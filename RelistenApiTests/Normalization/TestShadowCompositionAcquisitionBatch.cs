@@ -119,6 +119,33 @@ public sealed class TestShadowCompositionAcquisitionBatch
     }
 
     [Test]
+    public async Task ChangedProgramReferencesRefuseBeforeContextParsingOrClientConsultation()
+    {
+        // The selection plan is deliberately unparseable as a selection contract.
+        // Complete file authentication must reject the changed final pin first.
+        var selectionPath = Path.Combine(directory, "selection-plan.json");
+        await File.WriteAllTextAsync(selectionPath, "{}");
+        var referencesPath = Path.Combine(directory, "program-references.json");
+        await File.WriteAllTextAsync(referencesPath, "[]");
+        var sources = new CompositionProgramReferenceSources(
+            Guid.NewGuid(),
+            await PinAsync(selectionPath),
+            await PinAsync(referencesPath)
+        );
+        var requestPath = await WriteRequestAsync(programSources: sources);
+        await File.AppendAllTextAsync(referencesPath, "\n");
+        var client = new DurableClient();
+
+        var run = () => new ShadowCompositionAcquisitionBatch(client).RunAsync(requestPath, Output);
+
+        await run.Should().ThrowAsync<InvalidDataException>().WithMessage("*file changed*");
+        client.Gets.Should().BeEmpty();
+        client.Advances.Should().Be(0);
+        client.InputReads.Should().Be(0);
+        Directory.Exists(Output).Should().BeFalse();
+    }
+
+    [Test]
     public async Task CompletedCacheExportsExactInputBytesAndReplaysWithoutAnotherClientRead()
     {
         var requestPath = await WriteRequestAsync();
@@ -158,7 +185,8 @@ public sealed class TestShadowCompositionAcquisitionBatch
 
     private async Task<string> WriteRequestAsync(
         IReadOnlyList<ShadowCompositionAcquisitionFile>? retained = null,
-        ShadowCompositionAcquisitionFile? originalCommands = null
+        ShadowCompositionAcquisitionFile? originalCommands = null,
+        CompositionProgramReferenceSources? programSources = null
     )
     {
         var catalogPath = Path.Combine(directory, "catalog.jsonl.gz");
@@ -172,7 +200,8 @@ public sealed class TestShadowCompositionAcquisitionBatch
             [await PinAsync(catalogPath)],
             retained ?? [],
             new(0, 0, TimeSpan.FromMinutes(1)),
-            originalCommands
+            originalCommands,
+            programSources
         );
         var requestPath = Path.Combine(directory, "request.json");
         await File.WriteAllBytesAsync(

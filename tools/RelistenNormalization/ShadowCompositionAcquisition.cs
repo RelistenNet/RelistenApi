@@ -108,7 +108,8 @@ public static class ShadowCompositionAcquisition
     public static ShadowCompositionAcquisitionPlan Plan(
         IReadOnlyList<ShadowCompositionSeed> seeds,
         IReadOnlyList<NormalizationInputRevision> retainedInputs,
-        IReadOnlyList<ShadowCompositionAcquisitionCommand>? originalCommands = null
+        IReadOnlyList<ShadowCompositionAcquisitionCommand>? originalCommands = null,
+        IReadOnlyList<MusicBrainzSearchPageRequest>? initialSearches = null
     )
     {
         var commands =
@@ -195,6 +196,23 @@ public static class ShadowCompositionAcquisition
             }
         }
 
+        foreach (var request in initialSearches ?? [])
+        {
+            if (
+                request.Query.Kind != MusicBrainzLookupKind.Recording
+                || request.Query.Program is null
+                || request.Query.RelatedArtist is not null
+                || request.Offset != 0
+                || request.PlanIdentity is null
+            )
+            {
+                throw new InvalidDataException(
+                    "Program retrieval requires a cited offset-zero recording query."
+                );
+            }
+            AddSearch(request.Query, 0, [], request);
+        }
+
         foreach (var seed in seeds)
         {
             var performer = seed.ArtistMusicBrainzId is { } mbid
@@ -216,23 +234,35 @@ public static class ShadowCompositionAcquisition
         }
         return new(commands.Values.ToArray(), issues.Distinct(StringComparer.Ordinal).ToArray());
 
-        void AddSearch(MusicBrainzSearchQuery query, int offset, IReadOnlyList<Guid> catalogUuids)
+        void AddSearch(
+            MusicBrainzSearchQuery query,
+            int offset,
+            IReadOnlyList<Guid> catalogUuids,
+            MusicBrainzSearchPageRequest? template = null
+        )
         {
-            var request = new MusicBrainzSearchPageRequest(
-                query,
-                offset,
-                MusicBrainzCacheMode.ReuseFresh,
-                CacheAge
-            );
+            var request = template is null
+                ? new MusicBrainzSearchPageRequest(
+                    query,
+                    offset,
+                    MusicBrainzCacheMode.ReuseFresh,
+                    CacheAge
+                )
+                : template with
+                {
+                    Offset = offset,
+                };
             var descriptor = MusicBrainzCandidateQueryBuilder.CreateDescriptor(request);
             Add(
                 new(
-                    CommandUuid(descriptor.Resource),
+                    CommandUuid(descriptor.Resource, request.PlanIdentity),
                     descriptor.Resource,
                     request,
                     null,
                     catalogUuids,
-                    "literal_repertoire_search"
+                    template is null
+                        ? "literal_repertoire_search"
+                        : "cited_program_recording_search"
                 )
             );
             if (!retained.TryGetValue(descriptor.Resource, out var pages))
@@ -278,7 +308,7 @@ public static class ShadowCompositionAcquisition
                     }
                     else
                     {
-                        AddSearch(query, offset + members, catalogUuids);
+                        AddSearch(query, offset + members, catalogUuids, template);
                     }
                 }
             }
@@ -340,9 +370,17 @@ public static class ShadowCompositionAcquisition
                 };
                 return;
             }
-            if (originals.TryGetValue(command.Resource, out var original))
+            if (
+                originals.TryGetValue(command.Resource, out var original)
+                && (
+                    command.Search?.PlanIdentity is not { } plannedIdentity
+                    || original.Search?.PlanIdentity == plannedIdentity
+                )
+            )
             {
                 // Preserve exact request/cache policy and UUID, including terminal failures.
+                // Planned searches can reuse only their own frozen plan; another
+                // plan may share external bytes without taking over request ownership.
                 command = original with
                 {
                     CatalogUuids = original
@@ -357,11 +395,22 @@ public static class ShadowCompositionAcquisition
         }
     }
 
-    public static Guid CommandUuid(NormalizationResourceKey resource)
+    public static Guid CommandUuid(
+        NormalizationResourceKey resource,
+        MusicBrainzSearchPlanIdentity? identity = null
+    )
     {
-        var bytes = SHA256.HashData(
-            Encoding.UTF8.GetBytes(Version + "\n" + JsonSerializer.Serialize(resource))
-        );
+        // Keep historical unplanned commands byte-for-byte stable. Program pages
+        // belong to a frozen plan; another plan may reuse captured bytes through
+        // the service cache without reusing this command's request ownership.
+        var key = identity is null
+            ? Version + "\n" + JsonSerializer.Serialize(resource)
+            : Version
+                + "/planned-search-v1\n"
+                + identity.PlanUuid.ToString("D")
+                + "\n"
+                + JsonSerializer.Serialize(resource);
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(key));
         return new Guid(bytes.AsSpan(0, 16));
     }
 

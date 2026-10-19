@@ -420,6 +420,241 @@ public sealed class TestCompositionHypotheses
     }
 
     [Test]
+    public void RecordingSearchReleaseMembershipsAttachThroughActualEdgesInEitherObservationOrder()
+    {
+        const string recordingId = "b8cc2bc8-ac3d-4b9b-81c3-b973006cac70";
+        var search = Input(
+            "recording-search",
+            new string('d', 64),
+            File.ReadAllBytes(
+                Path.Combine(
+                    TestContext.CurrentContext.TestDirectory,
+                    "Fixtures",
+                    "normalization",
+                    "musicbrainz",
+                    "program-search-first-recording.json"
+                )
+            )
+        );
+        var recording = RecordingInput(
+            recordingId,
+            "Such a Night",
+            Performance(GarciaHunterWork, "Such a Night")
+        );
+        var lookup = WorkInput(GarciaHunterWork, "Such a Night");
+        var workSearch = SearchInput(Work(GarciaHunterWork, "Such a Night"));
+        var before = Index(search, recording, lookup, workSearch);
+        var after = Index(workSearch, lookup, recording, search);
+        var first = before.Works.Should().ContainSingle().Subject;
+        var second = after.Works.Should().ContainSingle().Subject;
+        var attached = first.SearchAssertions.Single(assertion =>
+            assertion.Page.Item == search.Resource
+        );
+        var decoded = new NormalizationProviderDecoder()
+            .Decode(search)
+            .MusicBrainzSearchPages!.Single();
+
+        JsonSerializer
+            .Serialize(first.SearchAssertions)
+            .Should()
+            .Be(JsonSerializer.Serialize(second.SearchAssertions));
+        JsonSerializer
+            .Serialize(attached.Hit)
+            .Should()
+            .Be(JsonSerializer.Serialize(decoded.Hits!.Single()));
+        attached.Page.Should().Be(decoded.Origin);
+        attached.Hit.Releases.Should().HaveCount(10);
+        attached
+            .Hit.Releases!.Where(release =>
+                release.Release.Identity.Identity.ProviderKey
+                == "c1a2fd94-35b4-4e46-83a0-f7e1ad5b7db4"
+            )
+            .Select(release => release.Media!.Single().Position!.Value)
+            .Should()
+            .Equal(2, 1);
+        var medium = attached.Hit.Releases[0].Media!.Single();
+        medium.TrackCount!.Value.Should().Be(13);
+        medium.TrackOffset!.Value.Should().Be(8);
+        medium.Tracks!.Single().Number!.Value.Should().Be("9");
+        medium.Tracks!.Single().Position.Should().BeNull();
+        attached
+            .Hit.ArtistCredits!.Select(credit => credit.Name!.Value)
+            .Should()
+            .Equal("The Band", "Dr. John");
+        first.WriterRoles.Should().BeEmpty();
+        before
+            .SearchPages.Should()
+            .ContainSingle()
+            .Which.Origin.Item.Should()
+            .Be(workSearch.Resource);
+        after
+            .SearchPages.Should()
+            .ContainSingle()
+            .Which.Origin.Item.Should()
+            .Be(workSearch.Resource);
+        RetainedCompositionCandidateIndex.Version.Should().Be("retained-composition-candidates-v2");
+        AssertCitations(before.Works, search, recording, lookup, workSearch);
+        AssertCitations(after.Works, search, recording, lookup, workSearch);
+    }
+
+    [Test]
+    public void RecordingSearchHitsJoinEachQualifiedWorkOnceWithoutDroppingRawEdgeOrHitVariants()
+    {
+        const string firstRecording = "76d91022-0000-4000-8000-000000000001";
+        const string secondRecording = "76d91022-0000-4000-8000-000000000002";
+        var first = RecordingInput(
+            firstRecording,
+            "Same retained title",
+            Performance(GarciaHunterWork, "Same retained title", ["live"]),
+            Performance(GarciaHunterWork, "Same retained title", ["partial"]),
+            Performance(HawkshawWork, "Same retained title")
+        );
+        var second = RecordingInput(
+            secondRecording,
+            "Same retained title",
+            Performance(HawkshawWork, "Same retained title")
+        );
+        var search = RecordingSearchInput(
+            new
+            {
+                id = firstRecording,
+                title = "Same retained title",
+                score = 100,
+            },
+            new
+            {
+                id = secondRecording,
+                title = "Same retained title",
+                score = 100,
+            },
+            new
+            {
+                id = firstRecording,
+                title = "Conflicting retained variant",
+                score = 42,
+            }
+        );
+        var index = Index(search, first, second);
+        var firstWork = index.Works.Single(work =>
+            work.Identity.Identity.ProviderKey == GarciaHunterWork
+        );
+        var secondWork = index.Works.Single(work =>
+            work.Identity.Identity.ProviderKey == HawkshawWork
+        );
+
+        firstWork
+            .SearchAssertions.Select(assertion => assertion.Hit.SourceIndex)
+            .Should()
+            .Equal(0, 2);
+        secondWork
+            .SearchAssertions.Select(assertion => assertion.Hit.SourceIndex)
+            .Should()
+            .BeEquivalentTo(new[] { 0, 1, 2 });
+        firstWork
+            .SearchAssertions.Select(assertion =>
+                assertion.Hit.Entity.Identity.Identity.ProviderKey
+            )
+            .Should()
+            .OnlyContain(id => id == firstRecording);
+        firstWork
+            .SearchAssertions.Select(assertion => assertion.Hit.Score!.Value)
+            .Should()
+            .Equal(100, 42);
+        firstWork.RecordingWorkRelationships.Should().HaveCount(2);
+        firstWork
+            .RecordingWorkRelationships.SelectMany(edge => edge.Relationship.Attributes!)
+            .Select(attribute => attribute.Value)
+            .Should()
+            .Equal("live", "partial");
+        firstWork.RecordingAssertions.Should().ContainSingle();
+        secondWork.RecordingWorkRelationships.Should().HaveCount(2);
+        secondWork.RecordingAssertions.Should().HaveCount(2);
+        index.SearchPages.Should().BeEmpty();
+        AssertCitations(index.Works, search, first, second);
+    }
+
+    [Test]
+    public void MatchingNamesScoresAndBareUuidCollisionsCannotReplaceAQualifiedRecordingWorkEdge()
+    {
+        const string recordingId = "76d91022-0000-4000-8000-000000000001";
+        const string unlinkedRecordingId = "76d91022-0000-4000-8000-000000000002";
+        var recording = RecordingInput(
+            recordingId,
+            "Same retained title",
+            Performance(GarciaHunterWork, "Same retained title")
+        );
+        var collisionWork = WorkInput(recordingId, "Same retained title");
+        var unlinkedWork = WorkInput(HawkshawWork, "Same retained title");
+        var search = RecordingSearchInput(
+            new
+            {
+                id = unlinkedRecordingId,
+                title = "Same retained title",
+                score = 100,
+            }
+        );
+        var wrongKind = Input(
+            "artist-search",
+            new string('e', 64),
+            JsonSerializer.SerializeToUtf8Bytes(
+                new
+                {
+                    count = 1,
+                    offset = 0,
+                    artists = new[]
+                    {
+                        new
+                        {
+                            id = recordingId,
+                            name = "Same retained title",
+                            score = 100,
+                        },
+                    },
+                }
+            )
+        );
+        var wrongProvider = RecordingSearchInput(
+            new
+            {
+                id = recordingId,
+                title = "Same retained title",
+                score = 100,
+            }
+        );
+        wrongProvider = Input(
+            "recording-search",
+            wrongProvider.Resource.ProviderKey,
+            wrongProvider.Payload,
+            provider: "fixture.invalid"
+        );
+        var index = Index(search, collisionWork, unlinkedWork, wrongKind, wrongProvider, recording);
+
+        index.Works.Should().HaveCount(3).And.OnlyContain(work => work.SearchAssertions.Count == 0);
+        index
+            .Works.Single(work => work.Identity.Identity.ProviderKey == recordingId)
+            .RecordingWorkRelationships.Should()
+            .BeEmpty();
+        index
+            .Works.Single(work => work.Identity.Identity.ProviderKey == HawkshawWork)
+            .RecordingWorkRelationships.Should()
+            .BeEmpty();
+        index
+            .Works.Single(work => work.Identity.Identity.ProviderKey == GarciaHunterWork)
+            .RecordingWorkRelationships.Should()
+            .ContainSingle();
+        index.SearchPages.Should().BeEmpty();
+        AssertCitations(
+            index.Works,
+            search,
+            collisionWork,
+            unlinkedWork,
+            wrongKind,
+            wrongProvider,
+            recording
+        );
+    }
+
+    [Test]
     public void InferenceAlternativesCannotRepeatTheSelectedSuppliedWork()
     {
         var index = Index(WorkInput(GarciaHunterWork, "Crazy Fingers"));
@@ -529,16 +764,59 @@ public sealed class TestCompositionHypotheses
             )
         );
 
+    private static NormalizationInputRevision RecordingSearchInput(params object[] recordings) =>
+        Input(
+            "recording-search",
+            new string('d', 64),
+            JsonSerializer.SerializeToUtf8Bytes(
+                new
+                {
+                    count = recordings.Length,
+                    offset = 0,
+                    recordings,
+                }
+            )
+        );
+
+    private static NormalizationInputRevision RecordingInput(
+        string id,
+        string title,
+        params object[] relationships
+    ) =>
+        Input(
+            "recording",
+            id,
+            JsonSerializer.SerializeToUtf8Bytes(
+                new Dictionary<string, object?>
+                {
+                    ["id"] = id,
+                    ["title"] = title,
+                    ["relations"] = relationships,
+                }
+            )
+        );
+
+    private static object Performance(string workId, string title, string[]? attributes = null) =>
+        new Dictionary<string, object?>
+        {
+            ["type"] = "performance",
+            ["direction"] = "forward",
+            ["target-type"] = "work",
+            ["work"] = new { id = workId, title },
+            ["attributes"] = attributes ?? [],
+        };
+
     private static NormalizationInputRevision Input(
         string type,
         string key,
         byte[] bytes,
-        Guid? revision = null
+        Guid? revision = null,
+        string provider = "musicbrainz.org"
     ) =>
         new()
         {
             Uuid = revision ?? Guid.NewGuid(),
-            Resource = new("musicbrainz.org", type, key),
+            Resource = new(provider, type, key),
             Payload = bytes,
             Sha256 = Convert.ToHexStringLower(SHA256.HashData(bytes)),
             MediaType = "application/json",
@@ -547,6 +825,8 @@ public sealed class TestCompositionHypotheses
                 "work" => "musicbrainz-work-json-v1",
                 "work-search" => "musicbrainz-work-search-json-v1",
                 "recording" => "musicbrainz-recording-work-json-v1",
+                "recording-search" => "musicbrainz-recording-search-json-v1",
+                "artist-search" => "musicbrainz-artist-search-json-v1",
                 _ => throw new ArgumentOutOfRangeException(nameof(type)),
             },
             CapturedAt = new DateTime(2026, 10, 18, 12, 0, 0, DateTimeKind.Utc),

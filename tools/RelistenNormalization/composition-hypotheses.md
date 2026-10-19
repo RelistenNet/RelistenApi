@@ -75,6 +75,44 @@ earlier evidence. The pure pass then proposes candidate works for all supplied
 artist-song targets. Acquisition expands the available evidence; it does not
 accept title matches or select a work for a song.
 
+## Use album and concert context to retrieve works
+
+A title can identify several unrelated compositions. When recording notes name
+an album, concert program or tribute, use that context to retrieve the program's
+recordings and their work relationships. A reference to a program does not mean
+that a later tribute recording is the original commercial recording.
+
+The existing `shadow-compositions-acquire` request accepts optional
+`programSources`: a new nonempty `planUuid`, a pinned `selectionPlan`, and a
+pinned `references` JSON file. Each pin contains `path` and `sha256`. References
+use `CompositionProgramReference`: the scoped song target, proposed program
+title and relationship kind, original source coordinates and text hash, and two
+Unicode code-point citations. One citation quotes the title; the other quotes
+the enclosing wording that supports the relationship. The batch authenticates
+the original target context and both spans before consulting the provider
+client. Explicitly selected songs can supply context even when they have no
+existing work candidates. Development references may be proposed by inspection;
+the planner does not itself extract program references from prose.
+
+`CompositionProgramQueryPlanner` emits literal recording-title searches with a
+program release-title constraint and retains every contributing reference.
+Unknown relationships remain unresolved without a request. Search pages retain
+their plan identity through pagination and replay; recording and work lookups
+continue to share the existing acquisition cache. Optional
+`MusicBrainzSearchQuery.Program` accepts exactly one literal `releaseTitle` or
+qualified MusicBrainz release identity, and only for recording searches. Queries
+without this constraint keep their existing serialization and resource keys.
+
+The decoder retains the actual release, medium and singular `track` memberships
+returned by recording search. The retained candidate index attaches those search
+facts to a work only through an observed qualified, forward recording-to-work
+performance relationship. Matching names or a search score cannot create that
+edge. Missing relationships remain missing; all rival works remain available to
+the selector. These changes use decoder version `provider-observations-v9` and
+candidate index version `retained-composition-candidates-v2`. Existing raw
+captures and accepted catalog identities stay intact; a future automatic policy
+must qualify the new decoder version before publication.
+
 ## Select a likely work
 
 `composition-select` uses Luna to select among the retained candidates for an

@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using FluentAssertions;
 using Relisten.Api.Models.Normalization;
@@ -56,6 +57,60 @@ public sealed class TestShadowCompositionAcquisition
     }
 
     [Test]
+    public void OriginalProgramCommandsAreReusedOnlyWithinTheirExactFrozenPlan()
+    {
+        var identity = new MusicBrainzSearchPlanIdentity(Guid.NewGuid(), new string('a', 64));
+        var request = new MusicBrainzSearchPageRequest(
+            new(
+                MusicBrainzLookupKind.Recording,
+                "Shared Song",
+                Program: new(ReleaseTitle: "Observed program")
+            ),
+            0,
+            MusicBrainzCacheMode.ReuseFresh,
+            TimeSpan.FromDays(7),
+            identity
+        );
+        var original = ShadowCompositionAcquisition
+            .Plan([], [], initialSearches: [request])
+            .Commands.Single();
+        original = original with
+        {
+            CommandUuid = Guid.NewGuid(),
+            Search = original.Search! with { CacheMode = MusicBrainzCacheMode.Refresh },
+        };
+        var otherRequest = request with { PlanIdentity = new(Guid.NewGuid(), new string('b', 64)) };
+
+        var otherPlan = ShadowCompositionAcquisition.Plan(
+            [],
+            [],
+            [original],
+            initialSearches: [otherRequest]
+        );
+        var current = otherPlan.Commands.Single();
+        current.Resource.Should().Be(original.Resource);
+        current.Search.Should().Be(otherRequest);
+        current
+            .CommandUuid.Should()
+            .Be(
+                ShadowCompositionAcquisition.CommandUuid(
+                    current.Resource,
+                    otherRequest.PlanIdentity
+                )
+            );
+        current.CommandUuid.Should().NotBe(original.CommandUuid);
+
+        var samePlan = ShadowCompositionAcquisition.Plan(
+            [],
+            [],
+            [original],
+            initialSearches: [request]
+        );
+        samePlan.Commands.Single().Search.Should().Be(original.Search);
+        samePlan.Commands.Single().CommandUuid.Should().Be(original.CommandUuid);
+    }
+
+    [Test]
     public void FullPageSchedulesNextPageAndEveryAlternativeThenHydratesRecordingWork()
     {
         var seed = Seed("Shared Song");
@@ -107,6 +162,156 @@ public sealed class TestShadowCompositionAcquisition
                 && command.Search.Query == query.Search!.Query
                 && command.Search.Offset == 50
             );
+    }
+
+    [Test]
+    public void ProgramPagesKeepTheirFrozenPlanWhileHydrationNeverInventsCatalogOwners()
+    {
+        var identity = new MusicBrainzSearchPlanIdentity(Guid.NewGuid(), new string('a', 64));
+        var request = new MusicBrainzSearchPageRequest(
+            new(
+                MusicBrainzLookupKind.Recording,
+                "Don't Let Go",
+                Program: new(ReleaseTitle: "Observed program")
+            ),
+            0,
+            MusicBrainzCacheMode.ReuseFresh,
+            TimeSpan.FromDays(7),
+            identity
+        );
+        var initial = ShadowCompositionAcquisition.Plan([], [], initialSearches: [request]);
+        var first = initial.Commands.Single();
+        var ids = Enumerable.Range(0, 50).Select(_ => Guid.NewGuid()).ToArray();
+        var page = Input(
+            first.Resource,
+            "musicbrainz-recording-search-json-v1",
+            new
+            {
+                count = 51,
+                offset = 0,
+                recordings = ids.Select(id => new { id, title = "Don't Let Go" }).ToArray(),
+            }
+        );
+        var work = Guid.NewGuid();
+        var recording = Input(
+            new("musicbrainz.org", "recording", ids[0].ToString("D")),
+            "musicbrainz-recording-work-json-v1",
+            new
+            {
+                id = ids[0],
+                title = "Don't Let Go",
+                relations = new[]
+                {
+                    new Dictionary<string, object>
+                    {
+                        ["type"] = "performance",
+                        ["direction"] = "forward",
+                        ["work"] = new { id = work, title = "Retained work alternative" },
+                        ["target-type"] = "work",
+                    },
+                },
+            }
+        );
+
+        var plan = ShadowCompositionAcquisition.Plan(
+            [],
+            [page, recording],
+            initialSearches: [request]
+        );
+        var pages = plan.Commands.Where(command => command.Search != null).ToArray();
+        pages.Select(command => command.Search!.Offset).Should().BeEquivalentTo([0, 50]);
+        pages.Should().OnlyContain(command => command.Search!.PlanIdentity == identity);
+        pages
+            .Single(command => command.Search!.Offset == 0)
+            .CommandUuid.Should()
+            .Be(first.CommandUuid);
+        plan.Commands.Count(command => command.Lookup?.Kind == MusicBrainzLookupKind.Recording)
+            .Should()
+            .Be(50);
+        plan.Commands.Should()
+            .Contain(command => command.Lookup != null && command.Lookup.Mbid == work);
+        plan.Commands.Should().OnlyContain(command => command.CatalogUuids.Count == 0);
+
+        var other = ShadowCompositionAcquisition.Plan(
+            [],
+            [page, recording],
+            initialSearches:
+            [
+                request with
+                {
+                    PlanIdentity = identity with { PlanUuid = Guid.NewGuid() },
+                },
+            ]
+        );
+        foreach (var command in pages)
+        {
+            var otherPage = other.Commands.Single(value => value.Resource == command.Resource);
+            otherPage.CommandUuid.Should().NotBe(command.CommandUuid);
+        }
+    }
+
+    [Test]
+    public async Task UnresolvedOnlyProgramPlanIsRetainedAndChangedReferenceCannotResume()
+    {
+        var target = new CompositionSelectionTargetKey(
+            "catalogue",
+            Guid.NewGuid(),
+            "repertoire:one"
+        );
+        var reference = new CompositionProgramReference(
+            target,
+            "Unclassified program",
+            CompositionProgramReferenceKind.Unknown,
+            new("/retained", "recording.jsonl.gz", 1, new string('a', 64), "/description"),
+            Convert.ToHexStringLower(
+                SHA256.HashData(Encoding.UTF8.GetBytes("Unclassified program"))
+            ),
+            new("description", "/description", "Unclassified program", 0, 20),
+            new("description", "/description", "Unclassified program", 0, 20)
+        );
+        var program = new CompositionProgramQueryPlan(
+            [],
+            [new(reference, "program_relationship_unresolved")],
+            new(Guid.NewGuid(), new string('b', 64))
+        );
+        var client = new FakeClient();
+        var runner = new ShadowCompositionAcquisitionRunner(client);
+        var limits = new ShadowCompositionAcquisitionLimits(0, 0, TimeSpan.FromMinutes(1));
+
+        var result = await runner.RunAsync([], [], directory, limits, programPlan: program);
+
+        result.State.Should().Be("plan_exhausted");
+        result.ProgramPlan!.Unresolved.Should().Equal(program.Unresolved);
+        result.Commands.Should().BeEmpty();
+        result.ReservedServiceCalls.Should().Be(0);
+        var checkpointPath = Path.Combine(directory, "checkpoint.json");
+        var saved = await File.ReadAllBytesAsync(checkpointPath);
+        var retained = JsonSerializer.Deserialize<ShadowCompositionAcquisitionCheckpoint>(
+            saved,
+            Json
+        )!;
+        retained.ProgramPlan!.Unresolved.Should().Equal(program.Unresolved);
+
+        var changed = program with
+        {
+            Unresolved =
+            [
+                new(
+                    reference with
+                    {
+                        Origin = reference.Origin with { Line = 2 },
+                    },
+                    "program_relationship_unresolved"
+                ),
+            ],
+        };
+        var resume = () => runner.RunAsync([], [], directory, limits, programPlan: changed);
+
+        await resume.Should().ThrowAsync<InvalidDataException>().WithMessage("*exact original*");
+        (await File.ReadAllBytesAsync(checkpointPath)).Should().Equal(saved);
+        client.Gets.Should().Be(0);
+        client.Advances.Should().Be(0);
+        client.InputReads.Should().Be(0);
     }
 
     [Test]
@@ -330,6 +535,8 @@ public sealed class TestShadowCompositionAcquisition
     {
         internal bool FailAdvance;
         internal int Advances;
+        internal int Gets;
+        internal int InputReads;
         internal bool ReturnGateOnce;
         internal int EarlyGateCalls;
         private DateTimeOffset gateUntil;
@@ -339,7 +546,11 @@ public sealed class TestShadowCompositionAcquisition
         public Task<ShadowCompositionAcquisitionReceipt?> GetAsync(
             ShadowCompositionAcquisitionCommand command,
             CancellationToken ct
-        ) => Task.FromResult(Receipts.GetValueOrDefault(command.CommandUuid));
+        )
+        {
+            Gets++;
+            return Task.FromResult(Receipts.GetValueOrDefault(command.CommandUuid));
+        }
 
         public Task<ShadowCompositionAcquisitionReceipt> AdvanceAsync(
             ShadowCompositionAcquisitionCommand command,
@@ -384,6 +595,10 @@ public sealed class TestShadowCompositionAcquisition
         public Task<NormalizationInputRevision?> ReadInputAsync(
             Guid inputUuid,
             CancellationToken ct
-        ) => Task.FromResult(Inputs.GetValueOrDefault(inputUuid));
+        )
+        {
+            InputReads++;
+            return Task.FromResult(Inputs.GetValueOrDefault(inputUuid));
+        }
     }
 }

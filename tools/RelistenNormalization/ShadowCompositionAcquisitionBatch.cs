@@ -18,7 +18,19 @@ public sealed record ShadowCompositionAcquisitionRequest(
     IReadOnlyList<ShadowCompositionAcquisitionFile> CatalogSnapshots,
     IReadOnlyList<ShadowCompositionAcquisitionFile> RetainedInputs,
     ShadowCompositionAcquisitionLimits Limits,
-    ShadowCompositionAcquisitionFile? OriginalCommands = null
+    ShadowCompositionAcquisitionFile? OriginalCommands = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        CompositionProgramReferenceSources? ProgramSources = null
+);
+
+/// <summary>
+/// Pins original target context and separately proposed program citations. The
+/// batch reproduces every citation before the acquisition client can be consulted.
+/// </summary>
+public sealed record CompositionProgramReferenceSources(
+    Guid PlanUuid,
+    ShadowCompositionAcquisitionFile SelectionPlan,
+    ShadowCompositionAcquisitionFile References
 );
 
 /// <summary>
@@ -40,18 +52,22 @@ public sealed class ShadowCompositionAcquisitionBatch(IShadowCompositionAcquisit
     )
     {
         requestPath = System.IO.Path.GetFullPath(requestPath);
+        var requestBytes = await File.ReadAllBytesAsync(requestPath, ct);
         var request =
-            JsonSerializer.Deserialize<ShadowCompositionAcquisitionRequest>(
-                await File.ReadAllBytesAsync(requestPath, ct),
-                Json
-            ) ?? throw new InvalidDataException("A composition acquisition request is required.");
+            JsonSerializer.Deserialize<ShadowCompositionAcquisitionRequest>(requestBytes, Json)
+            ?? throw new InvalidDataException("A composition acquisition request is required.");
         var directory = System.IO.Path.GetDirectoryName(requestPath)!;
 
         // Verify the complete selection before even consulting durable provider state.
         // A modified last file must not permit requests for an earlier valid prefix.
         var files = request
             .CatalogSnapshots.Concat(request.RetainedInputs)
-            .Concat(request.OriginalCommands is { } original ? [original] : []);
+            .Concat(request.OriginalCommands is { } original ? [original] : [])
+            .Concat(
+                request.ProgramSources is { } program
+                    ? [program.SelectionPlan, program.References]
+                    : []
+            );
         foreach (var file in files)
         {
             await VerifyAsync(file, directory, ct);
@@ -79,14 +95,54 @@ public sealed class ShadowCompositionAcquisitionBatch(IShadowCompositionAcquisit
             ) ?? throw new InvalidDataException("Original commands must be an array.")
             : null;
 
+        var programPlan = await ReadProgramPlanAsync(request, requestBytes, directory, ct);
+
         return await new ShadowCompositionAcquisitionRunner(client).RunAsync(
             seeds,
             inputs,
             outputDirectory,
             request.Limits,
             commands,
+            ct,
+            programPlan
+        );
+    }
+
+    private static async Task<CompositionProgramQueryPlan?> ReadProgramPlanAsync(
+        ShadowCompositionAcquisitionRequest request,
+        byte[] requestBytes,
+        string directory,
+        CancellationToken ct
+    )
+    {
+        if (request.ProgramSources is not { } sources)
+        {
+            return null;
+        }
+        var referencesPath = Resolve(directory, sources.References.Path);
+        if (new FileInfo(referencesPath).Length > 32 * 1024 * 1024)
+        {
+            throw new InvalidDataException("Program references exceed their read bound.");
+        }
+        var references =
+            JsonSerializer.Deserialize<CompositionProgramReference[]>(
+                await File.ReadAllBytesAsync(referencesPath, ct),
+                Json
+            ) ?? throw new InvalidDataException("Program references must be an array.");
+        var targets = await new CompositionSelectionBatch().ReadProgramTargetsAsync(
+            Resolve(directory, sources.SelectionPlan.Path),
+            sources.SelectionPlan.Sha256,
             ct
         );
+        var plan = CompositionProgramQueryPlanner.Plan(
+            targets,
+            references,
+            new(sources.PlanUuid, Convert.ToHexStringLower(SHA256.HashData(requestBytes)))
+        );
+        // Keep a pin check after the slower source-image read. A changed reference
+        // file cannot admit a request under an earlier frozen request's identity.
+        await VerifyAsync(sources.References, directory, ct);
+        return plan;
     }
 
     private static async Task VerifyAsync(

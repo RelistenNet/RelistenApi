@@ -1,0 +1,20 @@
+{
+  "source": {
+    "path": "local-dev/normalization-data/2026-10-18-composition-program-bridge-evidence-v1/such-a-night-program-search.json",
+    "bytes": 45308,
+    "sha256": "734ad2ba56dc3e4573035acbca648c75dab504552ee0b3c0615ac2e3f1621da3"
+  },
+  "selection": {
+    "originalPointer": "/recordings/0",
+    "retainedRootFields": ["created", "count", "offset"],
+    "retainedRecordingIndices": [0],
+    "completePage": false,
+    "description": "The original first recording subtree is retained without field changes. The original count of four remains; the other three recordings are omitted."
+  },
+  "fixture": {
+    "file": "program-search-first-recording.json",
+    "bytes": 15126,
+    "sha256": "2441486e557505f239c85bcc8a8073e54d4883dda1267e442bf7dadc73887449"
+  },
+  "authority": "Observed provider metadata only; this selection is not a correspondence, authorship or accuracy label."
+}

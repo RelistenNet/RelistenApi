@@ -133,6 +133,10 @@ public sealed partial class NormalizationProviderDecoder
                         entityType == "work"
                             ? ReadMusicBrainzSearchWorkArtists(reader, value, pointer)
                             : null,
+                    Releases =
+                        entityType == "recording"
+                            ? ReadMusicBrainzSearchReleases(reader, value, pointer)
+                            : null,
                 }
             );
         }
@@ -240,5 +244,197 @@ public sealed partial class NormalizationProviderDecoder
             );
         }
         return result;
+    }
+
+    private static IReadOnlyList<MusicBrainzSearchReleaseObservation>? ReadMusicBrainzSearchReleases(
+        ProviderObservationReader reader,
+        JsonElement recording,
+        string pointer
+    )
+    {
+        var values = MusicBrainzArray(reader, recording, "releases", pointer);
+        if (values is null)
+        {
+            return null;
+        }
+        var releases = new List<MusicBrainzSearchReleaseObservation>();
+        var index = 0;
+        foreach (var value in values.Value.EnumerateArray())
+        {
+            var sourceIndex = index++;
+            var location = ProviderObservationReader.Pointer(
+                pointer + "/releases",
+                sourceIndex.ToString(CultureInfo.InvariantCulture)
+            );
+            var release = ReadMusicBrainzEntity(reader, value, location, "release");
+            if (release is null)
+            {
+                continue;
+            }
+            MusicBrainzEntityReference? group = null;
+            if (value.TryGetProperty("release-group", out var rawGroup))
+            {
+                group = ReadMusicBrainzEntity(
+                    reader,
+                    rawGroup,
+                    location + "/release-group",
+                    "release-group"
+                );
+            }
+            releases.Add(
+                new()
+                {
+                    Evidence = reader.Evidence(location),
+                    SourceIndex = sourceIndex,
+                    Release = release,
+                    ArtistCredits = ReadMusicBrainzArtistCredits(reader, value, location),
+                    ReleaseGroup = group,
+                    Status = reader.String(value, "status", location),
+                    Date = reader.String(value, "date", location),
+                    Country = reader.String(value, "country", location),
+                    TrackCount = ReadMusicBrainzMembershipInteger(
+                        reader,
+                        value,
+                        "track-count",
+                        location
+                    ),
+                    Media = ReadMusicBrainzSearchMedia(reader, value, location),
+                }
+            );
+        }
+        return releases;
+    }
+
+    private static IReadOnlyList<MusicBrainzSearchMediumObservation>? ReadMusicBrainzSearchMedia(
+        ProviderObservationReader reader,
+        JsonElement release,
+        string pointer
+    )
+    {
+        var values = MusicBrainzArray(reader, release, "media", pointer);
+        if (values is null)
+        {
+            return null;
+        }
+        var media = new List<MusicBrainzSearchMediumObservation>();
+        var index = 0;
+        foreach (var value in values.Value.EnumerateArray())
+        {
+            var sourceIndex = index++;
+            var location = pointer + "/media/" + sourceIndex.ToString(CultureInfo.InvariantCulture);
+            if (value.ValueKind != JsonValueKind.Object)
+            {
+                reader.Issue("expected_object", location);
+                continue;
+            }
+            media.Add(
+                new()
+                {
+                    Evidence = reader.Evidence(location),
+                    SourceIndex = sourceIndex,
+                    Identity = ReadMusicBrainzIdentity(reader, value, "id", location, "medium"),
+                    Position = ReadMusicBrainzMembershipInteger(
+                        reader,
+                        value,
+                        "position",
+                        location
+                    ),
+                    Format = reader.String(value, "format", location),
+                    TrackCount = ReadMusicBrainzMembershipInteger(
+                        reader,
+                        value,
+                        "track-count",
+                        location
+                    ),
+                    TrackOffset = ReadMusicBrainzMembershipInteger(
+                        reader,
+                        value,
+                        "track-offset",
+                        location
+                    ),
+                    Tracks = ReadMusicBrainzSearchTracks(reader, value, location),
+                }
+            );
+        }
+        return media;
+    }
+
+    private static IReadOnlyList<MusicBrainzSearchTrackObservation>? ReadMusicBrainzSearchTracks(
+        ProviderObservationReader reader,
+        JsonElement medium,
+        string pointer
+    )
+    {
+        // Recording searches return matching tracks in singular `track`, unlike
+        // release lookups. Counts/offsets can describe a larger original medium;
+        // neither the array index nor number of returned slots fills those facts.
+        var values = MusicBrainzArray(reader, medium, "track", pointer);
+        if (values is null)
+        {
+            return null;
+        }
+        var tracks = new List<MusicBrainzSearchTrackObservation>();
+        var index = 0;
+        foreach (var value in values.Value.EnumerateArray())
+        {
+            var sourceIndex = index++;
+            var location = pointer + "/track/" + sourceIndex.ToString(CultureInfo.InvariantCulture);
+            if (value.ValueKind != JsonValueKind.Object)
+            {
+                reader.Issue("expected_object", location);
+                continue;
+            }
+            tracks.Add(
+                new()
+                {
+                    Evidence = reader.Evidence(location),
+                    SourceIndex = sourceIndex,
+                    Identity = ReadMusicBrainzIdentity(
+                        reader,
+                        value,
+                        "id",
+                        location,
+                        "release-track"
+                    ),
+                    Number = reader.String(value, "number", location),
+                    Title = reader.String(value, "title", location),
+                    Position = ReadMusicBrainzMembershipInteger(
+                        reader,
+                        value,
+                        "position",
+                        location
+                    ),
+                    Length = ReadMusicBrainzMembershipInteger(reader, value, "length", location),
+                }
+            );
+        }
+        return tracks;
+    }
+
+    private static ObservedValue<long>? ReadMusicBrainzMembershipInteger(
+        ProviderObservationReader reader,
+        JsonElement parent,
+        string property,
+        string pointer
+    )
+    {
+        if (
+            !parent.TryGetProperty(property, out var value)
+            || value.ValueKind == JsonValueKind.Null
+        )
+        {
+            return null;
+        }
+        var location = ProviderObservationReader.Pointer(pointer, property);
+        if (
+            value.ValueKind == JsonValueKind.Number
+            && value.TryGetInt64(out var number)
+            && number >= 0
+        )
+        {
+            return new(number, reader.Evidence(location));
+        }
+        reader.Issue("expected_nonnegative_integer", location);
+        return null;
     }
 }

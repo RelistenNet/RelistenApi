@@ -87,6 +87,58 @@ public sealed class TestCompositionSelectionBatch
         Directory.Exists(Path.Combine(output, "composition_selections")).Should().BeFalse();
     }
 
+    [Test]
+    public async Task SelectedSongWithoutWorkCandidatesCanRetrieveCitedProgramsButSelectionStillSkipsIt()
+    {
+        var fixture = await SelectionContextFixture.Create(directory);
+        var batch = new CompositionSelectionBatch();
+        var selection = await batch.RunAsync(
+            fixture.Plan,
+            Path.Combine(directory, "selection-preflight"),
+            fixture.Sha,
+            preflightOnly: true
+        );
+
+        var targets = await batch.ReadProgramTargetsAsync(fixture.Plan, fixture.Sha);
+
+        targets.Should().HaveCount(3);
+        var target = targets.Single(value => value.Song.EntityKey == "repertoire:missing");
+        target.Song.Title.Should().Be("Other title");
+        var text = target.Context.Witnesses.Single().Texts.Single();
+        var reference = new CompositionProgramReference(
+            target.Context.Key,
+            "Été 🌙",
+            CompositionProgramReferenceKind.Program,
+            text.Origin,
+            text.TextSha256,
+            new(text.Field, text.Origin.JsonPointer, "Été 🌙", 3, 8),
+            new(
+                text.Field,
+                text.Origin.JsonPointer,
+                text.Value,
+                0,
+                text.Value.EnumerateRunes().Count()
+            )
+        );
+        var program = CompositionProgramQueryPlanner.Plan(
+            [target],
+            [reference],
+            new(Guid.NewGuid(), fixture.Sha)
+        );
+
+        program.Queries.Should().ContainSingle().Which.References.Should().Equal(reference);
+        program.Unresolved.Should().BeEmpty();
+        program.PublicationPermitted.Should().BeFalse();
+        selection.Preflight.CandidateBearingSongs.Should().Be(2);
+        selection.Preflight.EligibleInputs.Should().Be(2);
+        selection.Preflight.RemainingCandidateBearingSongs.Should().Be(0);
+        var skipped = selection.Preflight.Rows.Single(row =>
+            row.Key.SongEntityKey == target.Song.EntityKey
+        );
+        skipped.SkipReason.Should().Be("missing_candidate_bearing_hypothesis");
+        skipped.Request.Should().BeNull();
+    }
+
     [TestCase("source_plan_keys")]
     [TestCase("hypothesis_generation")]
     [TestCase("music_generation")]

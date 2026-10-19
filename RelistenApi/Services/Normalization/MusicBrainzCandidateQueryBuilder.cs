@@ -13,6 +13,7 @@ namespace Relisten.Normalization;
 public static class MusicBrainzCandidateQueryBuilder
 {
     public const string Version = "musicbrainz-literal-search-v1";
+    public const string RecordingProgramVersion = "musicbrainz-recording-program-search-v1";
     public const int PageSize = 50;
     public const int MaximumPages = 4;
     public const int MaximumVariants = 3;
@@ -22,6 +23,7 @@ public static class MusicBrainzCandidateQueryBuilder
         ValidatePageRequest(request);
         var kind = request.Query.Kind.ToString().ToLowerInvariant();
         var rendered = RenderQuery(request.Query);
+        var version = request.Query.Program is null ? Version : RecordingProgramVersion;
 
         if (
             Encoding.UTF8.GetByteCount(rendered) > 4096
@@ -35,7 +37,7 @@ public static class MusicBrainzCandidateQueryBuilder
         var descriptorBytes = JsonSerializer.SerializeToUtf8Bytes(
             new
             {
-                version = Version,
+                version,
                 kind,
                 query = rendered,
                 limit = PageSize,
@@ -49,7 +51,7 @@ public static class MusicBrainzCandidateQueryBuilder
         );
 
         return new(
-            Version,
+            version,
             request.Query.Kind,
             rendered,
             PageSize,
@@ -125,6 +127,38 @@ public static class MusicBrainzCandidateQueryBuilder
                     + (query.Kind == MusicBrainzLookupKind.Work ? "artist" : "artistname")
                     + ":"
                     + Literal(related.Name!);
+        }
+
+        if (query.Program is { } program)
+        {
+            if (
+                query.Kind != MusicBrainzLookupKind.Recording
+                || (program.ReleaseTitle is null) == (program.ReleaseIdentity is null)
+            )
+            {
+                throw new ArgumentException(
+                    "A recording program constraint requires exactly one release literal or qualified release identity."
+                );
+            }
+            if (program.ReleaseIdentity is { } release)
+            {
+                if (
+                    release.Provider != "musicbrainz.org"
+                    || release.ResourceType != "release"
+                    || !Guid.TryParseExact(release.ProviderKey, "D", out var mbid)
+                    || mbid == Guid.Empty
+                )
+                {
+                    throw new ArgumentException(
+                        "A program identity requires a qualified external MusicBrainz release MBID."
+                    );
+                }
+                rendered += " AND reid:" + mbid.ToString("D");
+            }
+            else
+            {
+                rendered += " AND release:" + Literal(program.ReleaseTitle!);
+            }
         }
 
         return rendered;

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using FluentAssertions;
@@ -14,6 +15,309 @@ public sealed class TestNormalizationProviderDecoderMusicBrainzSearch
     private const string SecondId = "6394bda2-57a6-3578-badc-f3043d4f0ba8";
     private const string ArtistId = "592a3b6d-c42b-4567-99c9-ecf63bd66499";
     private readonly NormalizationProviderDecoder decoder = new();
+
+    [Test]
+    public void RetainedProgramSearchKeepsReleaseEditionsCreditsAndPartialTrackWindows()
+    {
+        var path = Path.Combine(
+            TestContext.CurrentContext.TestDirectory,
+            "Fixtures",
+            "normalization",
+            "musicbrainz",
+            "program-search-first-recording.json"
+        );
+        var bytes = File.ReadAllBytes(path);
+        using var provenance = JsonDocument.Parse(
+            File.ReadAllBytes(Path.ChangeExtension(path, ".provenance.json"))
+        );
+        provenance
+            .RootElement.GetProperty("fixture")
+            .GetProperty("bytes")
+            .GetInt32()
+            .Should()
+            .Be(bytes.Length);
+        provenance
+            .RootElement.GetProperty("fixture")
+            .GetProperty("sha256")
+            .GetString()
+            .Should()
+            .Be(Convert.ToHexStringLower(SHA256.HashData(bytes)));
+        provenance
+            .RootElement.GetProperty("selection")
+            .GetProperty("completePage")
+            .GetBoolean()
+            .Should()
+            .BeFalse();
+        var input = Synthetic("recording", Encoding.UTF8.GetString(bytes));
+        var result = decoder.Decode(input);
+        var page = result.MusicBrainzSearchPages.Should().ContainSingle().Subject;
+        page.Count!.Value.Should().Be(4);
+        page.Offset!.Value.Should().Be(0);
+        page.Created!.Value.Should().Be("2026-10-19T02:46:29.516Z");
+        var hit = page.Hits.Should().ContainSingle().Subject;
+        hit.Entity.Identity.Identity.Should()
+            .Be(
+                new NormalizationResourceKey(
+                    "musicbrainz.org",
+                    "recording",
+                    "b8cc2bc8-ac3d-4b9b-81c3-b973006cac70"
+                )
+            );
+        hit.ArtistCredits!.Select(credit => credit.Name!.Value)
+            .Should()
+            .Equal("The Band", "Dr. John");
+        hit.WorkArtists.Should().BeNull();
+        var releases = hit.Releases!;
+        releases.Should().HaveCount(10);
+        releases.Select(release => release.SourceIndex).Should().Equal(Enumerable.Range(0, 10));
+        releases
+            .Should()
+            .OnlyContain(release => release.Release.Identity.Identity.ResourceType == "release");
+        releases[0]
+            .ArtistCredits.Should()
+            .ContainSingle()
+            .Which.Name!.Value.Should()
+            .Be("The Band");
+        releases[0]
+            .ReleaseGroup!.Identity.Identity.Should()
+            .Be(
+                new NormalizationResourceKey(
+                    "musicbrainz.org",
+                    "release-group",
+                    "83bf04a6-8a2d-38c2-83ea-9702e1837d1f"
+                )
+            );
+        releases[0].Status!.Value.Should().Be("Official");
+        releases[0].Date!.Value.Should().BeEmpty();
+        releases[0].Country!.Value.Should().Be("US");
+        releases[0].TrackCount!.Value.Should().Be(30);
+        var medium = releases[0].Media.Should().ContainSingle().Subject;
+        medium.Position!.Value.Should().Be(1);
+        medium.TrackCount!.Value.Should().Be(13);
+        medium.TrackOffset!.Value.Should().Be(8);
+        medium.Identity!.Identity.ResourceType.Should().Be("medium");
+        var track = medium.Tracks.Should().ContainSingle().Subject;
+        track.SourceIndex.Should().Be(0);
+        track.Number!.Value.Should().Be("9");
+        track.Position.Should().BeNull();
+        track.Length!.Value.Should().Be(243640);
+        track
+            .Identity!.Identity.Should()
+            .Be(
+                new NormalizationResourceKey(
+                    "musicbrainz.org",
+                    "release-track",
+                    "7cefc4fd-c063-4daa-86f0-3eec15596f42"
+                )
+            );
+        track.Evidence.JsonPointer.Should().Be("/recordings/0/releases/0/media/0/track/0");
+        var duplicateEditions = releases
+            .Where(release =>
+                release.Release.Identity.Identity.ProviderKey
+                == "c1a2fd94-35b4-4e46-83a0-f7e1ad5b7db4"
+            )
+            .ToArray();
+        duplicateEditions.Should().HaveCount(2);
+        duplicateEditions
+            .Select(release => release.Media!.Single().Position!.Value)
+            .Should()
+            .Equal(2, 1);
+        duplicateEditions
+            .Select(release => release.Media!.Single().Identity!.Identity)
+            .Should()
+            .OnlyHaveUniqueItems();
+        releases[9].Media!.Single().Tracks!.Single().Length.Should().BeNull();
+        hit.CompleteAuthorship.Should().BeNull();
+        page.ExternalUniverseComplete.Should().BeFalse();
+        result.Issues.Should().BeEmpty();
+        AssertSearchOnly(result);
+        AssertCitations(input, result);
+    }
+
+    [TestCase("releases", "/releases")]
+    [TestCase("media", "/releases/0/media")]
+    [TestCase("track", "/releases/0/media/0/track")]
+    public void ReleaseMembershipContainersKeepAbsentEmptyAndMalformedStatesDistinct(
+        string container,
+        string pointer
+    )
+    {
+        object Recording(object? value, bool missing = false)
+        {
+            var recording = new Dictionary<string, object?>
+            {
+                ["id"] = FirstId,
+                ["title"] = "Recording",
+            };
+            var release = new Dictionary<string, object?>
+            {
+                ["id"] = SecondId,
+                ["title"] = "Program",
+            };
+            var medium = new Dictionary<string, object?>();
+            if (container != "releases")
+            {
+                recording["releases"] = new[] { release };
+            }
+            if (container == "track")
+            {
+                release["media"] = new[] { medium };
+            }
+            if (!missing)
+            {
+                (
+                    container == "releases" ? recording
+                    : container == "media" ? release
+                    : medium
+                )[container] = value;
+            }
+            return recording;
+        }
+        var input = Synthetic(
+            "recording",
+            JsonSerializer.Serialize(
+                new
+                {
+                    count = 4,
+                    offset = 0,
+                    recordings = new[]
+                    {
+                        Recording(null, missing: true),
+                        Recording(Array.Empty<object>()),
+                        Recording(null),
+                        Recording(new { unexpected = true }),
+                    },
+                }
+            )
+        );
+        var result = decoder.Decode(input);
+        var hits = result.MusicBrainzSearchPages!.Single().Hits!;
+        int? Count(MusicBrainzSearchHitObservation hit) =>
+            container switch
+            {
+                "releases" => hit.Releases?.Count,
+                "media" => hit.Releases![0].Media?.Count,
+                _ => hit.Releases![0].Media![0].Tracks?.Count,
+            };
+
+        Count(hits[0]).Should().BeNull();
+        Count(hits[1]).Should().Be(0);
+        Count(hits[2]).Should().BeNull();
+        Count(hits[3]).Should().BeNull();
+        result
+            .Issues.Select(issue => issue.Evidence.JsonPointer)
+            .Should()
+            .Equal("/recordings/2" + pointer, "/recordings/3" + pointer);
+        result.Issues.Should().OnlyContain(issue => issue.Code == "expected_array");
+        AssertCitations(input, result);
+    }
+
+    [Test]
+    public void MalformedMembershipPeersKeepOriginalPositionsAndNeverInferTrackNumbersOrIdentities()
+    {
+        var input = Synthetic(
+            "recording",
+            $$$"""
+            {"count":1,"offset":0,"recordings":[{"id":"{{{FirstId}}}","title":"Recording","score":100,
+             "releases":[false,{"id":"{{{SecondId}}}","title":"Program","track-count":-1,"media":[null,
+               {"id":"invalid","position":-1,"track-count":13,"track-offset":-8,"format":7,
+                "track":[false,{"id":"invalid","number":"B4","title":"Été 🌙","position":-2,"length":-1,"unfamiliar":{"value":"untouched"}},
+                  {"id":"7cefc4fd-c063-4daa-86f0-3eec15596f42","number":"9","length":243640},
+                  {"id":"7cefc4fd-c063-4daa-86f0-3eec15596f42","number":"9","length":243640}]},
+               {"position":2,"track":[],"tracks":[{"title":"Do not substitute lookup shape"}]}]},
+               null,{"id":"{{{SecondId}}}","title":"Program edition","media":[]}]}]}
+            """
+        );
+        var result = decoder.Decode(input);
+        var releases = result.MusicBrainzSearchPages!.Single().Hits!.Single().Releases!;
+
+        releases.Select(release => release.SourceIndex).Should().Equal(1, 3);
+        releases
+            .Select(release => release.Release.Identity.Identity)
+            .Distinct()
+            .Should()
+            .ContainSingle();
+        releases[0].TrackCount.Should().BeNull();
+        var media = releases[0].Media!;
+        media.Select(medium => medium.SourceIndex).Should().Equal(1, 2);
+        media[0].Identity.Should().BeNull();
+        media[0].Position.Should().BeNull();
+        media[0].TrackOffset.Should().BeNull();
+        media[0].TrackCount!.Value.Should().Be(13);
+        var tracks = media[0].Tracks!;
+        tracks.Select(track => track.SourceIndex).Should().Equal(1, 2, 3);
+        tracks[0].Identity.Should().BeNull();
+        tracks[0].Position.Should().BeNull();
+        tracks[0].Length.Should().BeNull();
+        tracks[0].Number!.Value.Should().Be("B4");
+        tracks[0].Title!.Value.Should().Be("Été 🌙");
+        tracks[1]
+            .Identity.Should()
+            .Be(tracks[2].Identity! with { Evidence = tracks[1].Identity!.Evidence });
+        tracks[1].Position.Should().BeNull();
+        media[1].Tracks.Should().BeEmpty();
+        foreach (
+            var location in new[]
+            {
+                "/recordings/0/releases/1/track-count",
+                "/recordings/0/releases/1/media/1/position",
+                "/recordings/0/releases/1/media/1/track-offset",
+                "/recordings/0/releases/1/media/1/track/1/position",
+                "/recordings/0/releases/1/media/1/track/1/length",
+            }
+        )
+        {
+            result
+                .Issues.Should()
+                .Contain(issue =>
+                    issue.Code == "expected_nonnegative_integer"
+                    && issue.Evidence.JsonPointer == location
+                );
+        }
+        using var retained = NormalizationRetainedDocument.Open(input);
+        retained
+            .Resolve(tracks[0].Evidence.JsonPointer)
+            .GetProperty("unfamiliar")
+            .GetProperty("value")
+            .GetString()
+            .Should()
+            .Be("untouched");
+        AssertSearchOnly(result);
+        AssertCitations(input, result);
+    }
+
+    [Test]
+    public void AbsentReleaseMembershipPreservesHistoricalHitSerialization()
+    {
+        var result = decoder.Decode(
+            Synthetic(
+                "recording",
+                $$"""{"count":1,"offset":0,"recordings":[{"id":"{{FirstId}}","title":"Recording"}]}"""
+            )
+        );
+        var hit = result.MusicBrainzSearchPages!.Single().Hits!.Single();
+        var legacy = JsonSerializer.SerializeToUtf8Bytes(
+            new
+            {
+                hit.Evidence,
+                hit.SourceIndex,
+                hit.Entity,
+                hit.Score,
+                hit.ArtistCredits,
+                hit.Aliases,
+                hit.Iswcs,
+                hit.WorkArtists,
+                hit.CompleteAuthorship,
+            }
+        );
+
+        hit.Releases.Should().BeNull();
+        JsonSerializer.SerializeToUtf8Bytes(hit).Should().Equal(legacy);
+        JsonSerializer
+            .Deserialize<MusicBrainzSearchHitObservation>(legacy)!
+            .Releases.Should()
+            .BeNull();
+    }
 
     [Test]
     public void SameTitleAlternativesAndDuplicateHitsRetainOrderAndExactPageCitations()

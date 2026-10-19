@@ -16,10 +16,18 @@ public sealed record MusicBrainzSearchArtistConstraint(
     Guid? ExternalArtistMbid = null
 );
 
+/// <summary>Literal program retrieval context, never a claim that a target is this release's audio.</summary>
+public sealed record MusicBrainzRecordingProgramConstraint(
+    string? ReleaseTitle = null,
+    NormalizationResourceKey? ReleaseIdentity = null
+);
+
 public sealed record MusicBrainzSearchQuery(
     MusicBrainzLookupKind Kind,
     string Text,
-    MusicBrainzSearchArtistConstraint? RelatedArtist = null
+    MusicBrainzSearchArtistConstraint? RelatedArtist = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        MusicBrainzRecordingProgramConstraint? Program = null
 );
 
 public sealed record MusicBrainzSearchPlanIdentity(Guid PlanUuid, string RequestSha256);

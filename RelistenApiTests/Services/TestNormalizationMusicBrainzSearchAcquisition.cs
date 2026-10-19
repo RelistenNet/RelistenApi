@@ -15,6 +15,216 @@ namespace RelistenApiTests.Services;
 [TestFixture]
 public sealed class TestNormalizationMusicBrainzSearchAcquisitionQueries
 {
+    [TestCase(MusicBrainzLookupKind.Artist, false)]
+    [TestCase(MusicBrainzLookupKind.Recording, false)]
+    [TestCase(MusicBrainzLookupKind.Work, false)]
+    [TestCase(MusicBrainzLookupKind.Work, true)]
+    public void AbsentProgramPreservesLegacyQueryRequestAndDescriptorIdentity(
+        MusicBrainzLookupKind kind,
+        bool author
+    )
+    {
+        var request = Page(kind, "Déjà Vu") with { Offset = 50 };
+        if (author)
+        {
+            request = request with
+            {
+                Query = request.Query with
+                {
+                    RelatedArtist = new(MusicBrainzSearchArtistUse.WorkAuthor, "Author"),
+                },
+            };
+        }
+        var legacyQuery = new
+        {
+            request.Query.Kind,
+            request.Query.Text,
+            request.Query.RelatedArtist,
+        };
+        var legacyRequest = new
+        {
+            Query = legacyQuery,
+            request.Offset,
+            request.CacheMode,
+            request.MaximumCacheAge,
+        };
+        JsonSerializer
+            .SerializeToUtf8Bytes(request.Query)
+            .Should()
+            .Equal(JsonSerializer.SerializeToUtf8Bytes(legacyQuery));
+        JsonSerializer
+            .SerializeToUtf8Bytes(request)
+            .Should()
+            .Equal(JsonSerializer.SerializeToUtf8Bytes(legacyRequest));
+        var field = kind.ToString().ToLowerInvariant();
+        var rendered = field + ":\"Déjà Vu\"" + (author ? " AND artist:\"Author\"" : "");
+        var legacyDescriptorBytes = JsonSerializer.SerializeToUtf8Bytes(
+            new
+            {
+                version = "musicbrainz-literal-search-v1",
+                kind = field,
+                query = rendered,
+                limit = 50,
+                offset = 50,
+            }
+        );
+        var expected = new MusicBrainzSearchDescriptor(
+            "musicbrainz-literal-search-v1",
+            kind,
+            rendered,
+            50,
+            50,
+            new(
+                "musicbrainz.org",
+                field + "-search",
+                Convert.ToHexStringLower(SHA256.HashData(legacyDescriptorBytes))
+            ),
+            "musicbrainz-" + field + "-search-json-v1",
+            "https://musicbrainz.org/ws/2/"
+                + field
+                + "?query="
+                + Uri.EscapeDataString(rendered)
+                + "&limit=50&offset=50&fmt=json"
+        );
+
+        MusicBrainzCandidateQueryBuilder.CreateDescriptor(request).Should().Be(expected);
+        JsonSerializer.Serialize(request.Query).Should().NotContain("Program");
+    }
+
+    [Test]
+    public void RecordingProgramLiteralPreservesUnicodeAndCannotInjectAnotherQueryClause()
+    {
+        const string literal = "The Last Waltz \"édition\" + (live) OR artist:* / 🎵";
+        const string escaped =
+            "The Last Waltz \\\"édition\\\" \\+ \\(live\\) OR artist\\:\\* \\/ 🎵";
+        var request = Page(MusicBrainzLookupKind.Recording, "Such a Night") with
+        {
+            Query = new(
+                MusicBrainzLookupKind.Recording,
+                "Such a Night",
+                Program: new(ReleaseTitle: literal)
+            ),
+        };
+        var descriptor = MusicBrainzCandidateQueryBuilder.CreateDescriptor(request);
+
+        descriptor.BuilderVersion.Should().Be("musicbrainz-recording-program-search-v1");
+        descriptor
+            .RenderedQuery.Should()
+            .Be("recording:\"Such a Night\" AND release:\"" + escaped + "\"");
+        descriptor
+            .RequestUrl.Should()
+            .Be(
+                "https://musicbrainz.org/ws/2/recording?query="
+                    + Uri.EscapeDataString(descriptor.RenderedQuery)
+                    + "&limit=50&offset=0&fmt=json"
+            );
+        descriptor.CaptureVersion.Should().Be("musicbrainz-recording-search-json-v1");
+        descriptor
+            .Resource.Should()
+            .NotBe(
+                MusicBrainzCandidateQueryBuilder
+                    .CreateDescriptor(Page(MusicBrainzLookupKind.Recording, "Such a Night"))
+                    .Resource
+            );
+        request.Query.RelatedArtist.Should().BeNull();
+    }
+
+    [Test]
+    public void RecordingProgramIdentityUsesOnlyTheQualifiedReleaseId()
+    {
+        const string release = "5902973b-6cb4-4b78-9d1f-a6422f7ca191";
+        var request = Page(MusicBrainzLookupKind.Recording, "Such a Night") with
+        {
+            Query = new(
+                MusicBrainzLookupKind.Recording,
+                "Such a Night",
+                Program: new(ReleaseIdentity: new("musicbrainz.org", "release", release))
+            ),
+        };
+        var descriptor = MusicBrainzCandidateQueryBuilder.CreateDescriptor(request);
+
+        descriptor.RenderedQuery.Should().Be("recording:\"Such a Night\" AND reid:" + release);
+        descriptor.BuilderVersion.Should().Be("musicbrainz-recording-program-search-v1");
+        request.Query.RelatedArtist.Should().BeNull();
+        JsonSerializer
+            .Deserialize<MusicBrainzSearchPageRequest>(JsonSerializer.Serialize(request))
+            .Should()
+            .Be(request);
+    }
+
+    [TestCase("work")]
+    [TestCase("artist")]
+    [TestCase("empty")]
+    [TestCase("both")]
+    [TestCase("neither")]
+    [TestCase("wrong_provider")]
+    [TestCase("wrong_type")]
+    [TestCase("zero")]
+    [TestCase("malformed")]
+    [TestCase("compact")]
+    [TestCase("control")]
+    [TestCase("too_long")]
+    public void InvalidRecordingProgramConstraintsAreRejectedBeforeAdmission(string fault)
+    {
+        const string release = "5902973b-6cb4-4b78-9d1f-a6422f7ca191";
+        var program = new MusicBrainzRecordingProgramConstraint(ReleaseTitle: "The Last Waltz");
+        var kind = MusicBrainzLookupKind.Recording;
+        switch (fault)
+        {
+            case "work":
+                kind = MusicBrainzLookupKind.Work;
+                break;
+            case "artist":
+                kind = MusicBrainzLookupKind.Artist;
+                break;
+            case "empty":
+                program = new(ReleaseTitle: " ");
+                break;
+            case "both":
+                program = new("The Last Waltz", new("musicbrainz.org", "release", release));
+                break;
+            case "neither":
+                program = new();
+                break;
+            case "wrong_provider":
+                program = new(ReleaseIdentity: new("legacy_catalog", "release", release));
+                break;
+            case "wrong_type":
+                program = new(ReleaseIdentity: new("musicbrainz.org", "work", release));
+                break;
+            case "zero":
+                program = new(
+                    ReleaseIdentity: new("musicbrainz.org", "release", Guid.Empty.ToString("D"))
+                );
+                break;
+            case "malformed":
+                program = new(ReleaseIdentity: new("musicbrainz.org", "release", "not-an-mbid"));
+                break;
+            case "compact":
+                program = new(
+                    ReleaseIdentity: new(
+                        "musicbrainz.org",
+                        "release",
+                        Guid.Parse(release).ToString("N")
+                    )
+                );
+                break;
+            case "control":
+                program = new(ReleaseTitle: "The Last\nWaltz");
+                break;
+            case "too_long":
+                program = new(ReleaseTitle: new string('a', 513));
+                break;
+        }
+        var request = Page(kind, "Such a Night") with
+        {
+            Query = new(kind, "Such a Night", Program: program),
+        };
+        var describe = () => MusicBrainzCandidateQueryBuilder.CreateDescriptor(request);
+
+        describe.Should().Throw<ArgumentException>();
+    }
+
     [TestCase(MusicBrainzLookupKind.Artist, "artist")]
     [TestCase(MusicBrainzLookupKind.Recording, "recording")]
     [TestCase(MusicBrainzLookupKind.Work, "work")]

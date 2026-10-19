@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Relisten.Api.Models.Normalization;
 using Relisten.Data;
 
@@ -117,7 +118,9 @@ public sealed record ShadowCompositionAcquisitionCheckpoint(
     string State,
     bool ExternalUniverseComplete = false,
     bool PublicationPermitted = false,
-    IReadOnlyList<Guid>? ReservedCommandUuids = null
+    IReadOnlyList<Guid>? ReservedCommandUuids = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        CompositionProgramQueryPlan? ProgramPlan = null
 );
 
 /// <summary>
@@ -137,7 +140,8 @@ public sealed class ShadowCompositionAcquisitionRunner(IShadowCompositionAcquisi
         string outputDirectory,
         ShadowCompositionAcquisitionLimits limits,
         IReadOnlyList<ShadowCompositionAcquisitionCommand>? originalCommands = null,
-        CancellationToken ct = default
+        CancellationToken ct = default,
+        CompositionProgramQueryPlan? programPlan = null
     )
     {
         if (
@@ -159,20 +163,38 @@ public sealed class ShadowCompositionAcquisitionRunner(IShadowCompositionAcquisi
             FileAccess.ReadWrite,
             FileShare.None
         );
+        var request = new
+        {
+            version = ShadowCompositionAcquisition.Version,
+            seeds,
+            limits,
+            inputs = retainedInputs
+                .Select(input => new { input.Uuid, input.Sha256 })
+                .OrderBy(input => input.Uuid),
+            originalCommands,
+        };
+        // Existing runs keep their exact fingerprint. The program variant binds
+        // the frozen initial queries, including their source-plan identity.
+        var initialSearches = programPlan?.Queries.Select(query => query.Command.Search!).ToArray();
+        var programIssues =
+            programPlan
+                ?.Unresolved.Select(issue =>
+                    $"{issue.Reason}:{issue.Reference.Target.Scope}:{issue.Reference.Target.ArtistUuid:D}:{issue.Reference.Target.SongEntityKey}"
+                )
+                .ToArray()
+            ?? [];
         var requestHash = Hash(
-            JsonSerializer.SerializeToUtf8Bytes(
-                new
-                {
-                    version = ShadowCompositionAcquisition.Version,
-                    seeds,
-                    limits,
-                    inputs = retainedInputs
-                        .Select(input => new { input.Uuid, input.Sha256 })
-                        .OrderBy(input => input.Uuid),
-                    originalCommands,
-                },
-                Json
-            )
+            programPlan is null
+                ? JsonSerializer.SerializeToUtf8Bytes(request, Json)
+                : JsonSerializer.SerializeToUtf8Bytes(
+                    new
+                    {
+                        version = "shadow-program-acquisition-v1",
+                        request,
+                        programPlan,
+                    },
+                    Json
+                )
         );
         var checkpointPath = Path.Combine(outputDirectory, "checkpoint.json");
         var state = File.Exists(checkpointPath)
@@ -189,7 +211,8 @@ public sealed class ShadowCompositionAcquisitionRunner(IShadowCompositionAcquisi
                 [],
                 [],
                 [],
-                "pending"
+                "pending",
+                ProgramPlan: programPlan
             );
         if (
             state.Version != ShadowCompositionAcquisition.Version
@@ -243,12 +266,13 @@ public sealed class ShadowCompositionAcquisitionRunner(IShadowCompositionAcquisi
                 var plan = ShadowCompositionAcquisition.Plan(
                     seeds,
                     inputs.Values.ToArray(),
-                    originalCommands
+                    originalCommands,
+                    initialSearches
                 );
                 state = state with
                 {
                     Commands = plan.Commands,
-                    Issues = plan.Issues,
+                    Issues = plan.Issues.Concat(programIssues).Distinct().ToArray(),
                     Receipts = receipts.Values.ToArray(),
                 };
                 var resources = inputs.Values.Select(input => input.Resource).ToHashSet();
@@ -496,7 +520,8 @@ public sealed class ShadowCompositionAcquisitionRunner(IShadowCompositionAcquisi
             var finalPlan = ShadowCompositionAcquisition.Plan(
                 seeds,
                 inputs.Values.ToArray(),
-                originalCommands
+                originalCommands,
+                initialSearches
             );
             state = state with
             {

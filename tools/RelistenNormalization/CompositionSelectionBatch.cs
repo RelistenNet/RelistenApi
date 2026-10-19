@@ -39,6 +39,43 @@ public sealed partial class CompositionSelectionBatch
     }
 
     /// <summary>
+    /// Read original targets from an authenticated selection image without a key,
+    /// job, network request or output write. Every selected target must retain its
+    /// source hypothesis and context; callers cannot silently omit a missing target
+    /// when planning additional evidence retrieval.
+    /// </summary>
+    public async Task<IReadOnlyList<CompositionProgramTarget>> ReadProgramTargetsAsync(
+        string planPath,
+        string planSha256,
+        CancellationToken ct = default
+    )
+    {
+        var prepared = await PrepareAsync(
+            Path.GetFullPath(planPath),
+            planSha256,
+            ct,
+            retainSelectedWithoutCandidates: true
+        );
+        var targets = new List<CompositionProgramTarget>();
+        foreach (var row in prepared.Rows)
+        {
+            if (row.Hypothesis is not { } hypothesis || hypothesis.Song.TargetContext is null)
+            {
+                throw new InvalidDataException(
+                    "Program retrieval requires every original target context."
+                );
+            }
+            var input = CachedCompositionHypothesisSelector.ToInput(
+                hypothesis.Song,
+                row.Candidates
+            );
+            targets.Add(new(input.Song, hypothesis.Song.TargetContext));
+        }
+        await RecheckPinsAsync(prepared.Pins, ct);
+        return targets;
+    }
+
+    /// <summary>
     /// Writes only plan/preflight files when preflightOnly is true. Execute into a
     /// different new directory after approval. A resume requires its exact old plan.
     /// </summary>
@@ -224,7 +261,8 @@ public sealed partial class CompositionSelectionBatch
     private static async Task<Prepared> PrepareAsync(
         string planPath,
         string expectedSha,
-        CancellationToken ct
+        CancellationToken ct,
+        bool retainSelectedWithoutCandidates = false
     )
     {
         if (new FileInfo(planPath).Length > MaximumPlanBytes)
@@ -238,6 +276,9 @@ public sealed partial class CompositionSelectionBatch
         }
         var plan = JsonSerializer.Deserialize<CompositionSelectionPlan>(bytes, Json)!;
         ValidatePlan(plan);
+        var selectedWithoutCandidates = retainSelectedWithoutCandidates
+            ? plan.Songs.Select(Key).ToHashSet(StringComparer.Ordinal)
+            : null;
         var pins = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             [planPath] = expectedSha,
@@ -288,12 +329,27 @@ public sealed partial class CompositionSelectionBatch
                 {
                     songs++;
                     // The completed producer owns the logical whole-song census.
-                    // Stream empty-candidate rows without retaining their keys or
-                    // deserializing their large source context. Only candidate-bearing
-                    // songs need replay reconciliation for this selection stage.
+                    // Selection needs only candidate-bearing rows. Program retrieval
+                    // may bootstrap candidates from an explicitly selected target's
+                    // original context, without retaining every empty row in memory.
                     if (proposal.GetProperty("candidates").GetArrayLength() == 0)
                     {
-                        continue;
+                        if (selectedWithoutCandidates is null)
+                        {
+                            continue;
+                        }
+                        var song = proposal.GetProperty("song");
+                        var selectedKey = Key(
+                            new CompositionSelectionSongKey(
+                                song.GetProperty("scope").GetString()!,
+                                song.GetProperty("artistUuid").GetGuid(),
+                                song.GetProperty("song").GetProperty("entityKey").GetString()!
+                            )
+                        );
+                        if (!selectedWithoutCandidates.Contains(selectedKey))
+                        {
+                            continue;
+                        }
                     }
                 }
                 var key = domain + ":" + record.GetProperty("inputKey").GetString();
@@ -317,10 +373,6 @@ public sealed partial class CompositionSelectionBatch
                 else
                 {
                     var hypothesis = proposal.Deserialize<CompositionHypothesisResult>(Json)!;
-                    if (hypothesis.Candidates.Count == 0)
-                    {
-                        continue;
-                    }
                     var songKey = Key(hypothesis.Song);
                     hypotheses.Add(songKey, hypothesis);
                     origins.Add(songKey, new(artifact.Path, line, artifact.Sha256));
@@ -333,10 +385,13 @@ public sealed partial class CompositionSelectionBatch
                 );
             }
         }
+        var candidateBearingSongs = hypotheses.Values.LongCount(value =>
+            value.Candidates.Count > 0
+        );
         if (
             songs < manifest.Songs
             || works.Count != manifest.Works
-            || hypotheses.Count != manifest.Outcomes.GetValueOrDefault("hypotheses")
+            || candidateBearingSongs != manifest.Outcomes.GetValueOrDefault("hypotheses")
         )
         {
             throw new InvalidDataException(
@@ -364,6 +419,25 @@ public sealed partial class CompositionSelectionBatch
                 {
                     Song = hypothesis.Song with { TargetContext = contexts[Key(key)] },
                 };
+            }
+            if (hypothesis.Candidates.Count == 0)
+            {
+                // Preserve the authenticated source for program retrieval, but never
+                // describe or admit an empty-candidate composition-selection request.
+                rows.Add(
+                    new(
+                        new(
+                            key,
+                            null,
+                            origins[Key(key)],
+                            null,
+                            "missing_candidate_bearing_hypothesis"
+                        ),
+                        hypothesis,
+                        []
+                    )
+                );
+                continue;
             }
             var candidates = hypothesis
                 .Candidates.Select(candidate =>
@@ -400,11 +474,11 @@ public sealed partial class CompositionSelectionBatch
             expectedSha,
             plan.Mode,
             manifest.Songs,
-            hypotheses.Count,
+            candidateBearingSongs,
             works.Count,
             rows.Count,
             eligible,
-            hypotheses.Count - rows.Count(row => row.Hypothesis is not null),
+            candidateBearingSongs - rows.Count(row => row.Candidates.Count > 0),
             rows.Where(row => row.Row.SkipReason is null)
                 .Sum(row => row.Row.Request!.MaximumReservedUsd),
             skips,

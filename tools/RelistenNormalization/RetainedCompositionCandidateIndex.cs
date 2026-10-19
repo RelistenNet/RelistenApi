@@ -10,7 +10,7 @@ namespace Relisten.Normalization.Batch;
 /// </summary>
 public sealed class RetainedCompositionCandidateIndex
 {
-    public const string Version = "retained-composition-candidates-v1";
+    public const string Version = "retained-composition-candidates-v2";
     public const int MaximumInputs = 10_000;
     public const int MaximumWorks = 100_000;
     public const int MaximumPayloadBytes = 32 * 1024 * 1024;
@@ -20,6 +20,7 @@ public sealed class RetainedCompositionCandidateIndex
     private readonly Dictionary<Guid, InputFingerprint> inputs = [];
     private readonly Dictionary<Guid, WorkBuilder> works = [];
     private readonly List<MusicBrainzSearchPageObservation> searchPages = [];
+    private readonly List<RetainedCompositionSearchAssertion> recordingSearches = [];
     private readonly Dictionary<string, IReadOnlyList<RetainedCompositionWork>> titles = new(
         StringComparer.Ordinal
     );
@@ -119,6 +120,7 @@ public sealed class RetainedCompositionCandidateIndex
             return;
         }
 
+        AttachRecordingSearches();
         completedWorks = Array.AsReadOnly(
             works
                 .Values.Select(work => work.Complete())
@@ -206,7 +208,8 @@ public sealed class RetainedCompositionCandidateIndex
         NormalizationRetainedDocument document
     )
     {
-        if (input.Resource.ResourceType != "work-search")
+        var recordingSearch = input.Resource.ResourceType == "recording-search";
+        if (!recordingSearch && input.Resource.ResourceType != "work-search")
         {
             return;
         }
@@ -234,6 +237,19 @@ public sealed class RetainedCompositionCandidateIndex
             foreach (var issue in page.Issues)
             {
                 document.ValidateEvidence(issue.Evidence);
+            }
+            if (recordingSearch)
+            {
+                foreach (var hit in page.Hits ?? [])
+                {
+                    document.ValidateEvidence(hit.Evidence);
+                    ValidateEntity(hit.Entity, document);
+                    if (Qualified(hit.Entity.Identity, "recording", out _))
+                    {
+                        recordingSearches.Add(new(page.Origin, hit));
+                    }
+                }
+                continue;
             }
             searchPages.Add(page);
             foreach (var hit in page.Hits ?? [])
@@ -263,6 +279,31 @@ public sealed class RetainedCompositionCandidateIndex
                         );
                     }
                 }
+            }
+        }
+    }
+
+    private void AttachRecordingSearches()
+    {
+        // Wait until all inputs are observed: a search page can precede its
+        // recording lookup. Only an explicit qualified recording→work edge
+        // permits a work to receive the search hit's release/track evidence.
+        var searches = recordingSearches
+            .OrderBy(assertion => assertion.Page.Evidence.InputRevisionUuid)
+            .ThenBy(assertion => assertion.Hit.SourceIndex)
+            .ToLookup(assertion => assertion.Hit.Entity.Identity.Identity);
+        foreach (var work in works.Values)
+        {
+            // Keep repeated relationship observations in Recordings, but attach
+            // each actual search hit once per work rather than manufacturing an
+            // extra assertion for every duplicate copy of the same edge.
+            var recordings = work
+                .Recordings.Select(relationship => relationship.Recording.Identity)
+                .Distinct()
+                .OrderBy(recording => recording.ProviderKey, StringComparer.Ordinal);
+            foreach (var recording in recordings)
+            {
+                work.Searches.AddRange(searches[recording]);
             }
         }
     }
