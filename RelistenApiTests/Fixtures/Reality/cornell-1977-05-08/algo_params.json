@@ -1,0 +1,44 @@
+[
+  {
+    "algo": "align/0.3.0-poc",
+    "params": {
+      "bins_per_octave": 36,
+      "chroma_hop_frames": 4,
+      "cqt_bin_hi": 743,
+      "cqt_bin_lo": 37,
+      "hop": 256,
+      "implementation": "rust-poc@e5ad022",
+      "jump_us": 4000000,
+      "landmark_band_bins": 8,
+      "landmark_fan": 6,
+      "landmark_key_bits": 18,
+      "landmark_max_db": 40,
+      "landmark_max_dt": 48,
+      "landmark_max_shift_bins_x10": 36,
+      "landmark_min_dt": 2,
+      "min_inliers": 10,
+      "min_ratio_x10": 25,
+      "nfft": 2048,
+      "peak_neighbourhood_frames": 6,
+      "peaks_per_sec": 30,
+      "sample_rate": 11025,
+      "tuning_block_frames": 108,
+      "window_hop_us": 5000000,
+      "window_us": 12000000
+    },
+    "params_hash": "191cf3da3704e03f"
+  },
+  {
+    "algo": "anchor-fp/1",
+    "params": {
+      "half_window_us": 5000000,
+      "hop": 256,
+      "nfft": 2048,
+      "peak_neighbourhood_frames": 6,
+      "peaks_per_sec": 30,
+      "record": "u16le dt_frames, f32le bin, f32le magnitude",
+      "sample_rate": 11025
+    },
+    "params_hash": "7303407e7219bd39"
+  }
+]

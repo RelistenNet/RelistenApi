@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package relisten.common.v1;
+
+option csharp_namespace = "Relisten.Common.V1";
+
+// The protobuf twin of the relisten.anchor/1 JSON Schema (schemas/relisten.anchor-1.schema.json).
+// Anchors are stored as JSON in jsonb; this message exists so that bulk API responses can
+// embed them. The mapping is field-for-field; see docs/formats.md §Anchors.
+message Anchor {
+  // Durable: the source of truth.
+  string md5 = 1;
+  int64 offset_us = 2;
+  // A hint. Track uuids are re-minted on rename or re-upload (data-model.md §2.1).
+  string track_uuid = 3;
+  // A cache, for re-landing when the md5 is gone.
+  Fingerprint fingerprint = 4;
+  // Where the anchor sat when it was last landed.
+  Seen seen = 5;
+}
+
+message Fingerprint {
+  // Frozen independently of the alignment peaks, e.g. "anchor-fp/1".
+  string algo = 1;
+  string params_hash = 2;
+  // First analysis frame of the window, in the algorithm's frame grid over the file.
+  uint32 start_frame = 3;
+  // Window length in frames.
+  uint32 frames = 4;
+  // Packed peaks; layout defined by `algo` (docs/formats.md §anchor-fp/1).
+  bytes peaks = 5;
+}
+
+message Seen {
+  string event_uuid = 1;
+  uint32 version = 2;
+  int64 reality_us = 3;
+  string performance_uuid = 4;
+  // Set when re-landing failed and this position is the fallback.
+  bool stale = 5;
+}

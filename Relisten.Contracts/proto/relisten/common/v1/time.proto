@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package relisten.common.v1;
+
+option csharp_namespace = "Relisten.Common.V1";
+
+// Every *_us field in every Relisten message is an integer number of microseconds.
+// The clock (file time or reality time) is named by the field or the enclosing message.
+
+// A monotone piecewise-linear map from one clock to another, as parallel knot arrays:
+// knot i maps x_us[i] to y_us[i]. Between knots, interpolate linearly. Outside the first
+// and last knot the map is undefined.
+//
+// Used for segment and piece knots (x = file time, y = reality time), reality version maps
+// (x = old reality time, y = new reality time) and file lineage (x = old file time,
+// y = new file time). Stored as-is in Postgres bytea columns.
+message PiecewiseLinearMap {
+  repeated int64 x_us = 1;
+  repeated int64 y_us = 2;
+}
+
+// A half-open interval [start_us, end_us) on one clock.
+message Span {
+  int64 start_us = 1;
+  int64 end_us = 2;
+}
