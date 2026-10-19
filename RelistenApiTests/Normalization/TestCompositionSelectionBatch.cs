@@ -1,5 +1,7 @@
 using System.IO.Compression;
+using System.Net;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using FluentAssertions;
@@ -8,6 +10,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Relisten;
 using Relisten.Api.Models.Normalization;
 using Relisten.Data;
+using Relisten.Normalization;
 using Relisten.Normalization.Batch;
 
 namespace RelistenApiTests.Normalization;
@@ -124,22 +127,52 @@ public sealed class TestCompositionSelectionBatchLocal
     [Test]
     public async Task InterruptedExecutionResumesItsExactPrefixWithoutRepeatingACompletedSelection()
     {
-        var fixture = await SelectionFixture.Create(directory);
+        var fixture = await SelectionFixture.Create(directory, selectedCount: 8, concurrency: 4);
         var output = Path.Combine(directory, "execution");
-        var selector = new Selecting { FailOnCall = 2 };
+        using var handler = new ConcurrentResponses(fixture.WorkId);
+        using var http = new HttpClient(handler);
+        var selector = new Selecting(
+            new CachedCompositionHypothesisSelector(
+                new LunaCompositionHypothesisSelector(http, cache, () => "local-fixture"),
+                fixture.JobUuid
+            )
+        );
         var batch = new CompositionSelectionBatch(cache, selector);
         var interrupted = () => batch.RunAsync(fixture.Plan, output, fixture.Sha);
         await interrupted.Should().ThrowAsync<IOException>();
-        selector.Calls.Should().Be(2);
+        handler.Calls.Should().Be(7);
+        handler.MaximumInFlight.Should().Be(4);
+        handler.InFlight.Should().Be(0);
         File.Exists(Path.Combine(output, "manifest.json")).Should().BeFalse();
 
-        selector.FailOnCall = null;
         var completion = await batch.RunAsync(fixture.Plan, output, fixture.Sha, resume: true);
-        selector.Calls.Should().Be(3);
-        completion.ProcessedInputs.Should().Be(2);
-        completion.Outcomes["selected"].Should().Be(2);
+        handler.Calls.Should().Be(8);
+        completion.ProcessedInputs.Should().Be(8);
+        completion.CacheHits.Should().Be(3);
+        completion.Outcomes["selected"].Should().Be(8);
+        var publishedKeys = new List<string>();
+        foreach (var artifact in completion.Chunks)
+        {
+            await using var stream = new GZipStream(
+                File.OpenRead(Path.Combine(output, artifact.Path)),
+                CompressionMode.Decompress
+            );
+            using var reader = new StreamReader(stream);
+            while (await reader.ReadLineAsync() is { } line)
+            {
+                using var row = JsonDocument.Parse(line);
+                publishedKeys.Add(
+                    row.RootElement.GetProperty("proposal")
+                        .GetProperty("input")
+                        .GetProperty("key")
+                        .GetProperty("songEntityKey")
+                        .GetString()!
+                );
+            }
+        }
+        publishedKeys.Should().Equal(Enumerable.Range(0, 8).Select(index => "repertoire:" + index));
         var again = await batch.RunAsync(fixture.Plan, output, fixture.Sha, resume: true);
-        selector.Calls.Should().Be(3);
+        handler.Calls.Should().Be(8);
         again.Should().BeEquivalentTo(completion);
 
         var chunk = Path.Combine(output, completion.Chunks[0].Path);
@@ -158,39 +191,112 @@ public sealed class TestCompositionSelectionBatchLocal
         }
         var resume = () => batch.RunAsync(fixture.Plan, output, fixture.Sha, resume: true);
         await resume.Should().ThrowAsync<InvalidDataException>();
-        selector.Calls.Should().Be(3);
+        handler.Calls.Should().Be(8);
     }
 
-    private sealed class Selecting : ICompositionHypothesisSelector
+    private sealed class Selecting(ICompositionHypothesisSelector inner)
+        : ICompositionHypothesisSelector
     {
-        public int Calls { get; private set; }
-        public int? FailOnCall { get; set; }
+        private bool failed;
 
-        public Task<CompositionHypothesisSelection> SelectAsync(
+        public async Task<CompositionHypothesisSelection> SelectAsync(
             CompositionHypothesisSong song,
             IReadOnlyList<RetainedCompositionWork> suppliedCandidates,
             CancellationToken ct = default
         )
         {
-            Calls++;
-            if (Calls == FailOnCall)
+            if (song.Song.EntityKey == "repertoire:4" && !failed)
             {
+                failed = true;
                 throw new IOException("Synthetic interruption before a provider result.");
             }
-            return Task.FromResult(
-                new CompositionHypothesisSelection(
-                    Guid.Parse(suppliedCandidates.Single().Identity.Identity.ProviderKey),
-                    [],
-                    "selected",
-                    "synthetic-selector",
-                    "Supplied retained candidate"
-                )
-            );
+            return await inner.SelectAsync(song, suppliedCandidates, ct);
+        }
+    }
+
+    private sealed class ConcurrentResponses(Guid workId) : HttpMessageHandler
+    {
+        private readonly TaskCompletionSource firstBatch = new(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        private readonly object sync = new();
+        private int calls;
+        private int inFlight;
+        private int maximumInFlight;
+        public int Calls => calls;
+        public int InFlight => inFlight;
+        public int MaximumInFlight => maximumInFlight;
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken ct
+        )
+        {
+            int call;
+            lock (sync)
+            {
+                call = ++calls;
+                inFlight++;
+                maximumInFlight = Math.Max(maximumInFlight, inFlight);
+            }
+            try
+            {
+                if (call <= 4)
+                {
+                    if (call == 4)
+                    {
+                        firstBatch.TrySetResult();
+                    }
+                    await firstBatch.Task.WaitAsync(TimeSpan.FromSeconds(5), ct);
+                    await Task.Delay((5 - call) * 10, ct);
+                }
+                var selection = JsonSerializer.Serialize(
+                    new
+                    {
+                        selectedWorkMbid = workId,
+                        alternativeWorkMbids = Array.Empty<Guid>(),
+                        outcome = "selected",
+                        rationale = "Supplied retained candidate",
+                    }
+                );
+                var body = JsonSerializer.Serialize(
+                    new
+                    {
+                        status = "completed",
+                        usage = new { input_tokens = 100, output_tokens = 20 },
+                        output = new[]
+                        {
+                            new
+                            {
+                                type = "message",
+                                content = new[] { new { type = "output_text", text = selection } },
+                            },
+                        },
+                    }
+                );
+                return new(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(body, Encoding.UTF8, "application/json"),
+                };
+            }
+            finally
+            {
+                lock (sync)
+                {
+                    inFlight--;
+                }
+            }
         }
     }
 }
 
-internal sealed record SelectionFixture(string Plan, string Sha, string Chunk)
+internal sealed record SelectionFixture(
+    string Plan,
+    string Sha,
+    string Chunk,
+    Guid WorkId,
+    Guid JobUuid
+)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
@@ -201,7 +307,8 @@ internal sealed record SelectionFixture(string Plan, string Sha, string Chunk)
         string directory,
         bool includeMissing = false,
         long maximumOutputBytes = 64 * 1024 * 1024,
-        int selectedCount = 2
+        int selectedCount = 2,
+        int concurrency = 1
     )
     {
         var retained = Path.Combine(directory, "retained");
@@ -321,7 +428,9 @@ internal sealed record SelectionFixture(string Plan, string Sha, string Chunk)
             ))
             .ToList();
         if (includeMissing)
+        {
             keys.Add(missing);
+        }
         var plan = new CompositionSelectionPlan(
             CompositionSelectionBatch.PlanVersion,
             await Pin(manifestPath, 1),
@@ -333,12 +442,13 @@ internal sealed record SelectionFixture(string Plan, string Sha, string Chunk)
             keys.Count,
             120,
             maximumOutputBytes,
-            0
+            0,
+            concurrency
         );
         var bytes = JsonSerializer.SerializeToUtf8Bytes(plan, Json);
         var planPath = Path.Combine(directory, "plan.json");
         await File.WriteAllBytesAsync(planPath, bytes);
-        return new(planPath, Hash(bytes), chunk);
+        return new(planPath, Hash(bytes), chunk, id, plan.JobUuid);
     }
 
     private static async Task<MusicConsolidationArtifact> Pin(string path, long rows) =>

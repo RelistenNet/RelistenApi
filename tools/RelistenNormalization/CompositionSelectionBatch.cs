@@ -141,32 +141,37 @@ public sealed class CompositionSelectionBatch
         var completed = run.CompletedLine;
         try
         {
-            for (var index = checked((int)completed); index < prepared.Rows.Count; index++)
+            while (completed < prepared.Rows.Count)
             {
                 ct.ThrowIfCancellationRequested();
-                var input = prepared.Rows[index];
+                var inputs = prepared
+                    .Rows.Skip(checked((int)completed))
+                    .Take(prepared.Plan.Concurrency)
+                    .ToArray();
                 CheckResources(
                     prepared.Plan,
                     outputDirectory,
                     prepared.ControlReserveBytes
-                        + ResultReserveBytes
-                        + JsonSerializer.SerializeToUtf8Bytes(input.Row, Json).Length
+                        + inputs.Sum(input =>
+                            ResultReserveBytes
+                            + JsonSerializer.SerializeToUtf8Bytes(input.Row, Json).LongLength
+                        )
                 );
-                CompositionHypothesisSelection? result = null;
-                if (input.Row.SkipReason is null)
+
+                // Every admitted request settles in the shared cache before an
+                // exception escapes. A failed batch can replay successful siblings
+                // for free; it cannot silently retry uncertain provider requests.
+                var results = await Task.WhenAll(
+                    inputs.Select(input => SelectAsync(input, selector, ct))
+                );
+                foreach (var row in results)
                 {
-                    result = await selector.SelectAsync(
-                        input.Hypothesis!.Song,
-                        input.Candidates,
-                        ct
-                    );
-                    CompositionHypothesisProjector.ValidateSelection(input.Hypothesis, result);
+                    await run.WriteInputAsync([Result(row)]);
                 }
-                var row = new CompositionSelectionBatchRow(input.Row, result);
-                await run.WriteInputAsync([Result(row)]);
-                completed = index + 1;
-                // A completed provider response owns durable output even if the
-                // caller cancelled immediately afterwards. Save without its token.
+                completed += results.Length;
+
+                // Only this ordered writer advances the checkpoint. Responses
+                // already received retain durable output even after cancellation.
                 await run.SaveAsync(
                     completed,
                     "running",
@@ -197,6 +202,21 @@ public sealed class CompositionSelectionBatch
             );
             throw;
         }
+    }
+
+    private static async Task<CompositionSelectionBatchRow> SelectAsync(
+        PreparedRow input,
+        ICompositionHypothesisSelector selector,
+        CancellationToken ct
+    )
+    {
+        if (input.Row.SkipReason is not null)
+        {
+            return new(input.Row, null);
+        }
+        var result = await selector.SelectAsync(input.Hypothesis!.Song, input.Candidates, ct);
+        CompositionHypothesisProjector.ValidateSelection(input.Hypothesis, result);
+        return new(input.Row, result);
     }
 
     private static async Task<Prepared> PrepareAsync(
@@ -426,6 +446,7 @@ public sealed class CompositionSelectionBatch
             || plan.MaximumDurationSeconds < 1
             || plan.MaximumOutputBytes < ResultReserveBytes
             || plan.MinimumFreeBytes < 0
+            || plan.Concurrency is < 1 or > 4
         )
         {
             throw new ArgumentException(
@@ -456,6 +477,7 @@ public sealed class CompositionSelectionBatch
             prepared.Preflight.CandidateBearingSongs,
             prepared.Preflight.SelectedInputs,
             prepared.Plan.Mode,
+            prepared.Plan.Concurrency,
         };
 
     private static ShadowCatalogResult Result(CompositionSelectionBatchRow row) =>

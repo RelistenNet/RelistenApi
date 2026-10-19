@@ -83,6 +83,12 @@ manifest, job UUID, mode, selected keys, spending and attempt caps, duration,
 output size and free-space reserve. Missing candidates and skipped inputs remain
 in the outcome census.
 
+The optional `concurrency` setting defaults to one and permits up to four
+requests at a time. The caller reserves space for the whole batch before
+admission. All requests settle in the shared cache before the ordered writer
+advances its checkpoint. If one request interrupts a batch, successful siblings
+can replay from cache without another paid request.
+
 ```sh
 dotnet RelistenNormalization.dll composition-select \
   <plan.json> <new-preflight-directory> <plan-sha256> --preflight
@@ -117,3 +123,13 @@ Completion means the selected input census was processed. Inspect selection
 outcomes and skip reasons for actual matching coverage. Model selections and
 rationales remain hypotheses; they do not change provider assertions or accepted
 catalog identities. Updated source evidence or a new method requires a new plan.
+
+A real “Saturday Night” request illustrates the remaining matching risk. For
+G. Love and Special Sauce, Luna selected the supplied Bill Martin/Phil Coulter
+work associated with Bay City Rollers recordings. The retained facts contained no
+explicit G. Love correspondence. [Album credits](https://www.qobuz.com/us-en/album/sugar-g-love-special-sauce/u6ek4q9omtzcb)
+also identify a G. Love song of that title written by Garrett Dutton. Those album
+credits do not identify the captured live file, but they establish a competing
+explanation that the candidate pool did not represent. Keep this case
+unconfirmed. Evaluate missing candidates and unsupported cover assumptions
+alongside selected-ID validity before qualifying automatic acceptance.

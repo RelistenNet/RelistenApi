@@ -13,6 +13,7 @@ public sealed record CompositionSelectionSongKey(
 /// Operator-approved limits. Mode is initial or retry_failed; changing it requires
 /// a new plan and output, never a resume. Job caps are immutable once registered.
 /// A retry may reuse that job's remaining allowance or name a deliberately new job.
+/// Concurrency defaults to one and permits at most four requests; output remains ordered.
 /// </summary>
 public sealed record CompositionSelectionPlan(
     string Version,
@@ -25,7 +26,8 @@ public sealed record CompositionSelectionPlan(
     int MaximumTotalAttempts,
     int MaximumDurationSeconds,
     long MaximumOutputBytes,
-    long MinimumFreeBytes
+    long MinimumFreeBytes,
+    int Concurrency = 1
 );
 
 public sealed record CompositionSelectionOrigin(string Chunk, long Line, string Sha256);
