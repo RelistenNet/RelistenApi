@@ -130,8 +130,9 @@ relationships. It preserves the 33 earlier supported work pages and their routes
 shows the Garcia/Hunter work separately from Alan Hawkshaw's work. A 390-pixel
 browser journey followed the Garcia/Hunter page to Alex Jordan, two distinct show
 UUIDs, the 2023-07-25 recording and its original “Crazy Fingers >” Archive MP3.
-These song-to-work relationships remain unconfirmed title or alias matches. The
-model has not selected a work, and the page keeps all alternatives accessible.
+These song-to-work relationships remain unconfirmed title or alias matches.
+Model suggestions appear beside the processed songs; every alternative stays
+accessible.
 
 The C# pass covers every one of the 896,216 proposed artist-song targets. It
 explicitly records 893,182 targets without candidates in the supplied work pool.
@@ -151,7 +152,26 @@ two-hour duration. It reserves space before each batch and stops near the
 5.5 GiB disk reserve; completed responses survive interruption. Whole-run cache
 growth does not need to fit upfront. Its checkpoint is in
 `local-dev/normalization-data/2026-10-18-composition-selection-full-output-v1/`.
-The current live reader still shows title-based candidates. The single largest-request pilot
+The live reader shows the first 100 completed song results: 82 selected work
+hypotheses and 18 insufficient-evidence results, alongside all original title
+candidates. This is 100 of the 3,034 candidate-bearing song groups, not a measure
+of accuracy. The small completed projection reuses cached responses without
+another paid request while the full run continues. For example,
+[Furthur's Crazy Fingers](http://alecs-macbook-pro.tail09dbf.ts.net:18769/#song-group?scope=catalogue&artist=04735701-ff23-9ec4-93fa-f503246310ec&key=repertoire%3Ac48ac0a67fbe6098db592357bb5ab04d)
+shows a proposed Garcia/Hunter match, recording context, the model's reason and
+the separate Alan Hawkshaw alternative. No model choice changes an accepted
+identity or recording assignment.
+
+An independent read of the first 40 results found useful abstentions and
+namesake distinctions, together with unsupported cover and genre assumptions.
+Some rationales use an unrelated work's recording count or ISWC as though it
+established the target song's identity. Keep target-specific evidence separate
+from background knowledge when evaluating these choices. This nonrandom prefix
+does not estimate accuracy or establish a wrong-match label. The pinned cases
+are retained in the execution directory's `semantic-audit.json`; independent
+target credits or listening are the next adjudication step.
+
+The single largest-request pilot
 established transport and cost behavior, but its unsupported cover assumption
 remains a [candidate-coverage review case](../../../../tools/RelistenNormalization/composition-hypotheses.md#select-a-likely-work).
 Inspect the broad results before qualifying automatic acceptance.
