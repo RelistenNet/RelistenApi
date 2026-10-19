@@ -55,6 +55,9 @@
     <PackageReference Include="Swashbuckle.AspNetCore.Newtonsoft" Version="10.2.3" />
   </ItemGroup>
   <ItemGroup>
+    <EmbeddedResource Include="Migrations\Sql\*.sql" />
+  </ItemGroup>
+  <ItemGroup>
     <Content Update="appsettings.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
