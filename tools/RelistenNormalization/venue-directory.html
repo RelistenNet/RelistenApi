@@ -76,6 +76,9 @@
       .pagination { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 22px 0 35px; }
       .pagination .buttons { display: flex; gap: 8px; }
       .detail-top { margin: 25px 0; }
+      .detail-view .status { margin: 12px 0; }
+      .detail-view .status:empty { display: none; }
+      .detail-disclosure { border-top: 1px solid var(--line); padding-top: 18px; margin: 18px 0; }
       .detail-title { font-size: clamp(1.9rem, 4vw, 2.7rem); margin-bottom: 10px; overflow-wrap: anywhere; }
       .actions { display: flex; flex-wrap: wrap; gap: 9px; margin: 18px 0; }
       .detail-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(250px, 1fr); gap: 18px; align-items: start; }
@@ -134,7 +137,8 @@
       </div>
     </div>
     <div class="shell">
-      <header class="intro">
+      <div id="browse-home"><div id="browse-tools">
+      <header id="intro" class="intro">
         <div class="eyebrow">Retained venue proposals · Unaccepted identities</div>
         <h1>Places behind the recordings.</h1>
         <p>Find recordings across artists using shared venue names and localities. Proposed groups preserve each catalog account, original wording and playback home.</p>
@@ -159,9 +163,13 @@
           </div>
         </form>
       </section>
+      </div></div>
       <div id="status" class="status" role="status" aria-live="polite"></div>
       <main id="results" aria-label="Venue results"></main>
       <div id="pagination" class="pagination"></div>
+      <details id="browse-disclosure" class="detail-disclosure" hidden>
+        <summary>Search venues &amp; coverage</summary>
+      </details>
       <footer>Retained evidence, not production identity acceptance. Catalog dates and locations do not establish a physical premises by themselves. Playback and original recording ownership remain with the linked files and shows.</footer>
     </div>
     <script>
@@ -218,8 +226,19 @@
         return "?" + new URLSearchParams(Object.entries(params).filter(([, value]) => value !== "" && value !== undefined && value !== null));
       }
       function navigate(params) {
+        const leavingDetail = new URLSearchParams(location.search).has("id") && !params.id;
         history.pushState(null, "", pageUrl(params));
         load();
+        if (leavingDetail) { window.scrollTo(0, 0); }
+      }
+      function setPageMode(detail) {
+        document.body.classList.toggle("detail-view", detail);
+        element("intro").hidden = detail;
+        const disclosure = element("browse-disclosure");
+        disclosure.hidden = !detail;
+        if (!detail) { disclosure.open = false; }
+        // Move the existing form so filters and listeners survive back navigation.
+        (detail ? disclosure : element("browse-home")).append(element("browse-tools"));
       }
       function searchParams(params) {
         return Object.fromEntries(searchKeys.filter((key) => params[key]).map((key) => [key, params[key]]));
@@ -387,10 +406,10 @@
       function renderRecordings(data, params) {
         const content = node("div");
         content.append(node("p", data.venue.record_kind === "native_observation"
-          ? "These original recording accounts are associated with this cited native venue observation. Catalog UUIDs are optional historical anchors. Root, recording and file origins keep their own scopes."
+          ? "Recordings associated with this source venue account."
           : data.recordingsScope === "shared_normalization_hypothesis"
-            ? "These recordings span all catalog accounts in this proposed venue group. Each source appears once. The original source and show venue fields, dates and playback homes stay intact."
-            : "These recordings link to the selected catalog venue record. Source and show accounts, including uncertain dates, remain separate."));
+            ? "Recordings across this proposed venue group."
+            : "Recordings linked to this original venue account."));
         if (!data.recordingsComplete) { content.append(node("p", "Recording associations may be partial while this directory is built. The indexed records below do not establish complete coverage.", "unknown-note")); }
         if (data.recordingsScope === "shared_normalization_hypothesis") {
           const filter = node("form", undefined, "recording-filter");
@@ -414,20 +433,20 @@
           const row = node("li");
           row.append(node("h3", recording.source_date || recording.show_date || "Date not established"));
           row.append(node("p", recording.artist_name || "Artist not recorded"));
+          row.append(recordingLinks(recording, data));
           const assignment = node("details");
           assignment.append(node("summary", "Original recording and show assignment"), definition({ relationship: recording.relationship, source_date: recording.source_date, show_date: recording.show_date, source_venue_id: recording.source_venue_id, show_venue_id: recording.show_venue_id }));
-          row.append(assignment);
           if (recording.source_venue_id !== null && recording.source_venue_id !== undefined && recording.show_venue_id !== null && recording.show_venue_id !== undefined && recording.source_venue_id !== recording.show_venue_id) {
-            row.append(node("p", "Source and show point to different catalog venue records. Both are retained.", "unknown-note"));
+            assignment.append(node("p", "Source and show point to different catalog venue records. Both are retained.", "unknown-note"));
           }
-          if (recording.recording_origin) { row.append(richValue({ recording_origin: recording.recording_origin, literal_date: recording.literal_date, catalog_binding_reason: recording.catalog_binding_reason })); }
-          row.append(recordingLinks(recording, data));
+          if (recording.recording_origin) { assignment.append(richValue({ recording_origin: recording.recording_origin, literal_date: recording.literal_date, catalog_binding_reason: recording.catalog_binding_reason })); }
           if (data.recordingsScope === "shared_normalization_hypothesis") {
             const source = recording.source_venue_member_uuid;
             const show = recording.show_venue_member_uuid;
-            if (source) { row.append(link(source === show ? "Original source/show venue account ↗" : "Original source venue account ↗", detailUrl(source, params), "subtle")); }
-            if (show && show !== source) { row.append(link("Original show venue account ↗", detailUrl(show, params), "subtle")); }
+            if (source) { assignment.append(link(source === show ? "Original source/show venue account ↗" : "Original source venue account ↗", detailUrl(source, params), "subtle")); }
+            if (show && show !== source) { assignment.append(link("Original show venue account ↗", detailUrl(show, params), "subtle")); }
           }
+          row.append(assignment);
           list.append(row);
         }
         content.append(list);
@@ -519,10 +538,8 @@
         heading.append(link("← Back to venues", pageUrl({ ...searchParams(params), offset: params.returnOffset || 0 }), "subtle"));
         heading.append(node("h1", venue.name || "Unnamed catalog venue", "detail-title"));
         heading.append(node("p", (venue.normalized_location || venue.location || "Location not established") + " · " +
-          (venue.normalization_key ? count(venue.hypothesis_member_count) + " catalog accounts across " + count(venue.hypothesis_artist_count) + " artists" : venue.artist_name || "Artist not recorded"), "subtle"));
-        const tags = badges(venue);
-        if (!venue.normalization_key) { tags.append(badge("Unaccepted proposal", true)); }
-        heading.append(tags);
+          (venue.normalization_key ? count(data.recordingsTotal) + " recordings" : venue.artist_name || "Artist not recorded"), "subtle"));
+        heading.append(badge(venue.normalization_key ? "Proposed venue group" : "Venue proposal", true));
         const actions = node("div", undefined, "actions");
         const core = venue.normalization ? data.evidenceUrl : readerUrl(data.coreUrl || stats.coreUrl, "venues", venue.place_key);
         if (core) { actions.append(link("View place proposal ↗", core, "button")); }
@@ -537,13 +554,14 @@
           try { await navigator.clipboard.writeText(location.href); element("status").textContent = "Link copied."; }
           catch { element("status").textContent = "Copy the address from your browser to share this view."; }
         }));
-        heading.append(actions);
         main.append(heading);
+        main.append(renderRecordings(data, params));
+        if (venue.record_kind === "native_observation") { main.append(renderNativeFiles(data, params)); }
+        const disclosure = node("details", undefined, "detail-disclosure");
+        disclosure.append(node("summary", "Venue details & source evidence"), actions);
         const grid = node("div", undefined, "detail-grid");
         const primary = node("div");
         const aside = node("aside");
-        const grouped = data.recordingsScope === "shared_normalization_hypothesis";
-        if (grouped) { primary.append(renderRecordings(data, params)); }
         if (venue.normalization?.hypothesis) {
           const normalization = venue.normalization;
           const hypothesis = normalization.hypothesis;
@@ -551,24 +569,28 @@
           account.append(node("p", "The preferred name and shared membership come from the retained normalization proposal. This is an inferred group; physical identity has not been accepted."),
             definition({ preferred_name: hypothesis.preferredName, normalized_locality: hypothesis.displayLocation,
               membership_basis: normalization.membershipBasis, status: normalization.status,
+              original_accounts: hypothesis.memberCount, catalog_artists: hypothesis.artistCount,
               observed_source_associations: hypothesis.sourceObservationCount }));
           primary.append(panel("Shared venue interpretation", account));
           aside.append(panel("Selected original catalog account", definition({
             name: venue.original_name, location: venue.location, venue_uuid: venue.uuid, artist: venue.artist_name,
           })));
         }
-        primary.append(panel("What this record says", definition({ scope: venue.scope, outcome: venue.outcome, reason: venue.reason, grouping_basis: venue.grouping_basis })));
+        primary.append(panel("Current interpretation", definition({ scope: venue.scope, outcome: venue.outcome, reason: venue.reason, grouping_basis: venue.grouping_basis })));
         if (venue.record_kind === "native_observation") { primary.append(panel("Original venue scope", richValue({ origin: venue.original_origin, setlist_links: venue.setlist_links }))); }
         const history = node("div");
         history.append(node("p", venue.record_kind === "native_observation" ? "Original venue names and prose remain cited. Prose does not establish dated name history or relocation intervals." : "Historical names and date bounds are retained as reported. Missing dates do not mean a name applied forever."), richValue(venue.record_kind === "native_observation" ? { names: venue.names, original_venue_prose: venue.history_prose } : venue.history || []));
         primary.append(panel("Names & history", history));
         if (venue.record_kind !== "native_observation") { primary.append(renderAlternatives(venue, params)); }
         const unknowns = node("div", undefined, "unknown-note");
-        unknowns.append(richValue(venue.protected_unknowns || []));
-        aside.append(panel("What remains unknown", unknowns));
-        if (venue.enrichment_tasks?.length) { aside.append(panel("Evidence still needed", richValue(venue.enrichment_tasks))); }
+        unknowns.append(node("p", "These diagnostics belong to the original account. They may predate the current group interpretation."),
+          richValue(venue.protected_unknowns || []));
+        aside.append(panel("Original account diagnostics", unknowns));
+        if (venue.enrichment_tasks?.length) { aside.append(panel("Original evidence requests", richValue(venue.enrichment_tasks))); }
         const locality = Object.fromEntries(Object.entries(venue).filter(([key]) => /locality|country|region|latitude|longitude|address|provider|coordinates/i.test(key)));
-        aside.append(panel("Location account", richValue(locality)));
+        const location = node("div");
+        location.append(node("p", "Original locality observations are retained beside the current normalized display."), richValue(locality));
+        aside.append(panel("Location fields", location));
         const retained = node("details");
         retained.append(node("summary", "Catalog record & retained fields"), definition(Object.fromEntries(Object.entries(venue).filter(([, value]) => value === null || typeof value !== "object"))));
         aside.append(panel("Record provenance", retained));
@@ -590,18 +612,18 @@
         }
         if (!data.relatedRecords.length) { related.append(node("p", "No other records share this retained place key.")); }
         if (venue.record_kind !== "native_observation") { primary.append(panel("Related catalog records", related)); }
-        if (!grouped) { primary.append(renderRecordings(data, params)); }
-        if (venue.record_kind === "native_observation") { primary.append(renderNativeFiles(data, params)); }
         primary.append(renderEvidence(data.evidenceUrl, signal));
         grid.append(primary, aside);
-        main.append(grid);
-        element("status").textContent = "Retained venue proposal · identity not accepted.";
+        disclosure.append(grid);
+        main.append(disclosure);
+        element("status").textContent = "";
       }
       async function load() {
         activeRequest?.abort();
         const request = new AbortController();
         activeRequest = request;
         const params = Object.fromEntries(new URLSearchParams(location.search));
+        setPageMode(Boolean(params.id));
         for (const key of searchKeys) {
           if (key === "scope" || key === "outcome") { setOptions(key, [], params[key] || ""); }
           else { element(formIds[key]).value = params[key] || ""; }
@@ -679,6 +701,7 @@
       });
       element("reset").addEventListener("click", () => navigate({}));
       addEventListener("popstate", load);
+      setPageMode(Boolean(new URLSearchParams(location.search).get("id")));
       loadStats().then(load);
     </script>
   </body>

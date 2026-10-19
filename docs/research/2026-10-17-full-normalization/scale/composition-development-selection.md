@@ -118,9 +118,10 @@ not enter the reusable result cache. Do not reinterpret old indices silently.
 The interrupted job accounted for $0.4974739, including $0.3500055 in reported
 usage and retained reservations for two cancelled requests without usage. No
 attempt remains running or uncertain. The 44-row prefix is incomplete and is
-not served. The next request representation will label each witness, local
-claim and local text explicitly and connect cover attribution to recording
-performers before permitting a preferred proposal.
+not served. The v8 request representation now labels each witness, local claim and local
+text explicitly. It connects cover attribution to recording performers before
+permitting a preferred proposal. Its source contracts pass; its next live trial
+is waiting for local disk capacity and is not an accuracy result.
 
 ## Context-enriched request limits and accounting
 

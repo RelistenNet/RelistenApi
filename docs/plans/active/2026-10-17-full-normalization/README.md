@@ -24,10 +24,11 @@ Reuse the completed experiments and existing services. Process the full captured
 The current readers now support these listener journeys:
 
 - [Search MSG](http://alecs-macbook-pro.tail09dbf.ts.net:18776/?q=MSG) to open Madison Square Garden and browse its recordings across artists. Supported aliases share a preferred name and locality; original venue records and distinct rooms remain accessible.
+- [Open Red Rocks](http://alecs-macbook-pro.tail09dbf.ts.net:18776/?id=00944d87-aa46-ca16-6c6a-9ca48201f139) to browse 649 recordings across 86 recording-bearing artists. Morrison, Colorado now resolves from retained primary geographic evidence, and standard amphitheatre/amphitheater spellings share the group. Some conflicting legacy accounts and shortened names remain separate.
 - [Open tonedeaf](http://alecs-macbook-pro.tail09dbf.ts.net:18777/?person=shared-person%3Apeople_facts%3A9de2bd6e8a4f53298d78c7f3c56299b9) to browse 2,370 recordings across 403 artists, or [Timothy Brown](http://alecs-macbook-pro.tail09dbf.ts.net:18777/?person=shared-person%3Apeople_facts%3Ad40f1b4fab9c7492c3cd9146fbd5fcc5) for 424 recordings across 105 artists. Filter by artist or taper/transferrer role, then open the original recording's files. Shared pages use direct evidence; raw name groups remain available for unassigned observations.
 - [Open Scarlet Begonias](http://alecs-macbook-pro.tail09dbf.ts.net:18769/#song-group?scope=catalogue&artist=77a58ff9-2e01-c59c-b8eb-cff106049b72&key=repertoire%3Af6d191c085ac0d91475fa88f2f434707) to browse 329 catalog shows, 29 recording accounts without linked shows and 3,192 matching files. Numbered titles share the song page; compound files retain separate song links. Same-day performances keep their distinct show UUIDs.
 - [Explore Crazy Fingers](http://alecs-macbook-pro.tail09dbf.ts.net:18769/#possible-version?key=composition%3Amusicbrainz%3A8973193c-be9e-450d-9e26-2cced570c5aa) under the Garcia/Hunter work, choose an artist and open its recordings. The page keeps the Alan Hawkshaw work separate. These composition relationships are unconfirmed title or alias matches; writer context and alternatives remain visible.
-- [Open Furthur's Crazy Fingers](http://alecs-macbook-pro.tail09dbf.ts.net:18769/#song-group?scope=catalogue&artist=04735701-ff23-9ec4-93fa-f503246310ec&key=repertoire%3Ac48ac0a67fbe6098db592357bb5ab04d) to see Luna's proposed Garcia/Hunter match and its reason beside the alternative. The first 100 song groups have model results; the full 3,034-song run continues. Suggestions remain unconfirmed and preserve every title candidate and playback link.
+- [Explore All Along the Watchtower](http://alecs-macbook-pro.tail09dbf.ts.net:18769/#possible-version?key=composition%3Amusicbrainz%3A13b8eeb2-e3bb-35d9-b110-2cfc8ef4b4d7) under the Bob Dylan work, choose an artist and open its recordings. The captured title population includes 275 artist/song groups. These are possible versions, with original files and ownership preserved.
 
 These are proposed interpretations, with original evidence and playback homes retained. The [delivery guide](shadow-delivery.md) states current coverage and remaining gaps. The latest people generation applies the revised credit and alias grammar to all 292,523 captured recordings and includes the revised native provider observations. The [native reader](http://alecs-macbook-pro.tail09dbf.ts.net:18774/?view=files) retains all 34,139 native files and their optional catalog playback links.
 
@@ -38,7 +39,25 @@ and played “Sugar Magnolia” inline. Original source evidence remains availab
 an unavailable upstream audio URL produces a visible error rather than a new
 recording assignment.
 
-Directly supported person pages now cover 18,120 captured recordings across 1,536 artists. Artist-song pages consolidate the full captured title population through the shared C# interpretation. Composition pages now connect 1,024 retained works to 3,034 candidate song groups and their existing playback journeys. Continue the contextual composition run, inspect its actual choices, expand the retained work pool and extend person matching to difficult credits without supported accounts. Neither title matching nor a browsable proposal establishes an accepted identity.
+Directly supported person pages now cover 18,120 captured recordings across 1,536 artists. Artist-song pages consolidate the full captured title population through the shared C# interpretation. Composition pages now connect 2,656 retained works to 8,389 candidate song groups and their existing playback journeys. Preferred model choices are temporarily withheld: source audits found guesses that lacked distinguishing target evidence. Retained candidate works, writer facts and playback remain available. Provider cover credits, explicit source indices and attribution-to-recording checks are now implemented. The next bounded model trial must confirm their behavior before restoring preferred choices; it is waiting for local disk capacity. Neither title matching nor a browsable proposal establishes an accepted identity.
+
+The broader listener audit found venue gaps beyond MSG. A retained locality
+supplement now resolves Morrison, Colorado, and shared whole-token spelling
+comparison handles theatre/theater and amphitheatre/amphitheater across the
+captured catalog. The full venue refresh accounts for all 216,332 original rows;
+34,731 have changed browse fields. These changes describe proposed groups,
+not accepted physical identities.
+
+The largest remaining venue problem is recording ownership within conflated
+legacy rows. Some Warfield and Grateful Dead Red Rocks accounts contain
+conflicting source/show venue references. The reader keeps those recordings
+available, but its whole-row conflict fence excludes them from the shared group.
+Resolve those at the recording/performance relationship instead of merging the
+whole imported venue row. The existing normalized API gives show-specific venue
+assignments precedence; the experimental reader must apply the same ownership
+when it supports those corrections. Shortened names and historical aliases also
+need direct premises evidence; standard spelling equivalence does not establish
+either relationship.
 
 Complete the remaining domain coverage, then qualify production acceptance, rehearse backfill and prepare rollout. Production writes and deployment retain their existing approval requirements.
 
