@@ -376,8 +376,10 @@
       function card(row, kind) {
         if (kind === "artists")
           return `<article class="card"><div class="scope">${esc(scopeLabel(row.scope))}</div><a class="title-link" href="${link("songs", { artist: row.uuid, scope: row.scope })}">${esc(row.name || row.uuid)}</a><p class="muted">Browse this artist’s repertoire</p><a href="${link("setlists", { artist: row.uuid, scope: row.scope })}">View setlists →</a></article>`;
-        if (kind === "songs")
-          return `<article class="card"><div class="scope">${esc(scopeLabel(row.scope))}</div><a class="title-link" href="${link("song", { scope: row.scope, key: row.entity_key })}">${esc(row.title || "Title not available")}</a><p class="muted">${esc(row.artist_name || "")}</p>${badge(row)}<p class="key">${esc(row.entity_key)}</p></article>`;
+        if (kind === "songs") {
+          const normalized = Boolean(row.normalized_group);
+          return `<article class="card"><div class="scope">${esc(scopeLabel(row.scope))}</div><a class="title-link" href="${link(normalized ? "song-group" : "song", { scope: row.scope, artist: row.artist_uuid, key: row.entity_key })}">${esc(row.title || "Title not available")}</a><p class="muted">${esc(row.artist_name || "")}</p>${badge(row)}${normalized ? `<p class="muted">${row.member_count.toLocaleString()} original title accounts · proposed song group</p>` : `<p class="key">${esc(row.entity_key)}</p>`}</article>`;
+        }
         if (kind === "works")
           return `<article class="card"><span class="tag supported">Supported work correspondence</span><h3><a href="${link("work", { key: row.entity_key })}">${esc(row.title || row.entity_key)}</a></h3><p class="muted">Qualified MusicBrainz work · artist repertoire links below</p><p class="key">${esc(row.entity_key)}</p></article>`;
         return `<article class="card"><div class="scope">${esc(scopeLabel(row.scope))}</div><h3><a href="${link("setlist", { scope: row.scope, key: row.entity_key })}">${esc(row.label || row.literal_date || "Retained setlist")}</a></h3><p class="muted">${esc(row.artist_name || "")} · ${esc(row.literal_date || "Date not reported")}</p><span class="tag ${row.ordered ? "supported" : "warning"}">${row.ordered ? "Source-reported order" : "Unordered membership"}</span></article>`;
@@ -399,7 +401,15 @@
           offset: params.get("offset") || 0,
           limit: 40,
         };
-        const result = await api("/api/" + kind + "?" + query(filters));
+        if (kind === "songs" && stats.normalized_song_queries && !filters.q.trim() && !filters.artist
+            && params.get("browse") !== "all") {
+          $("content").innerHTML = '<div class="empty"><p>Search for a song title, or choose an artist.</p>'
+            + `<a href="${link("artists", {scope: filters.scope})}">Choose an artist</a> · `
+            + `<a href="${link("songs", {scope: filters.scope, browse: "all"})}">Browse all song accounts</a></div>`;
+          return;
+        }
+        const endpoint = kind === "songs" && stats.normalized_song_queries ? "normalized-songs" : kind;
+        const result = await api("/api/" + endpoint + "?" + query(filters));
         if (token !== generation) return;
         const artist = filters.artist
           ? `<p class="muted">Artist ${esc(filters.artist)} · <a href="${link("songs", { artist: filters.artist, scope: filters.scope })}">songs</a> / <a href="${link("setlists", { artist: filters.artist, scope: filters.scope })}">setlists</a></p>`
@@ -677,6 +687,16 @@
       async function detail(kind, params, token) {
         const row = await api("/api/" + kind + "?" + params);
         if (token !== generation) return;
+        let normalizedGroups = [];
+        if (kind === "song" && stats.normalized_song_queries && params.get("raw") !== "1") {
+          normalizedGroups = (await api("/api/original-song-groups?" + query({scope: row.scope,
+            artist: row.artist_uuid, key: row.entity_key}))).items;
+          if (token !== generation) return;
+          if (normalizedGroups.length === 1) {
+            navigate("song-group", {scope: row.scope, artist: row.artist_uuid, key: normalizedGroups[0].entity_key});
+            return;
+          }
+        }
         $("content").innerHTML =
           `<a class="back" href="${link(kind === "work" ? "works" : kind === "setlist" ? "setlists" : "songs", { scope: row.scope || "", artist: row.artist_uuid || "" })}">← Back to ${kind === "work" ? "compositions" : kind === "setlist" ? "setlists" : "repertoire"}</a><h2>${esc(row.title || row.label || row.literal_date || row.entity_key)}</h2><p class="muted">${esc(row.artist_name || "")} ${row.scope ? "· " + esc(scopeLabel(row.scope)) : ""}</p>${badge(row)}<p class="key">${esc(row.entity_key)}</p>`;
         if (kind !== "setlist") {
@@ -689,6 +709,10 @@
           $("content").append(witness);
         }
         if (kind === "song") {
+          if (normalizedGroups.length > 1) {
+            $("content").insertAdjacentHTML("beforeend", '<section class="section"><h3>Songs within this title</h3><p class="muted">These are distinct textual memberships. The title does not establish audio order or a segue.</p>'
+              + normalizedGroups.map((group) => `<p><a href="${link("song-group", {scope: group.scope, artist: group.artist_uuid, key: group.entity_key})}">${esc(group.title)}</a></p>`).join("") + '</section>');
+          }
           if (row.works?.length) {
             const box = document.createElement("section");
             box.className = "section";
@@ -820,6 +844,104 @@
           }
         }
       }
+
+      async function songGroup(params, token) {
+        if (!stats.normalized_song_queries) {
+          $("content").innerHTML = '<p class="empty">This reader has no normalized song groups. Browse the original songs instead.</p>';
+          return;
+        }
+        const coordinates = {scope: params.get("scope") || "", artist: params.get("artist") || "",
+          key: params.get("key") || "", generation: stats.generation};
+        const row = await api("/api/song-group?" + query({...coordinates, offset: params.get("offset") || 0}));
+        if (token !== generation) return;
+        $("content").innerHTML = `<a class="back" href="${link("songs", {scope: row.scope, artist: row.artist_uuid})}">← Back to this artist’s songs</a><h2>${esc(row.title)}</h2><p class="muted">${esc(row.artist_name || "")} · ${esc(scopeLabel(row.scope))}</p>${badge(row)}<p class="muted">A proposed song group. Each recording and file keeps its original home.</p>`;
+        const performances = document.createElement("section");
+        performances.className = "section";
+        performances.innerHTML = '<h3>Performances and files</h3><p class="loading">Finding this song’s retained performances…</p>';
+        $("content").append(performances);
+        await groupPerformances(performances, coordinates, token);
+        if (token !== generation) return;
+        if (row.works?.length) {
+          const works = document.createElement("section");
+          works.className = "section";
+          works.innerHTML = '<h3>Supported composition links</h3><div class="grid">' + row.works.map((work) => card(work, "works")).join("") + '</div>';
+          $("content").append(works);
+        }
+        const members = document.createElement("details");
+        members.className = "section";
+        members.innerHTML = `<summary>Original titles and interpretation evidence · ${row.members_total.toLocaleString()} relationships</summary><p class="muted">Jam, tease, reprise, practice and compound memberships keep their own labels. Text order does not establish an audio boundary or segue.</p>`;
+        for (const member of row.members) {
+          const entry = document.createElement("article");
+          entry.className = "card section";
+          entry.innerHTML = `<h3>${esc(member.original_title || "Title unknown")}</h3><span class="tag">${esc(member.relation.replaceAll("_", " "))}</span>${member.disposition !== "proposed" ? '<span class="tag warning">Partial source interpretation</span>' : ''}${member.qualifiers.map((qualifier) => `<span class="tag">${esc(qualifier.replaceAll("_", " "))}</span>`).join("")}<p><a href="${link("song", {scope: row.scope, key: member.original_key, raw: "1"})}">Original title account</a></p><button>Inspect normalization evidence</button>`;
+          entry.querySelector("button").onclick = async () => {
+            try {
+              const proof = await api("/api/correspondence?" + query({...coordinates, key: member.original_key}));
+              if (token !== generation) return;
+              const pre = document.createElement("pre");
+              pre.textContent = JSON.stringify(proof, null, 2);
+              entry.append(pre);
+            } catch (error) {
+              entry.insertAdjacentHTML("beforeend", `<p class="error">${esc(error.message)}</p>`);
+            }
+          };
+          members.append(entry);
+        }
+        members.append(pagination({total: row.members_total, limit: row.members_limit, offset: row.members_offset},
+          (offset) => navigate("song-group", {...Object.fromEntries(params), offset})));
+        $("content").append(members);
+      }
+
+      async function groupPerformances(container, coordinates, token, offset = 0) {
+        try {
+          const result = await api("/api/song-performances?" + query({...coordinates, offset}));
+          if (token !== generation) return;
+          container.innerHTML = `<h3>Performances and files</h3><p class="muted">${result.performancesTotal.toLocaleString()} linked performances · ${result.unboundAccountsTotal.toLocaleString()} recording accounts without a linked performance. Early and late shows keep their distinct show UUIDs.</p>`;
+          if (!result.items.length) container.insertAdjacentHTML("beforeend", '<p class="empty">No matching files in the configured readers.</p>');
+          for (const home of result.items) {
+            const entry = document.createElement("article");
+            entry.className = "card section";
+            const title = home.literalDate ? home.literalDate + (home.performanceLabel ? " · " + home.performanceLabel : "")
+              : home.kind === "catalog_show" ? "Linked performance" : "Original recording account";
+            entry.innerHTML = `<h3>${esc(title)}</h3><p class="muted">${home.sources.length === 1 ? home.fileCountUpperBound.toLocaleString() + ' matching files' : 'Matching files in ' + home.sources.length + ' retained views'}</p>${home.showUuid ? `<p class="key">${esc(home.showUuid)}</p>` : '<p class="muted">No performance inferred from the date or source sets.</p>'}<button>Show files</button>`;
+            const files = document.createElement("div");
+            entry.append(files);
+            entry.querySelector("button").onclick = () => groupFiles(files, coordinates, home, token);
+            container.append(entry);
+          }
+          container.append(pagination(result, (pageOffset) => groupPerformances(container, coordinates, token, pageOffset)));
+        } catch (error) {
+          if (token === generation) container.innerHTML = `<h3>Performances and files</h3><p class="error">${esc(error.message)}</p>`;
+        }
+      }
+
+      async function groupFiles(container, coordinates, home, token, offset = 0) {
+        container.innerHTML = '<p class="loading">Loading exact matching files…</p>';
+        try {
+          const result = await api("/api/performance-files?" + query({...coordinates, homeKey: home.homeKey, offset}));
+          if (token !== generation) return;
+          container.innerHTML = `<p class="muted">${result.total.toLocaleString()} matching ${result.total === 1 ? 'file' : 'files'} in the retained views. Inspect a file for playback and its original interpretation.</p>`;
+          for (const file of result.items) {
+            const source = stats.sources.find((candidate) => String(candidate.id) === String(file.source));
+            const entry = document.createElement("article");
+            entry.className = "card section";
+            const labels = new Set();
+            for (const interpretation of file.normalizationRelations || []) {
+              if (interpretation.relation !== "identity_alias") labels.add(interpretation.relation);
+              for (const qualifier of interpretation.qualifiers) labels.add(qualifier);
+              if (interpretation.partialSource) labels.add("partial source interpretation");
+            }
+            entry.innerHTML = `<button>${esc(file.label || "Original file")}</button><p>${[...labels].map((label) => `<span class="tag">${esc(label.replaceAll("_", " "))}</span>`).join("")}</p>`;
+            entry.querySelector("button").onclick = () => file.fileKind === "native"
+              ? openNativeFile(entry, source, {parentId: file.recordId, nativeFileKey: file.nativeFileKey}, token)
+              : openRecord(entry, source, file.recordId, token);
+            container.append(entry);
+          }
+          container.append(pagination(result, (pageOffset) => groupFiles(container, coordinates, home, token, pageOffset)));
+        } catch (error) {
+          if (token === generation) container.innerHTML = `<p class="error">${esc(error.message)}</p>`;
+        }
+      }
       function renderAccount(box, account, scope) {
         const provider = account.providerAccount || {};
         box.innerHTML = `<p class="muted">${account.ordered ? "Source-reported order. Sets are sections of this account, not separate performances." : "Unordered source membership. No positions, occurrence correspondence, or set boundaries are inferred."}</p>`;
@@ -910,6 +1032,7 @@
           "works",
           "setlists",
           "song",
+          "song-group",
           "work",
           "setlist",
         ].includes(rawKind)
@@ -924,7 +1047,7 @@
             b.classList.toggle(
               "active",
               b.dataset.tab ===
-                (kind === "song"
+                (kind === "song" || kind === "song-group"
                   ? "songs"
                   : kind === "work"
                     ? "works"
@@ -953,7 +1076,8 @@
             $("coverage").textContent =
               `Discovery snapshot · ${counts}. ${snapshots}. These are independent indexed snapshots, not the complete computed population. File searches query live readers; new song titles appear after a catalogue rebuild. Native file coverage does not complete the broader full-reader title projection.`;
           }
-          if (["song", "work", "setlist"].includes(kind))
+          if (kind === "song-group") await songGroup(params, token);
+          else if (["song", "work", "setlist"].includes(kind))
             await detail(kind, params, token);
           else await list(kind, params, token);
         } catch (e) {

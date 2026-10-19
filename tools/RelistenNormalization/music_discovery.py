@@ -6,6 +6,8 @@ Readers remain responsible for current logical results and immutable body checks
 """
 
 import argparse
+import copy
+from contextlib import closing
 import hashlib
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -13,9 +15,12 @@ from pathlib import Path
 import sqlite3
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlencode, urlsplit
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 from music_catalogue import MusicCatalogue, MusicCatalogueBuilder, Source
+from music_consolidation import MusicConsolidationExporter, MusicConsolidationProjection
+from music_groups import MusicGroups, MusicNormalizationChanged
+from shadow_music import MAXIMUM_KEYS, MAXIMUM_REQUEST_BYTES
 
 MAXIMUM_RESPONSE_BYTES = 8 * 1024 * 1024
 RELATION_DOMAINS = {"file_contents", "setlists", "compositions", "repertoire"}
@@ -25,11 +30,18 @@ class CatalogueChanged(ValueError):
     """A browser must reload before using ordinal source/record coordinates."""
 
 
+class MusicQueryUnavailable(ValueError):
+    """A complete source union could not be obtained; no partial total is published."""
+
+
 class MusicDiscovery:
     """Read the compact catalogue and proxy bounded, selective source lookups."""
 
-    def __init__(self, catalogue, readers=()):
+    def __init__(self, catalogue, readers=(), normalization=None):
         self.catalogue = catalogue
+        self._catalogue_marker = None
+        self._catalogue_stats = None
+        self.groups = MusicGroups(catalogue.database, normalization) if normalization else None
         self.readers = []
         for reader in readers:
             run = str(Path(reader.run).resolve(strict=True))
@@ -47,19 +59,136 @@ class MusicDiscovery:
                 raise ValueError("A configured reader URL must be an origin.")
 
     def stats(self):
-        result = self.catalogue.stats()
+        stat = self.catalogue.database.stat()
+        marker = (stat.st_ino, stat.st_size, stat.st_mtime_ns)
+        if marker != self._catalogue_marker:
+            self._catalogue_stats = self.catalogue.stats()
+            self._catalogue_marker = marker
+        # The image is immutable between atomic replacements. Recounting its
+        # million descriptors on every selective file query only adds latency.
+        result = copy.deepcopy(self._catalogue_stats)
         # Old processes also serve this HTML from disk. Advertise child routes
         # independently of projection metadata during a controlled cutover.
         result["native_file_queries"] = True
+        if self.groups:
+            result["normalization"] = self.groups.stats()
+            result["normalized_song_queries"] = True
         sources = result["sources"]
         for reader in self.readers:
             if not any((source["scope"], source["run"]) == (reader["scope"], reader["run"]) for source in sources):
                 sources.append(dict(reader))
         # Ordinal catalogue IDs and configured relationship-only IDs are both tied
         # to this image. Open pages must reload after either mapping changes.
-        generation = [result["built_at"], [(s["id"], s["scope"], s["run"], s["reader_url"]) for s in sources]]
+        generation = [result["built_at"], [(s["id"], s["scope"], s["run"], s["reader_url"]) for s in sources],
+                      (result.get("normalization") or {}).get("outputManifestSha256")]
         result["generation"] = hashlib.sha256(json.dumps(generation, separators=(",", ":")).encode()).hexdigest()[:24]
         return result
+
+    def _group_query(self, query):
+        metadata = self.stats()
+        if query.get("generation") != metadata["generation"]:
+            raise CatalogueChanged("The discovery catalogue changed. Reload before opening song performances")
+        if not self.groups:
+            raise ValueError("No completed music normalization is configured")
+        scope, artist, key = query.get("scope", ""), query.get("artist", ""), query.get("key", "")
+        keys = self.groups.member_keys(scope, artist, key)
+        if not keys:
+            return [], {"artistUuid": artist, "entityKeys": []}
+        if len(keys) > MAXIMUM_KEYS:
+            raise MusicQueryUnavailable("This song group exceeds the complete union-query key bound")
+        sources = [source for source in metadata["sources"] if source["scope"] == scope and self._has_files(source)]
+        return sources, {"artistUuid": artist, "entityKeys": keys}
+
+    @staticmethod
+    def _has_files(source):
+        """Keep proof-only readers without calling file routes they do not need."""
+        if not source.get("index"):
+            return True  # Explicit relationship-only readers may have newer live files.
+        with closing(sqlite3.connect(Path(source["index"]).as_uri() + "?mode=ro", uri=True)) as db:
+            if db.execute("SELECT 1 FROM sqlite_master WHERE name='native_files'").fetchone():
+                native = db.execute("SELECT 1 FROM native_files f JOIN records r ON r.id=f.parent_id "
+                    "JOIN chunks c ON c.id=r.chunk_id WHERE c.state='indexed' LIMIT 1").fetchone()
+                if native:
+                    return True
+            return db.execute("SELECT 1 FROM records r JOIN chunks c ON c.id=r.chunk_id "
+                "JOIN headers h ON h.id=r.header_id JOIN terms kind ON kind.id=h.kind_id "
+                "WHERE r.domain_id=(SELECT id FROM domains WHERE name='file_contents') "
+                "AND c.state='indexed' AND kind.value!='provider_input' LIMIT 1").fetchone() is not None
+
+    @staticmethod
+    def _music_pages(source, route, payload):
+        """Read the complete selective union before deriving a cross-reader total."""
+        items, expected, offset, total_bytes = [], None, 0, 0
+        while expected is None or offset < expected:
+            body = json.dumps({**payload, "limit": 100, "offset": offset}, separators=(",", ":")).encode()
+            if len(body) > MAXIMUM_REQUEST_BYTES:
+                raise MusicQueryUnavailable("This complete song group exceeds the reader request bound")
+            request = Request(source["reader_url"].rstrip("/") + route, data=body,
+                              headers={"Content-Type": "application/json"})
+            with urlopen(request, timeout=20) as response:
+                result_bytes = response.read(MAXIMUM_RESPONSE_BYTES + 1)
+            total_bytes += len(result_bytes)
+            if len(result_bytes) > MAXIMUM_RESPONSE_BYTES or total_bytes > 64 * 1024**2:
+                raise MusicQueryUnavailable("This complete song query exceeds the bounded response size")
+            result = json.loads(result_bytes)
+            if expected is not None and result["total"] != expected:
+                raise MusicQueryUnavailable("The original reader changed during this query. Try again")
+            expected = result["total"]
+            if not result["items"] and offset < expected:
+                raise MusicQueryUnavailable("The original reader returned incomplete music membership")
+            items.extend(result["items"])
+            offset += len(result["items"])
+        return items
+
+    @staticmethod
+    def _home_identity(source, home):
+        if home["homeKey"].startswith(("show:", "source:")):
+            return home["homeKey"]
+        return "reader:" + str(source["id"]) + ":" + home["homeKey"]
+
+    def performances(self, query):
+        sources, payload = self._group_query(query)
+        homes = {}
+        for source in sources:
+            for home in self._music_pages(source, "/api/music/homes", payload):
+                identity = self._home_identity(source, home)
+                combined = homes.setdefault(identity, {"homeKey": identity, "kind": home["kind"],
+                    "showUuid": home["showUuid"], "sources": [], "fileCountUpperBound": 0,
+                    "literalDate": home.get("literalDate"), "performanceLabel": home.get("performanceLabel")})
+                combined["fileCountUpperBound"] += home["fileCount"]
+                combined["sources"].append({"source": source["id"], "homeKey": home["homeKey"],
+                    "fileCount": home["fileCount"], "representativeRecordId": home["representativeRecordId"]})
+        ordered = sorted(homes.values(), key=lambda home: (home["kind"], home["literalDate"] or "", home["homeKey"]))
+        bounds = page(query)
+        offset, limit = bounds["offset"], bounds["limit"]
+        return {"items": ordered[offset:offset + limit], "total": len(ordered), **bounds,
+                "performancesTotal": sum(home["kind"] == "catalog_show" for home in ordered),
+                "unboundAccountsTotal": sum(home["kind"] != "catalog_show" for home in ordered)}
+
+    def performance_files(self, query):
+        sources, payload = self._group_query(query)
+        relations = self.groups.member_relations(query.get("scope", ""), query.get("artist", ""), query.get("key", ""))
+        requested_home = query.get("homeKey", "")
+        if not requested_home or len(requested_home) > 500:
+            raise ValueError("Choose an exact retained performance or recording account")
+        items = {}
+        for source in sources:
+            prefix = "reader:" + str(source["id"]) + ":"
+            if requested_home.startswith("reader:") and not requested_home.startswith(prefix):
+                continue
+            local_home = requested_home[len(prefix):] if requested_home.startswith(prefix) else requested_home
+            for file in self._music_pages(source, "/api/music/files", {**payload, "homeKey": local_home}):
+                identity = (("native", source["run"], file["nativeFileKey"]) if file["fileKind"] == "native"
+                            else ("legacy", file["fileKey"]) if file["fileKey"]
+                            else ("legacy", source["run"], file["recordId"]))
+                # Later configured captures have the same display precedence as
+                # the original catalogue. The selected file's exact home survives.
+                interpretations = [relation for key in file["matchingKeys"] for relation in relations.get(key, [])]
+                items[identity] = {**file, "source": source["id"], "normalizationRelations": interpretations}
+        ordered = sorted(items.values(), key=lambda item: (str(item["source"]), item["recordId"], item["fileOrdinal"] or -1))
+        bounds = page(query)
+        offset, limit = bounds["offset"], bounds["limit"]
+        return {"items": ordered[offset:offset + limit], "total": len(ordered), **bounds}
 
     def related(self, query):
         source = self._source(query)
@@ -141,6 +270,28 @@ def handler_for(discovery):
                     result = catalogue.artists(q=query.get("q", ""), scope=query.get("scope", ""), **page(query))
                 elif route.path == "/api/songs":
                     result = catalogue.songs(q=query.get("q", ""), artist=query.get("artist", ""), scope=query.get("scope", ""), **page(query))
+                elif route.path == "/api/normalized-songs":
+                    if not discovery.groups:
+                        raise ValueError("No completed music normalization is configured")
+                    result = discovery.groups.songs(q=query.get("q", ""), artist=query.get("artist", ""), scope=query.get("scope", ""), **page(query))
+                elif route.path == "/api/song-group":
+                    if query.get("generation") and query["generation"] != discovery.stats()["generation"]:
+                        raise CatalogueChanged("The music normalization changed. Reload this song page")
+                    if not discovery.groups:
+                        raise ValueError("No completed music normalization is configured")
+                    result = discovery.groups.group(query.get("scope", ""), query.get("artist", ""), query.get("key", ""), **page(query))
+                elif route.path == "/api/correspondence":
+                    if not discovery.groups:
+                        raise ValueError("No completed music normalization is configured")
+                    result = discovery.groups.correspondence(query.get("scope", ""), query.get("artist", ""), query.get("key", ""))
+                elif route.path == "/api/original-song-groups":
+                    if not discovery.groups:
+                        raise ValueError("No completed music normalization is configured")
+                    result = discovery.groups.original_groups(query.get("scope", ""), query.get("artist", ""), query.get("key", ""))
+                elif route.path == "/api/song-performances":
+                    result = discovery.performances(query)
+                elif route.path == "/api/performance-files":
+                    result = discovery.performance_files(query)
                 elif route.path == "/api/works":
                     result = catalogue.works(q=query.get("q", ""), **page(query))
                 elif route.path == "/api/setlists":
@@ -164,8 +315,10 @@ def handler_for(discovery):
                 if result is None:
                     return self.send_json(404, {"error": "This music identity is not in the current catalogue snapshot."})
                 return self.send_json(200, result)
-            except CatalogueChanged as error:
+            except (CatalogueChanged, MusicNormalizationChanged) as error:
                 return self.send_json(409, {"error": str(error)})
+            except MusicQueryUnavailable as error:
+                return self.send_json(503, {"error": str(error)})
             except KeyError:
                 return self.send_json(404, {"error": "This music identity is not in the catalogue snapshot."})
             except HTTPError as error:
@@ -205,8 +358,21 @@ def main():
     build.add_argument("--database", required=True)
     build.add_argument("--minimum-free-bytes", type=int, default=int(4.5 * 1024**3))
     build.add_argument("--maximum-bytes", type=int, default=256 * 1024**2)
+    export = commands.add_parser("export-normalization", help="Export every literal descriptor and dictionary spelling for C# normalization")
+    export.add_argument("--database", required=True)
+    export.add_argument("--output", required=True)
+    export.add_argument("--minimum-free-bytes", type=int, default=int(4.5 * 1024**3))
+    export.add_argument("--maximum-bytes", type=int, default=512 * 1024**2)
+    project = commands.add_parser("project-normalization", help="Build a complete normalized music sidecar without copying the browse catalogue")
+    project.add_argument("--database", required=True, help="Original completed browse catalogue")
+    project.add_argument("--input-manifest", required=True)
+    project.add_argument("--output-manifest", required=True)
+    project.add_argument("--normalization", required=True)
+    project.add_argument("--minimum-free-bytes", type=int, default=int(4.5 * 1024**3))
+    project.add_argument("--maximum-bytes", type=int, default=1024**3)
     serve = commands.add_parser("serve", help="Serve the private music browser")
     serve.add_argument("--database", required=True)
+    serve.add_argument("--normalization", help="Completed C# correspondence sidecar for this exact catalogue")
     serve.add_argument("--reader", nargs=3, action="append", metavar=("SCOPE", "RUN", "READER"), default=[], help="Additional relationship-only reader; does not claim title discovery coverage")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=18769)
@@ -215,9 +381,19 @@ def main():
         sources = [Source(scope, Path(run), reader) for scope, run, reader in args.source]
         result = MusicCatalogueBuilder(sources, args.database, minimum_free_bytes=args.minimum_free_bytes, maximum_bytes=args.maximum_bytes).build()
         print(json.dumps(result, ensure_ascii=False), flush=True)
+    elif args.command == "export-normalization":
+        result = MusicConsolidationExporter(args.database, args.output,
+            minimum_free_bytes=args.minimum_free_bytes, maximum_bytes=args.maximum_bytes).export()
+        print(json.dumps({"manifest": str(Path(args.output).resolve() / "manifest.json"),
+            "descriptors": result["descriptors"], "dictionaryNames": result["dictionaryNames"],
+            "catalogueSha256": result["catalogue"]["sha256"]}, ensure_ascii=False), flush=True)
+    elif args.command == "project-normalization":
+        result = MusicConsolidationProjection(args.database, args.input_manifest, args.output_manifest,
+            args.normalization, minimum_free_bytes=args.minimum_free_bytes, maximum_bytes=args.maximum_bytes).build()
+        print(json.dumps(result, ensure_ascii=False), flush=True)
     else:
         readers = [Source(scope, Path(run), reader) for scope, run, reader in args.reader]
-        discovery = MusicDiscovery(MusicCatalogue(args.database), readers)
+        discovery = MusicDiscovery(MusicCatalogue(args.database), readers, args.normalization)
         server = ThreadingHTTPServer((args.host, args.port), handler_for(discovery))
         print(json.dumps({"url": f"http://{args.host}:{args.port}/", "database": str(Path(args.database).resolve())}), flush=True)
         server.serve_forever()

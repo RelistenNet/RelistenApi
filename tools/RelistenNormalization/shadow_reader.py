@@ -24,6 +24,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
+from shadow_music import MAXIMUM_KEYS, MAXIMUM_REQUEST_BYTES, ShadowMusicQueries, recording_account_key
+
 
 def _pack_text(value):
     """Losslessly compact common UUID keys and long repeated label prefixes."""
@@ -202,13 +204,20 @@ class ShadowIndex:
     def _ensure_native_files(self, db):
         """Backfill native child pointers once; legacy track rows need no second index."""
         if db.execute("SELECT 1 FROM sqlite_master WHERE name='native_files'").fetchone():
+            if "recording_key" in {row[1] for row in db.execute("PRAGMA table_info(native_files)")}:
+                return
+            db.execute("BEGIN")
+            db.execute("ALTER TABLE native_files ADD COLUMN recording_key TEXT")
+            self._backfill_native_files(db, existing_children_only=True)
+            db.commit()
             return
         db.execute("BEGIN")
         statements = [
             """CREATE TABLE native_files (
                 id INTEGER PRIMARY KEY, parent_id INTEGER NOT NULL, native_key_id INTEGER NOT NULL,
                 file_ordinal INTEGER NOT NULL, label TEXT NOT NULL, filename TEXT NOT NULL,
-                outcome_id INTEGER NOT NULL, UNIQUE(parent_id,native_key_id), UNIQUE(parent_id,file_ordinal)
+                outcome_id INTEGER NOT NULL,recording_key TEXT NOT NULL,
+                UNIQUE(parent_id,native_key_id), UNIQUE(parent_id,file_ordinal)
             )""",
             """CREATE TABLE native_file_entities (
                 file_id INTEGER NOT NULL, entity_id INTEGER NOT NULL,
@@ -227,12 +236,17 @@ class ShadowIndex:
         ]
         for statement in statements:
             db.execute(statement)
+        self._backfill_native_files(db)
+        db.commit()
+
+    def _backfill_native_files(self, db, existing_children_only=False):
         # Only native file_contents parents require their original bodies during
         # this upgrade. Catalog track_sample bodies are never reprojected.
+        parent_filter = " AND r.id IN (SELECT DISTINCT parent_id FROM native_files)" if existing_children_only else ""
         parents = db.execute("""SELECT r.id,r.chunk_id FROM records r JOIN headers h ON h.id=r.header_id
             JOIN chunks c ON c.id=r.chunk_id
             WHERE r.domain_id=(SELECT id FROM domains WHERE name='file_contents')
-                AND h.kind_id=(SELECT id FROM terms WHERE value='provider_input') AND c.state='indexed'""").fetchall()
+                AND h.kind_id=(SELECT id FROM terms WHERE value='provider_input') AND c.state='indexed'""" + parent_filter).fetchall()
         for parent in parents:
             try:
                 record = self.detail(parent["id"])["record"]
@@ -241,7 +255,6 @@ class ShadowIndex:
                            (str(error)[:1000], parent["chunk_id"]))
                 continue
             self._replace_native_files(db, parent["id"], record)
-        db.commit()
 
     def connect(self, read_timeout=None):
         db = sqlite3.connect(self.database, timeout=10)
@@ -487,8 +500,9 @@ class ShadowIndex:
                      or (file.get("title") or {}).get("value") or filename or child["entityKey"])
             native_key_id = self._key(db, "entities", child["entityKey"])
             file_id = db.execute("""INSERT INTO native_files
-                (parent_id,native_key_id,file_ordinal,label,filename,outcome_id) VALUES(?,?,?,?,?,?)""",
-                                 (parent_id, native_key_id, ordinal, title, filename, self._term(db, outcome))).lastrowid
+                (parent_id,native_key_id,file_ordinal,label,filename,outcome_id,recording_key) VALUES(?,?,?,?,?,?,?)""",
+                                 (parent_id, native_key_id, ordinal, title, filename, self._term(db, outcome),
+                                  recording_account_key(record["inputUuid"], child))).lastrowid
             for key in set(keys) | {child["entityKey"]}:
                 db.execute("INSERT INTO native_file_entities VALUES(?,?)", (file_id, self._key(db, "entities", key)))
 
@@ -757,6 +771,8 @@ class ShadowIndex:
             status = {"activeFile": self._active_file, "lastScan": self._last_scan,
                       "error": self._scan_error, "pauseReason": self._pause_reason}
         return {"run": str(self.run), "fileReaderUrl": self.file_reader_url,
+                "musicQueries": {"unionKeys": True, "maximumKeys": MAXIMUM_KEYS,
+                                 "maximumRequestBytes": MAXIMUM_REQUEST_BYTES},
                 "progress": progress, "progressError": progress_error,
                 "coverage": coverage, "facets": facets, "indexedRecords": sum(indexed.values()),
                 "pendingChunks": len(discovered-indexed_files),
@@ -807,6 +823,28 @@ class ShadowIndex:
 
 def handler_for(index):
     class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            route = urlsplit(self.path)
+            if route.path not in {"/api/music/homes", "/api/music/files"}:
+                return self.send_json(404, {"error": "Unknown reader route."})
+            try:
+                size = int(self.headers.get("Content-Length", "0"))
+                if not 1 <= size <= MAXIMUM_REQUEST_BYTES:
+                    raise ValueError("Music queries require a JSON body of at most 8 MiB")
+                self.connection.settimeout(10)
+                query = json.loads(self.rfile.read(size))
+                if not isinstance(query, dict):
+                    raise ValueError("A music query must be a JSON object")
+                music = ShadowMusicQueries(index)
+                result = music.homes(query) if route.path.endswith("/homes") else music.files(query)
+                return self.send_json(200, result)
+            except (ValueError, TypeError, AttributeError) as error:
+                return self.send_json(400, {"error": str(error)})
+            except OSError:
+                return self.send_json(400, {"error": "The music query body could not be read completely."})
+            except sqlite3.Error:
+                return self.send_json(503, {"error": "The music query could not complete. Try again later."})
+
         def do_GET(self):
             route = urlsplit(self.path)
             query = {key: values[-1] for key, values in parse_qs(route.query).items()}
