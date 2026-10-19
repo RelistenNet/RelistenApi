@@ -24,6 +24,10 @@ public sealed class NormalizationVenueSourceService(
 {
     public const string Version = "venue-resolution-source-v1";
 
+    /// <summary>
+    /// Prepares the exact venue account from a published extraction. Local claims name the
+    /// supporting root revision and account pointer; its saved directory binding supplies ownership.
+    /// </summary>
     public async Task<VenueResolutionSource?> PrepareShowClaimAsync(
         VenueShowClaimReference reference,
         CancellationToken cancellationToken = default
@@ -89,28 +93,40 @@ public sealed class NormalizationVenueSourceService(
             );
         }
         RequireTicket(batch.Ticket, published);
-        var bindings = NormalizationRecordingReadSet
-            .Inputs(batch.Preparation)
-            .Where(input => input.Binding.InputRevisionUuid == reference.InputRevisionUuid)
-            .Select(input => input.Binding)
-            .ToArray();
-        if (bindings.Length == 0 || bindings.Any(binding => !SameJson(binding, bindings[0])))
+        var retained = await ReadOriginalInputs(batch.Ticket, ct);
+        if (!retained.TryGetValue(reference.InputRevisionUuid, out var input))
         {
             throw new ArgumentException(
-                "The requested revision has no unambiguous original recording binding."
+                "The requested revision is not a contributing recording input."
             );
         }
-        var retained = await ReadOriginalInputs(batch.Ticket, ct);
-        var root = retained[reference.InputRevisionUuid];
-        if (root.Recordings.Count != 1 || root.Recordings[0].Origin.Item != bindings[0].Resource)
+        var bindings = NormalizationRecordingReadSet
+            .Inputs(batch.Preparation)
+            .Select(item => item.Binding)
+            .ToArray();
+        NormalizationRecordingBindingSnapshot binding;
+        ProviderRecordingObservation recording;
+        if (input.Resource.Provider == "local" && input.Resource.ResourceType == "metadata_root")
         {
-            throw new NormalizationConflictException(
-                "The original recording input no longer reproduces its supported account contract."
-            );
+            (binding, recording) = SelectLocalRecording(reference, input, bindings, retained, ct);
         }
-        var recording = root.Recordings[0];
+        else
+        {
+            binding = RequireBinding(bindings.Where(item => item.InputRevisionUuid == input.Uuid));
+            var decoded = decoder.Decode(input, ct);
+            if (
+                decoded.Recordings.Count != 1
+                || decoded.Recordings[0].Origin.Item != binding.Resource
+            )
+            {
+                throw new NormalizationConflictException(
+                    "The original recording input no longer reproduces its supported account contract."
+                );
+            }
+            recording = decoded.Recordings[0];
+        }
         var venue = RequireVenue(reference, recording.Venue);
-        var bound = bindings[0].Recording;
+        var bound = binding.Recording;
         var value = bound.Status == NormalizationCatalogBindingStatus.Bound ? bound.Value : null;
         if (
             value != null
@@ -134,8 +150,72 @@ public sealed class NormalizationVenueSourceService(
             batch.Ticket,
             published.ToObservation(),
             reference,
-            bindings[0]
+            binding
         );
+    }
+
+    private (
+        NormalizationRecordingBindingSnapshot Binding,
+        ProviderRecordingObservation Recording
+    ) SelectLocalRecording(
+        VenueShowClaimReference reference,
+        NormalizationInputRevision root,
+        IReadOnlyList<NormalizationRecordingBindingSnapshot> bindings,
+        IReadOnlyDictionary<Guid, NormalizationInputRevision> retained,
+        CancellationToken ct
+    )
+    {
+        var decodedRoot = NormalizationLocalRecordingSelection.DecodeRoot(
+            root,
+            decoder,
+            cancellationToken: ct
+        );
+        var accounts = decodedRoot
+            .Recordings.Where(account =>
+                account.Venue?.Origin.Evidence.JsonPointer == reference.VenueJsonPointer
+            )
+            .ToArray();
+        if (accounts.Length != 1)
+        {
+            throw new ArgumentException(
+                "The coordinate does not identify one retained Local venue account."
+            );
+        }
+
+        // The root pointer selects an account, not a catalog recording. Only its published
+        // directory contributor can supply the source/show binding; dates never select it.
+        var binding = RequireBinding(
+            bindings.Where(item =>
+                item.Resource == accounts[0].Origin.Item
+                && item.SupportingInputs is { Count: 1 }
+                && item.SupportingInputs[0]
+                    == new NormalizationBindingInputReference(root.Uuid, root.Resource)
+            )
+        );
+        var directory = retained[binding.InputRevisionUuid];
+        var selected = NormalizationLocalRecordingSelection.Select(
+            directory,
+            decoder.Decode(directory, ct),
+            binding,
+            root,
+            decodedRoot,
+            ct
+        );
+        return (binding, selected.RootAccount);
+    }
+
+    private static NormalizationRecordingBindingSnapshot RequireBinding(
+        IEnumerable<NormalizationRecordingBindingSnapshot> candidates
+    )
+    {
+        var bindings = candidates.ToArray();
+        if (bindings.Length == 0 || bindings.Any(binding => !SameJson(binding, bindings[0])))
+        {
+            throw new ArgumentException(
+                "The requested revision has no unambiguous original recording binding."
+            );
+        }
+        return bindings[0];
     }
 
     private async Task<VenueResolutionSource> PrepareSetlist(
@@ -190,7 +270,7 @@ public sealed class NormalizationVenueSourceService(
             );
         }
         var retained = await ReadOriginalInputs(batch.Ticket, ct);
-        var root = retained[reference.InputRevisionUuid];
+        var root = decoder.Decode(retained[reference.InputRevisionUuid], ct);
         // The preparation filters a page to the qualified registration. Preserve that filtered
         // order instead of confusing its account index with an unrelated account on the same page.
         var reproduced = root
@@ -266,7 +346,7 @@ public sealed class NormalizationVenueSourceService(
             : null;
     }
 
-    private async Task<IReadOnlyDictionary<Guid, ProviderDecodeResult>> ReadOriginalInputs(
+    private async Task<IReadOnlyDictionary<Guid, NormalizationInputRevision>> ReadOriginalInputs(
         NormalizationWorkTicket ticket,
         CancellationToken ct
     )
@@ -301,7 +381,7 @@ public sealed class NormalizationVenueSourceService(
             new(100, 32 * 1024 * 1024, 128 * 1024 * 1024),
             ct
         );
-        return retained.ToDictionary(input => input.Uuid, input => decoder.Decode(input, ct));
+        return retained.ToDictionary(input => input.Uuid);
     }
 
     private Task<PublishedBatch?> ReadPublishedBatch(
