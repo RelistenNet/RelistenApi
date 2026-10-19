@@ -140,5 +140,25 @@ Focused contracts cover literal export and native-context authentication, namesa
 rivals, exact repeats and incomplete output, partial targets versus review rivals,
 alias search, overlapping readers, same-date distinct shows, original playback,
 unknown native accounts, migration, replay, missing chunks and query failure/recovery.
-The phone fixture checks the same search-to-file journey at 390 px. Full-run browser
-verification follows a completed C# output and coordinated reader cutover.
+The actual full-catalog browser journey was checked at 390 px after reader cutover.
+[Scarlet Begonias](http://alecs-macbook-pro.tail09dbf.ts.net:18769/#song-group?scope=catalogue&artist=77a58ff9-2e01-c59c-b8eb-cff106049b72&key=repertoire%3Af6d191c085ac0d91475fa88f2f434707)
+combines 61 original title entries and reaches 329 catalog shows, 29 recording
+accounts without show links and 3,192 distinct matching files. Numbered-title
+navigation and both compound-song links reach the original files. A bounded
+one-byte request to a selected original Archive MP3 returned HTTP 206 audio.
+
+The completed sidecar is 956,424,192 bytes and leaves the 510 MB base catalogue
+unchanged. Actual scoped Scarlet search took 0.079 seconds, global Scarlet search
+0.730 seconds and group detail 0.152 seconds. Explicit unfiltered browsing took
+7.382 seconds; the initial screen instead offers title search or artist selection.
+These timings describe the local retained images, not a production capacity claim.
+The retained publication is in
+`local-dev/normalization-data/2026-10-18-music-consolidation-publication-v1-execution/`.
+
+Source labels can conflict with other source metadata. Both current Archive items
+[170338](https://archive.org/metadata/gd1973-10-30.170338.aud.lamarre.vernon.sirmick.flac1644)
+and [170339](https://archive.org/metadata/gd1973-10-30.170339.aud.lamarre.vernon.sirmick.flac2496)
+label `gd1973-10-30s2t04.flac` as Scarlet Begonias, although the written item setlist
+omits that song. The retained title and date match that metadata. This discrepancy
+does not establish what the audio contains; keep the source evidence available
+rather than silently rewriting or suppressing the file.
