@@ -24,7 +24,7 @@ public sealed partial class ShadowVenueAdapter : IShadowCatalogAdapter
     private readonly ShadowVenueGeography? geography;
 
     public string Version =>
-        "shadow-venue-physical-history-v3/corpus-hypotheses-v2/geography="
+        "shadow-venue-physical-history-v3/corpus-hypotheses-v3/geography="
         + (geography?.EvidenceIdentity ?? "none");
 
     /// <param name="geographyManifest">Optional pinned offline GeoNames manifest. Null preserves parsed locality labels.</param>

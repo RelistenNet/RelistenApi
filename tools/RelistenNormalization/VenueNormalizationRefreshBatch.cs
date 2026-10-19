@@ -104,22 +104,32 @@ public sealed class VenueNormalizationRefreshBatch
         {
             throw new InvalidDataException("The original outcomes and frozen capture differ.");
         }
-        var adapter = new ShadowVenueAdapter(
+        var geography = ShadowVenueGeography.Load(
             request.GeographyManifest.Path + "#sha256=" + request.GeographyManifest.Sha256
         );
+        var adapter = new ShadowVenueAdapter(geography);
+        // A locality supplement may extend the original reference, but it cannot
+        // replace its cities500 snapshot. Unchanged browse fields remain absent
+        // from the changed-only output even though their evidence digest changes.
         var oldMethod = old.GetProperty("methods")
             .GetProperty(nameof(ShadowVenueAdapter))
             .GetString()!;
         if (
             oldMethod == adapter.Version
-            || !oldMethod.EndsWith(
-                "/geography=" + request.GeographyManifest.Sha256,
-                StringComparison.Ordinal
+            || !(
+                oldMethod.EndsWith(
+                    "/geography=" + geography.EvidenceIdentity,
+                    StringComparison.Ordinal
+                )
+                || oldMethod.EndsWith(
+                    "/geography=" + geography.BaseEvidenceIdentity,
+                    StringComparison.Ordinal
+                )
             )
         )
         {
             throw new InvalidDataException(
-                "Refresh requires the same geography and a new venue method."
+                "Refresh requires a new venue method and the same cities500 reference, optionally extended by a pinned locality supplement."
             );
         }
 

@@ -546,8 +546,25 @@ public sealed partial class ShadowVenueAdapter
         ShadowVenueObservation venue
     ) => (venue.Locality.Geography!.ProposedGeographicKey!, venue.Scope, FullName(venue.NameKey));
 
-    private static string FullName(string key) =>
-        key.StartsWith("the ", StringComparison.Ordinal) ? key[4..] : key;
+    private static string FullName(string key)
+    {
+        var name = key.StartsWith("the ", StringComparison.Ordinal) ? key[4..] : key;
+
+        // Compare whole-word spelling variants without changing provider wording or
+        // discarding venue terms. Geography, premises and room constraints still apply.
+        return string.Join(
+            " ",
+            name.Split(' ')
+                .Select(word =>
+                    word switch
+                    {
+                        "theatre" => "theater",
+                        "amphitheatre" => "amphitheater",
+                        _ => word,
+                    }
+                )
+        );
+    }
 
     private static string? Acronym(string? name)
     {

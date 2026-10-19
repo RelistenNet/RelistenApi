@@ -33,7 +33,7 @@ GeoNames attribution and the reference digest; retained downloads are unchanged.
 Matching unions exact normalized aliases, then applies every supplied country
 and administrative-region constraint. One distinct geographic ID yields a
 proposal. Ambiguous names retain candidates; missing countries, unrecognized
-constraints and absent towns remain unresolved. No population ranking or
+constraints and towns absent from the admitted reference remain unresolved. No population ranking or
 coordinate proximity breaks ties. District feature codes remain visible.
 Historical aliases can help propose a geographic feature, but their dates and
 historical administrative boundaries remain unknown.
@@ -71,3 +71,59 @@ locality on at least one side. All setlist.fm and PhantasyTour venue rows curren
 lack direct source venue references. Cross-provider venue correspondence still
 needs evidence; geographic proposals do not move recordings or replace source
 venue ownership.
+
+## Towns omitted from cities500
+
+Small towns can be missing from cities500 even when GeoNames has a populated-place
+record. Morrison, Colorado is one example: GeoNames identifies it as
+[`geonames:5431916`](https://www.geonames.org/5431916/morrison.html), with population
+434. An omitted town must retain its own identity. Substituting a nearby city
+would make unrelated concert locations appear equivalent.
+
+Retain individual GeoNames RDF records in a new supplement directory. Supply the
+existing cities500 manifest pin and explicit GeoNames IDs:
+
+```sh
+python3 tools/RelistenNormalization/venue-geography/acquire-localities.py \
+  local-dev/normalization-data/geonames-localities-new \
+  --base-manifest '<cities500-manifest-path>#sha256=<digest>' \
+  --geoname-id 5431916
+```
+
+Repeat `--geoname-id` for more towns. The command accepts 1 to 32 distinct IDs,
+retains at most 128 KiB per response and 2 MiB in total, refuses redirects and
+existing output directories, and keeps a 4 GiB free-space floor. It makes one
+request per ID with a 30-second timeout. On failure, retained partial files remain;
+use a new directory for a retry. Only a completed acquisition writes its manifest.
+
+The printed pin selects a `shadow-geonames-localities-v1` manifest. Use that pin
+as `RELISTEN_SHADOW_VENUE_GEOGRAPHY` for a new shadow or venue-refresh run. The
+manifest references one unchanged cities500 v1 manifest and records each RDF
+source URL, capture time, byte length and SHA-256. Existing cities500 v1 pins
+continue to work without a supplement. No network access occurs during matching.
+
+The loader authenticates both references, then reads each locality directly from
+its retained RDF. A record must identify a populated place at its official
+`https://sws.geonames.org/<id>/about.rdf` URL. Its country must agree with the
+first-order administrative division in the authenticated base reference. Repeated
+GeoNames IDs, including IDs already present in cities500, reject the supplement;
+operators must resolve that conflict before creating a new reference. Invalid
+coordinates or changed bytes also reject it. The new manifest digest becomes the
+geography evidence identity, so adding a locality cannot reuse results cached for
+the older reference.
+
+Supplemental places follow the same exact-alias, country and region rules as the
+base reference. They can introduce ambiguity; the loader does not prefer a
+supplemental place over another same-name place. Locality coordinates describe
+the town. The supplement supplies no venue entrance, room, physical venue identity,
+or historical boundary evidence.
+
+The `venue-normalization-refresh` command accepts a supplement when its frozen
+cities500 base is the reference used by the original venue run. Set the existing
+request's `geographyManifest` to the new manifest's path, byte count and SHA-256;
+the request schema and command arguments stay the same. A different cities500
+snapshot is rejected. The refresh continues to authenticate the original corpus,
+reader directory and outcomes, and emits only changed browse or grouping fields.
+Changing the evidence digest alone does not emit every venue. Use a fresh output
+directory and retain the previous reader generation until the changed projection
+has been applied and checked through the listener interface.

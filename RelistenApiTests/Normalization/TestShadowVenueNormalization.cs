@@ -299,6 +299,106 @@ public sealed class TestShadowVenueNormalization
         left.Normalization.GeographicKey.Should().NotBe(right.Normalization.GeographicKey);
     }
 
+    [TestCase("Warfield Theater", "Warfield Theatre", "San Francisco, CA")]
+    [TestCase("Red Rocks Amphitheater", "Red Rocks Amphitheatre", "Morrison, CO")]
+    public void StandardSpellingVariantsJoinAcrossSourceShowAccountsAndArtists(
+        string sourceName,
+        string showName,
+        string locality
+    )
+    {
+        var source = Venue(1, sourceName, 1, locality);
+        var show = Venue(2, showName, 1, locality);
+        var anotherArtist = Venue(3, showName, 2, locality);
+        var adapter = Observe(source, show, anotherArtist, Source(1, 1, 2), Source(2, 3, 3));
+
+        var proposed = Proposal(Result(adapter, source));
+        proposed.Normalization!.Hypothesis.Should().NotBeNull();
+        proposed.ProposedPlaceKey.Should().Be(Proposal(Result(adapter, show)).ProposedPlaceKey);
+        proposed
+            .ProposedPlaceKey.Should()
+            .Be(Proposal(Result(adapter, anotherArtist)).ProposedPlaceKey);
+        proposed.Normalization.OriginalName.Should().Be(sourceName);
+        Proposal(Result(adapter, show)).Normalization!.OriginalName.Should().Be(showName);
+        proposed.Normalization.Hypothesis!.Names.Should().Contain([sourceName, showName]);
+        proposed.Normalization.Hypothesis.SourceObservationCount.Should().Be(2);
+        proposed.AcceptedIdentity.Should().BeFalse();
+        Result(adapter, source).InputUuid.Should().Be(Id(1));
+    }
+
+    [TestCase("Los Angeles, CA", null, null, null)]
+    [TestCase("San Francisco, CA", "1 First Street", "2 Second Street", null)]
+    [TestCase("San Francisco, CA", null, null, "Old Harbor Theatre (1980–1990)")]
+    public void StandardSpellingCannotOverrideDifferentGeographyPremisesOrExplicitHistory(
+        string showLocality,
+        string? sourceAddress,
+        string? showAddress,
+        string? showHistory
+    )
+    {
+        var source = Venue(1, "Warfield Theater", 1, "San Francisco, CA", address: sourceAddress);
+        var show = Venue(
+            2,
+            "Warfield Theatre",
+            1,
+            showLocality,
+            address: showAddress,
+            history: showHistory
+        );
+        var adapter = Observe(source, show, Source(1, 1, 2));
+
+        Proposal(Result(adapter, source))
+            .ProposedPlaceKey.Should()
+            .NotBe(Proposal(Result(adapter, show)).ProposedPlaceKey);
+        Proposal(Result(adapter, show)).Normalization!.Hypothesis.Should().BeNull();
+        Proposal(Result(adapter, show)).PastNames.Should().HaveCount(showHistory == null ? 0 : 1);
+    }
+
+    [Test]
+    public void StandardSpellingDoesNotTurnANamedRoomIntoItsArena()
+    {
+        var arena = Venue(1, "Madison Square Garden", 1);
+        var britishRoom = Venue(2, "Theatre at Madison Square Garden", 1);
+        var americanRoom = Venue(3, "Theater at Madison Square Garden", 2);
+        var adapter = Observe(arena, britishRoom, americanRoom, Source(1, 1, 2), Source(2, 3, 3));
+
+        foreach (var room in new[] { britishRoom, americanRoom })
+        {
+            var proposed = Proposal(Result(adapter, room));
+            proposed.Scope.Should().Be("room");
+            proposed.Normalization!.Hypothesis.Should().BeNull();
+            proposed
+                .ProposedPlaceKey.Should()
+                .NotBe(Proposal(Result(adapter, arena)).ProposedPlaceKey);
+        }
+    }
+
+    [Test]
+    public void SpellingComparisonDoesNotChangePartsOfNamesOrTreatTyposAsEqual()
+    {
+        var first = Venue(1, "Theatreland", 1);
+        var second = Venue(2, "Theaterland", 2);
+        var typo = Venue(3, "Red Rocks Ampitheatre", 3);
+        var full = Venue(4, "Red Rocks Amphitheatre", 4);
+        var adapter = Observe(
+            first,
+            second,
+            typo,
+            full,
+            Source(1, 1, 1),
+            Source(2, 2, 2),
+            Source(3, 3, 3),
+            Source(4, 4, 4)
+        );
+
+        Proposal(Result(adapter, first))
+            .ProposedPlaceKey.Should()
+            .NotBe(Proposal(Result(adapter, second)).ProposedPlaceKey);
+        Proposal(Result(adapter, typo))
+            .ProposedPlaceKey.Should()
+            .NotBe(Proposal(Result(adapter, full)).ProposedPlaceKey);
+    }
+
     [Test]
     public void ARoomAssociationCannotRouteAnAmbiguousArenaAbbreviationIntoTheArena()
     {
@@ -538,6 +638,8 @@ public sealed class TestShadowVenueNormalization
                     Place(5128581, "New York City", "NY", "New York", ["NY", "NYC", "New York"]),
                     Place(5327684, "Berkeley", "CA", "California", []),
                     Place(5368361, "Los Angeles", "CA", "California", []),
+                    Place(5391959, "San Francisco", "CA", "California", []),
+                    Place(5431916, "Morrison", "CO", "Colorado", []),
                 ],
                 "synthetic-normalization-reference-v1"
             )

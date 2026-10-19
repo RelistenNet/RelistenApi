@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Xml.Linq;
 using FluentAssertions;
 using Relisten.Normalization.Batch;
 
@@ -183,6 +184,98 @@ public sealed class TestVenueNormalizationRefreshBatch
         File.Exists(Path.Combine(directory, "missing", "manifest.json")).Should().BeFalse();
     }
 
+    [Test]
+    public async Task PinnedSupplementCanExtendOriginalReferenceWithoutRewritingUnchangedVenues()
+    {
+        var originalGeography = request.GeographyManifest;
+        var supplement = CreateSupplement(originalGeography);
+        request = request with { GeographyManifest = Pin(supplement) };
+
+        var result = await RunAsync("supplemented");
+
+        result.Complete.Should().BeTrue();
+        result.TotalVenues.Should().Be(3);
+        result.ChangedVenues.Should().Be(2);
+        result.UnchangedVenues.Should().Be(1);
+        result.GeographyManifest.Sha256.Should().Be(Pin(supplement).Sha256);
+        Pin(originalGeography.Path).Should().Be(originalGeography);
+    }
+
+    [Test]
+    public async Task SupplementCannotReplaceOriginalCities500Reference()
+    {
+        var alternateBase = Path.Combine(directory, "alternate-geography.json");
+        var manifest = JsonNode.Parse(await File.ReadAllTextAsync(request.GeographyManifest.Path))!;
+        manifest["revision"] = "different snapshot";
+        await File.WriteAllTextAsync(alternateBase, manifest.ToJsonString());
+        request = request with { GeographyManifest = Pin(CreateSupplement(Pin(alternateBase))) };
+
+        var run = async () => await RunAsync("wrong-base");
+        await run.Should()
+            .ThrowAsync<InvalidDataException>()
+            .WithMessage("*same cities500 reference*");
+        File.Exists(Path.Combine(directory, "wrong-base", "manifest.json")).Should().BeFalse();
+    }
+
+    private string CreateSupplement(VenueCorrectionArtifact baseManifest)
+    {
+        XNamespace gn = "http://www.geonames.org/ontology#";
+        XNamespace rdf = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
+        XNamespace geo = "http://www.w3.org/2003/01/geo/wgs84_pos#";
+        var rdfPath = Path.Combine(directory, "hamlet.rdf");
+        File.WriteAllText(
+            rdfPath,
+            new XElement(
+                rdf + "RDF",
+                new XElement(
+                    gn + "Feature",
+                    new XAttribute(rdf + "about", "https://sws.geonames.org/999/"),
+                    new XElement(gn + "name", "Small Hamlet"),
+                    new XElement(gn + "countryCode", "US"),
+                    new XElement(
+                        gn + "featureClass",
+                        new XAttribute(rdf + "resource", "https://www.geonames.org/ontology#P")
+                    ),
+                    new XElement(
+                        gn + "featureCode",
+                        new XAttribute(rdf + "resource", "https://www.geonames.org/ontology#P.PPL")
+                    ),
+                    new XElement(
+                        gn + "parentADM1",
+                        new XAttribute(rdf + "resource", "https://sws.geonames.org/5128638/")
+                    ),
+                    new XElement(geo + "lat", "40.7"),
+                    new XElement(geo + "long", "-74")
+                )
+            ).ToString()
+        );
+        var source = Pin(rdfPath);
+        var path = Path.Combine(directory, "supplement.json");
+        File.WriteAllText(
+            path,
+            JsonSerializer.Serialize(
+                new
+                {
+                    version = "shadow-geonames-localities-v1",
+                    baseManifest = baseManifest.Path + "#sha256=" + baseManifest.Sha256,
+                    files = new[]
+                    {
+                        new
+                        {
+                            path = Path.GetFileName(rdfPath),
+                            source.Bytes,
+                            source.Sha256,
+                            url = "https://sws.geonames.org/999/about.rdf",
+                            capturedAt = "2026-10-18T00:00:00Z",
+                        },
+                    },
+                },
+                Json
+            )
+        );
+        return path;
+    }
+
     private async Task<VenueNormalizationCorrections> RunAsync(string output)
     {
         var path = Path.Combine(directory, output + "-request.json");
@@ -279,12 +372,7 @@ public sealed class TestVenueNormalizationRefreshBatch
     {
         private readonly ShadowVenueAdapter inner = new(geography);
         private ShadowVenueProposal? anchor;
-        public string Version =>
-            inner.Version.Replace(
-                "corpus-hypotheses-v2",
-                "corpus-hypotheses-v1",
-                StringComparison.Ordinal
-            );
+        public string Version => "historical-fixture/" + inner.Version;
 
         public IReadOnlyList<string> DomainsFor(string inputKind) => inner.DomainsFor(inputKind);
 
