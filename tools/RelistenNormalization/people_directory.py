@@ -27,6 +27,7 @@ import unicodedata
 from urllib.parse import parse_qs, urlencode, urlsplit
 
 from person_hypotheses import PersonHypotheses
+from shared_people_directory import CombinedPeopleHypotheses, SharedPeopleOverlay
 
 VERSION = "people-name-directory-v5"
 
@@ -1386,13 +1387,14 @@ class DirectoryReadConnection(sqlite3.Connection):
 class PeopleDirectory:
     """Read-only search and recording pages; each request uses its own connection."""
 
-    def __init__(self, database, files_url, core_url):
+    def __init__(self, database, files_url, core_url, shared_people_database=None):
         self.database = Path(database).resolve()
         self.files_url = files_url.rstrip("/") + "/"
         self.core_url = core_url.rstrip("/") + "/"
         self._people_lock = threading.Lock()
         self._people_stamp = None
         self._people_index = None
+        self.shared_overlay = SharedPeopleOverlay(self.database, shared_people_database) if shared_people_database else None
 
     def _database_stamp(self):
         paths = (self.database, Path(str(self.database) + '-wal'))
@@ -1406,16 +1408,19 @@ class PeopleDirectory:
         return tuple(stamps)
 
     def _shared_people(self, db):
-        # The stamp belongs to the open read snapshot, not the current path.
-        # A replacement can occur after connect without relabeling that snapshot.
+        # Context evidence is cached only for the already-open base snapshot.
+        # Broad membership stays in a separate immutable, generation-pinned overlay.
         stamp = db.generation_stamp
         if stamp is None:
-            return PersonHypotheses(db, name_key)
-        with self._people_lock:
-            if stamp != self._people_stamp:
-                self._people_index = PersonHypotheses(db, name_key)
-                self._people_stamp = stamp
-            return self._people_index
+            context = PersonHypotheses(db, name_key)
+        else:
+            with self._people_lock:
+                if stamp != self._people_stamp:
+                    self._people_index = PersonHypotheses(db, name_key)
+                    self._people_stamp = stamp
+                context = self._people_index
+        broad = self.shared_overlay.reader(db, name_key) if self.shared_overlay else None
+        return CombinedPeopleHypotheses(context, broad)
 
     def connect(self):
         before = self._database_stamp()
@@ -1454,7 +1459,8 @@ class PeopleDirectory:
             result['capabilities']['sharedPeople'] = True
             shared = self._shared_people(db)
             result['personHypotheses'] = len(shared.visible)
-            result['personHypothesisCredits'] = len({credit for person in shared.visible for credit in person['members']})
+            result['personHypothesisCredits'] = shared.credit_count()
+            result['sharedPeopleOverlay'] = self.shared_overlay.current_state(db) if self.shared_overlay else dict(state='unavailable', reason='not_configured')
             result.update(filesUrl=self.files_url, coreUrl=self.core_url)
             return result
 
@@ -1617,30 +1623,63 @@ class PeopleDirectory:
             if projected is None:
                 return None
             result, members = projected
+            source_actors = result.pop('_sourceActors', [])
             source_run = json.loads(db.execute("SELECT value FROM metadata WHERE key='sourceRun'").fetchone()[0])
             artist_sources, role_sources = {}, {}
-            for credit in members:
+            for credit in members + source_actors:
                 artist_sources.setdefault(credit['artist_uuid'], set()).add(credit['source_uuid'])
-                role_sources.setdefault(credit['role'], set()).add(credit['source_uuid'])
-            artist_names = {credit['artist_uuid']: credit['artist_name'] or credit['artist_uuid'] for credit in members}
+                if credit.get('role'):
+                    role_sources.setdefault(credit['role'], set()).add(credit['source_uuid'])
+            artist_names = {credit['artist_uuid']: credit['artist_name'] or credit['artist_uuid'] for credit in members + source_actors}
             result['artists'] = [dict(uuid=identifier, name=artist_names[identifier], recordingCount=len(sources))
                                  for identifier, sources in sorted(artist_sources.items(), key=lambda pair: (artist_names[pair[0]], pair[0]))]
             result['roles'] = [dict(role=wording, recordingCount=len(sources)) for wording, sources in sorted(role_sources.items())]
             selected = [credit for credit in members if (not artist or credit['artist_uuid'] == artist)
                         and (not role or credit['role'] == role)]
+            selected_actors = [member for member in source_actors
+                               if (not artist or member['artist_uuid'] == artist) and not role]
+            sources = sorted({member['source_uuid'] for member in selected + selected_actors})
+            page_sources = set(sources[offset:offset + limit])
             recordings = {}
             for member in selected:
                 source = member['source_uuid']
+                if source not in page_sources:
+                    continue
                 if source not in recordings:
                     recordings[source] = dict(sourceUuid=source, capturedHome=self._home(db, source),
-                        playableFilesUrl=self.files_url + '?' + urlencode(dict(domain='file_contents', entityKey='source:' + source)), credits=[])
+                        playableFilesUrl=self.files_url + '?' + urlencode(dict(domain='file_contents', entityKey='source:' + source)), credits=[], sourceObservations=[])
                 credit = dict(member)
                 credit.update(evidence=json.loads(member['evidence']), aliases=json.loads(member['aliases']),
                               originRun=member['origin_run'] or source_run,
                               sourceEvidenceUrl='/api/credit?' + urlencode(dict(id=member['id'])))
                 recordings[source]['credits'].append(credit)
-            result.update(total=len(recordings), offset=offset, limit=limit,
-                          recordings=[recordings[source] for source in sorted(recordings)[offset:offset + limit]])
+            for member in selected_actors:
+                source = member['source_uuid']
+                if source not in page_sources:
+                    continue
+                if source not in recordings:
+                    recordings[source] = dict(sourceUuid=source, capturedHome=self._home(db, source),
+                        playableFilesUrl=self.files_url + '?' + urlencode(dict(domain='file_contents', entityKey='source:' + source)),
+                        credits=[], sourceObservations=[])
+                observation = dict(member)
+                observation.update(aliases=json.loads(member['aliases']), originRun=member['origin_run'],
+                    sourceEvidenceUrl='/api/source-actor?' + urlencode(dict(id=member['id'])),
+                    basis='source_actor_observation', acceptedIdentity=False)
+                recordings[source]['sourceObservations'].append(observation)
+            result.update(total=len(sources), offset=offset, limit=limit,
+                          recordings=[recordings[source] for source in sources[offset:offset + limit]])
+            return result
+
+    def shared_person_support(self, identifier, candidate):
+        with closing(self.connect()) as db:
+            broad = self.shared_overlay.reader(db, name_key) if self.shared_overlay else None
+            result = broad.support(identifier, candidate) if broad else None
+            if result:
+                for item in result['buckets']:
+                    actor = item['representative']
+                    if actor:
+                        actor['playableFilesUrl'] = self.files_url + '?' + urlencode(
+                            dict(domain='file_contents', entityKey='source:' + actor['source']))
             return result
 
     def _source_observations(self, db, identifier, parameters):
@@ -1934,6 +1973,11 @@ def handler_for(directory):
                             404, encoded({"error": "Unknown draft group"}).encode()
                         )
                         return
+                elif url.path == '/api/shared-person-support':
+                    result = directory.shared_person_support(parameters.get('id', ''), parameters.get('candidate', ''))
+                    if result is None:
+                        self.respond(404, encoded({'error': 'Unknown direct support'}).encode())
+                        return
                 elif url.path == '/api/shared-person':
                     result = directory.shared_person(parameters.get('id', ''), parameters)
                     if result is None:
@@ -2015,6 +2059,7 @@ def main():
     native.add_argument("--native-url", required=True)
     serve = sub.add_parser("serve")
     serve.add_argument("--database", required=True)
+    serve.add_argument("--shared-people-database", help="Optional sealed direct-support membership overlay")
     serve.add_argument("--files-url", required=True)
     serve.add_argument("--core-url", required=True)
     serve.add_argument("--bind", default="127.0.0.1")
@@ -2040,7 +2085,7 @@ def main():
     elif args.command == "overlay-native":
         print(encoded(NativePeopleOverlay(args.run, args.database, args.native_url).apply()), flush=True)
     else:
-        directory = PeopleDirectory(args.database, args.files_url, args.core_url)
+        directory = PeopleDirectory(args.database, args.files_url, args.core_url, args.shared_people_database)
         print(
             encoded(
                 {

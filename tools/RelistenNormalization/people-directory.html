@@ -373,6 +373,48 @@
               "/api/relationship?" + new URLSearchParams({ id: comparison.id }),
           );
           body.replaceChildren();
+          if (detail.support) {
+            body.append(
+              node("pre", JSON.stringify(detail.support.features, null, 2)),
+            );
+            for (const item of detail.buckets) {
+              const actor = item.representative;
+              body.append(node("h3", actor?.name || item.bucket.bucketId));
+              if (actor?.sourceEvidenceUrl)
+                body.append(
+                  link("Original source evidence", actor.sourceEvidenceUrl),
+                );
+              if (actor?.playableFilesUrl)
+                body.append(
+                  link(
+                    "Open this recording’s playable files",
+                    actor.playableFilesUrl,
+                  ),
+                );
+              for (const evidence of item.bucket.evidence) {
+                body.append(
+                  node("blockquote", evidence.quote),
+                  node(
+                    "p",
+                    evidence.jsonPointer +
+                      " · code points " +
+                      evidence.startCodePoint +
+                      "–" +
+                      evidence.endCodePoint,
+                    "muted",
+                  ),
+                );
+              }
+              body.append(node("details"));
+              const original = body.lastChild;
+              original.append(
+                node("summary", "Original bucket and source coordinates"),
+                node("pre", JSON.stringify(item, null, 2)),
+              );
+            }
+            loaded = true;
+            return;
+          }
           for (const side of ["left", "right"]) {
             const actor = detail.question[side];
             body.append(
@@ -549,6 +591,10 @@
         node("p", "Several roles on the same recording count once."),
         comparisonSection("Supporting comparisons", person.support),
       );
+      if (person.unmappedOccurrenceCount || person.unmappedCreditCount)
+        grouping.append(node("p", "Some supported source mentions could not be linked to recordings in this directory: " +
+          count(person.unmappedOccurrenceCount || 0) + " whole actor observations and " +
+          count(person.unmappedCreditCount || 0) + " credit occurrences."));
       if (person.conflicts.length)
         grouping.append(
           comparisonSection("Conflicting comparisons", person.conflicts),
@@ -930,7 +976,7 @@
       let card = node("article", undefined, "card"),
         names = [
           ...new Set(
-            r.credits.map(
+            [...r.credits, ...(r.sourceObservations || [])].map(
               (c) => c.artist_name || c.artist_uuid || "Unknown artist",
             ),
           ),
@@ -996,6 +1042,21 @@
             ),
           );
         section.append(link("Inspect source extraction", c.sourceEvidenceUrl));
+        card.append(section);
+      }
+      for (const actor of r.sourceObservations || []) {
+        const section = node("details");
+        section.append(
+          node("summary", actor.name + " · Source alias observation"),
+        );
+        for (const alias of actor.aliases) {
+          section.append(node("p", "Explicit alias: " + alias.wording));
+          for (const evidence of alias.evidence || [])
+            section.append(node("blockquote", evidence.quote));
+        }
+        section.append(
+          link("Inspect original source alias", actor.sourceEvidenceUrl),
+        );
         card.append(section);
       }
       return card;
