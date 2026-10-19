@@ -206,6 +206,40 @@ public sealed class TestCompositionHypothesisBatch
         Directory.Exists(output).Should().BeFalse();
     }
 
+    [TestCase("output")]
+    [TestCase("free_space")]
+    public async Task ImpossibleResourceLimitsRefuseBeforeOpeningRetainedInputs(string bound)
+    {
+        // The absent manifests deliberately prove that resource admission happens
+        // before retained-image decoding or any output directory is created.
+        var absent = new MusicConsolidationArtifact(
+            Path.Combine(directory, "absent-manifest.json"),
+            0,
+            new string('a', 64),
+            1
+        );
+        var limits =
+            bound == "output"
+                ? new CompositionHypothesisResourceLimits(1, 1)
+                : new CompositionHypothesisResourceLimits(long.MaxValue, 16 * 1024 * 1024);
+        var request = new CompositionHypothesisBatchRequest(
+            CompositionHypothesisBatch.RequestVersion,
+            absent,
+            absent,
+            [],
+            Limits: limits
+        );
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(request, Json);
+        var requestPath = Path.Combine(directory, "bounded-request.json");
+        await File.WriteAllBytesAsync(requestPath, bytes);
+        var output = Path.Combine(directory, "resource-refusal");
+        var run = () => new CompositionHypothesisBatch().RunAsync(requestPath, output, Hash(bytes));
+
+        await run.Should().ThrowAsync<IOException>();
+        Directory.Exists(output).Should().BeFalse();
+        File.Exists(Path.Combine(output, "manifest.json")).Should().BeFalse();
+    }
+
     [Test]
     public async Task AuthenticCheckpointResumesWithoutRepeatingAnyCompletedLogicalResult()
     {
@@ -523,7 +557,8 @@ public sealed class TestCompositionHypothesisBatch
                 await ProviderPin(providerPath, format),
                 await ProviderPin(searchPath, "input_revision_json"),
             ],
-            artistContextPin
+            artistContextPin,
+            new CompositionHypothesisResourceLimits(64 * 1024 * 1024, 16 * 1024 * 1024)
         );
         var requestPath = Path.Combine(directory, "composition-request.json");
         var requestBytes = JsonSerializer.SerializeToUtf8Bytes(request, Json);

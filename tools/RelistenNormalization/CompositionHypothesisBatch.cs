@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
@@ -34,9 +35,19 @@ public sealed class CompositionHypothesisBatch
     {
         requestPath = Path.GetFullPath(requestPath);
         outputDirectory = Path.GetFullPath(outputDirectory);
-        var prepared = await AuthenticateAsync(requestPath, requestSha256, ct);
-        var index = await ObserveProvidersAsync(prepared.Request, ct);
+        var prepared = await AuthenticateAsync(requestPath, requestSha256, outputDirectory, ct);
+        var budget = prepared.Budget;
+        Console.Error.WriteLine("Composition hypotheses: authenticated retained inputs.");
+        // Reconciliation retains temporary descriptor state. Release it before
+        // loading the external work graph; the two phases do not depend on each other.
         var songs = await ReadSongsAsync(prepared, ct);
+        Console.Error.WriteLine(
+            $"Composition hypotheses: reconciled {songs.Length} songs; managed bytes {GC.GetTotalMemory(false)}."
+        );
+        var index = await ObserveProvidersAsync(prepared.Request, ct);
+        Console.Error.WriteLine(
+            $"Composition hypotheses: indexed {index.Works.Count} works; managed bytes {GC.GetTotalMemory(false)}."
+        );
         var projector = new CompositionHypothesisProjector(index);
         var methods = new Dictionary<string, string>
         {
@@ -48,12 +59,12 @@ public sealed class CompositionHypothesisBatch
 
         // Rebuild deterministic expectations before trusting a saved prefix. A
         // checkpoint alone cannot prove that its acknowledged gzip rows survived.
-        var expected = new Dictionary<ResultKey, string>();
+        var expected = new Dictionary<Sha256Digest, Sha256Digest>();
         foreach (var result in Results(index, songs, projector))
         {
             ct.ThrowIfCancellationRequested();
             if (
-                !expected.TryAdd(new(result.Domain, result.InputKey), Measure(result, out _))
+                !expected.TryAdd(ResultKey(result.Domain, result.InputKey), Measure(result, out _))
                 || expected.Count > MaximumRows
             )
             {
@@ -98,10 +109,7 @@ public sealed class CompositionHypothesisBatch
             return output;
         }
 
-        var retainedBytes = CheckResources(
-            Path.GetDirectoryName(outputDirectory)!,
-            outputDirectory
-        );
+        var retainedBytes = budget.CheckResources();
         long pendingBytes = 0;
         await using var run = new ShadowCatalogRun(outputDirectory, requestSha256, methods, resume);
         var completed = run.CompletedLine;
@@ -113,7 +121,7 @@ public sealed class CompositionHypothesisBatch
         {
             var acknowledged = Results(index, songs, projector)
                 .Take(checked((int)completed))
-                .Select(result => new ResultKey(result.Domain, result.InputKey))
+                .Select(result => ResultKey(result.Domain, result.InputKey))
                 .ToHashSet();
             await RequireCoverageAsync(outputDirectory, expected, acknowledged, ct);
         }
@@ -129,21 +137,21 @@ public sealed class CompositionHypothesisBatch
                     continue;
                 }
                 Measure(result, out var bytes);
-                RequireFreeSpace(outputDirectory, bytes);
-                RequireOutputBudget(retainedBytes, pendingBytes + bytes);
+                budget.RequireFreeSpace(bytes);
+                budget.RequireOutputBudget(retainedBytes, pendingBytes + bytes);
                 await run.WriteInputAsync([result]);
                 pendingBytes += bytes;
                 completed = line;
                 if (line % CheckpointRows == 0)
                 {
                     await run.SaveAsync(line, "running", Population(index, songs), ct);
-                    retainedBytes = CheckResources(outputDirectory, outputDirectory);
+                    retainedBytes = budget.CheckResources();
                     pendingBytes = 0;
                 }
             }
-            await AuthenticateAsync(requestPath, requestSha256, ct);
+            await AuthenticateAsync(requestPath, requestSha256, outputDirectory, ct);
             await run.SaveAsync(completed, "completed", Population(index, songs), ct);
-            retainedBytes = CheckResources(outputDirectory, outputDirectory);
+            retainedBytes = budget.CheckResources();
             await RequireCoverageAsync(outputDirectory, expected, expected.Keys.ToHashSet(), ct);
             var output = await DescribeOutputAsync(
                 outputDirectory,
@@ -158,8 +166,8 @@ public sealed class CompositionHypothesisBatch
             // proof and checkpoint, but never advertise a complete candidate image.
             using var manifestSize = new ResultSizeStream(16 * 1024 * 1024);
             JsonSerializer.Serialize(manifestSize, output, ShadowCatalogRun.Json);
-            RequireFreeSpace(outputDirectory, manifestSize.Length);
-            RequireOutputBudget(retainedBytes, manifestSize.Length);
+            budget.RequireFreeSpace(manifestSize.Length);
+            budget.RequireOutputBudget(retainedBytes, manifestSize.Length);
             await File.WriteAllBytesAsync(
                 completion + ".writing",
                 JsonSerializer.SerializeToUtf8Bytes(output, ShadowCatalogRun.Json),
@@ -188,6 +196,7 @@ public sealed class CompositionHypothesisBatch
     private static async Task<Prepared> AuthenticateAsync(
         string path,
         string sha,
+        string outputDirectory,
         CancellationToken ct
     )
     {
@@ -211,6 +220,10 @@ public sealed class CompositionHypothesisBatch
                 "The hypothesis request version or population is invalid."
             );
         }
+        // Refuse an impossible run before hashing or decoding the larger retained
+        // music/provider images, and before creating an output directory.
+        var budget = new ResourceBudget(request.Limits, outputDirectory);
+        budget.CheckResources();
         var directory = Path.GetDirectoryName(path)!;
         request = request with
         {
@@ -268,11 +281,11 @@ public sealed class CompositionHypothesisBatch
         // The externally pinned completed input manifest is the provenance link
         // to original witness/catalogue bytes. Their export already validated
         // them; rebuilding hypotheses does not require a live upstream catalogue.
-        var outputDirectory = Path.GetDirectoryName(request.MusicOutputManifest.Path)!;
+        var musicOutputDirectory = Path.GetDirectoryName(request.MusicOutputManifest.Path)!;
         output = output with
         {
-            Chunks = output.Chunks.Select(chunk => Resolve(chunk, outputDirectory)).ToArray(),
-            Progress = Resolve(output.Progress, outputDirectory),
+            Chunks = output.Chunks.Select(chunk => Resolve(chunk, musicOutputDirectory)).ToArray(),
+            Progress = Resolve(output.Progress, musicOutputDirectory),
         };
         if (
             output.Chunks.Select(chunk => chunk.Path).Distinct(StringComparer.Ordinal).Count()
@@ -303,7 +316,7 @@ public sealed class CompositionHypothesisBatch
             );
         }
         var artists = await ReadArtistsAsync(request, music, ct);
-        return new(request, music, output, artists);
+        return new(request, music, output, artists, budget);
     }
 
     private static async Task<
@@ -484,23 +497,31 @@ public sealed class CompositionHypothesisBatch
         CancellationToken ct
     )
     {
-        var originals = new Dictionary<string, string>(StringComparer.Ordinal);
+        // The authenticated census bounds this allocation and avoids growth copies
+        // while the complete original-key population is resident.
+        var originals = new Dictionary<Sha256Digest, OriginalEntry>(
+            checked((int)prepared.Music.Descriptors.Rows)
+        );
         await foreach (var line in LinesAsync(prepared.Music.Descriptors.Path, ct))
         {
             var descriptor = JsonSerializer.Deserialize<MusicRepertoireDescriptor>(
                 line,
                 ShadowCatalogRun.Json
             )!;
-            var key = OriginalKey(descriptor.Scope, descriptor.OriginalKey);
+            var key = Sha256Digest.Compute(
+                Encoding.UTF8.GetBytes(OriginalKey(descriptor.Scope, descriptor.OriginalKey))
+            );
             if (
                 !originals.TryAdd(
                     key,
-                    OriginalFingerprint(
-                        descriptor.Scope,
-                        descriptor.ArtistUuid,
-                        descriptor.OriginalKey,
-                        descriptor.Title,
-                        descriptor.Witness
+                    new OriginalEntry(
+                        OriginalFingerprint(
+                            descriptor.Scope,
+                            descriptor.ArtistUuid,
+                            descriptor.OriginalKey,
+                            descriptor.Title,
+                            descriptor.Witness
+                        )
                     )
                 )
                 || originals.Count > prepared.Music.Descriptors.Rows
@@ -515,6 +536,9 @@ public sealed class CompositionHypothesisBatch
         {
             throw new InvalidDataException("The music descriptor population is incomplete.");
         }
+        Console.Error.WriteLine(
+            $"Composition hypotheses: authenticated {originals.Count} descriptors; managed bytes {GC.GetTotalMemory(false)}."
+        );
         long dictionaryRows = 0;
         await foreach (var line in LinesAsync(prepared.Music.DictionaryNames.Path, ct))
         {
@@ -531,7 +555,8 @@ public sealed class CompositionHypothesisBatch
             throw new InvalidDataException("The retained dictionary population is incomplete.");
         }
 
-        var seen = new Dictionary<string, string>(StringComparer.Ordinal);
+        var seenCount = 0;
+        var metadata = new SourceMetadataPool();
         var songs = new Dictionary<(string Scope, Guid Artist, string Key), SongBuilder>();
         long physicalRows = 0;
         long decodedCharacters = 0;
@@ -558,13 +583,14 @@ public sealed class CompositionHypothesisBatch
                         .Deserialize<MusicRepertoireCorrespondence>(ShadowCatalogRun.Json)
                     ?? throw new InvalidDataException("A correspondence proposal is null.");
                 var key = OriginalKey(correspondence.Scope, correspondence.OriginalKey);
+                var keyDigest = Sha256Digest.Compute(Encoding.UTF8.GetBytes(key));
                 if (
                     root.GetProperty("domain").GetString() != "repertoire_correspondences"
                     || root.GetProperty("inputKey").GetString() != key
                     || root.GetProperty("artistUuid").GetGuid() != correspondence.ArtistUuid
                     || root.GetProperty("outcome").GetString() != correspondence.Disposition
-                    || !originals.TryGetValue(key, out var original)
-                    || original
+                    || !originals.TryGetValue(keyDigest, out var original)
+                    || original.DescriptorFingerprint
                         != OriginalFingerprint(
                             correspondence.Scope,
                             correspondence.ArtistUuid,
@@ -578,8 +604,8 @@ public sealed class CompositionHypothesisBatch
                         "A correspondence changes its frozen original descriptor."
                     );
                 }
-                var fingerprint = Digest(Encoding.UTF8.GetBytes(line));
-                if (seen.TryGetValue(key, out var prior))
+                var fingerprint = Sha256Digest.Compute(Encoding.UTF8.GetBytes(line));
+                if (original.CorrespondenceFingerprint is { } prior)
                 {
                     if (prior != fingerprint)
                     {
@@ -589,7 +615,8 @@ public sealed class CompositionHypothesisBatch
                     }
                     continue;
                 }
-                seen.Add(key, fingerprint);
+                originals[keyDigest] = original with { CorrespondenceFingerprint = fingerprint };
+                seenCount++;
                 // Filter individual targets, not the enclosing file disposition:
                 // a partially unresolved compound can retain proposed members.
                 var memberships = new HashSet<(string Scope, Guid Artist, string Key)>();
@@ -600,9 +627,9 @@ public sealed class CompositionHypothesisBatch
                 )
                 {
                     var identity = (
-                        correspondence.Scope,
-                        correspondence.ArtistUuid,
-                        target.Song.EntityKey
+                        Scope: metadata.Share(correspondence.Scope),
+                        Artist: correspondence.ArtistUuid,
+                        Key: target.Song.EntityKey
                     );
                     if (
                         target.Song.ArtistUuid != correspondence.ArtistUuid
@@ -615,7 +642,14 @@ public sealed class CompositionHypothesisBatch
                     }
                     if (!songs.TryGetValue(identity, out var song))
                     {
-                        song = new(correspondence.Scope, target.Song, correspondence.SourceWitness);
+                        song = new(
+                            identity.Scope,
+                            target.Song with
+                            {
+                                Basis = metadata.Share(target.Song.Basis),
+                            },
+                            metadata.Share(correspondence.SourceWitness)
+                        );
                         songs.Add(identity, song);
                         if (songs.Count > MaximumRows)
                         {
@@ -632,12 +666,18 @@ public sealed class CompositionHypothesisBatch
                 throw new InvalidDataException("A correspondence chunk is incomplete.");
             }
         }
-        if (seen.Count != originals.Count)
+        if (seenCount != originals.Count)
         {
             throw new InvalidDataException(
                 "The correspondence image omits original scoped descriptors."
             );
         }
+
+        // Descriptor reconciliation is complete. Release its keys and digests
+        // before allocating the ordered, completed song population.
+        originals.Clear();
+        originals.TrimExcess();
+
         return songs
             .Values.Select(song =>
                 song.Complete(prepared.Artists, prepared.Request.ArtistContextManifest?.Sha256)
@@ -721,8 +761,8 @@ public sealed class CompositionHypothesisBatch
 
     private static async Task RequireCoverageAsync(
         string directory,
-        Dictionary<ResultKey, string> expected,
-        HashSet<ResultKey> required,
+        Dictionary<Sha256Digest, Sha256Digest> expected,
+        HashSet<Sha256Digest> required,
         CancellationToken ct
     )
     {
@@ -747,14 +787,17 @@ public sealed class CompositionHypothesisBatch
                 }
                 using var document = JsonDocument.Parse(line);
                 var root = document.RootElement;
-                var key = new ResultKey(
-                    root.GetProperty("domain").GetString()!,
-                    root.GetProperty("inputKey").GetString()!
-                );
+                var domain = root.GetProperty("domain").GetString()!;
+                if (Path.GetFileName(Path.GetDirectoryName(path)) != domain)
+                {
+                    throw new InvalidDataException(
+                        "A retained hypothesis result differs from its exact frozen projection."
+                    );
+                }
+                var key = ResultKey(domain, root.GetProperty("inputKey").GetString()!);
                 if (
-                    Path.GetFileName(Path.GetDirectoryName(path)) != key.Domain
-                    || !expected.TryGetValue(key, out var wanted)
-                    || Digest(Encoding.UTF8.GetBytes(line)) != wanted
+                    !expected.TryGetValue(key, out var wanted)
+                    || Sha256Digest.Compute(Encoding.UTF8.GetBytes(line)) != wanted
                 )
                 {
                     throw new InvalidDataException(
@@ -869,14 +912,14 @@ public sealed class CompositionHypothesisBatch
     private static string OriginalKey(string scope, string key) =>
         JsonSerializer.Serialize(new[] { scope, key });
 
-    private static string OriginalFingerprint(
+    private static Sha256Digest OriginalFingerprint(
         string scope,
         Guid artist,
         string key,
         string? title,
         MusicTitleWitness witness
     ) =>
-        Digest(
+        Sha256Digest.Compute(
             JsonSerializer.SerializeToUtf8Bytes(
                 new
                 {
@@ -973,43 +1016,75 @@ public sealed class CompositionHypothesisBatch
             publicationPermitted = false,
         };
 
-    private static void RequireFreeSpace(string volume, long nextBytes)
+    private sealed class ResourceBudget
     {
-        if (
-            new DriveInfo(Path.GetPathRoot(volume)!).AvailableFreeSpace
-            < MinimumFreeBytes + nextBytes + 3 * 65536
-        )
+        private const long FramingReserve = 3 * 65536;
+        private readonly string outputDirectory;
+        private readonly long minimumFreeBytes;
+        private readonly long maximumOutputBytes;
+
+        internal ResourceBudget(CompositionHypothesisResourceLimits? limits, string outputDirectory)
         {
-            throw new IOException("Composition hypotheses paused at the 5.5 GiB free-space floor.");
+            minimumFreeBytes = limits?.MinimumFreeBytes ?? MinimumFreeBytes;
+            maximumOutputBytes = limits?.MaximumOutputBytes ?? MaximumOutputBytes;
+            if (
+                minimumFreeBytes <= 0
+                || maximumOutputBytes <= 0
+                || maximumOutputBytes > MaximumOutputBytes
+            )
+            {
+                throw new InvalidDataException(
+                    "Hypothesis limits require a positive free-space floor and output ceiling of at most 4 GiB."
+                );
+            }
+
+            this.outputDirectory = outputDirectory;
+        }
+
+        internal void RequireFreeSpace(long nextBytes)
+        {
+            var available = new DriveInfo(Path.GetPathRoot(outputDirectory)!).AvailableFreeSpace;
+            if (
+                available < minimumFreeBytes
+                || available - minimumFreeBytes < FramingReserve
+                || nextBytes > available - minimumFreeBytes - FramingReserve
+            )
+            {
+                throw new IOException(
+                    "Composition hypotheses paused at the request's free-space floor."
+                );
+            }
+        }
+
+        internal long CheckResources()
+        {
+            RequireFreeSpace(0);
+            var bytes = Directory.Exists(outputDirectory)
+                ? Directory
+                    .EnumerateFiles(outputDirectory, "*", SearchOption.AllDirectories)
+                    .Sum(path => new FileInfo(path).Length)
+                : 0;
+            RequireOutputBudget(bytes, 0);
+            return bytes;
+        }
+
+        internal void RequireOutputBudget(long retainedBytes, long pendingBytes)
+        {
+            // Scan durable files only at checkpoints. Between scans, reserve
+            // uncompressed envelopes, expansion allowance and gzip framing.
+            if (
+                retainedBytes + pendingBytes + pendingBytes / 100 + FramingReserve
+                > maximumOutputBytes
+            )
+            {
+                throw new IOException(
+                    "Composition hypotheses reached the request's retained-output bound."
+                );
+            }
         }
     }
 
-    private static long CheckResources(string volume, string directory)
-    {
-        RequireFreeSpace(volume, 0);
-        var bytes = Directory.Exists(directory)
-            ? Directory
-                .EnumerateFiles(directory, "*", SearchOption.AllDirectories)
-                .Sum(path => new FileInfo(path).Length)
-            : 0;
-        RequireOutputBudget(bytes, 0);
-        return bytes;
-    }
-
-    private static void RequireOutputBudget(long retainedBytes, long pendingBytes)
-    {
-        // Scan durable files only at checkpoints. Until the next scan reserve all
-        // uncompressed envelopes, expansion allowance and the three gzip frames;
-        // this enforces the ceiling without one directory walk per target.
-        if (retainedBytes + pendingBytes + pendingBytes / 100 + 3 * 65536 > MaximumOutputBytes)
-        {
-            throw new IOException(
-                "Composition hypotheses reached the 4 GiB retained-output bound."
-            );
-        }
-    }
-
-    private static string Measure(ShadowCatalogResult result, out long bytes)
+    private static Sha256Digest Measure(ShadowCatalogResult result, out long bytes)
     {
         using var stream = new ResultSizeStream();
         JsonSerializer.Serialize(stream, result, ShadowCatalogRun.Json);
@@ -1021,10 +1096,73 @@ public sealed class CompositionHypothesisBatch
         CompositionHypothesisBatchRequest Request,
         MusicConsolidationInput Music,
         MusicConsolidationOutput Output,
-        Dictionary<(string Scope, Guid Artist), CompositionArtistContext> Artists
+        Dictionary<(string Scope, Guid Artist), CompositionArtistContext> Artists,
+        ResourceBudget Budget
     );
 
-    private sealed record ResultKey(string Domain, string InputKey);
+    private static Sha256Digest ResultKey(string domain, string inputKey) =>
+        Sha256Digest.Compute(JsonSerializer.SerializeToUtf8Bytes(new[] { domain, inputKey }));
+
+    // Full SHA-256 keys replace retained JSON key strings, under the same
+    // cryptographic collision assumption as the input and output content pins.
+    // Four inline words preserve every digest bit without per-entry arrays.
+    private readonly record struct Sha256Digest(
+        ulong First,
+        ulong Second,
+        ulong Third,
+        ulong Fourth
+    )
+    {
+        public static Sha256Digest Compute(ReadOnlySpan<byte> value)
+        {
+            Span<byte> bytes = stackalloc byte[32];
+            SHA256.HashData(value, bytes);
+            return From(bytes);
+        }
+
+        public static Sha256Digest From(ReadOnlySpan<byte> bytes) =>
+            new(
+                BinaryPrimitives.ReadUInt64LittleEndian(bytes),
+                BinaryPrimitives.ReadUInt64LittleEndian(bytes[8..]),
+                BinaryPrimitives.ReadUInt64LittleEndian(bytes[16..]),
+                BinaryPrimitives.ReadUInt64LittleEndian(bytes[24..])
+            );
+    }
+
+    // One inline state per authenticated original; null means no correspondence
+    // has been observed, and exact repeated rows never advance the seen census.
+    private readonly record struct OriginalEntry(
+        Sha256Digest DescriptorFingerprint,
+        Sha256Digest? CorrespondenceFingerprint = null
+    );
+
+    // A source chunk supplies many songs. Share its literal coordinates within
+    // this run instead of retaining another copy of each path and hash per song.
+    private sealed class SourceMetadataPool
+    {
+        private readonly Dictionary<string, string> values = new(StringComparer.Ordinal);
+
+        internal string Share(string value)
+        {
+            if (values.TryGetValue(value, out var retained))
+            {
+                return retained;
+            }
+
+            values.Add(value, value);
+            return value;
+        }
+
+        internal MusicTitleWitness Share(MusicTitleWitness witness) =>
+            witness with
+            {
+                Run = Share(witness.Run),
+                Chunk = Share(witness.Chunk),
+                ChunkSha256 = Share(witness.ChunkSha256),
+                ValuePointer = witness.ValuePointer is null ? null : Share(witness.ValuePointer),
+                DocumentKind = Share(witness.DocumentKind),
+            };
+    }
 
     private sealed class SongBuilder(
         string scope,
@@ -1032,8 +1170,9 @@ public sealed class CompositionHypothesisBatch
         MusicTitleWitness witness
     )
     {
-        private readonly HashSet<ShadowRepertoireDictionaryEvidence> names = [];
-        private readonly HashSet<MusicRepertoireRelation> relations = [];
+        private HashSet<ShadowRepertoireDictionaryEvidence>? names;
+        private MusicRepertoireRelation? firstRelation;
+        private HashSet<MusicRepertoireRelation>? relations;
         private long memberships;
 
         public void Observe(MusicRepertoireTarget target, bool firstMembership)
@@ -1044,7 +1183,17 @@ public sealed class CompositionHypothesisBatch
                     "A scoped proposed target has conflicting song facts."
                 );
             }
-            relations.Add(target.Relation);
+            // Most targets have one relation and no dictionary evidence. Allocate
+            // sets only when an observation actually needs their uniqueness checks.
+            if (firstRelation is null)
+            {
+                firstRelation = target.Relation;
+            }
+            else if (target.Relation != firstRelation.Value)
+            {
+                relations ??= [firstRelation.Value];
+                relations.Add(target.Relation);
+            }
             foreach (
                 var diagnostic in target.ComparisonDiagnostics.Where(candidate =>
                     candidate.Song.EntityKey == song.EntityKey
@@ -1053,6 +1202,7 @@ public sealed class CompositionHypothesisBatch
             {
                 foreach (var name in diagnostic.Evidence)
                 {
+                    names ??= [];
                     names.Add(name);
                 }
             }
@@ -1072,17 +1222,22 @@ public sealed class CompositionHypothesisBatch
                 scope,
                 song.ArtistUuid,
                 song,
-                names
-                    .OrderBy(name => name.InputKey, StringComparer.Ordinal)
-                    .ThenBy(name => name.JsonPointer, StringComparer.Ordinal)
-                    .ThenBy(name => name.Quote, StringComparer.Ordinal)
-                    .ThenBy(
-                        name =>
-                            JsonSerializer.Serialize(name.RetainedWitness, ShadowCatalogRun.Json),
-                        StringComparer.Ordinal
-                    )
-                    .ToArray(),
-                relations.Order().ToArray(),
+                names is null
+                    ? []
+                    : names
+                        .OrderBy(name => name.InputKey, StringComparer.Ordinal)
+                        .ThenBy(name => name.JsonPointer, StringComparer.Ordinal)
+                        .ThenBy(name => name.Quote, StringComparer.Ordinal)
+                        .ThenBy(
+                            name =>
+                                JsonSerializer.Serialize(
+                                    name.RetainedWitness,
+                                    ShadowCatalogRun.Json
+                                ),
+                            StringComparer.Ordinal
+                        )
+                        .ToArray(),
+                relations is null ? [firstRelation!.Value] : relations.Order().ToArray(),
                 witness,
                 memberships,
                 artist?.Name,
@@ -1099,7 +1254,12 @@ public sealed class CompositionHypothesisBatch
             HashAlgorithmName.SHA256
         );
 
-        public string Hash() => Convert.ToHexStringLower(digest.GetHashAndReset());
+        public Sha256Digest Hash()
+        {
+            Span<byte> bytes = stackalloc byte[32];
+            digest.GetHashAndReset(bytes);
+            return Sha256Digest.From(bytes);
+        }
 
         public override void Write(byte[] buffer, int offset, int count) =>
             Write(buffer.AsSpan(offset, count));

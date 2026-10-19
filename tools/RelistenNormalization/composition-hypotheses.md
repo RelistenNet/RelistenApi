@@ -31,6 +31,26 @@ The top `manifest.json` is written last. Cancellation, a changed input, an unsup
 
 Retained inputs have per-response and aggregate byte bounds. The batch also bounds decoded lines, original correspondence counts, output size and free disk space. Crossing a bound rejects completion; it never returns a truncated candidate pool or an empty substitute for unavailable evidence.
 
+The request may set explicit local resource limits:
+
+```json
+{
+  "limits": {
+    "minimumFreeBytes": 4294967296,
+    "maximumOutputBytes": 268435456
+  }
+}
+```
+
+This example preserves a 4 GiB host reserve and permits 256 MiB of retained
+output. Both limits must be positive; the output ceiling cannot exceed 4 GiB.
+When `limits` is absent, the existing 5.5 GiB reserve and 4 GiB output ceiling
+remain in effect. Absent limits add no serialized field to older requests.
+Resource admission happens before the large retained images are decoded. The
+same limits then apply to each output row, checkpoints and final completion.
+The exact request hash binds these values: changing a limit requires a new
+request and output directory, rather than resuming under different bounds.
+
 ## Later inference and browsing
 
 `ICompositionHypothesisSelector` receives the supplied work facts. Its result can select a supplied ID, retain supplied alternatives or abstain. An invented ID is rejected. Inference metadata, including cache and usage receipts, is separate from raw provider assertions. No selector is invoked by the pure hypothesis pass.

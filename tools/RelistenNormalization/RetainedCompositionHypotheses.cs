@@ -113,7 +113,15 @@ public sealed record CompositionHypothesisBatchRequest(
     MusicConsolidationArtifact MusicInputManifest,
     MusicConsolidationArtifact MusicOutputManifest,
     IReadOnlyList<RetainedCompositionInputArtifact> RetainedProviderInputs,
-    MusicConsolidationArtifact? ArtistContextManifest = null
+    MusicConsolidationArtifact? ArtistContextManifest = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        CompositionHypothesisResourceLimits? Limits = null
+);
+
+/// <summary>Explicit local resource bounds; omitted limits retain the historical batch defaults.</summary>
+public sealed record CompositionHypothesisResourceLimits(
+    long MinimumFreeBytes,
+    long MaximumOutputBytes
 );
 
 /// <summary>An actual display name from the frozen catalogue; it implies no authorship.</summary>
