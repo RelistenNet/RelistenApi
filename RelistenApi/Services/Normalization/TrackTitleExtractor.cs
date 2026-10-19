@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -13,24 +12,9 @@ namespace Relisten.Normalization;
 /// composition or performance identities. Only explicit title syntax is removed;
 /// the retained title and exact evidence remain available for later correction.
 /// </summary>
-public sealed class TrackTitleExtractor
+public sealed partial class TrackTitleExtractor
 {
-    public const string Version = "track-title-v1";
-
-    private static readonly Regex FilenameMetadata = new(
-        @"^(?<date>\d{4}-\d{2}-\d{2}) - .+? - .+? - \d{3} (?<content>.+)\.(?:mp3|flac|wav|shn|ogg|m4a)$",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
-    );
-
-    private static readonly Regex AudioExtension = new(
-        @"\.(?:mp3|flac|wav|shn|ogg|m4a)$",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
-    );
-
-    private static readonly Regex TrackNumber = new(
-        @"^(?:0\d[.)]?|\d{1,3}[.)])\s+",
-        RegexOptions.CultureInvariant
-    );
+    public const string Version = "track-title-v2";
 
     private static readonly Regex OpaqueFilename = new(
         @"(?:\d{4}[-_.]\d{2}[-_.]\d{2}.*t\d+$)|^(?:(?:disc|d)\s*\d+\s*)?(?:track|t)\s*\d+$",
@@ -38,11 +22,6 @@ public sealed class TrackTitleExtractor
     );
 
     private static readonly Regex Separator = new(@"-?>+|→|\s+/\s+", RegexOptions.CultureInvariant);
-
-    private static readonly Regex PartialSuffix = new(
-        @"\s*\((?:partial|cut|fragment)\)\s*$",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
-    );
 
     /// <summary>
     /// Returns artist-scoped, title-derived mentions and syntax evidence. A false
@@ -95,7 +74,11 @@ public sealed class TrackTitleExtractor
                     : TitleTransition.Unknown;
             AddSegment(title, next, delimiterStart, transition, segments, qualifiers);
             qualifiers.Add(
-                new("separator", Evidence(title, delimiterStart, delimiterStart + delimiter.Length))
+                Qualifier(
+                    "separator",
+                    Evidence(title, delimiterStart, delimiterStart + delimiter.Length),
+                    TrackTitleStructuralKind.Separator
+                )
             );
             next = delimiterStart + delimiter.Length;
         }
@@ -111,49 +94,6 @@ public sealed class TrackTitleExtractor
             : TrackTitleSequence.TitleOrder;
 
         return new(artistUuid, title, segments, sequence, qualifiers, !unresolved, reason);
-    }
-
-    private static (int Start, int End) ContentRange(
-        string title,
-        List<TrackTitleQualifier> qualifiers
-    )
-    {
-        var (start, end) = Trim(title, 0, title.Length);
-        var filename = FilenameMetadata.Match(title[start..end]);
-        if (
-            filename.Success
-            && DateOnly.TryParseExact(
-                filename.Groups["date"].Value,
-                "yyyy-MM-dd",
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.None,
-                out _
-            )
-        )
-        {
-            var content = filename.Groups["content"];
-            var contentStart = start + content.Index;
-            var contentEnd = contentStart + content.Length;
-            qualifiers.Add(new("filename_metadata", Evidence(title, start, contentStart)));
-            qualifiers.Add(new("audio_extension", Evidence(title, contentEnd, end)));
-            return (contentStart, contentEnd);
-        }
-
-        var extension = AudioExtension.Match(title[start..end]);
-        if (extension.Success)
-        {
-            qualifiers.Add(new("audio_extension", Evidence(title, start + extension.Index, end)));
-            end = start + extension.Index;
-        }
-
-        var number = TrackNumber.Match(title[start..end]);
-        if (number.Success)
-        {
-            qualifiers.Add(new("track_number", Evidence(title, start, start + number.Length)));
-            start += number.Length;
-        }
-
-        return Trim(title, start, end);
     }
 
     private static void AddSegment(
@@ -172,18 +112,23 @@ public sealed class TrackTitleExtractor
         }
 
         var coverage = TitleCoverage.Unknown;
-        var partial = PartialSuffix.Match(raw[start..end]);
-        if (partial.Success)
+        (start, end) = SegmentContentRange(raw, start, end, qualifiers, ref coverage);
+
+        if (start == end)
         {
-            qualifiers.Add(new("partial_coverage", Evidence(raw, start + partial.Index, end)));
-            end = start + partial.Index;
-            coverage = TitleCoverage.Partial;
+            return;
         }
 
         if (raw.AsSpan(start, end - start).StartsWith("...") || raw[start] == '…')
         {
             var markerEnd = start + (raw[start] == '…' ? 1 : 3);
-            qualifiers.Add(new("partial_marker", Evidence(raw, start, markerEnd)));
+            qualifiers.Add(
+                Qualifier(
+                    "partial_marker",
+                    Evidence(raw, start, markerEnd),
+                    TrackTitleStructuralKind.PartialMarker
+                )
+            );
             start = markerEnd;
             coverage = TitleCoverage.PartialMarker;
         }
@@ -205,6 +150,9 @@ public sealed class TrackTitleExtractor
                 coverage,
                 transition
             )
+            {
+                CoreTitle = kind == TrackContentKind.Song ? CoreTitle(raw, start, end) : null,
+            }
         );
     }
 

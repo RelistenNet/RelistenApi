@@ -817,6 +817,12 @@ public sealed partial class SourceActorAliasApplicationService
         + HistoricalResolutionComponents
         + SourceActorAliasExtractor.LegacyV3Version
         + ResolutionFeatureSuffix;
+    private const string HistoricalAliasV4TitleV1Resolution =
+        ResolutionPrefix
+        + SourceActorResolutionStore.AliasV4TitleV1ProcessingVersion
+        + HistoricalResolutionComponents
+        + SourceActorAliasExtractor.Version
+        + ResolutionFeatureSuffix;
     private const string ApplicationPrefix = "source-actor-alias-publication-v1/";
     private const string ApplicationSuffix = "/complete-person-map-v1/component-review-v1";
 
@@ -827,6 +833,7 @@ public sealed partial class SourceActorAliasApplicationService
             || version == HistoricalV7Resolution
             || version == HistoricalV7AliasV3Resolution
             || version == HistoricalV8AliasV3Resolution
+            || version == HistoricalAliasV4TitleV1Resolution
         );
 
     internal static bool SupportsHistoricalAcceptedApplication(string version) =>
@@ -844,6 +851,7 @@ public sealed partial class SourceActorAliasApplicationService
                 ApplicationPrefix + HistoricalV7Resolution + ApplicationSuffix,
                 ApplicationPrefix + HistoricalV7AliasV3Resolution + ApplicationSuffix,
                 ApplicationPrefix + HistoricalV8AliasV3Resolution + ApplicationSuffix,
+                ApplicationPrefix + HistoricalAliasV4TitleV1Resolution + ApplicationSuffix,
             ]
             : [];
 

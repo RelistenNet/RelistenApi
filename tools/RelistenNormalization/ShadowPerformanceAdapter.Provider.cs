@@ -300,10 +300,6 @@ public sealed partial class ShadowPerformanceAdapter
         var single =
             extraction.IsResolved && extraction.Segments.Count == 1 ? extraction.Segments[0] : null;
         var kind = single?.Kind ?? TrackContentKind.Unknown;
-        if (kind == TrackContentKind.Song && single?.Title != title)
-        {
-            kind = TrackContentKind.Unknown;
-        }
         var evidence = passage.Title.Evidence;
         // HTML observations can have decoded titles with differently encoded original
         // spans. Keep the whole actual provider citation; never transplant decoded offsets
@@ -311,7 +307,7 @@ public sealed partial class ShadowPerformanceAdapter
         var mention = new TrackTitleSegment(
             0,
             kind,
-            title,
+            single?.Title ?? title,
             new(
                 "provider_title",
                 evidence.JsonPointer,
@@ -322,6 +318,6 @@ public sealed partial class ShadowPerformanceAdapter
             TitleCoverage.Unknown,
             TitleTransition.Unknown
         );
-        return repertoire.ResolveTitleMention(input.Artist.Id, input.Artist.Uuid, mention);
+        return repertoire.ResolveTitleMention(input.Artist.Id, input.Artist.Uuid, mention, title);
     }
 }

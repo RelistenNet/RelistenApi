@@ -258,7 +258,8 @@ public sealed class ShadowNativeFileContentsAdapter(
                             repertoire.ResolveTitleMention(
                                 input.Artist.Id,
                                 input.Artist.Uuid,
-                                segment
+                                segment,
+                                extraction.Segments.Count == 1 ? file.Title.Value : null
                             ),
                             evidence
                         );

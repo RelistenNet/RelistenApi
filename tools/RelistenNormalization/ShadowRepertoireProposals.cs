@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Relisten.Api.Models.Normalization;
 
 namespace Relisten.Normalization.Batch;
@@ -16,7 +17,12 @@ public sealed record ShadowRepertoireDictionaryEvidence(
     string InputKey,
     string JsonPointer,
     string Quote
-);
+)
+{
+    /// <summary>When present, JsonPointer addresses this pinned document (a result or its verified catalog context).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public MusicTitleWitness? RetainedWitness { get; init; }
+}
 
 /// <summary>
 /// A candidate with one actual witness per literal title spelling, ignoring canonical

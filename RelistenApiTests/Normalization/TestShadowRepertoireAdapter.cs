@@ -556,12 +556,27 @@ public sealed partial class TestShadowRepertoireAdapter
         var result = adapter.Process(Track(title)).Single();
         var track = (ShadowRepertoireTrack)result.Proposal!;
 
-        result.Outcome.Should().Be("unresolved");
+        result.Outcome.Should().Be("proposed");
         track.Segments[0].Song!.LegacySongUuid.Should().Be(song);
-        track.Segments[1].Song.Should().BeNull();
-        track.Segments[1].Evidence.Quote.Should().Be("Supplication (12:55)");
+        track.Segments[1].Song!.Name.Should().Be("Supplication");
+        track.Segments[1].Song!.Basis.Should().Be("title_derived");
+        track.Segments[1].Evidence.Quote.Should().Be("Supplication");
         track.Extraction!.OriginalTitle.Should().Be(title);
-        result.EntityKeys.Should().Equal(ShadowRepertoireAdapter.KnownEntityKey(song));
+        track
+            .Extraction.Qualifiers.Should()
+            .Contain(qualifier =>
+                qualifier.StructuralKind == TrackTitleStructuralKind.Duration
+                && qualifier.Evidence.Quote.Contains("(12:55)")
+            );
+        track
+            .Extraction.Segments.Should()
+            .OnlyContain(segment => segment.StartMs == null && segment.EndMs == null);
+        result
+            .EntityKeys.Should()
+            .Equal(
+                ShadowRepertoireAdapter.KnownEntityKey(song),
+                ShadowRepertoireAdapter.ProvisionalEntityKey(ArtistUuid, "Supplication")
+            );
     }
 
     [Test]

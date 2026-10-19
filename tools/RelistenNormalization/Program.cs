@@ -30,6 +30,11 @@ if (
                     or "composition-evaluation"
         )
         || (args.Length is 4 or 5 && args[0] == "musicbrainz-search")
+        || (
+            args.Length is 4 or 5
+            && args[0] == "music-consolidate"
+            && (args.Length == 4 || args[4] == "--resume")
+        )
         || (args.Length == 6 && args[0] == "luna-credit-fields")
         || (
             args.Length is 4 or 5
@@ -63,6 +68,7 @@ if (
             + "       RelistenNormalization shadow-inline <snapshot.jsonl[.gz] OR capture-manifest.json> <output-directory> [--resume]\n"
             + "       RelistenNormalization shadow-venues <snapshot.jsonl[.gz] OR capture-manifest.json> <output-directory> [--resume]\n"
             + "       RelistenNormalization shadow-source-observations <snapshot.jsonl[.gz] OR capture-manifest.json> <output-directory> [--resume]\n"
+            + "       RelistenNormalization music-consolidate <input-manifest.json> <output-directory> <frozen-manifest-sha256> [--resume]\n"
             + "       RelistenNormalization people-shared <completed-source-observations-run> <new-output-directory>\n"
             + "       RelistenNormalization shadow-rows <catalog-rows.jsonl[.gz]> <output-directory> [--resume]\n"
             + "       RelistenNormalization shadow-native <catalog-rows.jsonl[.gz]> <output-directory> [--resume]\n"
@@ -98,6 +104,18 @@ Console.CancelKeyPress += (_, signal) =>
 
 try
 {
+    if (args[0] == "music-consolidate")
+    {
+        await new MusicRepertoireConsolidationBatch().RunAsync(
+            args[1],
+            args[2],
+            args[3],
+            args.Length == 5,
+            cancellation.Token
+        );
+        return 0;
+    }
+
     if (args[0] == "people-shared")
     {
         await new SharedPeopleExport().RunAsync(args[1], args[2], cancellation.Token);

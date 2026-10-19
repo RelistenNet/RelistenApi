@@ -1,5 +1,6 @@
 using System.Text.Json;
 using FluentAssertions;
+using Relisten.Api.Models.Normalization;
 using Relisten.Data;
 using Relisten.Normalization;
 
@@ -11,6 +12,10 @@ public sealed class TestSourceActorProducerCompatibility
     private const string CreditV4Envelope =
         "recording-source-actor-envelope-v2/recording-extraction-v4/"
         + "retained-recording-credits-v2/recording-credits-v4/recording-actor-evidence-v1/"
+        + "retained-actor-facts-v1/track-title-v1/local-selected-account-v1/";
+    private const string CreditV5Envelope =
+        "recording-source-actor-envelope-v2/recording-extraction-v4/"
+        + "retained-recording-credits-v2/recording-credits-v5/recording-actor-evidence-v1/"
         + "retained-actor-facts-v1/track-title-v1/local-selected-account-v1/";
     private const string ResolutionComponents =
         "/people-candidate-facts-v5/people-actor-retrieval-v3/people-actor-projection-v1/"
@@ -43,24 +48,31 @@ public sealed class TestSourceActorProducerCompatibility
             "source-actor-aliases-v3",
             SourceActorAliasGrammar.LegacyV3
         );
+        yield return Profile(
+            "provider-observations-v8",
+            "source-actor-aliases-v4",
+            SourceActorAliasGrammar.Current,
+            CreditV5Envelope
+        );
     }
 
     private static TestCaseData Profile(
         string decoder,
         string alias,
-        SourceActorAliasGrammar grammar
+        SourceActorAliasGrammar grammar,
+        string envelope = CreditV4Envelope
     ) =>
         new TestCaseData(
             "catalog-recording-processing-v4/legacy-recording-snapshot-v2/"
                 + decoder
                 + "/"
-                + CreditV4Envelope
+                + envelope
                 + "retained-source-actor-aliases-v1/"
                 + alias
                 + "/recording-actor-evidence-v1/retained-source-actor-alias-mapping-v1",
             alias + "/recording-actor-evidence-v1",
             (int)grammar
-        ).SetName("ExactHistoricalProducer_" + decoder + "_" + alias);
+        );
 
     [TestCaseSource(nameof(HistoricalProfiles))]
     public void ExactHistoricalProducersRetainReadAuthorityWithoutCurrentAdmission(
@@ -122,6 +134,106 @@ public sealed class TestSourceActorProducerCompatibility
             .Be(SourceActorAliasGrammar.Current);
     }
 
+    [TestCaseSource(nameof(HistoricalProfiles))]
+    public void HistoricalReadReplaysCompleteOriginalActorScopesButCannotAdmitThemAsCurrent(
+        string processingVersion,
+        string aliasVersion,
+        int grammar
+    )
+    {
+        var context = OriginalActorAccount((SourceActorAliasGrammar)grammar);
+        var authenticator = new SourceActorResolutionStore.OriginalInputAuthenticator(
+            processingVersion,
+            new Dictionary<Guid, NormalizationInputRevision>
+            {
+                [context.Input.Uuid] = context.Input,
+            },
+            true
+        );
+
+        var actual = authenticator.Authenticate(context.Prepared, context.Output, default);
+
+        actual
+            .Scopes.Should()
+            .HaveCount(2, "recording and file prose keep separate original scopes");
+        JsonElement
+            .DeepEquals(
+                JsonSerializer.SerializeToElement(
+                    actual.Scopes.Select(scope => scope.OriginalScope)
+                ),
+                JsonSerializer.SerializeToElement(context.Output.SourceActorAliases)
+            )
+            .Should()
+            .BeTrue("the original assertion UUIDs, aliases, citations and coverage must survive");
+        actual
+            .Scopes.Should()
+            .OnlyContain(scope =>
+                scope.OriginalScope.Extraction.Assertions.Count > 0
+                && scope.OriginalScope.ProducerVersion.Contains(
+                    aliasVersion,
+                    StringComparison.Ordinal
+                )
+            );
+
+        var admission = new SourceActorResolutionStore.OriginalInputAuthenticator(
+            processingVersion,
+            new Dictionary<Guid, NormalizationInputRevision>
+            {
+                [context.Input.Uuid] = context.Input,
+            },
+            false
+        );
+        Action admit = () => admission.Authenticate(context.Prepared, context.Output, default);
+        admit.Should().Throw<ArgumentException>();
+    }
+
+    [Test]
+    public void TitleOnlyCompatibilityStillRefusesAnAlteredOriginalFileInventory()
+    {
+        var context = OriginalActorAccount(SourceActorAliasGrammar.Current);
+        var authenticator = new SourceActorResolutionStore.OriginalInputAuthenticator(
+            SourceActorResolutionStore.AliasV4TitleV1ProcessingVersion,
+            new Dictionary<Guid, NormalizationInputRevision>
+            {
+                [context.Input.Uuid] = context.Input,
+            },
+            true
+        );
+        var missingFile = context.Output with
+        {
+            SourceActorAliases = context.Output.SourceActorAliases!.Take(1).ToArray(),
+        };
+
+        Action replay = () => authenticator.Authenticate(context.Prepared, missingFile, default);
+        replay.Should().Throw<ArgumentException>();
+    }
+
+    [Test]
+    public void TitleOnlyCompatibilityKeepsCurrentActorIdsAndOriginalScopes()
+    {
+        var context = OriginalActorAccount(SourceActorAliasGrammar.Current);
+        var authenticator = new SourceActorResolutionStore.OriginalInputAuthenticator(
+            NormalizationRecordingProcessor.Version,
+            new Dictionary<Guid, NormalizationInputRevision>
+            {
+                [context.Input.Uuid] = context.Input,
+            },
+            false
+        );
+
+        var current = authenticator.Authenticate(context.Prepared, context.Output, default);
+
+        JsonElement
+            .DeepEquals(
+                JsonSerializer.SerializeToElement(
+                    current.Scopes.Select(scope => scope.OriginalScope)
+                ),
+                JsonSerializer.SerializeToElement(context.Output.SourceActorAliases)
+            )
+            .Should()
+            .BeTrue();
+    }
+
     [Test]
     public void GenuinePublishedV6ProposalRetainsItsHistoricalReadProfile()
     {
@@ -155,6 +267,7 @@ public sealed class TestSourceActorProducerCompatibility
     [TestCase("alias")]
     [TestCase("mapping")]
     [TestCase("capture")]
+    [TestCase("title")]
     public void UnknownProducerCombinationsCannotBorrowHistoricalProof(string changedComponent)
     {
         var version = SourceActorResolutionStore.LegacyAliasV3DecoderV8ProcessingVersion;
@@ -171,6 +284,7 @@ public sealed class TestSourceActorProducerCompatibility
                 "legacy-recording-snapshot-v2",
                 "legacy-recording-snapshot-v1"
             ),
+            "title" => version.Replace("track-title-v1", "track-title-v0"),
             _ => throw new ArgumentException("Unknown producer mutation."),
         };
         Action replay = () => SourceActorResolutionStore.RequireOriginalAliasGrammar(changed, true);
@@ -206,6 +320,7 @@ public sealed class TestSourceActorProducerCompatibility
             .HistoricalAcceptedApplicationReadVersions()
             .Single(version =>
                 version.Contains("provider-observations-v8/", StringComparison.Ordinal)
+                && version.Contains("source-actor-aliases-v3/", StringComparison.Ordinal)
             );
         var token = component switch
         {
@@ -233,4 +348,68 @@ public sealed class TestSourceActorProducerCompatibility
             .Should()
             .BeFalse();
     }
+
+    private static OriginalAccount OriginalActorAccount(SourceActorAliasGrammar grammar)
+    {
+        var input = new NormalizationInputRevision
+        {
+            Uuid = Guid.Parse("7a4d282b-7b8c-4d77-ad91-d173fd16abef"),
+            Resource = new("archive.org", "item_metadata", "original-title-profile"),
+            Payload = JsonSerializer.SerializeToUtf8Bytes(
+                new
+                {
+                    metadata = new
+                    {
+                        identifier = "original-title-profile",
+                        description = "<div>The band:\nZoë Vale AKA Lark - guitar</div>",
+                    },
+                    files = new[]
+                    {
+                        new
+                        {
+                            name = "original.flac",
+                            format = "Flac",
+                            title = "Song [1]",
+                            description = "The band:\nPat Myers AKA DATPAT - guitar",
+                        },
+                    },
+                }
+            ),
+            MediaType = "application/json",
+            CaptureVersion = "archive-item-response-v1",
+        };
+        var decoded = new NormalizationProviderDecoder().Decode(input);
+        var recording = decoded.Recordings.Single();
+        var binding = new NormalizationRecordingBindingSnapshot(
+            input.Uuid,
+            input.Resource,
+            new(
+                NormalizationCatalogBindingStatus.Bound,
+                new(Guid.NewGuid(), Guid.NewGuid(), null, null, ["missing_show"]),
+                "bound"
+            ),
+            recording
+                .Files.Select(file => new NormalizationFileBinding(
+                    file,
+                    new(NormalizationCatalogBindingStatus.Missing, null, "unbound_file")
+                ))
+                .ToArray(),
+            [],
+            []
+        );
+        using var document = NormalizationRetainedDocument.Open(input);
+        var scopes = new NormalizationRecordingSourceActorAliasBuilder(grammar).Build(
+            input,
+            document,
+            recording,
+            default
+        );
+        return new(input, new(input.Resource, 0, binding), new(decoded.Issues, scopes));
+    }
+
+    private sealed record OriginalAccount(
+        NormalizationInputRevision Input,
+        NormalizationRecordingPreparedInput Prepared,
+        SourceActorExtractionOutput Output
+    );
 }

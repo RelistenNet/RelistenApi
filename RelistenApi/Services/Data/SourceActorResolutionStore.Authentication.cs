@@ -32,17 +32,26 @@ public sealed partial class SourceActorResolutionStore
         "catalog-recording-processing-v4/legacy-recording-snapshot-v2/provider-observations-v8/"
         + HistoricalCreditV4ExtractionPrefix
         + RetainedSourceActorAliasExtractor.LegacyV3Version;
+    internal const string AliasV4TitleV1ProcessingVersion =
+        "catalog-recording-processing-v4/legacy-recording-snapshot-v2/provider-observations-v8/"
+        + "recording-source-actor-envelope-v2/recording-extraction-v4/"
+        + "retained-recording-credits-v2/recording-credits-v5/recording-actor-evidence-v1/"
+        + "retained-actor-facts-v1/track-title-v1/local-selected-account-v1/"
+        + "retained-source-actor-aliases-v1/source-actor-aliases-v4/recording-actor-evidence-v1/"
+        + "retained-source-actor-alias-mapping-v1";
 
     // Pin the reader implementation as well as each historical producer. Decoder v8 keeps
     // the v6/v7 recording fields at their original coordinates; complete scope replay below
     // still refuses any changed field/file/root inventory. Future component changes require
     // an explicit compatibility decision rather than inheriting these historical grants.
+    // Title v2 changes only the parallel title interpretation. Alias replay never consumes
+    // those proposals: its complete original text/file/root scopes and local IDs stay intact.
     internal static bool SupportsHistoricalAliasReplay =>
         NormalizationRecordingProcessor.Version
         == "catalog-recording-processing-v4/legacy-recording-snapshot-v2/provider-observations-v8/"
             + "recording-source-actor-envelope-v2/recording-extraction-v4/"
             + "retained-recording-credits-v2/recording-credits-v5/recording-actor-evidence-v1/"
-            + "retained-actor-facts-v1/track-title-v1/local-selected-account-v1/"
+            + "retained-actor-facts-v1/track-title-v2/local-selected-account-v1/"
             + "retained-source-actor-aliases-v1/source-actor-aliases-v4/recording-actor-evidence-v1/"
             + "retained-source-actor-alias-mapping-v1";
 
@@ -66,6 +75,8 @@ public sealed partial class SourceActorResolutionStore
                 case LegacyAliasV3DecoderV7ProcessingVersion:
                 case LegacyAliasV3DecoderV8ProcessingVersion:
                     return SourceActorAliasGrammar.LegacyV3;
+                case AliasV4TitleV1ProcessingVersion:
+                    return SourceActorAliasGrammar.Current;
             }
         }
 
@@ -77,7 +88,7 @@ public sealed partial class SourceActorResolutionStore
     // One authentication pass owns decoder/root caches. Each original input and selected root
     // document stays open only while its scopes are replayed; file extraction borrows that
     // document rather than opening the entire retained payload once per file.
-    private sealed class OriginalInputAuthenticator(
+    internal sealed class OriginalInputAuthenticator(
         string processingVersion,
         IReadOnlyDictionary<Guid, NormalizationInputRevision> inputs,
         bool allowHistoricalProof

@@ -10,7 +10,7 @@ namespace RelistenApiTests.Normalization;
 /// interpretation only; they do not establish composition or person identity.
 /// </summary>
 [TestFixture]
-public class TestTrackTitleExtraction
+public partial class TestTrackTitleExtraction
 {
     private readonly TrackTitleExtractor extractor = new();
 

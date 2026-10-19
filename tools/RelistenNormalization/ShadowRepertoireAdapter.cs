@@ -28,7 +28,7 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
     );
     private static readonly Regex RecordingFilename = new(
-        @"^\S*\d{4}[-_.]\d{2}[-_.]\d{2}(?:[._-]?[sd]\d+)?[._-]?t\d+(?:[._-][\p{L}\p{N}._-]+)*$",
+        @"^\S*(?:\d{4}|\d{2})[-_.]\d{2}[-_.]\d{2}(?:[._-]?[sd]\d+)?[._-]?t\d+(?:[._-][\p{L}\p{N}._-]+)*$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
     );
     private static readonly Regex CompactDateRecordingLabel = new(
@@ -69,6 +69,17 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
         (long ArtistId, string Title),
         Dictionary<Guid, CapturedSong>
     > songs = [];
+
+    // A descriptor bundle has artist UUIDs and explicit source scopes, not native
+    // numeric artist IDs. Each consolidation scope owns a separate adapter instance.
+    private readonly Dictionary<
+        (Guid ArtistUuid, string Title),
+        Dictionary<Guid, CapturedSong>
+    > descriptorSongs = [];
+    private readonly Dictionary<
+        (Guid ArtistUuid, Guid SongUuid),
+        CapturedSong
+    > descriptorIdentities = [];
     private readonly IdentityCandidateMatcher matcher = new();
 
     public string Version => "shadow-repertoire-v6";
@@ -150,7 +161,12 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
         var segments =
             extraction
                 ?.Segments.Select(segment =>
-                    ResolveTitleMention(input.Artist.Id, input.Artist.Uuid, segment)
+                    ResolveTitleMention(
+                        input.Artist.Id,
+                        input.Artist.Uuid,
+                        segment,
+                        extraction.Segments.Count == 1 ? title : null
+                    )
                 )
                 .ToArray()
             ?? [];
@@ -272,16 +288,109 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
     public ShadowRepertoireSegment ResolveTitleMention(
         long artistId,
         Guid artistUuid,
-        TrackTitleSegment segment
+        TrackTitleSegment segment,
+        string? originalTitle = null
+    ) =>
+        ResolveTitleMentionCore(
+            artistUuid,
+            segment,
+            Candidates(artistId, artistUuid, segment.Title ?? segment.Evidence.Quote),
+            originalTitle == null ? [] : Candidates(artistId, artistUuid, originalTitle),
+            originalTitle
+        );
+
+    /// <summary>Uses a complete, explicitly scoped descriptor dictionary without inventing native artist IDs.</summary>
+    public ShadowRepertoireSegment ResolveTitleMention(
+        Guid artistUuid,
+        TrackTitleSegment segment,
+        string? originalTitle = null
+    ) =>
+        ResolveTitleMentionCore(
+            artistUuid,
+            segment,
+            DictionaryCandidates(artistUuid, segment.Title ?? segment.Evidence.Quote),
+            originalTitle == null ? [] : DictionaryCandidates(artistUuid, originalTitle),
+            originalTitle
+        );
+
+    public void ObserveDictionary(MusicDictionaryName value)
+    {
+        var title = NormalizeTitle(value.Title);
+        if (title.Length == 0)
+        {
+            return;
+        }
+        if (!descriptorSongs.TryGetValue((value.ArtistUuid, title), out var matches))
+        {
+            matches = [];
+            descriptorSongs.Add((value.ArtistUuid, title), matches);
+        }
+        var evidence = new ShadowRepertoireDictionaryEvidence(
+            value.InputKey,
+            value.Witness.ValuePointer!,
+            value.Title
+        )
+        {
+            RetainedWitness = value.Witness,
+        };
+        if (
+            !descriptorIdentities.TryGetValue(
+                (value.ArtistUuid, value.LegacySongUuid),
+                out var identity
+            )
+        )
+        {
+            identity = new(value.LegacySongUuid, evidence);
+            descriptorIdentities.Add((value.ArtistUuid, value.LegacySongUuid), identity);
+        }
+        else
+        {
+            identity.AddWitness(evidence);
+        }
+        matches[value.LegacySongUuid] = identity;
+    }
+
+    public ShadowRepertoireCandidate? DictionaryIdentity(Guid artistUuid, Guid songUuid)
+    {
+        return descriptorIdentities.TryGetValue((artistUuid, songUuid), out var identity)
+            ? CompareCandidates(artistUuid, identity.Name, new() { [songUuid] = identity })[0]
+            : null;
+    }
+
+    public IReadOnlyList<ShadowRepertoireCandidate> DictionaryCandidates(
+        Guid artistUuid,
+        string title
+    )
+    {
+        descriptorSongs.TryGetValue((artistUuid, NormalizeTitle(title)), out var matches);
+        return CompareCandidates(artistUuid, title, matches);
+    }
+
+    private static ShadowRepertoireSegment ResolveTitleMentionCore(
+        Guid artistUuid,
+        TrackTitleSegment segment,
+        IReadOnlyList<ShadowRepertoireCandidate> candidates,
+        IReadOnlyList<ShadowRepertoireCandidate> originalCandidates,
+        string? originalTitle
     )
     {
         var title = segment.Title ?? segment.Evidence.Quote;
         var trimmedTitle = title.Trim();
         var normalized = NormalizeTitle(title);
-        IReadOnlyList<ShadowRepertoireCandidate> candidates =
-            artistUuid == Guid.Empty || normalized.Length == 0
-                ? []
-                : Candidates(artistId, artistUuid, title);
+        // Syntax may remove a recording annotation, but a retained literal dictionary
+        // identity for the complete title still has priority over that interpretation.
+        if (
+            originalTitle != null
+            && originalCandidates.Any(candidate =>
+                candidate.Evidence.Any(evidence =>
+                    LiteralTitleKey(evidence.Quote) == LiteralTitleKey(originalTitle)
+                )
+            )
+        )
+        {
+            candidates = originalCandidates;
+            return DictionarySegment();
+        }
         // Literal dictionary wording preserves an existing identity even when the producer
         // calls that wording a control label. Punctuation-normalized correspondence alone
         // cannot override an explicit content label (for example Banter, versus Banter).
@@ -370,6 +479,9 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
             normalized is "intro" or "intros" or "outro" or "interlude"
             || OpaqueOrUnparsedTitle.IsMatch(title)
             || RecordingFilename.IsMatch(trimmedTitle)
+            || originalTitle != null
+                && RecordingFilename.IsMatch(originalTitle.Trim())
+                && !title.Any(char.IsWhiteSpace)
             || IsCompactDateRecordingLabel(trimmedTitle)
             || RecordingDivision.IsMatch(trimmedTitle)
             || NumericAnnotation.IsMatch(trimmedTitle)
@@ -434,6 +546,19 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
             return [];
         }
 
+        return CompareCandidates(artistUuid, title, matches);
+    }
+
+    private IReadOnlyList<ShadowRepertoireCandidate> CompareCandidates(
+        Guid artistUuid,
+        string title,
+        Dictionary<Guid, CapturedSong>? matches
+    )
+    {
+        if (matches == null)
+        {
+            return [];
+        }
         var claim = new RepertoireMatchRecord(null, artistUuid, [new(title)], []);
         return matches
             .Values.OrderBy(song => song.Uuid)
@@ -442,7 +567,18 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
                 song.Witnesses.OrderBy(pair => pair.Key, StringComparer.Ordinal)
                     .Select(pair => pair.Value)
                     .ToArray(),
-                matcher.CompareRepertoire(claim, new(song.Uuid, artistUuid, [new(song.Name)], []))
+                matcher.CompareRepertoire(
+                    claim,
+                    new(
+                        song.Uuid,
+                        artistUuid,
+                        song.Witnesses.Values.Select(witness => new IdentityMatchingName(
+                                witness.Quote
+                            ))
+                            .ToArray(),
+                        []
+                    )
+                )
             ))
             .ToArray();
     }
@@ -466,6 +602,15 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
         }
         var uuid = row.GetProperty("uuid").GetGuid();
         var evidence = new ShadowRepertoireDictionaryEvidence(inputKey, pointer, name);
+        AddWitness(matches, uuid, evidence);
+    }
+
+    private static void AddWitness(
+        Dictionary<Guid, CapturedSong> matches,
+        Guid uuid,
+        ShadowRepertoireDictionaryEvidence evidence
+    )
+    {
         if (!matches.TryGetValue(uuid, out var song))
         {
             matches.Add(uuid, new(uuid, evidence));
