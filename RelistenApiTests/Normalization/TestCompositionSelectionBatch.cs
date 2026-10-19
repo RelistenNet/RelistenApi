@@ -70,7 +70,7 @@ public sealed class TestCompositionSelectionBatch
         );
 
         report.State.Should().Be("preflight_completed");
-        report.Method.Should().Be("luna-composition-hypothesis-v3");
+        report.Method.Should().Be("luna-composition-hypothesis-v4");
         report.Preflight.SelectedInputs.Should().Be(3);
         report.Preflight.EligibleInputs.Should().Be(2);
         report.Preflight.SkipReasons["missing_candidate_bearing_hypothesis"].Should().Be(1);
@@ -78,7 +78,7 @@ public sealed class TestCompositionSelectionBatch
             .Preflight.Rows.Where(row => row.Request != null)
             .Should()
             .OnlyContain(row =>
-                row.Request!.Method == "luna-composition-hypothesis-v3"
+                row.Request!.Method == "luna-composition-hypothesis-v4"
                 && row.Request.WithinRequestLimit
             );
         report.ProcessedInputs.Should().Be(0);

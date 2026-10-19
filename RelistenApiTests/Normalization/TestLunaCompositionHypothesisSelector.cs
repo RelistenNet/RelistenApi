@@ -65,27 +65,10 @@ public sealed class TestLunaCompositionHypothesisSelector
             request.RootElement.GetProperty("input")[1].GetProperty("content").GetString()!
         );
         var renderedContext = model.RootElement.GetProperty("targetContext");
-        var pool = renderedContext
-            .GetProperty("textPool")
-            .EnumerateArray()
-            .ToDictionary(
-                text => text.GetProperty("sha256").GetString()!,
-                text => text.GetProperty("value").GetString()!
-            );
-        pool.Should().ContainSingle();
-        var hydrated = System.Text.Json.Nodes.JsonNode.Parse(renderedContext.GetRawText())!;
-        foreach (var witness in hydrated["witnesses"]!.AsArray())
-        {
-            foreach (var reference in witness!["texts"]!.AsArray())
-            {
-                reference!.AsObject().ContainsKey("value").Should().BeFalse();
-                reference["value"] = pool[reference["textSha256"]!.GetValue<string>()];
-            }
-        }
-        hydrated.AsObject().Remove("textPool");
-        var context = hydrated.Deserialize<CompositionSelectionTargetContext>(
-            new JsonSerializerOptions(JsonSerializerDefaults.Web)
-        )!;
+        renderedContext.GetProperty("textPool").GetArrayLength().Should().Be(1);
+        renderedContext.GetProperty("sourceDocuments").GetArrayLength().Should().Be(1);
+        renderedContext.GetProperty("derivedFacts").GetArrayLength().Should().Be(0);
+        var context = HydrateRawTargetContext(renderedContext);
 
         JsonElement
             .DeepEquals(
@@ -136,7 +119,7 @@ public sealed class TestLunaCompositionHypothesisSelector
         LunaCompositionHypothesisSelector
             .DescribeRequest(input)
             .Method.Should()
-            .Be("luna-composition-hypothesis-v3");
+            .Be("luna-composition-hypothesis-v4");
 
         var original = input.TargetContext.Witnesses[2];
         var text = original.Texts.Single() with { Value = "<i>Changed literal source 🌙</i>" };
@@ -156,6 +139,194 @@ public sealed class TestLunaCompositionHypothesisSelector
             .DescribeRequest(changed)
             .CacheKey.Should()
             .NotBe(LunaCompositionHypothesisSelector.DescribeRequest(input).CacheKey);
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public void KnownDerivedInterpretationsShareFactsAcrossOwnersWithoutRewritingRawProviderClaims(
+        bool missingSecondSource
+    )
+    {
+        var input = DerivedInput(missingSecondSource);
+        var json = PromptJson();
+        var originalBytes = JsonSerializer.SerializeToUtf8Bytes(input, json);
+        using var model = ModelInput(input);
+        var rendered = model.RootElement.GetProperty("targetContext");
+        var facts = rendered.GetProperty("derivedFacts");
+        facts.GetArrayLength().Should().Be(1);
+        facts[0].GetProperty("kind").GetString().Should().Be("derived_repertoire_interpretation");
+        var fact = facts[0].GetProperty("observation");
+        var firstClaim = rendered.GetProperty("witnesses")[0].GetProperty("claims")[0];
+        var secondClaim = rendered.GetProperty("witnesses")[1].GetProperty("claims")[0];
+        firstClaim.GetProperty("observation").GetProperty("derivedFact").GetInt32().Should().Be(0);
+        secondClaim.GetProperty("observation").GetProperty("derivedFact").GetInt32().Should().Be(0);
+        firstClaim.GetProperty("role").ValueKind.Should().Be(JsonValueKind.Null);
+        secondClaim.GetProperty("value").ValueKind.Should().Be(JsonValueKind.Null);
+        var firstOwnership = firstClaim.GetProperty("observation").GetProperty("ownership");
+        var secondOwnership = secondClaim.GetProperty("observation").GetProperty("ownership");
+        firstOwnership
+            .GetProperty("fileUuid")
+            .GetGuid()
+            .Should()
+            .Be(input.TargetContext!.Witnesses[0].FileUuid!.Value);
+        firstOwnership
+            .GetProperty("sourceUuid")
+            .GetGuid()
+            .Should()
+            .Be(input.TargetContext.Witnesses[0].SourceUuid!.Value);
+        secondOwnership
+            .GetProperty("fileUuid")
+            .GetGuid()
+            .Should()
+            .Be(input.TargetContext.Witnesses[1].FileUuid!.Value);
+        if (missingSecondSource)
+        {
+            secondOwnership.TryGetProperty("sourceUuid", out _).Should().BeFalse();
+        }
+        else
+        {
+            secondOwnership.GetProperty("sourceUuid").ValueKind.Should().Be(JsonValueKind.Null);
+        }
+        fact.TryGetProperty("fileUuid", out _).Should().BeFalse();
+        fact.TryGetProperty("sourceUuid", out _).Should().BeFalse();
+        var segments = fact.GetProperty("segments");
+        segments
+            .EnumerateArray()
+            .Select(segment => segment.GetProperty("position").GetInt32())
+            .Should()
+            .Equal(1, 2);
+        segments[0]
+            .GetProperty("candidateSongs")
+            .EnumerateArray()
+            .Select(candidate => candidate.GetProperty("entityKey").GetString())
+            .Should()
+            .Equal("repertoire:rival-b", "repertoire:rival-a");
+        segments[0].GetProperty("evidence").GetProperty("quote").GetString().Should().Be("Song");
+        segments[0].GetProperty("outcome").GetString().Should().Be("proposed");
+        segments[0]
+            .GetProperty("song")
+            .GetProperty("entityKey")
+            .GetString()
+            .Should()
+            .Be("repertoire:target");
+        segments[0]
+            .GetProperty("song")
+            .GetProperty("basis")
+            .GetString()
+            .Should()
+            .Be("captured_artist_dictionary");
+        segments[1].GetProperty("title").ValueKind.Should().Be(JsonValueKind.Null);
+        segments[0].TryGetProperty("comparisonDiagnostics", out _).Should().BeFalse();
+        segments[1].TryGetProperty("comparisonDiagnostics", out _).Should().BeFalse();
+        fact.GetProperty("wholeFileDictionaryCandidates")[0]
+            .TryGetProperty("comparison", out _)
+            .Should()
+            .BeFalse();
+        segments[0]
+            .GetProperty("uninterpreted")
+            .GetProperty("comparisonDiagnostics")
+            .GetString()
+            .Should()
+            .Be("literal nested field");
+        fact.GetProperty("wholeFileDictionaryCandidates")[0]
+            .GetProperty("futureComparison")
+            .GetProperty("comparison")
+            .GetString()
+            .Should()
+            .Be("literal nested field");
+        fact.GetProperty("unknownContainer").ValueKind.Should().Be(JsonValueKind.Null);
+        fact.GetProperty("future")
+            .GetProperty("alternatives")
+            .EnumerateArray()
+            .Select(value => value.GetString())
+            .Should()
+            .Equal("z", "a");
+        var originalObservation = input.TargetContext.Witnesses[0].Claims[0].Observation;
+        JsonElement
+            .DeepEquals(
+                fact.GetProperty("extraction"),
+                originalObservation.GetProperty("extraction")
+            )
+            .Should()
+            .BeTrue();
+        JsonElement
+            .DeepEquals(
+                fact.GetProperty("comparisonDiagnostics"),
+                originalObservation.GetProperty("comparisonDiagnostics")
+            )
+            .Should()
+            .BeTrue();
+        var rawClaim = rendered
+            .GetProperty("witnesses")[2]
+            .GetProperty("claims")
+            .EnumerateArray()
+            .Single(claim => claim.GetProperty("kind").GetString() == "provider_assertion");
+        JsonElement
+            .DeepEquals(rawClaim.GetProperty("observation"), originalObservation)
+            .Should()
+            .BeTrue();
+        model
+            .RootElement.GetProperty("originalInputSha256")
+            .GetString()
+            .Should()
+            .Be(Convert.ToHexStringLower(SHA256.HashData(originalBytes)));
+        JsonSerializer.SerializeToUtf8Bytes(input, json).Should().Equal(originalBytes);
+    }
+
+    [Test]
+    public void OmittedDerivedDiagnosticsStillBindTheOriginalInputAndReusableCacheIdentity()
+    {
+        var input = DerivedInput();
+        var context = input.TargetContext!;
+        var original = context.Witnesses[0];
+        var claim = original.Claims[0];
+        var observation = System.Text.Json.Nodes.JsonNode.Parse(claim.Observation.GetRawText())!;
+        observation["segments"]![0]!["comparisonDiagnostics"]![0]!["score"] = 999;
+        observation["wholeFileDictionaryCandidates"]![0]!["comparison"]!["score"] = 999;
+        var changedClaim = claim with
+        {
+            Observation = JsonSerializer.SerializeToElement(observation),
+        };
+        var changed = input with
+        {
+            TargetContext = context with
+            {
+                Witnesses = context
+                    .Witnesses.Select(
+                        (witness, index) =>
+                            index == 0 ? original with { Claims = [changedClaim] } : witness
+                    )
+                    .ToArray(),
+            },
+        };
+        using var first = ModelInput(input);
+        using var second = ModelInput(changed);
+
+        JsonElement
+            .DeepEquals(
+                first.RootElement.GetProperty("targetContext"),
+                second.RootElement.GetProperty("targetContext")
+            )
+            .Should()
+            .BeTrue();
+        second
+            .RootElement.GetProperty("originalInputSha256")
+            .GetString()
+            .Should()
+            .NotBe(first.RootElement.GetProperty("originalInputSha256").GetString());
+        LunaCompositionHypothesisSelector
+            .DescribeRequest(changed)
+            .CacheKey.Should()
+            .NotBe(LunaCompositionHypothesisSelector.DescribeRequest(input).CacheKey);
+        context
+            .Witnesses[0]
+            .Claims[0]
+            .Observation.GetProperty("segments")[0]
+            .GetProperty("comparisonDiagnostics")[0]
+            .GetProperty("score")
+            .GetInt32()
+            .Should()
+            .Be(17);
     }
 
     [TestCase("wrong_scoped_key")]
@@ -508,6 +679,180 @@ public sealed class TestLunaCompositionHypothesisSelector
             .GetString()
             .Should()
             .Be("Named writer");
+    }
+
+    private static JsonSerializerOptions PromptJson() =>
+        new(JsonSerializerDefaults.Web) { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+
+    private static JsonDocument ModelInput(CompositionHypothesisSelectionInput input)
+    {
+        using var request = JsonDocument.Parse(
+            LunaCompositionHypothesisSelector.RenderRequest(input)
+        );
+        return JsonDocument.Parse(
+            request.RootElement.GetProperty("input")[1].GetProperty("content").GetString()!
+        );
+    }
+
+    private static CompositionHypothesisSelectionInput DerivedInput(
+        bool missingSecondSource = false
+    )
+    {
+        var input = EnrichedInput();
+        var context = input.TargetContext!;
+        var firstFile = Guid.Parse("00000000-0000-0000-0000-000000000061");
+        var firstSource = Guid.Parse("00000000-0000-0000-0000-000000000062");
+        var secondFile = Guid.Parse("00000000-0000-0000-0000-000000000063");
+        var secondSource = Guid.Parse("00000000-0000-0000-0000-000000000064");
+        JsonElement Observation(Guid file, Guid? source, bool omitSource, int diagnostic)
+        {
+            var node = System.Text.Json.Nodes.JsonNode.Parse(
+                """
+                {"extractorVersion":"track-title-v2","originalTitle":"09.Song > Other 🌙","isResolvedByExtractor":false,
+                 "segments":[
+                   {"position":1,"kind":"song","title":"Song","evidence":{"quote":"Song","startCodePoint":3,"endCodePoint":7},
+                    "outcome":"proposed","reason":"unique_title_correspondence_is_not_identity_acceptance",
+                    "song":{"entityKey":"repertoire:target","name":"Song","basis":"captured_artist_dictionary","legacySongUuid":"00000000-0000-0000-0000-000000000071"},
+                    "candidateSongs":[{"entityKey":"repertoire:rival-b"},{"entityKey":"repertoire:rival-a"}],
+                    "comparisonDiagnostics":[{"score":17}],"future":null,
+                    "uninterpreted":{"comparisonDiagnostics":"literal nested field"}},
+                   {"position":2,"kind":"unknown","title":null,"evidence":{"quote":"Other 🌙"},
+                    "candidateSongs":[],"comparisonDiagnostics":null,"future":{"ordered":["second","first"]}}],
+                 "wholeFileDictionaryCandidates":[{"song":{"entityKey":"repertoire:rival-a"},
+                   "evidence":[{"quote":"09.Song > Other 🌙"}],"comparison":{"score":3},
+                   "futureComparison":{"comparison":"literal nested field"}}],
+                 "extraction":{"originalTitle":"09.Song > Other 🌙","sequence":"title_order","isResolved":false,
+                   "reason":"retained_unknown_passage",
+                   "segments":[
+                     {"position":1,"kind":"song","title":"Song","coverage":"partial","transitionAfter":"segue_marker",
+                      "evidence":{"field":"title","jsonPointer":"/title","quote":"Song","startCodePoint":3,"endCodePoint":7}},
+                     {"position":2,"kind":"unknown","title":null,"coverage":"unknown","transitionAfter":"unknown",
+                      "evidence":{"field":"title","jsonPointer":"/title","quote":"Other 🌙","startCodePoint":10,"endCodePoint":17}}],
+                   "qualifiers":[{"kind":"track_number","structuralKind":"track_number",
+                     "evidence":{"field":"title","jsonPointer":"/title","quote":"09.","startCodePoint":0,"endCodePoint":3}}]},
+                 "comparisonDiagnostics":{"rawRoot":"preserve"},
+                 "future":{"nullValue":null,"empty":[],"alternatives":["z","a"]},"unknownContainer":null}
+                """
+            )!;
+            node["fileUuid"] = file.ToString("D");
+            node["segments"]![0]!["song"]!["artistUuid"] = input.Song.ArtistUuid.ToString("D");
+            node["extraction"]!["artistUuid"] = input.Song.ArtistUuid.ToString("D");
+            if (!omitSource)
+            {
+                node["sourceUuid"] = source?.ToString("D");
+            }
+            node["segments"]![0]!["comparisonDiagnostics"]![0]!["score"] = diagnostic;
+            node["wholeFileDictionaryCandidates"]![0]!["comparison"]!["score"] = diagnostic;
+            return JsonSerializer.SerializeToElement(node);
+        }
+        var first = Observation(firstFile, firstSource, false, 17);
+        var second = Observation(secondFile, null, missingSecondSource, 23);
+        CompositionSelectionTargetClaim Derived(
+            JsonElement observation,
+            CompositionSelectionTargetOrigin origin
+        ) => new("retained_repertoire_interpretation", null, null, observation, origin);
+        return input with
+        {
+            TargetContext = context with
+            {
+                Witnesses = context
+                    .Witnesses.Select(
+                        (witness, index) =>
+                            index switch
+                            {
+                                0 => witness with
+                                {
+                                    FileUuid = firstFile,
+                                    SourceUuid = firstSource,
+                                    Claims = [Derived(first, witness.Origin)],
+                                },
+                                1 => witness with
+                                {
+                                    FileUuid = secondFile,
+                                    SourceUuid = secondSource,
+                                    Claims = [Derived(second, witness.Origin)],
+                                },
+                                2 => witness with
+                                {
+                                    Claims =
+                                    [
+                                        .. witness.Claims,
+                                        new(
+                                            "provider_assertion",
+                                            "performer",
+                                            "Original provider fact",
+                                            first,
+                                            witness.Origin
+                                        ),
+                                    ],
+                                },
+                                _ => witness,
+                            }
+                    )
+                    .ToArray(),
+            },
+        };
+    }
+
+    private static CompositionSelectionTargetContext HydrateRawTargetContext(JsonElement rendered)
+    {
+        var json = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        var documents = rendered.GetProperty("sourceDocuments").EnumerateArray().ToArray();
+        var positions = rendered.GetProperty("sourcePositions").EnumerateArray().ToArray();
+        var texts = rendered.GetProperty("textPool").EnumerateArray().ToArray();
+        var hydrated = System.Text.Json.Nodes.JsonNode.Parse(rendered.GetRawText())!;
+
+        void Origin(System.Text.Json.Nodes.JsonNode owner)
+        {
+            var position = positions[owner["origin"]!.GetValue<int>()];
+            var document = documents[position.GetProperty("document").GetInt32()];
+            owner["origin"] = JsonSerializer.SerializeToNode(
+                new CompositionSelectionTargetOrigin(
+                    document.GetProperty("run").GetString()!,
+                    document.GetProperty("chunk").GetString()!,
+                    position.GetProperty("line").GetInt64(),
+                    document.GetProperty("sha256").GetString()!,
+                    position.GetProperty("jsonPointer").GetString()!
+                ),
+                json
+            );
+        }
+
+        foreach (var observation in hydrated["artist"]!["observations"]!.AsArray())
+        {
+            Origin(observation!);
+        }
+        foreach (var witness in hydrated["witnesses"]!.AsArray())
+        {
+            Origin(witness!);
+            foreach (var reference in witness!["texts"]!.AsArray())
+            {
+                reference!.AsObject().ContainsKey("value").Should().BeFalse();
+                reference.AsObject().ContainsKey("textSha256").Should().BeFalse();
+                var text = texts[reference["text"]!.GetValue<int>()];
+                reference.AsObject().Remove("text");
+                reference["textSha256"] = text.GetProperty("sha256").GetString();
+                reference["value"] = text.GetProperty("value").GetString();
+                Origin(reference);
+            }
+            foreach (var claim in witness["claims"]!.AsArray())
+            {
+                Origin(claim!);
+            }
+        }
+        foreach (
+            var property in new[]
+            {
+                "sourceDocuments",
+                "sourcePositions",
+                "textPool",
+                "derivedFacts",
+            }
+        )
+        {
+            hydrated.AsObject().Remove(property);
+        }
+        return hydrated.Deserialize<CompositionSelectionTargetContext>(json)!;
     }
 
     internal static CompositionHypothesisSelectionInput EnrichedInput(

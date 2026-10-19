@@ -25,7 +25,7 @@ public sealed class LunaCompositionHypothesisSelector(
 )
 {
     public const string Version = "luna-composition-hypothesis-v2";
-    public const string TargetContextVersion = "luna-composition-hypothesis-v3";
+    public const string TargetContextVersion = "luna-composition-hypothesis-v4";
 
     // This is a local resource limit, not the provider context limit. The full
     // compact candidate universe is measured and conservatively reserved before admission.
@@ -441,6 +441,9 @@ public sealed class LunaCompositionHypothesisSelector(
 
     private const string TargetContextInstructions =
         " Target context contains original source views, including mixed recordings, programs and setlists; inspect all views without choosing a first recording."
+        + " Target sourceDocuments/sourcePositions/textPool are exact reference pools; each ordered witness retains its own source position and ownership."
+        + " derivedFacts are our repertoire interpretations, not provider evidence for composition identity; their repeated matcher diagnostics are omitted."
+        + " All original source claims and text remain present. Shared references or repeated views do not establish independent confirmations."
         + " Coverage is complete only for the observed witness population; missing recording text, artist identifiers and other fields remain missing."
         + " A catalog artist may be a cover performer, house band or collection, not the actual singer or composer. Preserve original source roles and namespace."
         + " Artist MBIDs are observed performer/catalog context only, not composer ownership."
