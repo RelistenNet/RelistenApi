@@ -24,7 +24,7 @@ public sealed partial class ShadowVenueAdapter : IShadowCatalogAdapter
     private readonly ShadowVenueGeography? geography;
 
     public string Version =>
-        "shadow-venue-physical-history-v3/corpus-hypotheses-v1/geography="
+        "shadow-venue-physical-history-v3/corpus-hypotheses-v2/geography="
         + (geography?.EvidenceIdentity ?? "none");
 
     /// <param name="geographyManifest">Optional pinned offline GeoNames manifest. Null preserves parsed locality labels.</param>
@@ -128,8 +128,11 @@ public sealed partial class ShadowVenueAdapter : IShadowCatalogAdapter
         var outcome =
             !venue.HasName
             || venue.MultiplePlaces
-            || venue.Locality.BrowseKey == null
-            || venue.Locality.Geography is { ProposedGeographicKey: null }
+            || normalized.Hypothesis == null
+                && (
+                    venue.Locality.BrowseKey == null
+                    || venue.Locality.Geography is { ProposedGeographicKey: null }
+                )
             || conflictingRows.Contains(venue.Uuid)
             || normalized.Status == "ambiguous"
                 ? "unresolved"
@@ -138,9 +141,11 @@ public sealed partial class ShadowVenueAdapter : IShadowCatalogAdapter
             !venue.HasName ? "missing_usable_venue_name"
             : conflictingRows.Contains(venue.Uuid) ? "conflicting_snapshots_for_legacy_uuid"
             : venue.MultiplePlaces ? "multiple_places_in_legacy_row"
-            : venue.Locality.Geography is { ProposedGeographicKey: null } geographic
+            : normalized.Hypothesis == null
+            && venue.Locality.Geography is { ProposedGeographicKey: null } geographic
                 ? geographic.Status
-            : venue.Locality.BrowseKey == null ? "locality_requires_interpretation"
+            : normalized.Hypothesis == null && venue.Locality.BrowseKey == null
+                ? "locality_requires_interpretation"
             : normalized.Status == "ambiguous" ? normalized.MembershipBasis
             : grouping.Basis == "retained_venue_row" ? "physical_identity_requires_more_evidence"
             : null;

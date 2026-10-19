@@ -5,12 +5,19 @@ Browse shared venue groups at
 The lookup searches across artists, with locality, artist, scope and outcome
 filters. A detail page shows the original location account, history citations,
 protected unknowns, rival interpretations, and captured recording/show links.
+The original [Furthur “MSG / NY, NY” entry](http://alecs-macbook-pro.tail09dbf.ts.net:18776/?id=c7999ad2-04fa-42ab-ba9f-59649e679ff8)
+now opens **Madison Square Garden · New York City, New York, US**, with **950
+recordings from 34 artists**. The same rules handle the John Butler Trio and John
+Mayer MSG variants.
 
 The completed projection retains **216,332 catalog venue records** across **4,362
-artists**. The C# normalizer selects **35,271 shared hypotheses** containing
-**100,078 original accounts**. It connects **292,523 captured source UUIDs** to the
+artists**. The C# normalizer selects **34,726 shared hypotheses** containing
+**121,085 original accounts**. It connects **292,523 captured source UUIDs** to the
 original recording and show venue fields; 180,070 venue records have at least one
-such association. The catalog projection occupies 281,640,960 bytes. A separate
+such association. A full-corpus refresh changed 28,417 accounts and retained
+187,915 unchanged accounts. Its correction files occupy 7,173,367 bytes; the
+139,194,368-byte correction database supplies current search fields and counts.
+The original catalog projection occupies 281,640,960 bytes. A separate
 9,814,016-byte native overlay retains 670 venue observations and 34,139 associated
 files. Full proposals and native evidence remain in the original gzip outputs.
 The [original baseline](http://alecs-macbook-pro.tail09dbf.ts.net:18770/) remains
@@ -18,15 +25,16 @@ available for comparison.
 
 ## Interpret the results
 
-The current input uses `shadow-venue-physical-history-v3/corpus-hypotheses-v1` with
-its pinned geography evidence. Selected hypotheses supply preferred names,
+The current correction uses `shadow-venue-physical-history-v3/corpus-hypotheses-v2`
+with the original pinned geography evidence. Selected hypotheses supply preferred names,
 normalized locality and shared membership. Every original venue UUID remains
 valid; its evidence retains the raw wording. Physical identity remains unaccepted.
 Competing interpretations retain their original counts and bounded examples;
 searching the population is independent of those example bounds.
 
-A bare UUID API request lists the **selected legacy venue record**. Normalized
-result links open the explicitly scoped group list described below. Both preserve `source.venue_id` and
+A bare UUID API request opens the shared recording list when the account has a
+current selected hypothesis. Use `recordings=selected` for the **selected legacy
+venue record** alone. Both preserve `source.venue_id` and
 `show_context.venue_id` separately. When those differ, either record can lead to
 the same recording, and the page explains which field supplied the association.
 Recording counts count distinct source UUIDs; show counts count distinct captured
@@ -77,7 +85,7 @@ or music adapters, invoke a model, or write production normalization state.
 
 ```sh
 RELISTEN_SHADOW_VENUE_GEOGRAPHY='<geography-manifest>#sha256=<digest>' \
-  dotnet tools/RelistenNormalization/bin/LocalAdmissionVerification/RelistenNormalization.dll \
+  dotnet <built-normalization-tool.dll> \
   shadow-venues <retained-capture-manifest.json> <new-output-directory>
 ```
 
@@ -134,17 +142,21 @@ coverage is separate from the shared catalog groups.
 ## Useful examples
 
 [MSG](http://alecs-macbook-pro.tail09dbf.ts.net:18776/?q=MSG&locality=New+York+City)
-opens **Madison Square Garden · New York City, New York, US**: 63 original accounts
-across 33 artists, with 923 recordings and 199 captured show UUIDs. The group artist
+opens **Madison Square Garden · New York City, New York, US**: 88 original accounts
+across 41 catalog artists, with 950 recordings and 211 captured show UUIDs.
+Of those catalog artists, 34 have recordings in the captured group. The group artist
 filter returns 96 Phish recordings or 712 Grateful Dead recordings. The original
-MSG UUID `bcdf830e-9543-27fd-f851-db137f524991` still opens its own 16-recording
-account and exact “MSG” / “NY, NY” evidence.
+MSG UUID `bcdf830e-9543-27fd-f851-db137f524991` retains its own 16-recording
+account through `recordings=selected` and its exact “MSG” / “NY, NY” evidence.
 
-A 390-pixel browser check followed the Grateful Dead group to its 1994-10-19
-recording and played “Brokedown Palace” inline. Playback advanced with no media
-error. Its source UUID remains `4d9c0ea8-4710-c281-f58e-cd45b85f33ee`. Some sampled
-upstream audio URLs fail; the page reports that failure and keeps the original
-source link. The venue layer does not rewrite provider media URLs.
+A 390-pixel browser check started at the original Furthur MSG UUID, filtered the
+shared group to Grateful Dead, and played “Sugar Magnolia” from 1994-10-19 inline.
+Playback advanced past 33 seconds with no media error, then was paused. The page
+fit the viewport without horizontal overflow. Its source UUID remains
+`4d9c0ea8-4710-c281-f58e-cd45b85f33ee`. “Brokedown Palace” in that recording failed
+to load in the browser, although a separate HTTP range request returned 206.
+The page reported the failure and kept the original source link. The venue layer
+does not rewrite provider media URLs.
 
 The following counts describe the unchanged baseline on port 18770.
 
@@ -206,6 +218,7 @@ python3 tools/RelistenNormalization/venue_directory.py serve \
   --native-url http://alecs-macbook-pro.tail09dbf.ts.net:18774/ \
   --music-url http://alecs-macbook-pro.tail09dbf.ts.net:18769/ \
   --people-url http://alecs-macbook-pro.tail09dbf.ts.net:18777/ \
+  --corrections-database local-dev/normalization-data/2026-10-18-venue-directory-corrections-v5/corrections.sqlite3 \
   --bind 100.73.204.24 --port 18776
 ```
 
@@ -248,14 +261,70 @@ fields. A selected C# hypothesis produces one list row; its `uuid` is an origina
 matching member, including under an artist filter. Old proposals without selected
 normalization and native accounts keep their individual result rows.
 
-`GET /api/venue?id=<original UUID>` retains the selected-account recording contract.
-Add `recordings=group` to list associations through every catalog member of its
-selected normalization hypothesis. The response identifies this with
-`recordingsScope: shared_normalization_hypothesis`; the default remains
+`GET /api/venue?id=<original UUID>` lists associations through every catalog member
+of its current selected normalization hypothesis. `recordings=group` remains valid;
+`recordings=selected` requests only the original account. An account without a
+selected hypothesis keeps its own list. The response identifies the effective scope
+with `recordingsScope: shared_normalization_hypothesis` or
 `selected_legacy_venue_record`. Group rows include their original
 `source_venue_member_uuid` and `show_venue_member_uuid` when the corresponding field
 points to a member. `artist`, `offset` and `limit` apply in both scopes.
 `/api/evidence` always returns the selected UUID's exact retained outcome.
+
+## Changed-only venue corrections
+
+The current reader serves the full-corpus correction in
+`local-dev/normalization-data/2026-10-18-venue-normalization-corrections-v4`.
+Its completed manifest SHA-256 is
+`8315e09bac1f48fbbf628e1de989a3ccb2ede7cf632b5fea5db0a4fbd8e7e8a3`.
+The projection and its execution receipt are in
+`local-dev/normalization-data/2026-10-18-venue-directory-corrections-v5`.
+That directory also holds the API results, phone screenshot and
+the exact previous server command for rollback. The original database's pinned
+digest is unchanged.
+
+The completed C# pass took 52.25 seconds with a 1 GiB managed-heap limit and a
+1.25 GiB observed resident-memory stop. Its sampled peak resident memory was
+1,028,079,616 bytes; observed free disk stayed above 4,792,512,512 bytes.
+The reader projection took 25.56 seconds with a 192 MiB storage limit and a
+4 GiB free-space floor. These are explicit limits for this run. Earlier failed
+attempts retain their receipts; they did not replace the reader's base data.
+
+The optional correction projection applies a completed, pinned C#
+`venue-normalization-corrections-v1` manifest to one exact base database. It stores
+changed searchable fields, current C# groups and evidence locators. It does not copy
+the catalog database or rewrite its original venue and recording rows. Build it with:
+
+```sh
+python3 tools/RelistenNormalization/venue_directory.py corrections \
+  --manifest <completed-correction-manifest.json> \
+  --manifest-sha256 <manifest-sha256> \
+  --base-database <original-directory.sqlite3> \
+  --database <new-corrections.sqlite3> \
+  --minimum-free-bytes 4294967296 \
+  --maximum-bytes 201326592
+```
+
+The builder verifies the original UUID, prior tuple and pinned original outcome
+before publishing the replacement. A current `normalizationKey: null` removes the
+old membership. C# supplies the preferred name, locality and membership decision;
+Python recomputes affected recording and show counts through the original source
+and show venue IDs. One source UUID still counts once when both fields match.
+Native accounts remain separate.
+
+Serve the same base with `--corrections-database <corrections.sqlite3>`. Search and
+detail use current fields, while `/api/evidence` keeps the original outcome.
+Changed detail rows add `correctionEvidenceUrl`; `GET /api/correction?id=<UUID>`
+returns the exact retained transition and its manifest pin. `/api/stats` exposes
+correction provenance and current normalized membership counts separately from the
+baseline capture. A changed base or sidecar generation is refused until restart.
+
+The builder defaults to a 64 MiB output limit and a 5.5 GiB free-space floor.
+Operators can set explicit job limits with `--maximum-bytes` and
+`--minimum-free-bytes`. The example uses the completed run's 4 GiB reserve and
+192 MiB output limit. These limits are independent of the matching policy.
+Failed or interrupted replacement leaves a previously published sidecar intact. Roll back by
+omitting `--corrections-database`; the base and original playback homes are unchanged.
 
 Focused Python contracts cover shared preferred names, complete member-alias search,
 normalized localities, group and selected-account recording scopes, artist filters,

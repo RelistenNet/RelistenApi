@@ -30,6 +30,7 @@ if (
                     or "composition-evaluation"
         )
         || (args.Length is 4 or 5 && args[0] == "musicbrainz-search")
+        || (args.Length == 4 && args[0] == "venue-normalization-refresh")
         || (
             args.Length is 4 or 5
             && args[0]
@@ -75,6 +76,7 @@ if (
             + "       RelistenNormalization shadow <snapshot.jsonl[.gz]> <extractions.jsonl[.gz]> <output-directory> [--resume]\n"
             + "       RelistenNormalization shadow-inline <snapshot.jsonl[.gz] OR capture-manifest.json> <output-directory> [--resume]\n"
             + "       RelistenNormalization shadow-venues <snapshot.jsonl[.gz] OR capture-manifest.json> <output-directory> [--resume]\n"
+            + "       RelistenNormalization venue-normalization-refresh <request.json> <new-output-directory> <frozen-request-sha256>\n"
             + "       RelistenNormalization shadow-source-observations <snapshot.jsonl[.gz] OR capture-manifest.json> <output-directory> [--resume]\n"
             + "       RelistenNormalization music-consolidate <input-manifest.json> <output-directory> <frozen-manifest-sha256> [--resume]\n"
             + "       RelistenNormalization composition-hypotheses <request.json> <output-directory> <frozen-request-sha256> [--resume]\n"
@@ -115,6 +117,28 @@ Console.CancelKeyPress += (_, signal) =>
 
 try
 {
+    if (args[0] == "venue-normalization-refresh")
+    {
+        var result = await new VenueNormalizationRefreshBatch().RunAsync(
+            args[1],
+            args[2],
+            args[3],
+            cancellation.Token
+        );
+        Console.WriteLine(
+            JsonSerializer.Serialize(
+                new
+                {
+                    result.TotalVenues,
+                    result.ChangedVenues,
+                    result.UnchangedVenues,
+                    result.Method,
+                }
+            )
+        );
+        return 0;
+    }
+
     if (args[0] == "composition-select")
     {
         var result = await new CompositionSelectionBatch().RunAsync(

@@ -3,6 +3,7 @@ from contextlib import redirect_stdout
 import gzip
 import io
 import json
+import os
 import sqlite3
 from pathlib import Path
 import tempfile
@@ -11,10 +12,11 @@ import unittest
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
 from urllib.request import urlopen
+from urllib.error import HTTPError
 from http.server import ThreadingHTTPServer
 from shadow_reader import ShadowIndex
 
-from venue_directory import VenueDirectory, VenueDirectoryBuilder, NativeVenueOverlayBuilder, file_hash, handler_for
+from venue_directory import VenueDirectory, VenueDirectoryBuilder, NativeVenueOverlayBuilder, VenueCorrectionsBuilder, file_hash, handler_for, retained_outcome
 
 
 def uid(number):
@@ -185,7 +187,7 @@ class TestVenueDirectory(unittest.TestCase):
 
         for number, original, expected in ((1, "MSG", {uid(101), uid(102)}), (4, "Madison Square Garden", {uid(103)})):
             with self.subTest(number=number):
-                detail = directory.detail(uid(number), {})
+                detail = directory.detail(uid(number), {"recordings": "selected"})
                 self.assertEqual(detail["venue"]["original_name"], original)
                 self.assertEqual(detail["venue"]["normalization"]["hypothesis"]["key"], key)
                 self.assertEqual({row["uuid"] for row in detail["relatedRecords"]}, {uid(1), uid(4)})
@@ -227,6 +229,146 @@ class TestVenueDirectory(unittest.TestCase):
         for row in grouped["recordings"]:
             self.assertEqual(parse_qs(urlsplit(row["filesUrl"]).query)["entityKey"], ["source:" + row["source_uuid"]])
             self.assertEqual(row["show_uuid"], uid(int(row["source_uuid"].split("-")[-1]) + 1000))
+
+    def corrections_fixture(self):
+        key = self.normalized_fixture()
+        self.build()
+        folder = self.root / "corrections"
+        folder.mkdir()
+        artifact = lambda path, **extra: dict(path=str(path.resolve()), bytes=path.stat().st_size, sha256=file_hash(path), **extra)
+        def state(row):
+            proposal = row["proposal"]
+            normalization = proposal.get("normalization") or {}
+            return dict(placeKey=proposal["proposedPlaceKey"], normalizationKey=(normalization.get("hypothesis") or {}).get("key"),
+                status=normalization.get("status"), basis=normalization.get("membershipBasis"), groupingBasis=proposal["groupingBasis"],
+                name=proposal["displayName"], normalizedLocation=normalization.get("displayLocation"), geographicKey=normalization.get("geographicKey"),
+                outcome=row["outcome"], reason=row["reason"], uncertainties=normalization.get("uncertainties", []))
+        changes = []
+        for number in (1, 2):
+            previous = state(self.rows[number - 1])
+            current = dict(previous)
+            if number == 1:
+                current.update(placeKey="venue:raw-msg", normalizationKey=None, name="MSG", status="ambiguous",
+                    basis=None, normalizedLocation=None, geographicKey=None, uncertainties=["premises_conflict"])
+            else:
+                current.update(placeKey=key, normalizationKey=key, name="Madison Square Garden", status="proposed",
+                    basis="corrected_shared_context", normalizedLocation="New York City, New York, US", geographicKey="place:nyc")
+            changes.append(dict(venueUuid=uid(number), legacyId=number, artistId=self.rows[number - 1]["evidence"]["nativeVenue"]["artist_id"],
+                previous=previous, current=current, originalOutcome=artifact(self.run / "venues/100-a.jsonl.gz", line=number, jsonPointer="/evidence/nativeVenue")))
+        group = dict(self.rows[0]["proposal"]["normalization"]["hypothesis"])
+        group.update(memberCount=2, artistCount=1, sourceObservationCount=2)
+        write_gzip(folder / "changes.jsonl.gz", changes)
+        write_gzip(folder / "groups.jsonl.gz", [group])
+        write_json(folder / "geography.json", {"fixture": "pinned C# geography"})
+        manifest = dict(version="venue-normalization-corrections-v1", state="completed", complete=True, method="corrected-csharp-fixture",
+            baseDirectory=artifact(self.database), previousRunManifest=artifact(self.run / "manifest.json"),
+            captureDescriptor=artifact(self.raw / "core-inputs-manifest-v1.json"), geographyManifest=artifact(folder / "geography.json"),
+            changes=artifact(folder / "changes.jsonl.gz", rows=2), groups=artifact(folder / "groups.jsonl.gz", rows=1),
+            totalVenues=4, changedVenues=2, unchangedVenues=2)
+        manifest_path = folder / "manifest.json"
+        write_json(manifest_path, manifest)
+        sidecar = folder / "corrections.sqlite3"
+        return manifest_path, sidecar, changes
+
+    def test_http_corrections_replace_groups_but_preserve_original_ids_evidence_and_playback_homes(self):
+        manifest, sidecar, changes = self.corrections_fixture()
+        original = self.database.read_bytes()
+        VenueCorrectionsBuilder(manifest, file_hash(manifest), self.database, sidecar, minimum_free=0).build()
+        native_directory = self.native_overlay()
+        native_id = native_directory.search({"kind": "native_observation"})["rows"][0]["uuid"]
+        native_detail = native_directory.detail(native_id, {})
+        directory = VenueDirectory(self.database, "http://files/", "http://core/", self.overlay, "http://native/", corrections_database=sidecar)
+        server = ThreadingHTTPServer(("127.0.0.1", 0), handler_for(directory))
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        def get(path):
+            with urlopen("http://127.0.0.1:" + str(server.server_port) + path) as response:
+                return json.load(response)
+        grouped = get("/api/venue?id=" + uid(2))
+        self.assertEqual(grouped["recordingsScope"], "shared_normalization_hypothesis")
+        self.assertEqual({row["source_uuid"] for row in grouped["recordings"]}, {uid(101), uid(103)})
+        self.assertEqual(grouped["venue"]["hypothesis_member_count"], 2)
+        selected = get("/api/venue?id=" + uid(4) + "&recordings=selected")
+        self.assertEqual([row["source_uuid"] for row in selected["recordings"]], [uid(103)])
+        removed = get("/api/venue?id=" + uid(1))
+        self.assertIsNone(removed["venue"]["normalization_key"])
+        self.assertIsNone(removed["venue"]["normalization"]["hypothesis"])
+        self.assertEqual(removed["recordingsScope"], "selected_legacy_venue_record")
+        self.assertEqual(get(removed["venue"]["correctionEvidenceUrl"])["correction"], changes[0])
+        self.assertEqual(get(removed["evidenceUrl"]), self.rows[0])
+        result = get("/api/venues?q=Madison")
+        self.assertEqual((result["total"], result["rows"][0]["source_count"]), (1, 2))
+        self.assertEqual(result["rows"][0]["hypothesis_artist_count"], 1)
+        self.assertEqual(get("/api/venues?q=Greek&artist=" + uid(20))["total"], 1)
+        for row in grouped["recordings"]:
+            self.assertEqual(parse_qs(urlsplit(row["filesUrl"]).query)["entityKey"], ["source:" + row["source_uuid"]])
+            self.assertEqual(row["show_uuid"], uid(int(row["source_uuid"].split("-")[-1]) + 1000))
+        self.assertTrue(get("/api/stats")["capabilities"]["venueCorrections"])
+        self.assertEqual(get("/api/venue?id=" + native_id), native_detail)
+        self.assertEqual(get("/api/evidence?id=" + uid(4)), self.rows[3])
+        self.assertEqual(self.database.read_bytes(), original)
+        changed = json.loads(json.dumps(self.rows))
+        changed[0]["evidence"]["nativeVenue"]["name"] = "Changed after publication"
+        pinned_chunk = (self.run / "venues/100-a.jsonl.gz").read_bytes()
+        write_gzip(self.run / "venues/100-a.jsonl.gz", changed)
+        for route in ("/api/venue?id=", "/api/evidence?id="):
+            with self.assertRaises(HTTPError) as failure:
+                get(route + uid(1))
+            self.assertEqual(failure.exception.code, 400)
+            failure.exception.close()
+        retained_outcome.cache_clear()
+        raw_directory = VenueDirectory(self.database, "", "")
+        self.assertEqual(raw_directory.evidence(uid(1)), changed[0])
+        (self.run / "venues/100-a.jsonl.gz").write_bytes(pinned_chunk)
+        self.assertEqual(get("/api/evidence?id=" + uid(1)), self.rows[0])
+        (self.run / "venues/100-a.jsonl.gz").unlink()
+        with self.assertRaises(HTTPError) as failure:
+            get("/api/evidence?id=" + uid(1))
+        self.assertEqual(failure.exception.code, 400)
+        failure.exception.close()
+
+    def test_correction_startup_replacement_cannot_inherit_the_old_generation_provenance(self):
+        manifest, sidecar, _ = self.corrections_fixture()
+        VenueCorrectionsBuilder(manifest, file_hash(manifest), self.database, sidecar, minimum_free=0).build()
+        replacement = sidecar.with_name("replacement.sqlite3")
+        replacement.write_bytes(sidecar.read_bytes())
+        original_stamps = VenueDirectory._correction_stamps
+        calls = 0
+        def replace_after_validation(directory):
+            nonlocal calls
+            stamps = original_stamps(directory)
+            calls += 1
+            if calls == 2:
+                os.replace(replacement, sidecar)
+            return stamps
+        with patch.object(VenueDirectory, "_correction_stamps", replace_after_validation):
+            directory = VenueDirectory(self.database, "", "", corrections_database=sidecar)
+        with self.assertRaisesRegex(ValueError, "generation changed"):
+            directory.search({"q": "Madison"})
+        fresh = VenueDirectory(self.database, "", "", corrections_database=sidecar)
+        self.assertEqual(fresh.search({"q": "Madison"})["total"], 1)
+
+    def test_failed_correction_replacement_preserves_published_projection_and_original_base(self):
+        manifest, sidecar, changes = self.corrections_fixture()
+        base = self.database.read_bytes()
+        with self.assertRaisesRegex(ValueError, "input artifact"):
+            VenueCorrectionsBuilder(manifest, file_hash(manifest), self.database, self.database, minimum_free=0).build()
+        self.assertEqual(self.database.read_bytes(), base)
+        builder = lambda: VenueCorrectionsBuilder(manifest, file_hash(manifest), self.database, sidecar, minimum_free=0)
+        builder().build()
+        published = sidecar.read_bytes()
+        changes[0]["previous"]["name"] = "Different prior generation"
+        write_gzip(manifest.parent / "changes.jsonl.gz", changes)
+        document = json.loads(manifest.read_text())
+        document["changes"].update(bytes=(manifest.parent / "changes.jsonl.gz").stat().st_size,
+                                   sha256=file_hash(manifest.parent / "changes.jsonl.gz"))
+        write_json(manifest, document)
+        with self.assertRaisesRegex(ValueError, "Previous venue tuple"):
+            builder().build()
+        self.assertEqual(sidecar.read_bytes(), published)
+        self.assertFalse(sidecar.with_name(sidecar.name + ".building").exists())
+        self.assertEqual(VenueDirectory(self.database, "", "").detail(uid(1), {})["venue"]["name"], "Madison Square Garden")
 
     def test_normalized_catalog_group_does_not_absorb_room_or_native_observations(self):
         self.normalized_fixture()

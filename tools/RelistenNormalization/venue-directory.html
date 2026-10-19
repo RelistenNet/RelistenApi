@@ -526,10 +526,11 @@
         const actions = node("div", undefined, "actions");
         const core = venue.normalization ? data.evidenceUrl : readerUrl(data.coreUrl || stats.coreUrl, "venues", venue.place_key);
         if (core) { actions.append(link("View place proposal ↗", core, "button")); }
+        if (venue.correctionEvidenceUrl) { actions.append(link("View normalization correction ↗", venue.correctionEvidenceUrl, "button")); }
         if (venue.normalization_key) {
           const grouped = data.recordingsScope === "shared_normalization_hypothesis";
           actions.append(button(grouped ? "Selected account’s recordings" : "All group recordings", () => navigate({
-            ...params, recordings: grouped ? undefined : "group", offset: 0,
+            ...params, recordings: grouped ? "selected" : "group", offset: 0,
           })));
         }
         actions.append(button("Copy link", async () => {

@@ -183,6 +183,41 @@ public sealed class ShadowVenueGeography
         return result;
     }
 
+    /// <summary>
+    /// Check a literal locality against an already resolved contextual place. This
+    /// does not search the world for a missing country: the caller must supply an
+    /// evidenced place, and every supplied country and region must still agree.
+    /// </summary>
+    public ShadowGeographyResolution? ResolveWithContext(
+        ShadowVenueLocality locality,
+        ShadowGeographyResolution context
+    )
+    {
+        if (
+            locality.Basis is "conflicting_catalog_geography" or "unrecognized_catalog_geography"
+            || locality.City == null
+            || context.Place is not { } place
+            || !names.TryGetValue(ShadowVenueText.Key(locality.City), out var entries)
+            || !entries.Any(candidate => candidate.GeonameId == place.GeonameId)
+            || locality.CountryCode is { } country && country != place.CountryCode
+            || locality.Region is { } region
+                && !place
+                    .Admin1Names.Append(place.Admin1Code)
+                    .Any(name =>
+                        ShadowVenueText.AdministrativeKey(name, place.CountryCode)
+                        == ShadowVenueText.AdministrativeKey(region, place.CountryCode)
+                    )
+        )
+        {
+            return null;
+        }
+
+        return context with
+        {
+            Status = "exact_alias_with_context_locality",
+        };
+    }
+
     private static IEnumerable<ShadowGazetteerPlace> ReadPlaces(string directory)
     {
         var admins = File.ReadLines(Path.Combine(directory, "admin1CodesASCII.txt"))

@@ -7,6 +7,9 @@ namespace Relisten.Normalization.Batch;
 public sealed partial class ShadowVenueAdapter
 {
     private const int MaximumHypothesisExamples = 8;
+    private static readonly JsonElement EmptyLocalityFields = JsonSerializer.SerializeToElement(
+        new { }
+    );
     private readonly Dictionary<Guid, ShadowVenueSourceContext> sourceContexts = [];
     private readonly HashSet<Guid> conflictingSourceContexts = [];
     private Dictionary<Guid, ShadowVenueNormalization>? normalization;
@@ -112,22 +115,34 @@ public sealed partial class ShadowVenueAdapter
                     .Select(id => (Id: id!.Value, Context: value))
             )
             .ToLookup(value => value.Id, value => value.Context);
-        var rowsByCatalogId = venues
-            .Values.Where(value => value.CatalogId.HasValue)
+        var named = venues.Values.Select(WithoutRedundantLocality).ToArray();
+        var rowsByCatalogId = named
+            .Where(value => value.CatalogId.HasValue)
             .ToLookup(value => value.CatalogId!.Value);
-        var eligible = venues
-            .Values.Where(value =>
-                CanNormalize(value)
-                && value.CatalogId is { } id
-                && rowsByCatalogId[id].Count() == 1
-                && contextsByVenue[id].Any(context => context.ArtistId == value.ArtistId)
+        var interpreted = named
+            .Select(value => WithContextLocality(value, contextsByVenue, rowsByCatalogId))
+            .ToArray();
+        rowsByCatalogId = interpreted
+            .Where(value => value.CatalogId.HasValue)
+            .ToLookup(value => value.CatalogId!.Value);
+        var eligible = interpreted
+            .Where(value =>
+                CanNormalize(value) && value.CatalogId is { } id && rowsByCatalogId[id].Count() == 1
             )
             .ToArray();
         var conflicts = eligible
             .Where(venue => HasContextConflict(venue, contextsByVenue, rowsByCatalogId))
             .Select(venue => venue.Uuid)
             .ToHashSet();
-        var groups = CreateNameGroups(eligible.Where(venue => !conflicts.Contains(venue.Uuid)));
+        // Source usage admits anchors, not aliases. An unused imported label can
+        // join an existing unique place without creating a rival or changing its key.
+        var groups = CreateNameGroups(
+            eligible.Where(venue =>
+                !conflicts.Contains(venue.Uuid)
+                && contextsByVenue[venue.CatalogId!.Value]
+                    .Any(context => context.ArtistId == venue.ArtistId)
+            )
+        );
         var choices = SelectHypotheses(eligible, groups, contextsByVenue, conflicts);
         AttachAliases(eligible, choices);
         var summaries = groups.ToDictionary(
@@ -144,8 +159,93 @@ public sealed partial class ShadowVenueAdapter
         }
         return eligible.ToDictionary(
             venue => venue.Uuid,
-            venue => ProjectNormalization(venue, choices[venue.Uuid], summaries)
+            venue =>
+                ProjectNormalization(venue, choices[venue.Uuid], summaries) with
+                {
+                    OriginalName = venues[venue.Uuid].Name,
+                }
         );
+    }
+
+    private ShadowVenueObservation WithContextLocality(
+        ShadowVenueObservation venue,
+        ILookup<long, ShadowVenueSourceContext> contexts,
+        ILookup<long, ShadowVenueObservation> rows
+    )
+    {
+        if (geography == null || venue.Locality.Geography?.Status != "country_required")
+        {
+            return venue;
+        }
+
+        var targets = DirectContextTargets(venue, contexts)
+            .Where(id => id != venue.CatalogId)
+            .Select(id => rows[id].ToArray())
+            .ToArray();
+        if (targets.Length == 0 || targets.Any(matches => matches.Length != 1))
+        {
+            return venue;
+        }
+
+        var neighbors = targets.Select(matches => matches[0]).ToArray();
+        if (
+            neighbors.Any(target =>
+                target.ArtistId != venue.ArtistId
+                || conflictingRows.Contains(target.Uuid)
+                || target.Scope != venue.Scope
+                || !RelatedNames(venue, target)
+                || !CompatibleAddress(venue, Address(target))
+                || target.Locality.Geography?.ProposedGeographicKey == null
+            )
+            || neighbors
+                .Select(target => target.Locality.Geography!.ProposedGeographicKey)
+                .Distinct()
+                .Count() != 1
+        )
+        {
+            return venue;
+        }
+
+        var resolved = geography.ResolveWithContext(
+            venue.Locality,
+            neighbors[0].Locality.Geography!
+        );
+        return resolved == null
+            ? venue
+            : venue with
+            {
+                Locality = venue.Locality with { Geography = resolved },
+            };
+    }
+
+    private ShadowVenueObservation WithoutRedundantLocality(ShadowVenueObservation venue)
+    {
+        if (geography == null || venue.Name == null || venue.Locality.Geography?.Place == null)
+        {
+            return venue;
+        }
+
+        // Strip only a comma-delimited suffix that names this row's resolved
+        // locality. Venue words, rooms and contradictory geographic text survive.
+        for (
+            var comma = venue.Name.IndexOf(',');
+            comma >= 0;
+            comma = venue.Name.IndexOf(',', comma + 1)
+        )
+        {
+            var name = venue.Name[..comma].Trim();
+            var suffix = venue.Name[(comma + 1)..].Trim();
+            var locality = ShadowVenueText.Locality(EmptyLocalityFields, null, suffix, false);
+            if (
+                name.Length > 0
+                && geography.ResolveWithContext(locality, venue.Locality.Geography) != null
+            )
+            {
+                return venue with { NameKey = ShadowVenueText.Key(name) };
+            }
+        }
+
+        return venue;
     }
 
     private static Dictionary<Guid, HypothesisChoice> SelectHypotheses(
@@ -523,7 +623,10 @@ public sealed partial class ShadowVenueAdapter
         internal HypothesisGroup(ShadowVenueObservation[] members, string? address)
         {
             Members = members.ToList();
-            Anchor = members.OrderBy(value => value.Uuid).First();
+            Anchor = members
+                .OrderBy(value => ShadowVenueText.Key(value.Name) != value.NameKey)
+                .ThenBy(value => value.Uuid)
+                .First();
             Address = address;
         }
 

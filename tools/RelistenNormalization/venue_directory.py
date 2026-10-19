@@ -28,6 +28,12 @@ NORMALIZATION_COLUMNS = (
     "normalization_key", "normalization_status", "normalization_basis", "original_name",
     "normalized_location", "hypothesis_member_count", "hypothesis_artist_count", "hypothesis_source_count",
 )
+CORRECTIONS_VERSION = "venue-normalization-corrections-v1"
+CORRECTION_FIELDS = {
+    "placeKey": "place_key", "normalizationKey": "normalization_key", "status": "normalization_status",
+    "basis": "normalization_basis", "groupingBasis": "grouping_basis", "name": "name",
+    "normalizedLocation": "normalized_location", "outcome": "outcome", "reason": "reason",
+}
 
 
 def encoded(value):
@@ -259,6 +265,215 @@ class VenueDirectoryBuilder:
         VenueDirectoryBuilder._metadata(db, coverage=stats)
 
 
+class VenueCorrectionsBuilder:
+    """Project C# replacements without copying or updating the captured directory.
+
+    Previous tuples authenticate the transition. Only C# chooses membership and
+    display names; recording counts follow the resulting keys and original homes.
+    """
+
+    def __init__(self, manifest, manifest_sha256, base_database, database,
+                 minimum_free=5.5 * 1024**3, maximum_bytes=64 * 1024**2):
+        self.manifest_path = Path(manifest).resolve()
+        self.manifest_sha256 = manifest_sha256
+        self.base_database = Path(base_database).resolve()
+        self.database = Path(database).resolve()
+        self.minimum_free = minimum_free
+        self.maximum_bytes = maximum_bytes
+        self.pins = {}
+
+    def _pin(self, artifact):
+        path = (self.manifest_path.parent / artifact["path"]).resolve()
+        known = self.pins.get(path)
+        if path.stat().st_size != artifact["bytes"] or (known if known else file_hash(path)) != artifact["sha256"]:
+            raise ValueError("Venue correction input differs from its pin")
+        self.pins[path] = artifact["sha256"]
+        return path
+
+    def _budget(self, staging):
+        if shutil.disk_usage(staging.parent).free < self.minimum_free:
+            raise RuntimeError("Venue corrections stopped to preserve the host disk reserve")
+        if sum(p.stat().st_size for p in (staging, Path(str(staging) + "-journal")) if p.exists()) > self.maximum_bytes:
+            raise RuntimeError("Venue corrections exceed their storage bound")
+
+    @staticmethod
+    def _rows(path):
+        with gzip.open(path, "rb") as stream:
+            while line := stream.readline(32 * 1024**2 + 1):
+                if len(line) > 32 * 1024**2 or not line.endswith(b"\n"):
+                    raise ValueError("Venue correction row exceeds its read bound")
+                yield json.loads(line)
+
+    def build(self):
+        if self.manifest_path.stat().st_size > 16 * 1024**2:
+            raise ValueError("Venue correction manifest exceeds its read bound")
+        raw = self.manifest_path.read_bytes()
+        if hashlib.sha256(raw).hexdigest() != self.manifest_sha256:
+            raise ValueError("Venue correction manifest differs from its pin")
+        manifest = json.loads(raw)
+        if manifest.get("version") != CORRECTIONS_VERSION or not manifest.get("complete") or manifest.get("state") != "completed":
+            raise ValueError("Venue corrections must be a completed changed-only run")
+        self.pins[self.manifest_path] = self.manifest_sha256
+        if self._pin(manifest["baseDirectory"]) != self.base_database:
+            raise ValueError("Venue corrections refer to another base directory")
+        for name in ("previousRunManifest", "captureDescriptor", "geographyManifest"):
+            self._pin(manifest[name])
+        changes, groups = self._pin(manifest["changes"]), self._pin(manifest["groups"])
+        if any(path.parent != self.manifest_path.parent for path in (changes, groups)):
+            raise ValueError("Venue correction outputs must belong to their manifest directory")
+        if self.database in self.pins:
+            raise ValueError("Venue corrections cannot replace an input artifact")
+        self.database.parent.mkdir(parents=True, exist_ok=True)
+        if self.database.exists():
+            with closing(sqlite3.connect(self.database.as_uri() + "?mode=ro", uri=True)) as existing:
+                version = existing.execute("SELECT value FROM metadata WHERE key='version'").fetchone()
+                if version is None or json.loads(version[0]) != CORRECTIONS_VERSION:
+                    raise ValueError("Venue correction target is not a corrections projection")
+        staging = self.database.with_name(self.database.name + ".building")
+        with staging.open("xb"):
+            pass
+        try:
+            self._budget(staging)
+            with closing(sqlite3.connect(staging)) as db:
+                db.row_factory = sqlite3.Row
+                db.execute("PRAGMA temp_store=MEMORY")
+                db.execute("ATTACH DATABASE ? AS base", (self.base_database.as_uri() + "?mode=ro",))
+                db.executescript("""
+                    CREATE TABLE metadata(key TEXT PRIMARY KEY,value TEXT NOT NULL);
+                    CREATE TABLE corrections(uuid TEXT PRIMARY KEY,summary TEXT,body TEXT,line INTEGER);
+                    CREATE TABLE groups(place_key TEXT PRIMARY KEY,body TEXT);
+                    CREATE TABLE affected(place_key TEXT PRIMARY KEY);
+                    CREATE TABLE normalization_counts(place_key TEXT PRIMARY KEY,source_count INTEGER,show_count INTEGER);
+                """)
+                base_metadata = {row["key"]: json.loads(row["value"]) for row in db.execute("SELECT * FROM base.metadata")}
+                if base_metadata.get("buildState") != "completed" or base_metadata["sourceManifestSha256"] != manifest["previousRunManifest"]["sha256"]:
+                    raise ValueError("Venue corrections do not describe the completed base generation")
+                count = 0
+                for group in self._rows(groups):
+                    db.execute("INSERT INTO groups VALUES(?,?)", (group["key"], encoded(group)))
+                    count += 1
+                    self._budget(staging)
+                if count != manifest["groups"]["rows"]:
+                    raise ValueError("Venue correction group count differs from its manifest")
+                self._changes(db, changes, manifest, staging)
+                self._originals(db, staging)
+                coverage = self._counts(db)
+                VenueDirectoryBuilder._metadata(db, version=CORRECTIONS_VERSION, buildState="completed",
+                    baseDirectory=manifest["baseDirectory"], correctionManifest=str(self.manifest_path),
+                    correctionManifestSha256=self.manifest_sha256, method=manifest["method"], changedVenues=manifest["changedVenues"], coverage=coverage)
+                db.commit()
+                self._budget(staging)
+            if any(file_hash(path) != digest for path, digest in self.pins.items()):
+                raise ValueError("Venue correction inputs changed during projection")
+            os.replace(staging, self.database)
+        finally:
+            staging.unlink(missing_ok=True)
+            Path(str(staging) + "-journal").unlink(missing_ok=True)
+        return {"changedVenues": manifest["changedVenues"], "manifestSha256": self.manifest_sha256}
+
+    def _changes(self, db, path, manifest, staging):
+        count = 0
+        for count, change in enumerate(self._rows(path), 1):
+            base = db.execute("SELECT * FROM base.venues WHERE uuid=?", (change["venueUuid"],)).fetchone()
+            if base is None or base["legacy_id"] != change["legacyId"]:
+                raise ValueError("Venue correction changes an original venue identity")
+            if any(change["previous"][field] != base[column] for field, column in CORRECTION_FIELDS.items()):
+                raise ValueError("Previous venue tuple differs from the base snapshot")
+            summary = dict(base)
+            summary.update({column: change["current"][field] for field, column in CORRECTION_FIELDS.items()})
+            summary["method"] = manifest["method"]
+            db.execute("INSERT INTO corrections VALUES(?,?,?,?)", (change["venueUuid"], encoded(summary), encoded(change), count))
+            for state in ("previous", "current"):
+                if change[state]["normalizationKey"] is not None:
+                    db.execute("INSERT OR IGNORE INTO affected VALUES(?)", (change[state]["normalizationKey"],))
+            self._budget(staging)
+        total = db.execute("SELECT count(*) FROM base.venues").fetchone()[0]
+        if count != manifest["changes"]["rows"] or count != manifest["changedVenues"] or total != manifest["totalVenues"] or total != count + manifest["unchangedVenues"]:
+            raise ValueError("Venue correction coverage differs from its completed manifest")
+
+    def _originals(self, db, staging):
+        # A chunk is decoded once even when many corrected accounts came from it.
+        paths = db.execute("SELECT DISTINCT json_extract(body,'$.originalOutcome.path') path FROM corrections").fetchall()
+        for item in paths:
+            requests = {}
+            for row in db.execute("SELECT * FROM corrections WHERE json_extract(body,'$.originalOutcome.path')=?", (item["path"],)):
+                body = json.loads(row["body"])
+                if body["originalOutcome"]["line"] in requests:
+                    raise ValueError("Venue corrections reuse an original outcome line")
+                requests[body["originalOutcome"]["line"]] = (row, body)
+                self._pin(body["originalOutcome"])
+            for line, original in enumerate(self._rows(Path(item["path"])), 1):
+                if line not in requests:
+                    continue
+                row, body = requests.pop(line)
+                native = original["evidence"]["nativeVenue"]
+                if (original["domain"] != "venues" or original.get("inputKind") != "venue_sample"
+                        or original.get("inputKey") != "venue_sample:" + body["venueUuid"] or original["inputUuid"] != body["venueUuid"]
+                        or native.get("uuid") != body["venueUuid"]
+                        or native["id"] != body["legacyId"] or native["artist_id"] != body["artistId"]):
+                    raise ValueError("Original venue evidence disagrees with the corrected account")
+                base = db.execute("SELECT artist_uuid,chunk,line FROM base.venues WHERE uuid=?", (body["venueUuid"],)).fetchone()
+                run = json.loads(db.execute("SELECT value FROM base.metadata WHERE key='sourceRun'").fetchone()[0])
+                if (original["artistUuid"] != base["artist_uuid"] or Path(run, base["chunk"]).resolve() != Path(item["path"]).resolve()
+                        or line != base["line"] or body["originalOutcome"]["jsonPointer"] != "/evidence/nativeVenue"):
+                    raise ValueError("Correction evidence is outside its original base locator")
+                proposal = original.get("proposal") or {}
+                normalization = proposal.get("normalization") or {}
+                if (body["previous"]["geographicKey"] != normalization.get("geographicKey")
+                        or body["previous"]["uncertainties"] != normalization.get("uncertainties", [])):
+                    raise ValueError("Previous venue evidence differs from the correction tuple")
+                current = body["current"]
+                group_row = db.execute("SELECT body FROM groups WHERE place_key=?", (current["normalizationKey"],)).fetchone()
+                if current["normalizationKey"] is not None and group_row is None:
+                    raise ValueError("Selected venue correction lacks its C# group")
+                group = json.loads(group_row[0]) if group_row else {}
+                summary = json.loads(row["summary"])
+                for column, field in (("hypothesis_member_count", "memberCount"), ("hypothesis_artist_count", "artistCount"), ("hypothesis_source_count", "sourceObservationCount")):
+                    summary[column] = group.get(field)
+                locality = proposal.get("locality") or {}
+                history = [name["name"] for name in proposal.get("pastNames", [])]
+                summary["search_text"] = folded(" ".join(str(value or "") for value in [current["name"], native.get("name"),
+                    native.get("location"), current["normalizedLocation"], *group.get("names", []), *history,
+                    locality.get("city"), locality.get("region"), locality.get("countryCode"), locality.get("address")]))
+                db.execute("UPDATE corrections SET summary=? WHERE uuid=?", (encoded(summary), row["uuid"]))
+            if requests:
+                raise ValueError("Original venue correction line is absent")
+            self._budget(staging)
+
+    @staticmethod
+    def _counts(db):
+        # Materialize only affected memberships. Existing indexes find unchanged
+        # members of these keys; no full catalog or recording projection is copied.
+        db.executescript("""
+            CREATE TEMP TABLE affected_members(legacy_id INTEGER PRIMARY KEY,place_key TEXT);
+            CREATE INDEX affected_member_keys ON affected_members(place_key);
+            INSERT INTO affected_members
+                SELECT v.legacy_id,v.normalization_key FROM base.venues v
+                JOIN affected a ON a.place_key=v.normalization_key
+                WHERE NOT EXISTS(SELECT 1 FROM corrections c WHERE c.uuid=v.uuid);
+            INSERT INTO affected_members
+                SELECT json_extract(summary,'$.legacy_id'),json_extract(summary,'$.normalization_key')
+                FROM corrections WHERE json_extract(summary,'$.normalization_key') IS NOT NULL;
+        """)
+        db.execute("""INSERT INTO normalization_counts
+            SELECT a.place_key,count(DISTINCT r.source_uuid),count(DISTINCT r.show_uuid)
+            FROM affected a LEFT JOIN affected_members v ON v.place_key=a.place_key
+            LEFT JOIN base.recordings r ON r.source_venue_id=v.legacy_id OR r.show_venue_id=v.legacy_id
+            GROUP BY a.place_key""")
+        old_hypotheses = db.execute("SELECT count(DISTINCT normalization_key) FROM base.venues").fetchone()[0]
+        old_members = db.execute("SELECT count(*) FROM base.venues WHERE normalization_key IS NOT NULL").fetchone()[0]
+        replaced_hypotheses = db.execute("SELECT count(DISTINCT v.normalization_key) FROM base.venues v JOIN affected a ON a.place_key=v.normalization_key").fetchone()[0]
+        new_hypotheses = db.execute("SELECT count(DISTINCT place_key) FROM affected_members").fetchone()[0]
+        delta = db.execute("""SELECT coalesce(sum((json_extract(body,'$.current.normalizationKey') IS NOT NULL)
+            -(json_extract(body,'$.previous.normalizationKey') IS NOT NULL)),0) FROM corrections""").fetchone()[0]
+        place_count = db.execute("""SELECT count(DISTINCT CASE WHEN c.uuid IS NULL THEN v.place_key
+            ELSE json_extract(c.summary,'$.place_key') END) FROM base.venues v LEFT JOIN corrections c ON c.uuid=v.uuid""").fetchone()[0]
+        outcomes = dict(db.execute("""SELECT CASE WHEN c.uuid IS NULL THEN v.outcome ELSE json_extract(c.summary,'$.outcome') END outcome,count(*)
+            FROM base.venues v LEFT JOIN corrections c ON c.uuid=v.uuid GROUP BY 1"""))
+        return dict(normalizedHypotheses=old_hypotheses - replaced_hypotheses + new_hypotheses,
+                    normalizedMembers=old_members + delta, placeHypotheses=place_count, outcomes=outcomes)
+
+
 class NativeVenueOverlayBuilder:
     """Replace a small native-only projection atomically; never open the legacy DB."""
 
@@ -418,7 +633,8 @@ def retained_outcome(run, chunk, line):
 
 
 class VenueDirectory:
-    def __init__(self, database, files_url, core_url, native_database=None, native_url=None, music_url=None, people_url=None):
+    def __init__(self, database, files_url, core_url, native_database=None, native_url=None, music_url=None, people_url=None,
+                 corrections_database=None):
         self.database = Path(database).resolve()
         self.files_url = files_url.rstrip("/") + "/"
         self.core_url = core_url.rstrip("/") + "/"
@@ -426,10 +642,29 @@ class VenueDirectory:
         self.navigation = reader_navigation(music_url=music_url, people_url=people_url, own="venues")
         self.native_database = Path(native_database).resolve() if native_database else None
         self.native_url = native_url.rstrip("/") + "/" if native_url else None
+        self.corrections_database = Path(corrections_database).resolve() if corrections_database else None
+        self.correction_metadata = None
+        if self.corrections_database:
+            if self.corrections_database == self.database or self.corrections_database == self.native_database:
+                raise ValueError("Venue corrections require a separate projection")
+            stamps = self._correction_stamps()
+            with closing(sqlite3.connect(self.corrections_database.as_uri() + "?mode=ro", uri=True)) as db:
+                self.correction_metadata = {key: json.loads(value) for key, value in db.execute("SELECT * FROM metadata")}
+            metadata = self.correction_metadata
+            base = metadata["baseDirectory"]
+            if (metadata.get("version") != CORRECTIONS_VERSION or metadata.get("buildState") != "completed"
+                    or Path(base["path"]).resolve() != self.database or base["bytes"] != self.database.stat().st_size
+                    or base["sha256"] != file_hash(self.database) or self._correction_stamps() != stamps):
+                raise ValueError("Venue corrections do not match the configured base snapshot")
+            self.correction_stamps = stamps
         if self.native_database == self.database:
             raise ValueError("Native overlay and legacy database must be different files")
         if self.native_database and not self.native_url:
             raise ValueError("A native reader URL is required with a native overlay")
+
+    def _correction_stamps(self):
+        return tuple((path.stat().st_size, path.stat().st_mtime_ns, path.stat().st_ino)
+                     for path in (self.database, self.corrections_database))
 
     def connect(self):
         db = sqlite3.connect(self.database.as_uri() + "?mode=ro", uri=True, timeout=5)
@@ -440,10 +675,35 @@ class VenueDirectory:
         missing = [name for name in NORMALIZATION_COLUMNS if name not in columns]
         # Read older immutable projections without altering their schema or inventing groups.
         catalog = "SELECT v.*" + "".join(",NULL AS " + name for name in missing) + " FROM venues v"
+        if self.corrections_database:
+            if self._correction_stamps() != self.correction_stamps:
+                db.close()
+                raise ValueError("Venue correction generation changed; restart with the intended snapshot")
+            db.execute("ATTACH DATABASE ? AS corrections", (self.corrections_database.as_uri() + "?mode=ro",))
+            db.execute("SELECT count(*) FROM corrections.metadata").fetchone()
+            db.execute("SELECT count(*) FROM metadata").fetchone()
+            if self._correction_stamps() != self.correction_stamps:
+                db.close()
+                raise ValueError("Venue correction generation changed during snapshot opening")
+            projected = []
+            for name in columns + missing:
+                original = "v." + name if name in columns else "NULL"
+                value = "CASE WHEN c.uuid IS NOT NULL THEN json_extract(c.summary,'$." + name + "') ELSE " + original + " END"
+                group_field = {"hypothesis_member_count": "memberCount", "hypothesis_artist_count": "artistCount",
+                               "hypothesis_source_count": "sourceObservationCount"}.get(name)
+                if group_field:
+                    value = "CASE WHEN g.place_key IS NOT NULL THEN json_extract(g.body,'$." + group_field + "') ELSE " + value + " END"
+                projected.append(value + " AS " + name)
+            catalog = ("SELECT " + ",".join(projected) + " FROM venues v LEFT JOIN corrections.corrections c ON c.uuid=v.uuid "
+                       "LEFT JOIN corrections.groups g ON g.place_key=CASE WHEN c.uuid IS NOT NULL "
+                       "THEN json_extract(c.summary,'$.normalization_key') ELSE v.normalization_key END")
         db.execute("CREATE TEMP VIEW catalog_venues AS " + catalog)
         counts = "SELECT * FROM normalization_counts" if db.execute(
             "SELECT 1 FROM sqlite_master WHERE name='normalization_counts'").fetchone() else (
             "SELECT NULL place_key,NULL source_count,NULL show_count WHERE 0")
+        if self.corrections_database:
+            counts = ("SELECT * FROM corrections.normalization_counts UNION ALL SELECT b.* FROM normalization_counts b "
+                      "WHERE NOT EXISTS(SELECT 1 FROM corrections.affected a WHERE a.place_key=b.place_key)")
         db.execute("CREATE TEMP VIEW hypothesis_counts AS " + counts)
         selection = "SELECT v.*, 'legacy_catalog' record_kind, NULL provider FROM catalog_venues v"
         columns += missing
@@ -462,7 +722,8 @@ class VenueDirectory:
         with closing(self.connect()) as db:
             result = {row["key"]: json.loads(row["value"]) for row in db.execute("SELECT * FROM metadata")}
             native = {row["key"]: json.loads(row["value"]) for row in db.execute("SELECT * FROM native.metadata")} if self.native_database else {}
-        result.update(result.pop("coverage", {}))
+        coverage = result.pop("coverage", {})
+        result.update(coverage)
         result["countsReady"] = result.get("buildState") == "completed"
         if not result["countsReady"]:
             result["venuesWithRecordings"] = None
@@ -471,6 +732,11 @@ class VenueDirectory:
                       filesUrl=self.files_url, coreUrl=self.core_url)
         result["navigation"] = self.navigation
         result["capabilities"] = dict(recordingPlayback=bool(self.playback.files_url))
+        if self.correction_metadata:
+            result["baselineCoverage"] = coverage
+            result["corrections"] = self.correction_metadata
+            result.update(self.correction_metadata["coverage"])
+            result["capabilities"]["venueCorrections"] = True
         result["directoryRecords"] = result.get("venueRecords", 0) + result["nativeCoverage"]["observations"]
         return result
 
@@ -562,12 +828,52 @@ class VenueDirectory:
                 return self._native_evidence(db, identifier)[0] if self.native_database else None
             venue = db.execute("SELECT chunk,line FROM venues WHERE uuid=?", (identifier,)).fetchone()
             root = db.execute("SELECT value FROM metadata WHERE key='sourceRun'").fetchone()
+            correction = db.execute("SELECT body FROM corrections.corrections WHERE uuid=?", (identifier,)).fetchone() if self.corrections_database else None
         if venue is None:
             return None
-        outcome = retained_outcome(json.loads(root[0]), venue["chunk"], venue["line"])
+        return self._original_outcome(identifier, json.loads(root[0]), venue, correction)
+
+    @staticmethod
+    def _original_outcome(identifier, run, venue, correction):
+        artifact = json.loads(correction[0])["originalOutcome"] if correction else None
+        path = Path(run, venue["chunk"]).resolve()
+        if artifact and (path != Path(artifact["path"]).resolve() or venue["line"] != artifact["line"]
+                         or path.stat().st_size != artifact["bytes"] or file_hash(path) != artifact["sha256"]):
+            raise ValueError("Original corrected venue evidence changed")
+        # The legacy cache is addressed by path, not content. Corrected claims
+        # must come from the authenticated bytes, regardless of prior cache use.
+        read = retained_outcome.__wrapped__ if artifact else retained_outcome
+        outcome = read(run, venue["chunk"], venue["line"])
         if outcome["inputUuid"] != identifier or outcome["domain"] != "venues":
             raise ValueError("Evidence locator no longer describes this venue")
+        if artifact and file_hash(path) != artifact["sha256"]:
+            raise ValueError("Original corrected venue evidence changed during retrieval")
         return outcome
+
+    def correction(self, identifier):
+        if not self.corrections_database or identifier.startswith("native:"):
+            return None
+        with closing(self.connect()) as db:
+            row = db.execute("SELECT body,line FROM corrections.corrections WHERE uuid=?", (identifier,)).fetchone()
+        if row is None:
+            return None
+        manifest_path = Path(self.correction_metadata["correctionManifest"])
+        raw = manifest_path.read_bytes()
+        if hashlib.sha256(raw).hexdigest() != self.correction_metadata["correctionManifestSha256"]:
+            raise ValueError("Venue correction evidence manifest changed")
+        manifest = json.loads(raw)
+        artifact = manifest["changes"]
+        path = (manifest_path.parent / artifact["path"]).resolve()
+        if path.stat().st_size != artifact["bytes"] or file_hash(path) != artifact["sha256"]:
+            raise ValueError("Venue correction evidence changed")
+        for line, body in enumerate(VenueCorrectionsBuilder._rows(path), 1):
+            if line == row["line"]:
+                if body != json.loads(row["body"]):
+                    raise ValueError("Venue correction locator describes another transition")
+                if file_hash(path) != artifact["sha256"]:
+                    raise ValueError("Venue correction evidence changed during retrieval")
+                return dict(correction=body, method=manifest["method"], manifestSha256=self.correction_metadata["correctionManifestSha256"])
+        raise ValueError("Venue correction evidence line is absent")
 
     def detail(self, identifier, parameters):
         offset, limit = self.page(parameters)
@@ -583,13 +889,13 @@ class VenueDirectory:
             source_run = json.loads(db.execute("SELECT value FROM metadata WHERE key='sourceRun'").fetchone()[0])
             related = [dict(row) for row in db.execute("SELECT uuid,name,original_name,location,normalized_location,artist_name,artist_uuid,outcome,grouping_basis "
                 "FROM venue_accounts WHERE place_key=? AND record_kind='legacy_catalog' ORDER BY artist_name,uuid LIMIT 100", (venue["place_key"],))]
-            related_total = db.execute("SELECT count(*) FROM venues WHERE place_key=?", (venue["place_key"],)).fetchone()[0]
-            group_recordings = parameters.get("recordings") == "group" and venue["normalization_key"] is not None
+            related_total = db.execute("SELECT count(*) FROM catalog_venues WHERE place_key=?", (venue["place_key"],)).fetchone()[0]
+            group_recordings = parameters.get("recordings") != "selected" and venue["normalization_key"] is not None
             members = {row["legacy_id"]: row["uuid"] for row in db.execute(
-                "SELECT legacy_id,uuid FROM venues WHERE place_key=?", (venue["place_key"],))}
+                "SELECT legacy_id,uuid FROM catalog_venues WHERE place_key=?", (venue["place_key"],))}
             if group_recordings:
-                conditions = ["(r.source_venue_id IN (SELECT legacy_id FROM venues WHERE normalization_key=?) "
-                              "OR r.show_venue_id IN (SELECT legacy_id FROM venues WHERE normalization_key=?))"]
+                conditions = ["(r.source_venue_id IN (SELECT legacy_id FROM catalog_venues WHERE normalization_key=?) "
+                              "OR r.show_venue_id IN (SELECT legacy_id FROM catalog_venues WHERE normalization_key=?))"]
                 values = [venue["normalization_key"], venue["normalization_key"]]
             else:
                 conditions = ["(r.source_venue_id=? OR r.show_venue_id=?)"]
@@ -602,9 +908,9 @@ class VenueDirectory:
             join = " FROM recordings r LEFT JOIN artists a ON a.id=r.artist_id"
             total = db.execute("SELECT count(*)" + join + where, values).fetchone()[0]
             recordings = [dict(row) for row in db.execute("SELECT r.*,a.uuid artist_uuid,a.name artist_name" + join + where + " ORDER BY coalesce(source_date,show_date) DESC,source_uuid LIMIT ? OFFSET ?", values + [limit, offset])]
-        outcome = retained_outcome(source_run, venue["chunk"], venue["line"])
-        if outcome["inputUuid"] != identifier or outcome["domain"] != "venues":
-            raise ValueError("Evidence locator no longer describes this venue")
+            correction = db.execute("SELECT body FROM corrections.corrections WHERE uuid=?", (identifier,)).fetchone() if self.corrections_database else None
+            group = db.execute("SELECT body FROM corrections.groups WHERE place_key=?", (venue["normalization_key"],)).fetchone() if self.corrections_database else None
+        outcome = self._original_outcome(identifier, source_run, venue, correction)
         if not ready:
             venue.update(source_count=None, show_count=None)
         proposal = outcome.get("proposal") or {}
@@ -612,7 +918,15 @@ class VenueDirectory:
                      protected_unknowns=proposal.get("protectedUnknowns", []), enrichment_tasks=proposal.get("enrichmentTasks", []),
                      coordinates=proposal.get("coordinates"), provider_reference=proposal.get("providerReference"),
                      accepted_identity=proposal.get("acceptedIdentity", False),
-                     alternatives=proposal.get("alternatives", []), normalization=proposal.get("normalization"))
+                     alternatives=proposal.get("alternatives", []), normalization=dict(proposal["normalization"]) if proposal.get("normalization") else None)
+        if correction:
+            current = json.loads(correction[0])["current"]
+            venue["normalization"] = dict(status=current["status"], membershipBasis=current["basis"],
+                originalName=venue["original_name"], displayLocation=current["normalizedLocation"], geographicKey=current["geographicKey"],
+                hypothesis=json.loads(group[0]) if group else None, uncertainties=current["uncertainties"])
+            venue["correctionEvidenceUrl"] = "/api/correction?" + urlencode({"id": identifier})
+        elif group and venue["normalization"]:
+            venue["normalization"]["hypothesis"] = json.loads(group[0])
         selected_ids = members if group_recordings else {venue["legacy_id"]: identifier}
         for recording in recordings:
             source_member = selected_ids.get(recording["source_venue_id"])
@@ -723,6 +1037,8 @@ def handler_for(directory):
                     result = directory.detail(params.get("id", ""), params)
                 elif url.path == "/api/evidence":
                     result = directory.evidence(params.get("id", ""))
+                elif url.path == "/api/correction":
+                    result = directory.correction(params.get("id", ""))
                 else:
                     self.respond(404, b'{"error":"Not found"}')
                     return
@@ -731,7 +1047,7 @@ def handler_for(directory):
                     self.respond(404, b'{"error":"Unknown venue"}')
                     return
                 self.respond(200, encoded(result).encode())
-            except (ValueError, sqlite3.Error) as error:
+            except (ValueError, sqlite3.Error, OSError) as error:
                 self.respond(400, encoded({"error": str(error)}).encode())
 
         def respond(self, status, body, content_type="application/json; charset=utf-8"):
@@ -756,6 +1072,13 @@ def main():
     native = sub.add_parser("native")
     native.add_argument("--run", required=True)
     native.add_argument("--database", required=True)
+    corrections = sub.add_parser("corrections")
+    corrections.add_argument("--manifest", required=True)
+    corrections.add_argument("--manifest-sha256", required=True)
+    corrections.add_argument("--base-database", required=True)
+    corrections.add_argument("--database", required=True)
+    corrections.add_argument("--minimum-free-bytes", type=int, default=int(5.5 * 1024**3))
+    corrections.add_argument("--maximum-bytes", type=int, default=64 * 1024**2)
     serve = sub.add_parser("serve")
     serve.add_argument("--database", required=True)
     serve.add_argument("--files-url", required=True)
@@ -764,6 +1087,7 @@ def main():
     serve.add_argument("--native-url")
     serve.add_argument("--music-url", help="Optional music discovery reader root")
     serve.add_argument("--people-url", help="Optional taper/transferrer discovery reader root")
+    serve.add_argument("--corrections-database", help="Optional completed C# venue correction projection")
     serve.add_argument("--bind", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=18770)
     args = parser.parse_args()
@@ -773,8 +1097,12 @@ def main():
         print(encoded(result), flush=True)
     elif args.command == "native":
         print(encoded(NativeVenueOverlayBuilder(args.run, args.database).build()), flush=True)
+    elif args.command == "corrections":
+        print(encoded(VenueCorrectionsBuilder(args.manifest, args.manifest_sha256, args.base_database, args.database,
+                                             args.minimum_free_bytes, args.maximum_bytes).build()), flush=True)
     else:
-        directory = VenueDirectory(args.database, args.files_url, args.core_url, args.native_database, args.native_url, args.music_url, args.people_url)
+        directory = VenueDirectory(args.database, args.files_url, args.core_url, args.native_database, args.native_url,
+                                   args.music_url, args.people_url, args.corrections_database)
         print(encoded({"listening": f"http://{args.bind}:{args.port}", "stats": directory.stats()}), flush=True)
         ThreadingHTTPServer((args.bind, args.port), handler_for(directory)).serve_forever()
 

@@ -91,6 +91,113 @@ public sealed class TestShadowVenueNormalization
     }
 
     [Test]
+    public void UnusedAliasJoinsAnObservedPlaceWithoutReplacingItsAnchorOrInventingUsage()
+    {
+        var full = Venue(10, "North Harbor Live", 1);
+        var unused = Venue(1, "NHL", 2, "NY, NY");
+        var source = Source(1, 10, 10);
+        var original = Proposal(Result(Observe(full, source), full));
+        var adapter = Observe(full, unused, source);
+
+        var joined = Proposal(Result(adapter, unused));
+        joined.ProposedPlaceKey.Should().Be(original.ProposedPlaceKey);
+        joined.DisplayName.Should().Be("North Harbor Live");
+        joined.Normalization!.OriginalName.Should().Be("NHL");
+        joined.Normalization.Hypothesis!.AnchorVenueUuid.Should().Be(Id(10));
+        joined.Normalization.Hypothesis.MemberCount.Should().Be(2);
+        joined.Normalization.Hypothesis.SourceObservationCount.Should().Be(1);
+        Result(adapter, unused).InputUuid.Should().Be(Id(1));
+        Proposal(Result(Observe(unused), unused)).Normalization!.Hypothesis.Should().BeNull();
+    }
+
+    [Test]
+    public void MissingCountryUsesOnlyAnExactAliasOfTheSameRecordingsResolvedLocality()
+    {
+        var full = Venue(1, "North Harbor Live", 1);
+        var missing = Venue(2, "NHL", 1, "NYC");
+        var adapter = Observe(full, missing, Source(1, 2, 1));
+
+        var result = Result(adapter, missing);
+        var proposed = Proposal(result);
+        result.Outcome.Should().Be("proposed");
+        proposed.ProposedPlaceKey.Should().Be(Proposal(Result(adapter, full)).ProposedPlaceKey);
+        proposed.Normalization!.DisplayLocation.Should().Be("New York City, New York, US");
+        proposed
+            .Locality.CountryCode.Should()
+            .BeNull("the original incomplete wording stays retained");
+        proposed.Locality.OriginalWording.Should().Be("NYC");
+        Proposal(Result(Observe(full, missing, Source(1, 1, 1)), missing))
+            .Normalization!.Hypothesis.Should()
+            .BeNull("a global city alias cannot invent a missing country");
+    }
+
+    [TestCase("NYC", "Unrelated Hall", "New York, NY", null, null)]
+    [TestCase("NYC", "North Harbor Live", "Los Angeles, CA", null, null)]
+    [TestCase("NYC, Canada", "North Harbor Live", "New York, NY", null, null)]
+    [TestCase("NYC", "North Harbor Live", "New York, NY", "1 First Street", "2 Second Street")]
+    public void SameDayContextCannotOverrideContradictoryNamesGeographyOrAddresses(
+        string locality,
+        string fullName,
+        string fullLocality,
+        string? sourceAddress,
+        string? showAddress
+    )
+    {
+        var full = Venue(1, fullName, 1, fullLocality, address: showAddress);
+        var missing = Venue(2, "NHL", 1, locality, address: sourceAddress);
+        var adapter = Observe(full, missing, Source(1, 2, 1));
+
+        Proposal(Result(adapter, missing)).Normalization!.Hypothesis.Should().BeNull();
+    }
+
+    [Test]
+    public void AForeignArtistsVenueRowCannotSupplyAMissingCountryThroughAMalformedAssociation()
+    {
+        var foreign = Venue(1, "North Harbor Live", 2);
+        var missing = Venue(2, "NHL", 1, "NYC");
+        var adapter = Observe(foreign, missing, Source(2, 1, 1), Source(1, 2, 1));
+
+        Proposal(Result(adapter, missing)).Normalization!.Hypothesis.Should().BeNull();
+    }
+
+    [TestCase("Madison Square Garden", "MSG")]
+    [TestCase("North Harbor Live", "NHL")]
+    public void RedundantLocalityInsideAVenueNameDoesNotCreateAFalseSourceShowConflict(
+        string fullName,
+        string initialism
+    )
+    {
+        var full = Venue(10, fullName, 2);
+        var suffixed = Venue(1, fullName + ", NYC, NY", 1);
+        var shortName = Venue(2, initialism, 1);
+        var original = Proposal(Result(Observe(full, Source(2, 10, 10)), full));
+        var adapter = Observe(full, suffixed, shortName, Source(2, 10, 10), Source(1, 2, 1));
+
+        foreach (var record in new[] { full, suffixed, shortName })
+        {
+            var proposed = Proposal(Result(adapter, record));
+            proposed.ProposedPlaceKey.Should().Be(original.ProposedPlaceKey);
+            proposed.DisplayName.Should().Be(fullName);
+            proposed.Normalization!.Hypothesis!.AnchorVenueUuid.Should().Be(Id(10));
+        }
+        Proposal(Result(adapter, suffixed))
+            .Normalization!.OriginalName.Should()
+            .Be(fullName + ", NYC, NY");
+    }
+
+    [Test]
+    public void ContradictoryGeographicSuffixIsRetainedAndCannotEstablishTheInitialism()
+    {
+        var full = Venue(1, "North Harbor Live", 1);
+        var suffixed = Venue(2, "North Harbor Live, Los Angeles, CA", 1);
+        var shortName = Venue(3, "NHL", 1);
+        var adapter = Observe(full, suffixed, shortName, Source(1, 1, 1), Source(1, 3, 2));
+
+        Proposal(Result(adapter, shortName)).Normalization!.Status.Should().Be("ambiguous");
+        Proposal(Result(adapter, suffixed)).Normalization!.Hypothesis.Should().BeNull();
+    }
+
+    [Test]
     public void ASharedInitialismCannotBridgeTwoDifferentFullNameAnchors()
     {
         var first = Venue(1, "East Bay Hall", 1);
@@ -249,6 +356,7 @@ public sealed class TestShadowVenueNormalization
     public void MalformedSourceShowNeighborsCannotSupplyNormalizationContext(string mismatch)
     {
         var full = Venue(1, "North Harbor Live", 1);
+        var competing = Venue(3, "New Harbor Lights", 2);
         var abbreviation = Venue(2, "NHL", 1);
         var valid = Source(1, 1, 1);
         var bad = Source(
@@ -259,7 +367,7 @@ public sealed class TestShadowVenueNormalization
             sourceShowId: mismatch == "show" ? 99 : 1,
             showDay: mismatch == "date" ? "2010-11-22" : null
         );
-        var adapter = Observe(full, abbreviation, valid, bad);
+        var adapter = Observe(full, competing, abbreviation, valid, Source(2, 3, 3), bad);
 
         Proposal(Result(adapter, abbreviation)).Normalization!.Hypothesis.Should().BeNull();
         Proposal(Result(adapter, full))
@@ -311,10 +419,11 @@ public sealed class TestShadowVenueNormalization
     public void ObservationOrderReplayAndConflictingContextRecoveryDoNotInventStableAcceptedIds()
     {
         var full = Venue(1, "North Harbor Live", 1);
+        var competing = Venue(3, "New Harbor Lights", 2);
         var abbreviation = Venue(2, "NHL", 1);
         var first = Source(1, 1, 1);
         var second = Source(1, 2, 1);
-        var records = new[] { full, abbreviation, first, second };
+        var records = new[] { full, competing, abbreviation, first, second, Source(2, 3, 3) };
         var forward = Observe(records);
         var reverse = Observe(records.Reverse().ToArray());
         var original = Proposal(Result(forward, abbreviation));
