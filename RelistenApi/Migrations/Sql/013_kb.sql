@@ -27,8 +27,8 @@ CREATE TABLE kb.runs (
     finished_at timestamptz
 );
 
--- Provenance, on every catalogue row: author_type, author_ref, confidence (machines; people
--- are 1 by convention), run_uuid, updated_at.
+-- Provenance, on every catalogue row: author_type, author_ref, confidence (required for
+-- machines, which are gated on it; people are 1 by convention), run_uuid, updated_at.
 
 -- Songs are per artist (decided 2026-10-19): the same composition under two artists is two
 -- songs. A merged song keeps its row and points at the survivor; readers follow merged_into.
@@ -39,15 +39,17 @@ CREATE TABLE kb.songs (
     slug            text NOT NULL,              -- display string, never an id
     kind            text CHECK (kind IN ('song', 'jam', 'segment', 'tuning', 'banter', 'other')),  -- NULL = unknown
     original_artist text,                       -- cover credit
-    merged_into     uuid REFERENCES kb.songs (uuid),
+    merged_into     uuid,                       -- the surviving song, of the same artist
     author_type     text NOT NULL CHECK (author_type IN ('importer', 'algorithm', 'llm', 'user', 'moderator')),
     author_ref      text NOT NULL,
     confidence      real CHECK (confidence BETWEEN 0 AND 1),
     run_uuid        uuid NOT NULL REFERENCES kb.runs (uuid),
     updated_at      timestamptz NOT NULL DEFAULT now(),
     UNIQUE (artist_uuid, slug),
-    UNIQUE (artist_uuid, uuid),                 -- target of per-artist references (aliases)
-    CHECK (merged_into IS DISTINCT FROM uuid)
+    UNIQUE (artist_uuid, uuid),                 -- target of per-artist references (aliases, merges)
+    FOREIGN KEY (artist_uuid, merged_into) REFERENCES kb.songs (artist_uuid, uuid),
+    CHECK (merged_into IS DISTINCT FROM uuid),
+    CHECK (author_type NOT IN ('algorithm', 'llm') OR confidence IS NOT NULL)
 );
 CREATE INDEX ON kb.songs (artist_uuid);
 
@@ -64,6 +66,7 @@ CREATE TABLE kb.song_aliases (
     run_uuid    uuid NOT NULL REFERENCES kb.runs (uuid),
     updated_at  timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (artist_uuid, normalized),
+    CHECK (author_type NOT IN ('algorithm', 'llm') OR confidence IS NOT NULL),
     -- an artist's spelling can only name that artist's song
     FOREIGN KEY (artist_uuid, song_uuid) REFERENCES kb.songs (artist_uuid, uuid)
 );
@@ -78,7 +81,8 @@ CREATE TABLE kb.song_evidence (
     author_ref        text NOT NULL,
     confidence        real CHECK (confidence BETWEEN 0 AND 1),
     run_uuid          uuid NOT NULL REFERENCES kb.runs (uuid),
-    updated_at        timestamptz NOT NULL DEFAULT now()
+    updated_at        timestamptz NOT NULL DEFAULT now(),
+    CHECK (author_type NOT IN ('algorithm', 'llm') OR confidence IS NOT NULL)
 );
 CREATE INDEX ON kb.song_evidence (song_uuid);
 
@@ -103,7 +107,8 @@ CREATE TABLE kb.track_songs (
     confidence  real CHECK (confidence BETWEEN 0 AND 1),
     run_uuid    uuid NOT NULL REFERENCES kb.runs (uuid),
     updated_at  timestamptz NOT NULL DEFAULT now(),
-    PRIMARY KEY (track_uuid, part)
+    PRIMARY KEY (track_uuid, part),
+    CHECK (author_type NOT IN ('algorithm', 'llm') OR confidence IS NOT NULL)
 );
 CREATE INDEX ON kb.track_songs (song_uuid) WHERE song_uuid IS NOT NULL;
 
@@ -157,10 +162,14 @@ DECLARE
     actor text := coalesce(nullif(current_setting('kb.author_type', true), ''),
                            CASE WHEN TG_OP = 'UPDATE' THEN NEW.author_type END);
 BEGIN
-    -- Every delete needs a named actor, so the change log can attribute it and a revert of
-    -- its run can find it.
-    IF TG_OP = 'DELETE' AND actor IS NULL THEN
-        RAISE EXCEPTION 'deleting from % needs SET LOCAL kb.author_type (and kb.run_uuid)', TG_TABLE_NAME;
+    -- Every delete names its actor and a run of that actor, so the change log attributes it
+    -- and a revert of the run finds it.
+    IF TG_OP = 'DELETE' AND NOT EXISTS (
+           SELECT 1 FROM kb.runs r
+           WHERE r.uuid = nullif(current_setting('kb.run_uuid', true), '')::uuid
+             AND r.author_type = actor
+             AND r.author_ref = nullif(current_setting('kb.author_ref', true), '')) THEN
+        RAISE EXCEPTION 'deleting from % needs SET LOCAL kb.author_type, kb.author_ref and kb.run_uuid naming one run', TG_TABLE_NAME;
     END IF;
     IF OLD.author_type IN ('user', 'moderator') AND actor IS DISTINCT FROM 'user'
        AND actor IS DISTINCT FROM 'moderator' THEN

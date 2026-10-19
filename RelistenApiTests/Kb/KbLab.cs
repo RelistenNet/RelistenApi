@@ -257,7 +257,9 @@ public class KbLab
             )
             {
                 var skip = new List<string>();
-                for (var passChunks = 0; review || passChunks < maxChunks; passChunks++)
+                // KB_LAB_MAX_CHUNKS is the artist's whole budget, as in the workflow: the review
+                // pass gets what the first pass left.
+                for (var passChunks = 0; chunks < maxChunks; passChunks++)
                 {
                     // Retried like the workflow's step: up to three attempts.
                     CatalogueChunkResult chunk;

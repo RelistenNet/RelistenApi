@@ -52,8 +52,8 @@ if [[ -z "$(local_psql -d postgres -Atc "SELECT 1 FROM pg_database WHERE datname
   local_psql -d "$LAB_DB" < "$script_dir/seed/schema.sql" > /dev/null
 fi
 
-# 2. The artists' rows. Each table's filter selects one artist's evidence; columns come from
-# the local schema, which matches production at migration 12.
+# 2. The artists' rows. Each table's filter selects one artist's evidence; columns are those
+# the local and production schemas share.
 slug_list="$(printf "'%s'," "${slugs[@]}")"
 ids="$(prod_psql -Atc "SELECT string_agg(id::text, ',') FROM artists WHERE slug IN (${slug_list%,})")"
 [[ -n "$ids" ]] || { echo "error: no artists match ${slugs[*]}" >&2; exit 1; }
@@ -69,17 +69,28 @@ filter() {
   esac
 }
 
+# Approvals are the lab's own decisions: keep them across a reload of the artist's rows.
+approved="$(local_psql -d "$LAB_DB" -Atc "SELECT coalesce(string_agg(artist_id::text, ','), '') FROM features WHERE artist_id IN ($ids) AND kb_catalogue" 2>/dev/null || true)"
+
 # Foreign keys and triggers stay off while rows arrive out of order (session_replication_role).
 for ((i = ${#tables[@]} - 1; i >= 0; i--)); do
   t="${tables[$i]}"
   local_psql -d "$LAB_DB" -c "SET session_replication_role = replica" -c "DELETE FROM public.$t WHERE $(filter "$t")" > /dev/null
 done
 for t in "${tables[@]}"; do
-  cols="$(local_psql -d "$LAB_DB" -Atc "SELECT string_agg(quote_ident(column_name), ',' ORDER BY ordinal_position) FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '$t' AND is_generated = 'NEVER'")"
+  # The columns both sides have: once migrated, the lab has columns production doesn't yet
+  # (features.kb_catalogue); those keep their defaults.
+  local_cols="$(local_psql -d "$LAB_DB" -Atc "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '$t' AND is_generated = 'NEVER' ORDER BY ordinal_position")"
+  prod_cols="$(prod_psql -Atc "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '$t'")"
+  cols="$(grep -Fxf <(echo "$prod_cols") <(echo "$local_cols") | sed 's/.*/"&"/' | paste -sd, -)"
   echo "==> $t"
   prod_psql -c "\\copy (SELECT $cols FROM public.$t WHERE $(filter "$t")) TO STDOUT" |
     local_psql -d "$LAB_DB" -c "SET session_replication_role = replica" -c "\\copy public.$t ($cols) FROM STDIN"
 done
+
+if [[ -n "$approved" ]]; then
+  local_psql -d "$LAB_DB" -c "UPDATE features SET kb_catalogue = true WHERE artist_id IN ($approved)" > /dev/null
+fi
 
 # Sequences past the copied ids, so local inserts don't collide.
 local_psql -d "$LAB_DB" -Atc "

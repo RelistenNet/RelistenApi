@@ -73,7 +73,8 @@ public static class KbEvaluation
                  WHERE s.artist_id = @Id AND s.show_id IS NOT NULL
                    AND EXISTS (SELECT 1 FROM source_tracks t WHERE t.source_id = s.id AND NOT t.is_orphaned)
                    AND NOT EXISTS (SELECT 1 FROM source_tracks t WHERE t.source_id = s.id AND NOT t.is_orphaned
-                                   AND NOT EXISTS (SELECT 1 FROM kb.track_songs ts WHERE ts.track_uuid = t.uuid)))::int
+                                   AND (NOT EXISTS (SELECT 1 FROM kb.track_songs ts WHERE ts.track_uuid = t.uuid)
+                                        OR EXISTS (SELECT 1 FROM kb.track_songs ts WHERE ts.track_uuid = t.uuid AND NOT ts.resolved))))::int
             """,
             new { artist.Id, artist.Uuid }
         );
