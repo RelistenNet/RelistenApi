@@ -72,6 +72,8 @@
       .muted {
         color: var(--muted);
       }
+      select { max-width: 100%; }
+      .domain-navigation { display: flex; flex-wrap: wrap; gap: 18px; margin: 20px 0; }
       .intro {
         max-width: 800px;
         color: var(--muted);
@@ -301,10 +303,11 @@
         </div>
         <a href="/">Music discovery</a>
       </header>
+      <nav id="domain-navigation" class="domain-navigation" aria-label="Browse Relisten"></nav>
       <p class="intro">
-        Browse artist repertoire, follow supported composition links across
-        artists, and reach the original playable recordings. Setlists preserve
-        the order their source actually reports.
+        Find songs, explore possible composition versions across artists, and
+        hear the original recordings. Supported links and unconfirmed suggestions
+        keep their own labels.
       </p>
       <div class="notice">
         These are retained normalization results, not a replacement accepted
@@ -316,8 +319,8 @@
         <input
           id="query"
           type="search"
-          placeholder="Search an artist, song, or supported work title"
-          aria-label="Search music"
+          placeholder="Search song titles"
+          aria-label="Search song titles"
         /><button class="primary">Search</button
         ><select id="scope" aria-label="Catalogue scope">
           <option value="">All scopes</option>
@@ -329,7 +332,7 @@
       <nav class="tabs" id="tabs" aria-label="Music search">
         <button data-tab="artists">Artists</button
         ><button data-tab="songs">Songs</button
-        ><button data-tab="works">Compositions</button
+        ><button data-tab="compositions">Compositions</button
         ><button data-tab="setlists">Setlists</button>
       </nav>
       <div id="content" aria-live="polite"></div>
@@ -415,18 +418,134 @@
           ? `<p class="muted">Artist ${esc(filters.artist)} · <a href="${link("songs", { artist: filters.artist, scope: filters.scope })}">songs</a> / <a href="${link("setlists", { artist: filters.artist, scope: filters.scope })}">setlists</a></p>`
           : "";
         $("content").innerHTML =
-          artist +
+          artist + (kind === "works" && stats.composition_queries
+            ? `<p><a href="${link("compositions", Object.fromEntries(params))}">Browse possible versions across artists →</a></p><h2>Supported composition links</h2>` : "") +
           (kind === "setlists"
             ? '<p class="muted">Browse by artist. A legacy song-membership list does not establish song positions or set boundaries.</p>'
             : "") +
           (result.items.length
             ? `<div class="grid">${result.items.map((r) => card(r, kind)).join("")}</div>`
-            : '<div class="empty">No entries in this discovery snapshot. Newer retained results may not yet be indexed; an empty search is not proof of absence.</div>');
+            : `<div class="empty"><p>No matching ${esc(kind)} in this snapshot.</p>${otherSearchLinks(kind, filters)}</div>`);
         $("content").append(
           pagination(result, (offset) =>
             navigate(kind, { ...Object.fromEntries(params), offset }),
           ),
         );
+      }
+      function otherSearchLinks(kind, filters) {
+        if (!filters.q) return "";
+        return [["artists", "artist names"], ["songs", "song titles"], ["compositions", "composition titles"]]
+          .filter(([category]) => category !== kind && !(kind === "possible-versions" && category === "compositions"))
+          .map(([category, label]) => `<p><a href="${link(category, {q: filters.q, scope: filters.scope})}">Search ${label} for “${esc(filters.q)}” →</a></p>`).join("");
+      }
+      function compositionCard(work) {
+        return `<article class="card"><a class="title-link" href="${link("possible-version", {key: work.work_key})}">${esc(work.title)}</a><p class="muted">${esc((work.writer_names || []).join(" · "))}</p><span class="tag warning">Unconfirmed composition</span><p>${work.song_count ?? 0} proposed song groups</p></article>`;
+      }
+      async function compositionList(params, token) {
+        const filters = {q: params.get("q") || "", scope: params.get("scope") || "", offset: params.get("offset") || 0, limit: 40};
+        const result = await api("/api/composition-works?" + query(filters));
+        if (token !== generation) return;
+        $("content").innerHTML = '<h2>Possible versions</h2><p class="muted">Explore compositions by title, alias or credited writer. These source matches are unconfirmed.</p>'
+          + `<p><a href="${link("works", {q: filters.q})}">Supported composition links →</a></p>`
+          + (result.items.length ? '<div class="grid">' + result.items.map(compositionCard).join("") + '</div>'
+            : `<div class="empty"><p>No retained composition matches.</p>${otherSearchLinks("possible-versions", filters)}</div>`);
+        $("content").append(pagination(result, (offset) => navigate("compositions", {...Object.fromEntries(params), offset})));
+      }
+      function evidenceButton(container, coordinates, label, token) {
+        const button = document.createElement("button");
+        button.textContent = label;
+        button.onclick = async () => {
+          button.disabled = true;
+          try {
+            const evidence = await api("/api/composition-evidence?" + query({...coordinates, generation: stats.generation}));
+            if (token !== generation) return;
+            const details = document.createElement("details");
+            details.open = true;
+            details.innerHTML = '<summary>Original assertions and supporting text</summary>';
+            const pre = document.createElement("pre");
+            pre.textContent = JSON.stringify(evidence, null, 2);
+            details.append(pre);
+            container.append(details);
+          } catch (error) {
+            container.insertAdjacentHTML("beforeend", `<p class="error">${esc(error.message)}</p>`);
+            button.disabled = false;
+          }
+        };
+        container.append(button);
+      }
+      async function songCompositions(container, coordinates, token) {
+        try {
+          const result = await api("/api/song-composition-hypotheses?" + query(coordinates));
+          if (token !== generation) return;
+          container.innerHTML = '<h3>Possible versions</h3>';
+          if (!result.candidates.length) {
+            container.insertAdjacentHTML("beforeend", '<p class="muted">No composition candidates in the retained source pool. Other versions may exist.</p>');
+            return;
+          }
+          container.insertAdjacentHTML("beforeend", '<p class="muted">Unconfirmed title or alias matches. No model selection is included in this run.</p><div class="grid">'
+            + result.candidates.map((work) => compositionCard(work)).join("") + '</div>');
+          evidenceButton(container, {kind: "song", ...coordinates}, "Why these possible versions?", token);
+        } catch (error) {
+          if (token === generation) container.innerHTML = `<h3>Possible versions</h3><p class="error">${esc(error.message)}</p>`;
+        }
+      }
+      async function compositionWork(params, token) {
+        if (!stats.composition_queries) throw Error("This reader has no composition suggestions configured.");
+        const result = await api("/api/composition-work?" + query({key: params.get("key") || "", scope: params.get("scope") || "",
+          artist: params.get("artist") || "", offset: params.get("offset") || 0, generation: stats.generation}));
+        if (token !== generation) return;
+        $("content").innerHTML = `<a class="back" href="${link("compositions", {})}">← Compositions</a><h2>${esc(result.title)}</h2><span class="tag warning">Suggested composition · unconfirmed</span>`
+          + `<p class="muted">${esc(result.writer_names.join(" · "))}</p><p>Explore performances by different artists below. A matching title or alias does not confirm this composition.</p>`
+          + `<p><a target="_blank" rel="noopener" href="https://musicbrainz.org/work/${encodeURIComponent(result.provider_key)}">MusicBrainz work →</a></p>`;
+        const source = document.createElement("details");
+        source.className = "section";
+        source.innerHTML = '<summary>Titles, aliases and source evidence</summary>'
+          + `<p>${result.title_names.map(esc).join(" · ")}</p><p class="muted">Aliases: ${result.aliases.map(esc).join(" · ") || "None retained"}</p>`
+          + `<p class="muted">ISWC: ${result.iswcs.map(esc).join(" · ") || "Not retained"}. Writer names are provider assertions; a complete authorship list is unknown.</p>`;
+        evidenceButton(source, {kind: "work", key: result.work_key}, "Inspect original work assertions", token);
+        $("content").append(source);
+        const filter = document.createElement("select");
+        filter.setAttribute("aria-label", "Filter composition by artist");
+        const all = document.createElement("option");
+        all.value = ""; all.textContent = "All artists and scopes"; filter.append(all);
+        for (const artist of result.artists) {
+          const option = document.createElement("option");
+          option.value = JSON.stringify([artist.scope, artist.artist_uuid]);
+          option.textContent = `${artist.artist_name || "Unknown artist"} · ${scopeLabel(artist.scope)} (${artist.song_count})`;
+          option.selected = artist.artist_uuid === params.get("artist") && artist.scope === params.get("scope");
+          filter.append(option);
+        }
+        filter.onchange = () => {
+          const [scope, artist] = filter.value ? JSON.parse(filter.value) : ["", ""];
+          navigate("possible-version", {key: result.work_key, scope, artist});
+        };
+        $("content").append(filter);
+        const songs = document.createElement("section");
+        songs.className = "section";
+        songs.innerHTML = `<h3>Artist performances</h3><p class="muted">${result.songs_total.toLocaleString()} proposed song groups. Open a song to hear its retained performances.</p>`;
+        if (!result.songs.length) songs.insertAdjacentHTML("beforeend", '<p class="empty">No proposed song groups linked by this retained candidate pool.</p>');
+        for (const song of result.songs) {
+          const entry = document.createElement("section");
+          entry.innerHTML = card(song, "songs");
+          const body = entry.firstElementChild;
+          body.insertAdjacentHTML("beforeend", `<p class="muted">Unconfirmed ${song.retrieval_basis === "retained_explicit_work_alias" ? "alias" : "title"} match${song.candidate_count > 1 ? ` · ${song.candidate_count - 1} other possible ${song.candidate_count === 2 ? "version" : "versions"}` : ""}</p>`);
+          const alternatives = document.createElement("details");
+          alternatives.innerHTML = '<summary>Possible versions and matching basis</summary>';
+          const alternativeBody = document.createElement("div");
+          alternatives.append(alternativeBody);
+          let loaded = false;
+          alternatives.ontoggle = () => {
+            if (alternatives.open && !loaded) {
+              loaded = true;
+              songCompositions(alternativeBody, {scope: song.scope, artist: song.artist_uuid, key: song.entity_key, generation: stats.generation}, token);
+            }
+          };
+          body.append(alternatives);
+          songs.append(entry);
+        }
+        songs.append(pagination({total: result.songs_total, limit: result.songs_limit, offset: result.songs_offset},
+          (offset) => navigate("possible-version", {...Object.fromEntries(params), offset})));
+        $("content").append(songs);
       }
       async function relationships(container, scope, key, domain, token) {
         const sources = stats.sources.filter((s) => s.scope === scope);
@@ -859,8 +978,14 @@
         performances.className = "section";
         performances.innerHTML = '<h3>Performances and files</h3><p class="loading">Finding this song’s retained performances…</p>';
         $("content").append(performances);
-        await groupPerformances(performances, coordinates, token);
-        if (token !== generation) return;
+        groupPerformances(performances, coordinates, token);
+        if (stats.composition_queries) {
+          const possible = document.createElement("section");
+          possible.className = "section";
+          possible.innerHTML = '<h3>Possible versions</h3><p class="loading">Finding composition suggestions…</p>';
+          $("content").append(possible);
+          songCompositions(possible, coordinates, token);
+        }
         if (row.works?.length) {
           const works = document.createElement("section");
           works.className = "section";
@@ -1030,6 +1155,8 @@
           "artists",
           "songs",
           "works",
+          "compositions",
+          "possible-version",
           "setlists",
           "song",
           "song-group",
@@ -1037,9 +1164,14 @@
           "setlist",
         ].includes(rawKind)
           ? rawKind
-          : "artists";
+          : "songs";
         const params = new URLSearchParams(rawQuery);
         $("query").value = params.get("q") || "";
+        const searchLabel = kind === "artists" ? "Search artist names" : kind === "setlists" || kind === "setlist"
+          ? "Search setlist labels" : kind === "works" || kind === "work" ? "Search supported composition titles"
+          : kind === "compositions" || kind === "possible-version" ? "Search composition titles, aliases or writers" : "Search song titles";
+        $("query").placeholder = searchLabel;
+        $("query").setAttribute("aria-label", searchLabel);
         $("scope").value = params.get("scope") || "";
         document
           .querySelectorAll("[data-tab]")
@@ -1049,8 +1181,8 @@
               b.dataset.tab ===
                 (kind === "song" || kind === "song-group"
                   ? "songs"
-                  : kind === "work"
-                    ? "works"
+                  : ["work", "works", "compositions", "possible-version"].includes(kind)
+                    ? "compositions"
                     : kind === "setlist"
                       ? "setlists"
                       : kind),
@@ -1073,10 +1205,19 @@
                   : `${(source.run || "").split("/").pop()}: ${(source.current_records || 0).toLocaleString()} current index records at build (v${source.indexVersion}); ${(source.native_files || 0).toLocaleString()} native children / ${(source.native_file_parents || 0).toLocaleString()} native input accounts`,
               )
               .join(" / ");
+            const navigation = $("domain-navigation");
+            for (const [name, label] of [["songs", "Songs"], ["compositions", "Compositions"], ["venues", "Venues"], ["tapers", "Tapers"]]) {
+              const href = stats.navigation?.[name];
+              if (!href) continue;
+              const a = document.createElement("a"); a.href = href; a.textContent = label; navigation.append(a);
+            }
             $("coverage").textContent =
               `Discovery snapshot · ${counts}. ${snapshots}. These are independent indexed snapshots, not the complete computed population. File searches query live readers; new song titles appear after a catalogue rebuild. Native file coverage does not complete the broader full-reader title projection.`;
           }
-          if (kind === "song-group") await songGroup(params, token);
+          if (kind === "compositions" && stats.composition_queries) await compositionList(params, token);
+          else if (kind === "compositions") await list("works", params, token);
+          else if (kind === "possible-version") await compositionWork(params, token);
+          else if (kind === "song-group") await songGroup(params, token);
           else if (["song", "work", "setlist"].includes(kind))
             await detail(kind, params, token);
           else await list(kind, params, token);
@@ -1090,9 +1231,9 @@
         e.preventDefault();
         const current = location.hash.slice(1).split("?")[0];
         navigate(
-          ["artists", "songs", "works", "setlists"].includes(current)
-            ? current
-            : "songs",
+          current === "possible-version" ? "compositions" : current === "work" ? "works"
+            : current === "setlist" ? "setlists"
+            : ["artists", "songs", "works", "compositions", "setlists"].includes(current) ? current : "songs",
           { q: $("query").value, scope: $("scope").value },
         );
       };

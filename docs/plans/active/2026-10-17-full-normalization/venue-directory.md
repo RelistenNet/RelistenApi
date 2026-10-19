@@ -168,7 +168,8 @@ The directory implementation is
 [`venue_directory.py`](../../../../tools/RelistenNormalization/venue_directory.py),
 [`venue-directory.html`](../../../../tools/RelistenNormalization/venue-directory.html)
 and [`test_venue_directory.py`](../../../../tools/RelistenNormalization/test_venue_directory.py).
-They do not change the shared reader, people directory, production API or database.
+Building or serving this projection does not alter the shared reader, people
+directory, production API or database.
 
 ```sh
 python3 tools/RelistenNormalization/venue_directory.py build \

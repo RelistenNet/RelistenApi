@@ -17,6 +17,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlencode, urlsplit
 from urllib.request import Request, urlopen
 
+from composition_catalogue import CompositionCatalogue
 from music_catalogue import MusicCatalogue, MusicCatalogueBuilder, Source
 from music_consolidation import MusicConsolidationExporter, MusicConsolidationProjection
 from music_groups import MusicGroups, MusicNormalizationChanged
@@ -37,11 +38,22 @@ class MusicQueryUnavailable(ValueError):
 class MusicDiscovery:
     """Read the compact catalogue and proxy bounded, selective source lookups."""
 
-    def __init__(self, catalogue, readers=(), normalization=None):
+    def __init__(self, catalogue, readers=(), normalization=None, compositions=None, people_url=None, venue_url=None):
         self.catalogue = catalogue
         self._catalogue_marker = None
         self._catalogue_stats = None
         self.groups = MusicGroups(catalogue.database, normalization) if normalization else None
+        if compositions and not self.groups:
+            raise ValueError("Composition suggestions require the matching normalized music image")
+        self.compositions = CompositionCatalogue(self.groups, compositions) if compositions else None
+        self.navigation = {"songs": "#songs", "compositions": "#compositions"}
+        for name, url in (("tapers", people_url), ("venues", venue_url)):
+            if url:
+                origin = urlsplit(url)
+                if (origin.scheme not in {"http", "https"} or not origin.hostname or origin.username or origin.password
+                        or origin.query or origin.fragment or origin.path not in {"", "/"}):
+                    raise ValueError("Directory navigation needs an HTTP(S) origin without credentials")
+                self.navigation[name] = url.rstrip("/") + "/"
         self.readers = []
         for reader in readers:
             run = str(Path(reader.run).resolve(strict=True))
@@ -70,9 +82,13 @@ class MusicDiscovery:
         # Old processes also serve this HTML from disk. Advertise child routes
         # independently of projection metadata during a controlled cutover.
         result["native_file_queries"] = True
+        result["navigation"] = dict(self.navigation)
         if self.groups:
             result["normalization"] = self.groups.stats()
             result["normalized_song_queries"] = True
+        if self.compositions:
+            result["composition_queries"] = True
+            result["compositionSuggestions"] = self.compositions.stats()
         sources = result["sources"]
         for reader in self.readers:
             if not any((source["scope"], source["run"]) == (reader["scope"], reader["run"]) for source in sources):
@@ -80,7 +96,8 @@ class MusicDiscovery:
         # Ordinal catalogue IDs and configured relationship-only IDs are both tied
         # to this image. Open pages must reload after either mapping changes.
         generation = [result["built_at"], [(s["id"], s["scope"], s["run"], s["reader_url"]) for s in sources],
-                      (result.get("normalization") or {}).get("outputManifestSha256")]
+                      (result.get("normalization") or {}).get("outputManifestSha256"),
+                      (result.get("compositionSuggestions") or {}).get("manifestSha256")]
         result["generation"] = hashlib.sha256(json.dumps(generation, separators=(",", ":")).encode()).hexdigest()[:24]
         return result
 
@@ -264,6 +281,11 @@ def handler_for(discovery):
                 if route.path in {"/", "/music-discovery.html"}:
                     return self.send_body(200, Path(__file__).with_name("music-discovery.html").read_bytes(), "text/html; charset=utf-8")
                 catalogue = discovery.catalogue
+                if route.path in {"/api/composition-works", "/api/composition-work", "/api/song-composition-hypotheses", "/api/composition-evidence"}:
+                    if not discovery.compositions:
+                        raise ValueError("No completed composition suggestions are configured")
+                    if route.path != "/api/composition-works" and query.get("generation") != discovery.stats()["generation"]:
+                        raise CatalogueChanged("Composition suggestions changed. Reload this page")
                 if route.path == "/api/stats":
                     result = discovery.stats()
                 elif route.path == "/api/artists":
@@ -292,6 +314,14 @@ def handler_for(discovery):
                     result = discovery.performances(query)
                 elif route.path == "/api/performance-files":
                     result = discovery.performance_files(query)
+                elif route.path == "/api/composition-works":
+                    result = discovery.compositions.works(q=query.get("q", ""), scope=query.get("scope", ""), artist=query.get("artist", ""), **page(query))
+                elif route.path == "/api/composition-work":
+                    result = discovery.compositions.work(query.get("key", ""), scope=query.get("scope", ""), artist=query.get("artist", ""), **page(query))
+                elif route.path == "/api/song-composition-hypotheses":
+                    result = discovery.compositions.song(query.get("scope", ""), query.get("artist", ""), query.get("key", ""))
+                elif route.path == "/api/composition-evidence":
+                    result = discovery.compositions.evidence(query.get("kind", ""), query.get("key", ""), query.get("scope", ""), query.get("artist", ""))
                 elif route.path == "/api/works":
                     result = catalogue.works(q=query.get("q", ""), **page(query))
                 elif route.path == "/api/setlists":
@@ -372,6 +402,9 @@ def main():
     project.add_argument("--maximum-bytes", type=int, default=1024**3)
     serve = commands.add_parser("serve", help="Serve the private music browser")
     serve.add_argument("--database", required=True)
+    serve.add_argument("--compositions", help="Completed composition suggestion projection for this exact music image")
+    serve.add_argument("--people-url", help="Optional taper directory HTTP(S) origin")
+    serve.add_argument("--venue-url", help="Optional venue directory HTTP(S) origin")
     serve.add_argument("--normalization", help="Completed C# correspondence sidecar for this exact catalogue")
     serve.add_argument("--reader", nargs=3, action="append", metavar=("SCOPE", "RUN", "READER"), default=[], help="Additional relationship-only reader; does not claim title discovery coverage")
     serve.add_argument("--host", default="127.0.0.1")
@@ -393,7 +426,7 @@ def main():
         print(json.dumps(result, ensure_ascii=False), flush=True)
     else:
         readers = [Source(scope, Path(run), reader) for scope, run, reader in args.reader]
-        discovery = MusicDiscovery(MusicCatalogue(args.database), readers, args.normalization)
+        discovery = MusicDiscovery(MusicCatalogue(args.database), readers, args.normalization, args.compositions, args.people_url, args.venue_url)
         server = ThreadingHTTPServer((args.host, args.port), handler_for(discovery))
         print(json.dumps({"url": f"http://{args.host}:{args.port}/", "database": str(Path(args.database).resolve())}), flush=True)
         server.serve_forever()

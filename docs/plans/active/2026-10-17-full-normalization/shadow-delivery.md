@@ -108,7 +108,31 @@ operations](venue-directory.md#inline-recording-playback).
 
 The full C# interpretation now connects title variants to shared artist-song pages. [Scarlet Begonias](http://alecs-macbook-pro.tail09dbf.ts.net:18769/#song-group?scope=catalogue&artist=77a58ff9-2e01-c59c-b8eb-cff106049b72&key=repertoire%3Af6d191c085ac0d91475fa88f2f434707) brings together 61 original entries, including `09.Scarlet Begonias`, and reaches 329 catalog shows, 29 unbound recording accounts and 3,192 distinct matching files. `Scarlet Begonias – Fire on the Mountain` retains both song links. The phone journey reaches an original Archive MP3; the service returned audio for a bounded one-byte request. These are title-based proposals and retained catalog homes, not independent verification of the audio's song or performance date.
 
-The same pass covers all 971,127 original scoped keys. Known dictionary titles take priority; inferred compounds, jams, teases, reprises and partial interpretations retain their labels. Review alternatives stay accessible without making every rival a file's default song. File results preserve original ownership and group performances only by actual show UUID. The first screen prompts for a title or artist rather than fetching the million-account list. Cross-artist work coverage remains sparse and is the next feature; song consolidation does not establish composition identity. See the [consolidated music interface](../../../../tools/RelistenNormalization/music-consolidation.md) and [original music interfaces](../../../../tools/RelistenNormalization/music-discovery.md).
+The same pass covers all 971,127 original scoped keys. Known dictionary titles take priority; inferred compounds, jams, teases, reprises and partial interpretations retain their labels. Review alternatives stay accessible without making every rival a file's default song. File results preserve original ownership and group performances only by actual show UUID. The first screen prompts for a title or artist rather than fetching the million-account list. See the [consolidated music interface](../../../../tools/RelistenNormalization/music-consolidation.md) and [original music interfaces](../../../../tools/RelistenNormalization/music-discovery.md).
+
+### Composition discovery across artists
+
+[Possible versions](http://alecs-macbook-pro.tail09dbf.ts.net:18769/#compositions)
+now connects retained works to artist-song pages and their original recordings.
+Search by title, alias, writer or work ID. The current projection includes all
+1,024 qualified retained works, 3,034 candidate song groups and 27,555 alternative
+relationships. It preserves the 33 earlier supported work pages and their routes.
+
+[Crazy Fingers](http://alecs-macbook-pro.tail09dbf.ts.net:18769/#possible-version?key=composition%3Amusicbrainz%3A8973193c-be9e-450d-9e26-2cced570c5aa)
+shows the Garcia/Hunter work separately from Alan Hawkshaw's work. A 390-pixel
+browser journey followed the Garcia/Hunter page to Alex Jordan, two distinct show
+UUIDs, the 2023-07-25 recording and its original “Crazy Fingers >” Archive MP3.
+These song-to-work relationships remain unconfirmed title or alias matches. The
+model has not selected a work, and the page keeps all alternatives accessible.
+
+The C# pass covers every one of the 896,216 proposed artist-song targets. It
+explicitly records 893,182 targets without candidates in the supplied work pool.
+The browse projection uses only 15.6 MB beside the unchanged song catalog and
+does not copy recording files. This generation uses the earlier retained provider
+pool; newly acquired work searches, including Watchtower, need a subsequent C#
+pass before they appear here. Broader lookup stopped at the host disk reserve and
+retained its completed inputs. See the [composition interface and
+operations](../../../../tools/RelistenNormalization/composition-discovery.md).
 
 Dictionary citation compaction retains one actual witness per distinct literal
 spelling while keeping every membership in its original setlist result. The
