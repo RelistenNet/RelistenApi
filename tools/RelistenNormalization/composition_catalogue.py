@@ -252,11 +252,18 @@ class CompositionSelectionBuilder:
         if len(plan_raw) > MAXIMUM_LINE_BYTES:
             raise ValueError("The selection plan exceeds its byte bound")
         plan = json.loads(plan_raw)
-        if (report.get("version") != "composition-selection-batch-v1" or report.get("state") != "completed"
+        plan_version = {"composition-selection-batch-v1": "composition-selection-plan-v1",
+                        "composition-selection-batch-v2": "composition-selection-plan-v2"}.get(report.get("version"))
+        if (plan_version is None or report.get("state") != "completed"
                 or report.get("publicationPermitted") is not False or report.get("externalUniverseComplete") is not False
                 or hashlib.sha256(plan_raw).hexdigest() != report["planSha256"]
-                or plan.get("version") != "composition-selection-plan-v1" or plan["jobUuid"] != report["jobUuid"]):
+                or plan.get("version") != plan_version or plan["jobUuid"] != report["jobUuid"]):
             raise ValueError("Selections require their exact completed, unconfirmed plan")
+        context = plan.get("targetContextManifest")
+        if (plan_version == "composition-selection-plan-v2") != (context is not None):
+            raise ValueError("Context-enriched selections require their pinned target context")
+        if context is not None:
+            self._context_pin(context)
         prepared = report["preflight"]
         expected = {self._key(row["key"]): row for row in prepared["rows"]}
         keys = [self._key(key) for key in plan["songs"]]
@@ -265,6 +272,16 @@ class CompositionSelectionBuilder:
                 or prepared["selectedInputs"] != len(keys) or prepared["planSha256"] != report["planSha256"]):
             raise ValueError("The completed selection plan does not cover its exact scoped inputs")
         return report, plan, expected
+
+    @staticmethod
+    def _context_pin(artifact):
+        # C# authenticated the complete context before making requests. Retain
+        # that exact export beside the response; never substitute a later head.
+        if not isinstance(artifact, dict) or not {"path", "bytes", "sha256"}.issubset(artifact):
+            raise ValueError("Selection target context requires a complete artifact pin")
+        path = Path(artifact["path"]).resolve(strict=True)
+        if path.stat().st_size != artifact["bytes"] or sha256_file(path) != artifact["sha256"]:
+            raise MusicNormalizationChanged("Selection target context differs from its pinned export")
 
     def build(self):
         report, plan, expected = self._read_plan()
@@ -295,6 +312,8 @@ class CompositionSelectionBuilder:
                         "coveredSongs": len(expected), "candidateSongs": metadata["candidateSongs"],
                         "outcomes": dict(actual_outcomes), "executionStates": dict(outcomes),
                         "publicationPermitted": False, "externalUniverseComplete": False}
+                    if plan.get("targetContextManifest") is not None:
+                        result["targetContextManifest"] = plan["targetContextManifest"]
                     db.executemany("INSERT INTO metadata VALUES(?,?)", ((key, json.dumps(value)) for key, value in result.items()))
                     db.commit()
                 self._space()
@@ -306,6 +325,8 @@ class CompositionSelectionBuilder:
                     _artifact(self.manifest.parent, artifact)
                 for chunk in originals:
                     _artifact(hypothesis_path.parent, next(item for item in original["chunks"] if item["path"] == chunk))
+                if plan.get("targetContextManifest") is not None:
+                    self._context_pin(plan["targetContextManifest"])
                 building.replace(self.database)
                 return result
             finally:

@@ -1,0 +1,27 @@
+{
+  "version": "composition-target-context-integration-v1",
+  "sourceCommit": "0b18851",
+  "contextManifest": {
+    "path": "local-dev/normalization-data/2026-10-18-composition-target-context-first100-v3/manifest.json",
+    "bytes": 147336,
+    "sha256": "0b36106c3899c49d95465754a592c31c2bb2ef6f6b9d3ce798b10d81a5eb6df5"
+  },
+  "preflight": {
+    "path": "local-dev/normalization-data/2026-10-18-composition-selection-context-first100-preflight-v2/preflight.json",
+    "bytes": 70635,
+    "sha256": "76b988436d35c29500933769fdd09e65f7b67abfc60f04f4a17c57b3c0ceedac"
+  },
+  "planSha256": "8a4979f7c6e3cc08bb1f5921556062f609a0de01789ec3b0a33fcf44bd2dc1ea",
+  "selectedInputs": 100,
+  "eligibleInputs": 90,
+  "skipReasons": {
+    "input_too_large": 10
+  },
+  "maximumNewReservationUsd": 1.7478914,
+  "largestRenderedBytes": 2293822,
+  "modelCalls": 0,
+  "newCacheAttempts": 0,
+  "contextWitnessesOmitted": 0,
+  "resultScope": "Exact retained source context loads through the actual C# selector request preparation. No enriched model response or composition identity accuracy is established. Ten complete requests exceed the current size limit; lossless compaction is pending.",
+  "preservation": "Completed v1 export, failed v2 export receipt, corrected v3 export and both preflight attempts remain separate."
+}

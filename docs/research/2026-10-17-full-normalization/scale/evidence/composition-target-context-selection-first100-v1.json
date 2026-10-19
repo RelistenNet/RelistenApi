@@ -1,0 +1,41 @@
+{
+  "version": "composition-target-context-selection-first100-v1",
+  "manifest": {
+    "path": "local-dev/normalization-data/2026-10-18-composition-selection-context-first100-output-v1/manifest.json",
+    "bytes": 75939,
+    "sha256": "e9ba8a4bcd78387ff1819c6a1f2873e760020f2d7f9fa1e5157e15f233982839"
+  },
+  "projection": {
+    "path": "local-dev/normalization-data/2026-10-18-composition-selection-context-first100-projection-v1/selections.sqlite3",
+    "bytes": 208896,
+    "sha256": "d9d7808b7f2f97707766763cf41040864f4a1251809ab1b206e1338b5704244f"
+  },
+  "pairedComparison": {
+    "path": "local-dev/normalization-data/2026-10-18-composition-selection-context-first100-execution-v1/paired-comparison.json",
+    "bytes": 12433,
+    "sha256": "4a68679a35ae1f9e7d99311a231fcf9c6c65fbbceef0aacaa46bc6f4e1893f50"
+  },
+  "liveReader": {
+    "pid": 72837,
+    "generation": "bbd4dc235c62a37abf51d33c",
+    "url": "http://alecs-macbook-pro.tail09dbf.ts.net:18769/",
+    "spoonContract": {
+      "path": "local-dev/normalization-data/2026-10-18-composition-selection-context-first100-projection-v1/live-spoon-contract.json",
+      "bytes": 1420,
+      "sha256": "8d1678a2e05bf31aebd35fb572c72cf14b88b721e235d3f1f37f8195ce4b1e20"
+    }
+  },
+  "method": "luna-composition-hypothesis-v3",
+  "processedInputs": 100,
+  "outcomes": {
+    "insufficient_evidence": 19,
+    "selected": 71,
+    "skipped": 10
+  },
+  "executedRequests": 90,
+  "knownActualUsd": 0.4410058,
+  "costScope": "Estimated from reported tokens and configured rates, not an invoice.",
+  "publicationPermitted": false,
+  "accuracyScope": "Development comparison, not an independent accuracy estimate. Spoon no longer receives the independently rejected Elliott Smith choice; the Last Waltz case still favors Lincoln Chase without a discriminating supplied program/work credit. Dr. John is provisionally favored by separate official-program research; no audio identity was established.",
+  "remaining": "Ten complete inputs exceed the current request-size cap. Source v4 compaction and venue refresh await build and actual replay; current live reader retains v3 choices."
+}

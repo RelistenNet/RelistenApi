@@ -141,10 +141,17 @@ confident explanation can be wrong. Every result keeps `acceptedIdentity` and
 
 ## Include original recording and setlist context
 
-Focused C# contracts pass; actual enriched integration is still unverified. The
-first 100-target preflight refused an unusable artist-ID value before writing
-output. A corrected source export and keyless recheck remain; no enriched paid
-selection has run.
+The corrected first-100 context export passed keyless preflight: 90 requests fit
+the existing 512,000-byte limit and 10 were explicitly oversized. The v3 run then
+retained 71 selections and 19 abstentions, with those 10 inputs skipped. These
+counts measure execution, not matching accuracy. Additional context does not
+guarantee the right work: Such A Night still selected the Lincoln Chase candidate
+despite the retained Last Waltz program description. That choice remains under
+independent adjudication.
+
+The v4 prompt below shares repeated provenance and separates our repertoire
+derivation from source facts. Its exact rendered sizes still need a new keyless
+measurement; the request limit has not changed.
 
 An optional `composition-target-context-v1` export adds original catalogue files,
 recording text, legacy setlist memberships, native files, native recording
@@ -194,13 +201,24 @@ rendered bytes, cache keys and maximum reservations for every candidate-bearing
 target, including oversized requests. Missing-candidate targets retain a skip
 and no prompt measurement. Execution needs another new output directory.
 
-No-context requests preserve v2 prompt bytes and cache identity. Enriched runs
-report `composition-selection-batch-v2` and use `luna-composition-hypothesis-v3`.
-Requests bind only their target facts and witnesses, so unrelated export targets
-do not invalidate cached requests. Repeated text appears once per target while
-all view citations remain. Rationales distinguish target evidence from background
-familiarity/counts; a candidate ISWC only matches when the target supplies it too.
+No-context requests preserve v2 prompt bytes and cache identity. New enriched
+runs report `composition-selection-batch-v2` and use
+`luna-composition-hypothesis-v4`; older v3 results retain their original method
+and request. Use a verified v4 runtime for the commands above. Requests bind only
+their target facts and witnesses, so unrelated export targets do not invalidate
+cached requests.
 
-These remain model hypotheses. The current selection projection accepts v1
-batch/plan outputs; enriched outputs need compatible reader support before
-publication. Neither preflight nor execution updates a reader.
+The v4 request uses named source-document, source-position, literal-text and
+derived-fact pools. Every witness keeps its own owner, order and citation; no
+view is sampled. Shared facts are not independent confirmations. Only the known
+`retained_repertoire_interpretation` claim omits our repeated matcher diagnostics
+and whole-file comparison prose. Its segment interpretation, alternatives and
+evidence remain labeled as our derivation. Other provider claims stay exact.
+Complete originals and the full input hash retain the omitted diagnostics for
+audit and cache identity. Rationales must distinguish target evidence from
+background familiarity/counts; a candidate ISWC only matches when the target
+supplies it too.
+
+These remain model hypotheses. Publish enriched results through a reader that
+validates their enriched plan and context pins. Neither preflight nor execution
+updates a reader.

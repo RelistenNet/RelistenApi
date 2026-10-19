@@ -168,17 +168,18 @@ class TestCompositionCatalogue(unittest.TestCase):
         with urlopen(base + route + "?" + urlencode(query)) as response:
             return json.load(response)
 
-    def write_selections(self, states=("selected",)):
+    def write_selections(self, states=("selected",), *, target_context=False):
         output = self.root / "selections"
         output.mkdir(exist_ok=True)
         self.selection_database = self.root / "selections.sqlite3"
         parents = [row for row in self.results if row["domain"] == "composition_hypotheses"]
         prepared, records = [], []
         artifact = json.loads(self.manifest.read_text())["chunks"][0]
+        method = "luna-composition-hypothesis-v3" if target_context else "luna-composition-hypothesis-v2"
         for index, state in enumerate(states):
             parent = parents[index]
             key = {"scope": "catalogue", "artistUuid": self.songs[index]["artistUuid"], "songEntityKey": self.songs[index]["entityKey"]}
-            request = {"method": "luna-composition-hypothesis-v2", "model": "gpt-6-luna", "cacheKey": str(index) * 64}
+            request = {"method": method, "model": "gpt-6-luna", "cacheKey": str(index) * 64}
             row = {"key": key, "inputSha256": "f" * 64,
                    "hypothesisOrigin": {"chunk": artifact["path"], "sha256": artifact["sha256"], "line": self.results.index(parent) + 1},
                    "request": request, "skipReason": "request_bound" if state == "skipped" else None}
@@ -197,10 +198,17 @@ class TestCompositionCatalogue(unittest.TestCase):
         plan = {"version": "composition-selection-plan-v1", "jobUuid": SHOWS[0], "songs": [row["key"] for row in prepared],
                 "hypothesisManifest": {"path": str(self.manifest), **self.artifact(self.manifest, 1)}}
         plan["hypothesisManifest"]["path"] = str(self.manifest)
+        if target_context:
+            context = self.root / "target-context.json"
+            context.write_text(json.dumps({"version": "composition-target-context-v1", "state": "completed", "complete": True}))
+            plan.update(version="composition-selection-plan-v2", targetContextManifest={
+                "path": str(context), **self.artifact(context, 1)})
+            plan["targetContextManifest"]["path"] = str(context)
         plan_path = output / "approved-plan.json"
         plan_path.write_text(json.dumps(plan))
-        manifest = {"version": "composition-selection-batch-v1", "state": "completed", "planSha256": sha256_file(plan_path),
-            "jobUuid": plan["jobUuid"], "method": "luna-composition-hypothesis-v2", "processedInputs": len(records),
+        manifest = {"version": "composition-selection-batch-v2" if target_context else "composition-selection-batch-v1",
+            "state": "completed", "planSha256": sha256_file(plan_path),
+            "jobUuid": plan["jobUuid"], "method": method, "processedInputs": len(records),
             "preflight": {"planSha256": sha256_file(plan_path), "selectedInputs": len(records), "rows": prepared},
             "chunks": [self.chunk(output, "composition_selections", records)],
             "outcomes": {state: states.count(state) for state in set(states)}, "publicationPermitted": False, "externalUniverseComplete": False}
@@ -211,6 +219,41 @@ class TestCompositionCatalogue(unittest.TestCase):
     def build_selections(self, manifest):
         return CompositionSelectionBuilder(self.database, manifest, self.selection_database,
             manifest_sha256=sha256_file(manifest), minimum_free_bytes=0).build()
+
+    def test_context_enriched_selection_reaches_original_audio_and_rejects_changed_context(self):
+        self.build()
+        manifest = self.write_selections(target_context=True)
+        metadata = self.build_selections(manifest)
+        base = self.serve(handler_for(self.discovery(composition_selections=self.selection_database)))
+        coordinates = {"scope": "catalogue", "artist": ARTISTS[0], "key": self.songs[0]["entityKey"],
+                       "generation": self.get(base, "/api/stats")["generation"]}
+        song = self.get(base, "/api/song-composition-hypotheses", **coordinates)
+        self.assertEqual(song["modelSelection"]["selectedWorkKey"], self.work_keys[0])
+        self.assertEqual(song["modelSelection"]["method"], "luna-composition-hypothesis-v3")
+        self.assertFalse(song["modelSelection"]["acceptedIdentity"])
+        performances = self.get(base, "/api/song-performances", **coordinates)
+        files = self.get(base, "/api/performance-files", **coordinates, homeKey=performances["items"][0]["homeKey"])
+        self.assertEqual(files["total"], 1)
+        self.assertEqual(metadata["targetContextManifest"]["sha256"], sha256_file(self.root / "target-context.json"))
+        previous = self.selection_database.read_bytes()
+        plan_path = manifest.parent / "approved-plan.json"
+        original_plan, original_manifest = plan_path.read_bytes(), manifest.read_bytes()
+        malformed = json.loads(original_plan)
+        malformed["targetContextManifest"] = {}
+        plan_path.write_text(json.dumps(malformed))
+        report = json.loads(original_manifest)
+        report["planSha256"] = report["preflight"]["planSha256"] = sha256_file(plan_path)
+        manifest.write_text(json.dumps(report))
+        with self.assertRaisesRegex(ValueError, "complete artifact pin"):
+            self.build_selections(manifest)
+        self.assertEqual(self.selection_database.read_bytes(), previous)
+
+        plan_path.write_bytes(original_plan)
+        manifest.write_bytes(original_manifest)
+        (self.root / "target-context.json").write_text('{"changed":true}')
+        with self.assertRaisesRegex(MusicNormalizationChanged, "target context"):
+            self.build_selections(manifest)
+        self.assertEqual(self.selection_database.read_bytes(), previous)
 
     def test_partial_model_plan_keeps_alternatives_supported_links_and_audio(self):
         self.build()

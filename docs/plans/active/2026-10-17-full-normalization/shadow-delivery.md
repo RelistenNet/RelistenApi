@@ -159,18 +159,22 @@ alternatives without changing title matches or accepted identities. The full
 selection run started on 2026-10-19 at 01:30 UTC with a $100 job cap and a
 two-hour duration. It stopped at the disk reserve after retaining 1,444 of the
 3,034 results. It reserves space before each batch; completed responses survive
-interruption. Resume the same job and immutable plan when space permits.
-Whole-run cache growth does not need to fit upfront. Its checkpoint is in
+interruption. Retain those results as the comparison baseline. Assess the
+context-enriched requests before spending on more requests that omit recording
+descriptions and setlists. Any resume must use the same immutable plan;
+context-enriched work uses a separate job. Whole-run cache growth does not need
+to fit upfront. Its checkpoint is in
 `local-dev/normalization-data/2026-10-18-composition-selection-full-output-v1/`.
-The live reader shows the first 100 completed song results: 82 selected work
-hypotheses and 18 insufficient-evidence results, alongside all original title
-candidates. This is 100 of the 3,034 candidate-bearing song groups, not a measure
-of accuracy. The small completed projection reuses cached responses without
-another paid request while the full run is paused. For example,
+The live reader shows 100 context-enriched song results: 71 selected work
+hypotheses, 19 insufficient-evidence results and ten requests that exceed the
+current byte limit, alongside all original title candidates. This is 100 of the
+3,034 candidate-bearing song groups, not a measure of accuracy. The original
+artist-and-title results remain available as the comparison baseline. For example,
 [Furthur's Crazy Fingers](http://alecs-macbook-pro.tail09dbf.ts.net:18769/#song-group?scope=catalogue&artist=04735701-ff23-9ec4-93fa-f503246310ec&key=repertoire%3Ac48ac0a67fbe6098db592357bb5ab04d)
-shows a proposed Garcia/Hunter match, recording context, the model's reason and
-the separate Alan Hawkshaw alternative. No model choice changes an accepted
-identity or recording assignment.
+retains the Garcia/Hunter and Alan Hawkshaw alternatives and its original
+recordings. Its new complete context exceeds the current request limit; this
+does not withhold any recording or remove a title-based candidate. No model
+choice changes an accepted identity or recording assignment.
 
 An independent read of the first 40 results found useful abstentions and
 namesake distinctions, together with unsupported cover and genre assumptions.
@@ -206,9 +210,23 @@ repeated captures; Spoon has five unique unordered setlists observed twice.
 Another 41 recording lookups have no retained context. The first real C# read
 refused empty artist-ID strings. The exporter now preserves those original
 cells while producing a nullable, validated MusicBrainz ID. A corrected export
-stopped at the disk guard before publishing any artifact. Real enriched
-inference and its listener-visible results remain unverified; preserve the
-completed original export and the failed attempt's receipt.
+stopped at the disk guard before publishing any artifact. After space recovered,
+a third export completed and loaded successfully through the actual C# request
+preparation. Ninety of its 100 requests fit; ten exceed the current size limit,
+with a largest request of 2,293,822 bytes. Compact repeated source references
+without removing recording or setlist evidence before the paired model run.
+The [integration receipt](../../../research/2026-10-17-full-normalization/scale/evidence/composition-target-context-first100-v1.json)
+pins these inputs and measurements. The subsequent [context-enriched run](../../../research/2026-10-17-full-normalization/scale/evidence/composition-target-context-selection-first100-v1.json)
+executed the 90 fitting requests for an estimated $0.4410058 at configured token
+rates. Its results are live in the reader. Spoon now remains unresolved instead
+of receiving Elliott Smith's work. The Last Waltz example still favors Lincoln
+Chase; neither supplied candidate has a retained connection to that program.
+Retrieve program-specific recording/release credits for such cases rather than
+treating a candidate's popularity as target evidence. Separate official-program
+research provisionally favors Dr. John's work; it has not verified this audio.
+Preserve all completed and failed attempts separately. The v4 source compacts
+repeated references and distinguishes our title interpretations from raw source
+facts; its build and real request measurements remain pending disk capacity.
 
 The single largest-request pilot
 established transport and cost behavior, but its unsupported cover assumption
