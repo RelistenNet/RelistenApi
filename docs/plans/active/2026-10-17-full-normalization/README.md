@@ -29,6 +29,13 @@ The current readers now support these listener journeys:
 
 These are proposed interpretations, with original evidence and playback homes retained. The [delivery guide](shadow-delivery.md) states current coverage and remaining gaps. The latest people generation applies the revised credit and alias grammar to all 292,523 captured recordings and includes the revised native provider observations. The [native reader](http://alecs-macbook-pro.tail09dbf.ts.net:18774/?view=files) retains all 34,139 native files and their optional catalog playback links.
 
+Venue and taper recordings now offer **Show tracks** and **Play** on the discovery
+page. Shared navigation connects songs, compositions, venues and tapers. A
+390-pixel browser check followed MSG to the Grateful Dead's 1994-10-19 recording
+and played “Brokedown Palace” inline. Original source evidence remains available;
+an unavailable upstream audio URL produces a visible error rather than a new
+recording assignment.
+
 Directly supported person pages now cover 18,120 captured recordings across 1,536 artists. Artist-song pages now consolidate the full captured title population through the shared C# interpretation. Next, improve cross-artist composition coverage and extend person matching to difficult credits without supported accounts. Neither searchable file titles nor comparison cards alone complete normalization.
 
 Complete the remaining domain coverage, then qualify production acceptance, rehearse backfill and prepare rollout. Production writes and deployment retain their existing approval requirements.

@@ -140,11 +140,11 @@ filter returns 96 Phish recordings or 712 Grateful Dead recordings. The original
 MSG UUID `bcdf830e-9543-27fd-f851-db137f524991` still opens its own 16-recording
 account and exact “MSG” / “NY, NY” evidence.
 
-A phone check followed the Grateful Dead group to “Brokedown Palace” on source
-`4d9c0ea8-4710-c281-f58e-cd45b85f33ee`; its retained Archive MP3 returned
-`206 audio/mpeg` for a one-byte range request. A sampled Phish blob URL returned
-404. That external availability issue does not change its preserved catalog home;
-the venue layer does not rewrite provider media URLs.
+A 390-pixel browser check followed the Grateful Dead group to its 1994-10-19
+recording and played “Brokedown Palace” inline. Playback advanced with no media
+error. Its source UUID remains `4d9c0ea8-4710-c281-f58e-cd45b85f33ee`. Some sampled
+upstream audio URLs fail; the page reports that failure and keeps the original
+source link. The venue layer does not rewrite provider media URLs.
 
 The following counts describe the unchanged baseline on port 18770.
 
@@ -203,8 +203,41 @@ python3 tools/RelistenNormalization/venue_directory.py serve \
   --files-url http://alecs-macbook-pro.tail09dbf.ts.net:18767/ \
   --native-database local-dev/normalization-data/2026-10-18-venue-directory-normalized-v2/native.sqlite3 \
   --native-url http://alecs-macbook-pro.tail09dbf.ts.net:18774/ \
+  --music-url http://alecs-macbook-pro.tail09dbf.ts.net:18769/ \
+  --people-url http://alecs-macbook-pro.tail09dbf.ts.net:18777/ \
   --bind 100.73.204.24 --port 18776
 ```
+
+## Inline recording playback
+
+Venue and people pages share the bounded, read-only
+[`RecordingPlayback`](../../../../tools/RelistenNormalization/recording_playback.py)
+adapter. **Show tracks** lists the selected recording's files; **Play** opens the
+original audio on the same page. The configured file reader owns membership and
+playback URLs. The adapter uses exact source UUIDs and verifies the selected
+file's source home. It never joins recordings by date, venue or title.
+
+Both servers expose `GET /api/recording-files?source_uuid=<uuid>&offset=<n>` and
+`GET /api/recording-file?source_uuid=<uuid>&id=<reader record id>`. Pages contain
+at most 30 files. Upstream requests have a 20-second timeout and an 8 MiB response
+limit. Invalid ownership or an unavailable reader returns an error with the
+source-evidence fallback. Native recording parents are not treated as individual
+tracks; accounts without a catalog source UUID retain their original file and
+provider links.
+
+`/api/stats` advertises `capabilities.recordingPlayback` and optional
+`navigation: {songs, compositions, venues, tapers}` links. Venue `serve` accepts
+`--music-url` and `--people-url`; people `serve` accepts `--music-url` and
+`--venue-url`. Missing navigation targets stay hidden. Existing launch arguments
+remain valid. Updated HTML requests the playback script and endpoints only when
+the server advertises support, so an older running server keeps its source links.
+
+Restarting a reader loads the adapter and navigation options. Its SQLite
+projection, normalization decisions and original playback identities stay intact.
+To roll back the interface, run the earlier server code with its original launch
+arguments and the same projection; no catalog migration is involved.
+
+## Venue API
 
 GET contracts are `/api/stats`, `/api/venues`, `/api/venue?id=<native UUID>` and
 `/api/evidence?id=<native UUID>`. List queries support `q`, `locality`, `artist`

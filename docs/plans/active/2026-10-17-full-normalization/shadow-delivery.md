@@ -96,7 +96,13 @@ See the [directory interface and operations](../../../../tools/RelistenNormaliza
 
 The venue directory covers all 216,332 captured venue rows and 292,523 recording/show homes. The current method groups 100,078 venue members into 35,271 named-place hypotheses using resolved localities, observed names, initials and captured source/show associations. Conflicting addresses, distinct rooms and unresolved names remain separate and browsable. Historical physical continuity is not yet verified; observed recording dates are not opening, closing or name-validity dates. Another 670 native venue accounts retain their original scopes and links to 34,139 files, without a global native-place assignment.
 
-Actual venue navigation reaches the original playable files; a bounded request confirmed audio from one Grateful Dead Archive recording. One sampled Phish URL is stale while current upstream metadata supplies a working replacement. The venue layer preserves the captured URL; provider refresh owns that correction. See the [venue interface and operations](venue-directory.md).
+Venue and taper recording cards now open their tracks and play audio inline.
+Shared navigation connects all discovery pages. A 390-pixel browser check
+followed MSG to the Grateful Dead's 1994-10-19 recording and played “Brokedown
+Palace”; playback advanced without a media error. Some original audio URLs return
+upstream errors. The page explains the failure and retains the source link;
+provider refresh owns URL corrections. See the [venue interface and
+operations](venue-directory.md#inline-recording-playback).
 
 [Music discovery](http://alecs-macbook-pro.tail09dbf.ts.net:18769/) now includes all 963,490 current full-reader repertoire keys, for 971,127 scoped entries in total. It preserves every earlier song, artist, setlist and work membership. Catalog, Local and native scopes stay separate. Thirty-three supported work proposals have 41 work/song links; 38,517 setlist accounts retain their existing ordered or unresolved structure. Forty-three repertoire references have no retained title.
 

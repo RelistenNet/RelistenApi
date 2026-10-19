@@ -34,6 +34,14 @@ The source run must be complete. For retained replay chunks, the last source res
 
 The projection includes a `source_homes` table populated from the same run's performance results. It retains each source's captured show UUID, literal date, performance type and label, unresolved details and evidence locator. Partial or unknown dates stay as captured. These values describe the captured catalog assignment; they do not assert that normalization has independently verified that assignment.
 
+Recording cards now offer **Show tracks** and **Play** inline through the shared
+[recording playback contract](../../docs/plans/active/2026-10-17-full-normalization/venue-directory.md#inline-recording-playback).
+The configured file reader supplies exact source membership and original audio
+URLs. Add optional `--music-url` and `--venue-url` arguments to `serve` to connect
+Songs, Compositions, Venues and Tapers in the same navigation. Existing launch
+arguments work without those links. Restart the server to load these capabilities;
+the existing directory database needs no rebuild.
+
 An existing v1 projection can add recording homes without rebuilding credits:
 
 ```sh

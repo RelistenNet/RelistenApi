@@ -125,10 +125,11 @@
     <div class="topbar">
       <div class="shell">
         <a class="brand" href="/">Relisten <span>Venue directory</span></a>
-        <nav aria-label="Related readers">
-          <a id="people-link">Tapers &amp; transferrers</a>
-          <a id="core-link" hidden>All proposals</a>
-          <a id="files-link" hidden>Files &amp; songs</a>
+        <nav aria-label="Music discovery">
+          <a data-navigation="songs" hidden>Songs</a>
+          <a data-navigation="compositions" hidden>Compositions</a>
+          <a data-navigation="venues" href="/">Venues</a>
+          <a data-navigation="tapers" hidden>Tapers</a>
         </nav>
       </div>
     </div>
@@ -142,6 +143,7 @@
       <details class="method">
         <summary>Coverage, method &amp; limits</summary>
         <p>This directory shows retained proposals, including unresolved records. The actual retained method and coverage are shown below. A place group is a browsing aid, not an accepted identity. Rooms, larger sites, relocations and historical names can require different accounts. Unknown dates and geography remain unknown.</p>
+        <p><a id="core-link" hidden>All source evidence</a> <a id="files-link" hidden>Source files</a></p>
         <div id="method-data" class="method-data"></div>
       </details>
       <section class="search-panel" aria-label="Find venues">
@@ -372,6 +374,14 @@
           const show = readerUrl(data.coreUrl || stats.coreUrl, "performances", "show:" + recording.show_uuid);
           if (show) { result.append(link("Show account ↗", show, "button")); }
         }
+        if (!recording.recording_origin && recording.source_uuid && window.recordingTracks) {
+          const controls = node("div");
+          controls.append(window.recordingTracks(recording.source_uuid));
+          const evidence = node("details");
+          evidence.append(node("summary", "Original source evidence"), result);
+          controls.append(evidence);
+          return controls;
+        }
         return result;
       }
       function renderRecordings(data, params) {
@@ -404,7 +414,9 @@
           const row = node("li");
           row.append(node("h3", recording.source_date || recording.show_date || "Date not established"));
           row.append(node("p", recording.artist_name || "Artist not recorded"));
-          row.append(definition({ relationship: recording.relationship, source_date: recording.source_date, show_date: recording.show_date, source_venue_id: recording.source_venue_id, show_venue_id: recording.show_venue_id }));
+          const assignment = node("details");
+          assignment.append(node("summary", "Original recording and show assignment"), definition({ relationship: recording.relationship, source_date: recording.source_date, show_date: recording.show_date, source_venue_id: recording.source_venue_id, show_venue_id: recording.show_venue_id }));
+          row.append(assignment);
           if (recording.source_venue_id !== null && recording.source_venue_id !== undefined && recording.show_venue_id !== null && recording.show_venue_id !== undefined && recording.source_venue_id !== recording.show_venue_id) {
             row.append(node("p", "Source and show point to different catalog venue records. Both are retained.", "unknown-note"));
           }
@@ -620,14 +632,22 @@
         }
       }
       async function loadStats() {
-        const people = new URL(location.href);
-        people.port = "18768";
-        people.pathname = "/";
-        people.search = "";
-        element("people-link").href = people.href;
         try {
           stats = await get("/api/stats");
-          for (const [id, value] of [["people-link", stats.peopleUrl], ["core-link", stats.coreUrl], ["files-link", stats.filesUrl]]) {
+          for (const anchor of document.querySelectorAll("[data-navigation]")) {
+            const target = stats.navigation?.[anchor.dataset.navigation];
+            const url = safeUrl(target);
+            if (url) { anchor.href = url.href; anchor.hidden = false; }
+          }
+          if (stats.capabilities?.recordingPlayback) {
+            await new Promise((resolve) => {
+              const script = document.createElement("script");
+              script.src = "/recording-playback.js";
+              script.onload = script.onerror = resolve;
+              document.head.append(script);
+            });
+          }
+          for (const [id, value] of [["core-link", stats.coreUrl], ["files-link", stats.filesUrl]]) {
             const url = safeUrl(value);
             if (url) { element(id).href = url.href; element(id).hidden = false; }
           }

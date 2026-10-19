@@ -19,6 +19,8 @@ import sqlite3
 import unicodedata
 from urllib.parse import parse_qs, urlencode, urlsplit
 
+from recording_playback import RecordingPlayback, reader_navigation
+
 VERSION = "retained-venue-directory-v2"
 NATIVE_VERSION = "native-venue-overlay-v2"
 FLOOR = 4.5 * 1024**3
@@ -416,10 +418,12 @@ def retained_outcome(run, chunk, line):
 
 
 class VenueDirectory:
-    def __init__(self, database, files_url, core_url, native_database=None, native_url=None):
+    def __init__(self, database, files_url, core_url, native_database=None, native_url=None, music_url=None, people_url=None):
         self.database = Path(database).resolve()
         self.files_url = files_url.rstrip("/") + "/"
         self.core_url = core_url.rstrip("/") + "/"
+        self.playback = RecordingPlayback(files_url)
+        self.navigation = reader_navigation(music_url=music_url, people_url=people_url, own="venues")
         self.native_database = Path(native_database).resolve() if native_database else None
         self.native_url = native_url.rstrip("/") + "/" if native_url else None
         if self.native_database == self.database:
@@ -465,6 +469,8 @@ class VenueDirectory:
         result.update(nativeCoverage=native.get("coverage", {"observations": 0, "parents": 0, "files": 0}),
                       nativeRun=native.get("sourceRun"), nativeUrl=self.native_url,
                       filesUrl=self.files_url, coreUrl=self.core_url)
+        result["navigation"] = self.navigation
+        result["capabilities"] = dict(recordingPlayback=bool(self.playback.files_url))
         result["directoryRecords"] = result.get("venueRecords", 0) + result["nativeCoverage"]["observations"]
         return result
 
@@ -678,7 +684,14 @@ def handler_for(directory):
                                  "text/html; charset=utf-8")
                     return
 
-                if url.path == "/api/stats":
+                if url.path == "/recording-playback.js":
+                    self.respond(200, Path(__file__).with_name("recording-playback.js").read_bytes(), "text/javascript; charset=utf-8")
+                    return
+                if url.path == "/api/recording-files":
+                    result = directory.playback.files(params)
+                elif url.path == "/api/recording-file":
+                    result = directory.playback.file(params)
+                elif url.path == "/api/stats":
                     result = directory.stats()
                 elif url.path == "/api/venues":
                     result = directory.search(params)
@@ -725,6 +738,8 @@ def main():
     serve.add_argument("--core-url", required=True)
     serve.add_argument("--native-database")
     serve.add_argument("--native-url")
+    serve.add_argument("--music-url", help="Optional music discovery reader root")
+    serve.add_argument("--people-url", help="Optional taper/transferrer discovery reader root")
     serve.add_argument("--bind", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=18770)
     args = parser.parse_args()
@@ -735,7 +750,7 @@ def main():
     elif args.command == "native":
         print(encoded(NativeVenueOverlayBuilder(args.run, args.database).build()), flush=True)
     else:
-        directory = VenueDirectory(args.database, args.files_url, args.core_url, args.native_database, args.native_url)
+        directory = VenueDirectory(args.database, args.files_url, args.core_url, args.native_database, args.native_url, args.music_url, args.people_url)
         print(encoded({"listening": f"http://{args.bind}:{args.port}", "stats": directory.stats()}), flush=True)
         ThreadingHTTPServer((args.bind, args.port), handler_for(directory)).serve_forever()
 

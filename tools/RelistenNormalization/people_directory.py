@@ -26,6 +26,7 @@ import threading
 import unicodedata
 from urllib.parse import parse_qs, urlencode, urlsplit
 
+from recording_playback import RecordingPlayback, reader_navigation
 from person_hypotheses import PersonHypotheses
 from shared_people_directory import CombinedPeopleHypotheses, SharedPeopleOverlay
 
@@ -1387,10 +1388,12 @@ class DirectoryReadConnection(sqlite3.Connection):
 class PeopleDirectory:
     """Read-only search and recording pages; each request uses its own connection."""
 
-    def __init__(self, database, files_url, core_url, shared_people_database=None):
+    def __init__(self, database, files_url, core_url, shared_people_database=None, music_url=None, venue_url=None):
         self.database = Path(database).resolve()
         self.files_url = files_url.rstrip("/") + "/"
         self.core_url = core_url.rstrip("/") + "/"
+        self.playback = RecordingPlayback(files_url)
+        self.navigation = reader_navigation(music_url=music_url, venue_url=venue_url, own="tapers")
         self._people_lock = threading.Lock()
         self._people_stamp = None
         self._people_index = None
@@ -1457,6 +1460,8 @@ class PeopleDirectory:
             result.update(counts)
             result["capabilities"] = dict(sourceActors=db.execute("SELECT 1 FROM sqlite_master WHERE name='source_actors'").fetchone() is not None)
             result['capabilities']['sharedPeople'] = True
+            result['capabilities']['recordingPlayback'] = bool(self.playback.files_url)
+            result['navigation'] = self.navigation
             shared = self._shared_people(db)
             result['personHypotheses'] = len(shared.visible)
             result['personHypothesisCredits'] = shared.credit_count()
@@ -1962,7 +1967,14 @@ def handler_for(directory):
                     )
                     self.respond(200, body, "text/html; charset=utf-8")
                     return
-                if url.path == "/api/stats":
+                if url.path == "/recording-playback.js":
+                    self.respond(200, Path(__file__).with_name("recording-playback.js").read_bytes(), "text/javascript; charset=utf-8")
+                    return
+                if url.path == "/api/recording-files":
+                    result = directory.playback.files(parameters)
+                elif url.path == "/api/recording-file":
+                    result = directory.playback.file(parameters)
+                elif url.path == "/api/stats":
                     result = directory.stats()
                 elif url.path == "/api/people":
                     result = directory.search(parameters)
@@ -2062,6 +2074,8 @@ def main():
     serve.add_argument("--shared-people-database", help="Optional sealed direct-support membership overlay")
     serve.add_argument("--files-url", required=True)
     serve.add_argument("--core-url", required=True)
+    serve.add_argument("--music-url", help="Optional music discovery reader root")
+    serve.add_argument("--venue-url", help="Optional venue discovery reader root")
     serve.add_argument("--bind", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=18768)
     args = parser.parse_args()
@@ -2085,7 +2099,7 @@ def main():
     elif args.command == "overlay-native":
         print(encoded(NativePeopleOverlay(args.run, args.database, args.native_url).apply()), flush=True)
     else:
-        directory = PeopleDirectory(args.database, args.files_url, args.core_url, args.shared_people_database)
+        directory = PeopleDirectory(args.database, args.files_url, args.core_url, args.shared_people_database, args.music_url, args.venue_url)
         print(
             encoded(
                 {

@@ -135,10 +135,11 @@
       }
     }
   </style>
-  <nav>
-    <a href="?context=1">Contextual comparisons</a
-    ><a id="files-link" href="#">Files and songs</a
-    ><a id="core-link" href="#">All normalization results</a>
+  <nav aria-label="Music discovery">
+    <a data-navigation="songs" hidden>Songs</a>
+    <a data-navigation="compositions" hidden>Compositions</a>
+    <a data-navigation="venues" hidden>Venues</a>
+    <a data-navigation="tapers" href="/">Tapers</a>
   </nav>
   <p class="badge">RECORDING CREDITS</p>
   <h1 id="directory-title">Tapers and transferrers</h1>
@@ -153,6 +154,7 @@
   <details>
     <summary>Coverage and how the directory works</summary>
     <p id="coverage" class="counts"></p>
+    <p><a href="?context=1">Contextual comparisons</a> · <a id="files-link" href="#">Source files</a> · <a id="core-link" href="#">All source evidence</a></p>
     <ul id="issues"></ul>
   </details>
   <div id="status" aria-live="polite"></div>
@@ -984,8 +986,9 @@
       card.append(
         node("h3", names.join(" · ")),
         node("p", performanceLabel(r.capturedHome)),
-        link("Open playable files →", r.playableFilesUrl),
       );
+      if (window.recordingTracks) card.append(window.recordingTracks(r.sourceUuid));
+      card.append(link(window.recordingTracks ? "Original source evidence ↗" : "Open playable files →", r.playableFilesUrl));
       const assignment = node("details");
       assignment.append(
         node("summary", "Recording source and captured show"),
@@ -1068,7 +1071,19 @@
     };
     window.onpopstate = load;
     get("/api/stats")
-      .then((s) => {
+      .then(async (s) => {
+        for (const anchor of document.querySelectorAll("[data-navigation]")) {
+          const target = s.navigation?.[anchor.dataset.navigation];
+          if (target) { anchor.href = target; anchor.hidden = false; }
+        }
+        if (s.capabilities?.recordingPlayback) {
+          await new Promise((resolve) => {
+            const script = document.createElement("script");
+            script.src = "/recording-playback.js";
+            script.onload = script.onerror = resolve;
+            document.head.append(script);
+          });
+        }
         sourceActorsSupported = s.capabilities?.sourceActors === true;
         $("files-link").href = s.filesUrl;
         $("core-link").href = s.coreUrl;
