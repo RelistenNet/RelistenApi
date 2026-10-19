@@ -34,7 +34,7 @@ These are proposed interpretations, with original evidence and playback homes re
 Venue and taper recordings now offer **Show tracks** and **Play** on the discovery
 page. Shared navigation connects songs, compositions, venues and tapers. A
 390-pixel browser check followed MSG to the Grateful Dead's 1994-10-19 recording
-and played “Brokedown Palace” inline. Original source evidence remains available;
+and played “Sugar Magnolia” inline. Original source evidence remains available;
 an unavailable upstream audio URL produces a visible error rather than a new
 recording assignment.
 
