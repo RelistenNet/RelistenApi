@@ -71,10 +71,10 @@ public class TestKbStore
     {
         var song = Guid.CreateVersion7();
         await (await As(AuthorTypes.Importer, "bootstrap@1")).WriteSongsAsync([
-            new SongRecord(song, artist, "Sugaree"),
+            new SongRecord(song, artist, "Sugaree", Confidence: 0.95f),
         ]);
         await (await As(AuthorTypes.User, "u1")).WriteSongsAsync([
-            new SongRecord(song, artist, "Sugaree (Jam)"),
+            new SongRecord(song, artist, "Sugaree (Jam)", Confidence: 0.95f),
         ]);
 
         var written = await (await As(AuthorTypes.Algorithm, "matcher@1")).WriteSongsAsync([
@@ -90,7 +90,7 @@ public class TestKbStore
     {
         var song = Guid.CreateVersion7();
         await (await As(AuthorTypes.User, "u1")).WriteSongsAsync([
-            new SongRecord(song, artist, "Sugaree"),
+            new SongRecord(song, artist, "Sugaree", Confidence: 0.95f),
         ]);
         await As(AuthorTypes.Algorithm, "matcher@1");
 
@@ -122,8 +122,8 @@ public class TestKbStore
     {
         var (a, b) = (Guid.CreateVersion7(), Guid.CreateVersion7());
         await (await As(AuthorTypes.Importer, "bootstrap@1")).WriteSongsAsync([
-            new SongRecord(a, artist, "St. Stephen"),
-            new SongRecord(b, artist, "Saint Stephen"),
+            new SongRecord(a, artist, "St. Stephen", Confidence: 0.95f),
+            new SongRecord(b, artist, "Saint Stephen", Confidence: 0.95f),
         ]);
 
         (
@@ -143,8 +143,8 @@ public class TestKbStore
         var (scarlet, fire, track) = (Guid.CreateVersion7(), Guid.CreateVersion7(), Guid.NewGuid());
         var bot = await As(AuthorTypes.Algorithm, "title-matcher@1");
         await bot.WriteSongsAsync([
-            new SongRecord(scarlet, artist, "Scarlet Begonias"),
-            new SongRecord(fire, artist, "Fire on the Mountain"),
+            new SongRecord(scarlet, artist, "Scarlet Begonias", Confidence: 0.95f),
+            new SongRecord(fire, artist, "Fire on the Mountain", Confidence: 0.95f),
         ]);
         await bot.WriteTrackSongsAsync([
             new TrackPartRecord(
@@ -196,7 +196,7 @@ public class TestKbStore
     {
         var (song, track) = (Guid.CreateVersion7(), Guid.NewGuid());
         await (await As(AuthorTypes.User, "u1")).WriteSongsAsync([
-            new SongRecord(song, artist, "Dark Star"),
+            new SongRecord(song, artist, "Dark Star", Confidence: 0.95f),
         ]);
         await (await As(AuthorTypes.User, "u1")).WriteTrackSongsAsync([
             new TrackPartRecord(track, 1, song, "Dark Star"),
@@ -216,16 +216,16 @@ public class TestKbStore
     {
         var (song, other) = (Guid.CreateVersion7(), Guid.CreateVersion7());
         await (await As(AuthorTypes.Importer, "bootstrap@1")).WriteSongsAsync([
-            new SongRecord(song, artist, "Sugaree"),
+            new SongRecord(song, artist, "Sugaree", Confidence: 0.95f),
         ]);
         var before = await Snapshot();
 
         var bad = await As(AuthorTypes.Llm, "catalogue-llm@1");
         await bad.WriteSongsAsync([
-            new SongRecord(song, artist, "Sugar Magnolia"),
-            new SongRecord(other, artist, "Deal"),
+            new SongRecord(song, artist, "Sugar Magnolia", Confidence: 0.95f),
+            new SongRecord(other, artist, "Deal", Confidence: 0.95f),
         ]);
-        await bad.WriteAliasesAsync([new AliasRecord(artist, "Sugaree", song)]);
+        await bad.WriteAliasesAsync([new AliasRecord(artist, "Sugaree", song, 0.95f)]);
 
         var moderator = await As(AuthorTypes.Moderator, "m1");
         var (reverted, skipped) = await moderator.RevertRunAsync(bad.Run);
@@ -248,9 +248,11 @@ public class TestKbStore
     {
         var song = Guid.CreateVersion7();
         var bot = await As(AuthorTypes.Llm, "catalogue-llm@1");
-        await bot.WriteSongsAsync([new SongRecord(song, artist, "Sugar Magnolia")]);
+        await bot.WriteSongsAsync([
+            new SongRecord(song, artist, "Sugar Magnolia", Confidence: 0.95f),
+        ]);
         await (await As(AuthorTypes.User, "u1")).WriteSongsAsync([
-            new SongRecord(song, artist, "Sugaree"),
+            new SongRecord(song, artist, "Sugaree", Confidence: 0.95f),
         ]);
 
         var (reverted, skipped) = await (await As(AuthorTypes.Moderator, "m1")).RevertRunAsync(
@@ -276,7 +278,7 @@ public class TestKbStore
     {
         var (song, track, kept) = (Guid.CreateVersion7(), Guid.NewGuid(), Guid.NewGuid());
         var bot = await As(AuthorTypes.Llm, "catalogue-llm@3");
-        await bot.WriteSongsAsync([new SongRecord(song, artist, "Mellow Mood")]);
+        await bot.WriteSongsAsync([new SongRecord(song, artist, "Mellow Mood", Confidence: 0.95f)]);
         await bot.WriteAliasesAsync([new AliasRecord(artist, "Let Me Lie", song, 0.95f)]);
         await bot.WriteTrackSongsAsync([
             new TrackPartRecord(track, 1, song, "Let Me Lie", Confidence: 0.95f),
@@ -313,8 +315,8 @@ public class TestKbStore
         );
         var first = await As(AuthorTypes.Llm, "catalogue-llm@4");
         await first.WriteSongsAsync([
-            new SongRecord(a, artist, "Funky Bitch"),
-            new SongRecord(b, artist, "The Pendulum"),
+            new SongRecord(a, artist, "Funky Bitch", Confidence: 0.95f),
+            new SongRecord(b, artist, "The Pendulum", Confidence: 0.95f),
         ]);
         await first.WriteTrackSongsAsync(
             [

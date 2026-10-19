@@ -243,9 +243,13 @@ public sealed class CatalogueLlm(DbService db, ICatalogueModel model)
         var keys = new Dictionary<string, KeyInfo>();
         foreach (var group in fromTracks)
         {
+            // The most common spelling; ties go to the fuller one ("Me And My Uncle" over
+            // "Me & My Uncle"), then alphabetically, so the request doesn't depend on row order.
             var display = group
                 .GroupBy(x => x.Part.Text)
                 .OrderByDescending(g => g.Count())
+                .ThenByDescending(g => g.Key.Length)
+                .ThenBy(g => g.Key, StringComparer.Ordinal)
                 .First()
                 .Key;
             var examples = group.Select(x => x.Track.Title.Raw).Distinct().Take(3).ToList();
