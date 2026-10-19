@@ -7,7 +7,7 @@ artist and includes supported provider inputs already owned by that recording.
 It requires no repertoire dictionary. It does not accept person, song or composition matches,
 change playback, call Luna or enable public normalization reads.
 
-The shared processor also consumes [retained Archive and Phish accounts](provider-processing.md)
+The shared processor also consumes [retained Archive, Phish and joint Local accounts](provider-processing.md)
 through lookup handoffs. A stored legacy snapshot cannot recover upstream
 information that an older importer discarded. Automatic resolution remains
 required by the [main plan](README.md).
@@ -118,12 +118,89 @@ contract. Extra resources, artist or identifier clocks, source UUIDs, causal
 owners, imported venues or candidate facts cannot be acknowledged by a batch
 that did not consume them.
 
-The processor consumes legacy, Archive and Phish recording inputs. Unsupported
+The processor consumes legacy, Archive, Phish and joint Local recording inputs. Unsupported
 contributors, unmanaged baseline bindings or an unexpected union return an
 explicit attention outcome and leave the owner unpublished and pending for
 reconciliation. They cannot consume those publication watermarks. See the
 [complete-input contract](provider-processing.md) for membership races,
 file-credit scope, per-account conflicts and handoff recovery.
+
+## Continue a committed handoff through normalization
+
+`NormalizationRecordingPipeline.ProcessAsync(request, cancellationToken)` delivers
+one committed lookup handoff through the existing guarded domain services. The
+`NormalizationRecordingPipelineRequest` contains `AttemptUuid` and `HandoffUuid`.
+It carries no proposed winners, accepted facts or policy overrides. A retained
+Archive or Phish handoff keeps its exact provider revision. A Local handoff keeps
+the directory and its actual supporting root together.
+
+The pipeline first enrolls owner `(extractions, recording_pipeline, handoffUuid)`
+with work UUID `AttemptUuid`. Enrollment happens before the existing dispatcher
+acknowledges extraction delivery. A crash after acknowledgement therefore leaves
+the downstream pipeline discoverable. This owner tracks delivery; the recording
+extraction owner and accepted people, alias and venue owners retain their own
+publication receipts and authority.
+
+After extraction publishes, the pipeline performs these phases:
+
+1. Resolve complete people candidates and apply eligible recording-credit
+   decisions through `NormalizationPeopleResolutionProcessor` and
+   `NormalizationPeopleResolutionApplier`.
+2. Resolve role-free source assertions and apply eligible aliases through
+   `SourceActorResolutionService` and `SourceActorAliasApplicationService`.
+   An alias assertion does not create a recording role or identify a performer.
+3. Resolve every exact recording-account venue claim through
+   `NormalizationVenueResolutionProcessor`. Local venue evidence retains its
+   root revision and account pointer; the authenticated directory binding supplies
+   the catalog association. Adjacent root accounts cannot supply that evidence.
+4. Publish an empty pipeline completion only when the domain stages report
+   applied or complete results. Domain writers perform the accepted writes;
+   pipeline completion changes no identity or playback data.
+
+`NormalizationRecordingPipelineResult` includes the request, source UUID,
+extraction result, typed people and alias resolution/application receipts, venue
+receipts and optional completion. Its disposition distinguishes `Completed`,
+`AwaitingPolicy`, `Review`, `Stale` and `Unresolved`. The last four leave the
+pipeline owner pending. Inactive policies still permit proposal resolution and
+durable attention receipts; they do not authorize accepted facts. Existing
+accepted credits, aliases and venue assignments remain governed by the domain
+writers' preservation and replacement rules.
+
+Reuse both request UUIDs after cancellation or a transient exception. Child IDs
+derive from that immutable request and each phase's original source coordinate,
+so replay resumes the existing child checkpoints. Admission uses the same request
+shape on every replay; it does not substitute a later owner generation. A parked
+policy, review or unresolved result needs the stated external change before a
+new attempt can help. Do not busy-loop it. A terminal stale attempt needs a new
+`AttemptUuid`; changed provider evidence first needs a new lookup and handoff.
+
+`NormalizationWorkService.GetPendingRunsAsync("extractions", "recording_pipeline",
+afterUuid, limit, cancellationToken)` returns the pending owner, latest work ticket
+and run state. Recover the request from `Ticket.WorkUuid` and
+`Subject.Subject.Uuid`. `Running` includes both interrupted work and parked domain
+outcomes; it is discovery state, not retry advice. Replay the original request once
+to recover its typed outcome from the durable child checkpoints, then park it if
+the outcome requires an external change. A published or stale run needs a new
+attempt after inspecting the changed facts. Pagination
+follows the shared pending-owner UUID scan, so an empty filtered page with a
+non-null `Next` must continue. Ticket pages exceeding 32 MiB are refused; request
+a smaller page. Discovery does not itself establish freshness or authorize writes.
+
+Migration 59 adds `recording_pipeline` to the allowed extraction-owner kinds. It
+adds no pipeline table and does not convert extraction proposals into accepted
+facts. Apply it after the existing normalization migrations before using this
+service. Rollback stops pipeline delivery and retains the schema, original
+evidence, domain attempts and unfinished owners. Its down migration refuses to
+delete recovery state or restore a constraint that excludes those owners.
+
+Automatic importer enrollment, pending-work draining and Temporal registration
+are **not wired yet**. The existing `normalize-recordings` page command still
+publishes extraction proposals only. No schedule or production acceptance policy
+is activated by this service. An automatic drain must retain or derive parked
+outcomes and react to policy, review and evidence changes; repeatedly selecting
+every `Running` owner would not provide that behavior. Listener outcomes use the
+existing additive v3 people, credit, venue and show routes after domain acceptance and explicit read
+enablement; they do not read the shadow JSON output.
 
 ## Run a bounded recording page
 

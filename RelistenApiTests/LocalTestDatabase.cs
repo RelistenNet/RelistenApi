@@ -199,6 +199,10 @@ internal static class LocalTestDatabase
             Migrations.AddCanonicalAliasReviewVisibility.SchemaSql,
             commandTimeout: 120
         );
+        await catalog.ExecuteAsync(
+            Migrations.AddRecordingNormalizationPipeline.SchemaSql,
+            commandTimeout: 120
+        );
     }
 
     public static async Task DropAsync()
