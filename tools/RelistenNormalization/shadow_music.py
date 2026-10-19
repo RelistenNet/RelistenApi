@@ -63,7 +63,9 @@ class ShadowMusicQueries:
     @staticmethod
     def _selection():
         # CROSS JOIN keeps lookup order selective: requested key -> membership ->
-        # current file. Provider parents are not mistaken for individual files.
+        # current file, then that selected file’s home memberships. Ordinary
+        # aggregation joins otherwise let SQLite scan the full membership index.
+        # Provider parents are not mistaken for individual files.
         return """WITH legacy_matches AS MATERIALIZED (
             SELECT DISTINCT r.id,r.input_id,r.domain_id FROM requested_music_keys wanted
             CROSS JOIN entities found ON found.digest=wanted.digest AND key_text(found.data)=wanted.key
@@ -86,9 +88,9 @@ class ShadowMusicQueries:
                 min(music_uuid_key(key_text(e.data),'source:')) source_key,
                 count(DISTINCT music_uuid_key(key_text(e.data),'source:')) source_keys,
                 min(music_uuid_key(key_text(e.data),'file:')) file_key
-            FROM legacy_matches m JOIN input_entities linked ON linked.input_id=m.input_id
+            FROM legacy_matches m CROSS JOIN input_entities linked ON linked.input_id=m.input_id
                 AND has_domain(linked.domains,m.domain_id)
-            JOIN entities e ON e.id=linked.entity_id GROUP BY m.id
+            CROSS JOIN entities e ON e.id=linked.entity_id GROUP BY m.id
         ), legacy_unique AS (
             SELECT *,row_number() OVER(PARTITION BY coalesce(file_key,'record:'||id) ORDER BY id DESC) choice
             FROM legacy_homes
@@ -99,8 +101,8 @@ class ShadowMusicQueries:
                 min(music_uuid_key(key_text(e.data),'source:')) source_key,
                 count(DISTINCT music_uuid_key(key_text(e.data),'source:')) source_keys,
                 min(music_uuid_key(key_text(e.data),'file:')) file_key
-            FROM native_matches m JOIN native_files f ON f.id=m.id
-            JOIN native_file_entities linked ON linked.file_id=f.id JOIN entities e ON e.id=linked.entity_id GROUP BY f.id
+            FROM native_matches m CROSS JOIN native_files f ON f.id=m.id
+            CROSS JOIN native_file_entities linked ON linked.file_id=f.id CROSS JOIN entities e ON e.id=linked.entity_id GROUP BY f.id
         ), located AS (
             SELECT 'legacy' file_kind,h.id record_id,NULL native_id,NULL file_ordinal,NULL native_key,
                 CASE WHEN h.show_keys=1 THEN h.show_key END show_key,
