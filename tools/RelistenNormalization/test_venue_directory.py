@@ -3,14 +3,18 @@ from contextlib import redirect_stdout
 import gzip
 import io
 import json
+import sqlite3
 from pathlib import Path
 import tempfile
+import threading
 import unittest
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
+from urllib.request import urlopen
+from http.server import ThreadingHTTPServer
 from shadow_reader import ShadowIndex
 
-from venue_directory import VenueDirectory, VenueDirectoryBuilder, NativeVenueOverlayBuilder, file_hash
+from venue_directory import VenueDirectory, VenueDirectoryBuilder, NativeVenueOverlayBuilder, file_hash, handler_for
 
 
 def uid(number):
@@ -98,6 +102,128 @@ class TestVenueDirectory(unittest.TestCase):
         self.assertFalse(detail["venue"]["accepted_identity"])
         self.assertEqual(detail["venue"]["alternative_count"], 97)
         self.assertTrue(detail["venue"]["alternatives_truncated"])
+
+    def normalized_fixture(self):
+        """Supply C# decisions, not a Python implementation of its matching policy."""
+        key = "venue_hypothesis:msg-new-york"
+        names = {1: "MSG", 4: "Madison Square Garden"}
+        for row in self.rows:
+            number = row["evidence"]["nativeVenue"]["id"]
+            if number not in names:
+                continue
+            original = names[number]
+            row["evidence"]["nativeVenue"].update(name=original, location="NY, NY" if number == 1 else "New York, New York")
+            row["proposal"].update(proposedPlaceKey=key, displayName="Madison Square Garden", pastNames=[])
+            row["proposal"]["normalization"] = dict(status="proposed", membershipBasis="shared_csharp_fixture",
+                originalName=original, displayLocation="New York City, New York, US", geographicKey="place:nyc",
+                hypothesis=dict(key=key, anchorVenueUuid=uid(1), preferredName="Madison Square Garden",
+                    scope="place", geographicKey="place:nyc", displayLocation="New York City, New York, US",
+                    basis="corpus_alias_locality_context_hypothesis", memberCount=2, artistCount=2,
+                    memberExamples=[uid(1)], membersTruncated=True, nameCount=2, names=["Madison Square Garden"],
+                    namesTruncated=True, sourceObservationCount=3, sourceExamples=[], sourceExamplesTruncated=True),
+                candidateCount=1, candidateKeys=[key], candidatesTruncated=False,
+                uncertainties=["physical_identity_hypothesis_not_accepted"])
+        self.chunks()
+        return key
+
+    def test_shared_normalization_searches_all_member_aliases_and_localities_without_python_matching(self):
+        key = self.normalized_fixture()
+        directory = self.build()
+
+        for query in ({"q": "MSG"}, {"q": "Madison Square Garden"}, {"locality": "New York City"},
+                      {"q": "NY, NY", "artist": "Other"}, {"q": "MSG", "artist": uid(20)}):
+            with self.subTest(query=query):
+                result = directory.search(query)
+                self.assertEqual(result["total"], 1)
+                row = result["rows"][0]
+                self.assertEqual(row["normalization_key"], key)
+                self.assertEqual(row["name"], "Madison Square Garden")
+                self.assertEqual(row["normalized_location"], "New York City, New York, US")
+                self.assertEqual((row["hypothesis_member_count"], row["hypothesis_artist_count"]), (2, 2))
+                self.assertEqual((row["source_count"], row["show_count"]), (3, 3))
+        self.assertEqual(directory.search({"q": "MSG", "artist": uid(20)})["rows"][0]["uuid"], uid(4))
+        self.assertEqual(directory.search({"q": "Greek"})["total"], 1)
+        self.assertEqual(directory.search({"scope": "room"})["rows"][0]["uuid"], uid(3))
+        self.assertEqual(directory.stats()["normalizedHypotheses"], 1)
+        self.assertEqual(directory.stats()["normalizedMembers"], 2)
+
+    def test_original_uuid_detail_keeps_its_raw_evidence_and_selected_recording_home(self):
+        key = self.normalized_fixture()
+        directory = self.build()
+
+        for number, original, expected in ((1, "MSG", {uid(101), uid(102)}), (4, "Madison Square Garden", {uid(103)})):
+            with self.subTest(number=number):
+                detail = directory.detail(uid(number), {})
+                self.assertEqual(detail["venue"]["original_name"], original)
+                self.assertEqual(detail["venue"]["normalization"]["hypothesis"]["key"], key)
+                self.assertEqual({row["uuid"] for row in detail["relatedRecords"]}, {uid(1), uid(4)})
+                self.assertEqual(detail["recordingsScope"], "selected_legacy_venue_record")
+                self.assertEqual({row["source_uuid"] for row in detail["recordings"]}, expected)
+                self.assertEqual(directory.evidence(uid(number)), self.rows[number - 1])
+                for row in detail["recordings"]:
+                    self.assertEqual(parse_qs(urlsplit(row["filesUrl"]).query)["entityKey"], ["source:" + row["source_uuid"]])
+
+    def test_http_normalized_group_pagination_aliases_and_original_evidence(self):
+        self.normalized_fixture()
+        directory = self.build()
+        server = ThreadingHTTPServer(("127.0.0.1", 0), handler_for(directory))
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        base = "http://127.0.0.1:" + str(server.server_port)
+        def get(path):
+            with urlopen(base + path) as response:
+                return json.load(response)
+
+        result = get("/api/venues?q=MSG&limit=1")
+        self.assertEqual(result["total"], 1)
+        self.assertEqual(get("/api/venues?q=MSG&limit=1&offset=1")["rows"], [])
+        detail = get("/api/venue?id=" + uid(1))
+        self.assertEqual(detail["venue"]["name"], "Madison Square Garden")
+        self.assertEqual(detail["venue"]["original_name"], "MSG")
+        self.assertEqual(get(detail["evidenceUrl"])["evidence"]["nativeVenue"]["location"], "NY, NY")
+        grouped = get("/api/venue?id=" + uid(1) + "&recordings=group")
+        self.assertEqual(grouped["recordingsScope"], "shared_normalization_hypothesis")
+        self.assertEqual({row["source_uuid"] for row in grouped["recordings"]}, {uid(101), uid(102), uid(103)})
+        self.assertEqual(grouped["recordingsTotal"], 3)
+        filtered = get("/api/venue?id=" + uid(1) + "&recordings=group&artist=" + uid(20))
+        self.assertEqual([row["source_uuid"] for row in filtered["recordings"]], [uid(103)])
+        for row in grouped["recordings"]:
+            self.assertEqual(parse_qs(urlsplit(row["filesUrl"]).query)["entityKey"], ["source:" + row["source_uuid"]])
+            self.assertEqual(row["show_uuid"], uid(int(row["source_uuid"].split("-")[-1]) + 1000))
+
+    def test_normalized_catalog_group_does_not_absorb_room_or_native_observations(self):
+        self.normalized_fixture()
+        self.rows[2]["proposal"]["displayName"] = "The Theater at MSG"
+        self.rows[2]["evidence"]["nativeVenue"].update(name="The Theater at MSG", location="NY, NY")
+        self.chunks()
+        self.build()
+        directory = self.native_overlay([self.native_fixture(name="MSG")])
+
+        result = directory.search({"q": "MSG"})
+        self.assertEqual(result["total"], 3)
+        self.assertEqual(sum(bool(row["normalization_key"]) for row in result["rows"]), 1)
+        room = next(row for row in result["rows"] if row["scope"] == "room")
+        self.assertEqual(room["uuid"], uid(3))
+        native = next(row for row in result["rows"] if row["record_kind"] == "native_observation")
+        self.assertEqual(directory.detail(native["uuid"], {})["filesTotal"], 1)
+
+    def test_old_projection_remains_readable_and_new_builder_refuses_to_upgrade_it_in_place(self):
+        directory = self.build()
+        with sqlite3.connect(self.database) as db:
+            db.execute("DROP INDEX venues_normalization")
+            columns = [row[1] for row in db.execute("PRAGMA table_info(venues)")]
+            for column in columns[columns.index("normalization_key"):]:
+                db.execute("ALTER TABLE venues DROP COLUMN " + column)
+            db.execute("UPDATE metadata SET value=? WHERE key='version'", (json.dumps("retained-venue-directory-v1"),))
+        before = file_hash(self.database)
+
+        self.assertEqual(directory.search({"q": "Greek"})["total"], 3)
+        self.assertEqual(directory.detail(uid(1), {})["recordingsTotal"], 2)
+        with self.assertRaisesRegex(ValueError, "new database"):
+            self.build(resume=True)
+        self.assertEqual(file_hash(self.database), before)
 
     def test_history_locality_artist_and_literal_unicode_queries(self):
         directory = self.build()

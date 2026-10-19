@@ -92,6 +92,8 @@
       .record-list p { margin: 5px 0 9px; }
       .record-list .actions { margin: 8px 0 0; }
       .record-list .button { padding: 7px 11px; font-size: .77rem; }
+      .recording-filter { display: flex; flex-wrap: wrap; align-items: end; margin: 15px 0; }
+      .recording-filter label { flex: 1; min-width: 150px; }
       .nested-value { margin: 8px 0; }
       .nested-value > ul { padding-left: 20px; }
       .nested-value li { margin: 7px 0; font-size: .83rem; line-height: 1.55; }
@@ -134,7 +136,7 @@
       <header class="intro">
         <div class="eyebrow">Retained venue proposals · Unaccepted identities</div>
         <h1>Places behind the recordings.</h1>
-        <p>Explore catalog venue proposals and native provider accounts across artists. Matching names do not merge records or accept a physical place.</p>
+        <p>Find recordings across artists using shared venue names and localities. Proposed groups preserve each catalog account, original wording and playback home.</p>
       </header>
       <div id="coverage" class="coverage-bar" aria-live="polite"></div>
       <details class="method">
@@ -220,8 +222,9 @@
       function searchParams(params) {
         return Object.fromEntries(searchKeys.filter((key) => params[key]).map((key) => [key, params[key]]));
       }
-      function detailUrl(uuid, params) {
+      function detailUrl(uuid, params, grouped = false) {
         const destination = { ...searchParams(params), id: uuid };
+        if (grouped) { destination.recordings = "group"; }
         if (params.offset && !params.id) { destination.returnOffset = params.offset; }
         else if (params.returnOffset) { destination.returnOffset = params.returnOffset; }
         return pageUrl(destination);
@@ -231,7 +234,12 @@
       }
       function badges(record) {
         const result = node("div", undefined, "badges");
+        if (record.normalization_key) {
+          result.append(badge(record.scope), badge("Proposed venue group", true));
+          return result;
+        }
         result.append(badge(record.scope), badge(record.outcome, true), badge(record.record_kind || "legacy_catalog"));
+        if (record.normalization_status) { result.append(badge("Normalization " + record.normalization_status, true)); }
         return result;
       }
       function definition(values) {
@@ -307,16 +315,20 @@
       }
       function renderSearch(data, params) {
         const list = node("div", undefined, "result-list");
-        element("status").textContent = count(data.total) + " retained records and observations" + (params.q ? " matching “" + params.q + "”" : "") + ".";
+        element("status").textContent = count(data.total) + " venue groups and original accounts" + (params.q ? " matching “" + params.q + "”" : "") + ".";
         if (!data.countsReady) { element("status").append(document.createTextNode(" Recording counts are pending while this directory is built.")); }
         setOptions("scope", data.rows.map((row) => row.scope), params.scope || "");
         setOptions("outcome", data.rows.map((row) => row.outcome), params.outcome || "");
         for (const row of data.rows) {
           const card = node("article", undefined, "venue-card");
           const description = node("div");
-          description.append(link(row.name || "Unnamed catalog venue", detailUrl(row.uuid, params), "venue-name"));
-          description.append(node("p", (row.location || "Location not established") + " · " + (row.artist_name || "Artist not recorded"), "card-location"));
+          description.append(link(row.name || "Unnamed catalog venue", detailUrl(row.uuid, params, Boolean(row.normalization_key)), "venue-name"));
+          description.append(node("p", (row.normalized_location || row.location || "Location not established") + " · " +
+            (row.normalization_key ? count(row.hypothesis_member_count) + " catalog accounts across " + count(row.hypothesis_artist_count) + " artists" : row.artist_name || "Artist not recorded"), "card-location"));
           description.append(badges(row));
+          if (row.normalization_key && row.original_name) {
+            description.append(node("p", "Original account example: " + row.original_name + (row.location ? " · " + row.location : ""), "history-preview"));
+          }
           if (row.history_names) { description.append(node("p", "Historical names: " + row.history_names.split("\n").join(" · "), "history-preview")); }
           if (row.reason) { description.append(node("p", label(row.reason), "reason")); }
           const totals = node("div", undefined, "card-counts");
@@ -364,8 +376,29 @@
       }
       function renderRecordings(data, params) {
         const content = node("div");
-        content.append(node("p", data.venue.record_kind === "native_observation" ? "These original recording accounts are associated with this cited native venue observation. Catalog UUIDs are optional historical anchors. Root, recording and file origins keep their own scopes." : "These recordings link to the selected catalog venue record. Related place-key members have their own recording lists. Source and show accounts, including uncertain dates, remain separate."));
+        content.append(node("p", data.venue.record_kind === "native_observation"
+          ? "These original recording accounts are associated with this cited native venue observation. Catalog UUIDs are optional historical anchors. Root, recording and file origins keep their own scopes."
+          : data.recordingsScope === "shared_normalization_hypothesis"
+            ? "These recordings span all catalog accounts in this proposed venue group. Each source appears once. The original source and show venue fields, dates and playback homes stay intact."
+            : "These recordings link to the selected catalog venue record. Source and show accounts, including uncertain dates, remain separate."));
         if (!data.recordingsComplete) { content.append(node("p", "Recording associations may be partial while this directory is built. The indexed records below do not establish complete coverage.", "unknown-note")); }
+        if (data.recordingsScope === "shared_normalization_hypothesis") {
+          const filter = node("form", undefined, "recording-filter");
+          const field = node("label", "Artist in this venue group");
+          const input = node("input");
+          input.type = "search";
+          input.placeholder = "Artist name or UUID";
+          input.value = params.artist || "";
+          field.append(input);
+          const apply = node("button", "Filter recordings", "button");
+          filter.append(field, apply);
+          filter.addEventListener("submit", (event) => {
+            event.preventDefault();
+            navigate({ ...params, artist: input.value.trim(), offset: 0 });
+          });
+          if (params.artist) { filter.append(button("All artists", () => navigate({ ...params, artist: "", offset: 0 }))); }
+          content.append(filter);
+        }
         const list = node("ul", undefined, "record-list");
         for (const recording of data.recordings) {
           const row = node("li");
@@ -377,6 +410,12 @@
           }
           if (recording.recording_origin) { row.append(richValue({ recording_origin: recording.recording_origin, literal_date: recording.literal_date, catalog_binding_reason: recording.catalog_binding_reason })); }
           row.append(recordingLinks(recording, data));
+          if (data.recordingsScope === "shared_normalization_hypothesis") {
+            const source = recording.source_venue_member_uuid;
+            const show = recording.show_venue_member_uuid;
+            if (source) { row.append(link(source === show ? "Original source/show venue account ↗" : "Original source venue account ↗", detailUrl(source, params), "subtle")); }
+            if (show && show !== source) { row.append(link("Original show venue account ↗", detailUrl(show, params), "subtle")); }
+          }
           list.append(row);
         }
         content.append(list);
@@ -467,13 +506,20 @@
         const heading = node("div", undefined, "detail-top");
         heading.append(link("← Back to venues", pageUrl({ ...searchParams(params), offset: params.returnOffset || 0 }), "subtle"));
         heading.append(node("h1", venue.name || "Unnamed catalog venue", "detail-title"));
-        heading.append(node("p", (venue.location || "Location not established") + " · " + (venue.artist_name || "Artist not recorded"), "subtle"));
+        heading.append(node("p", (venue.normalized_location || venue.location || "Location not established") + " · " +
+          (venue.normalization_key ? count(venue.hypothesis_member_count) + " catalog accounts across " + count(venue.hypothesis_artist_count) + " artists" : venue.artist_name || "Artist not recorded"), "subtle"));
         const tags = badges(venue);
-        tags.append(badge("Unaccepted proposal", true));
+        if (!venue.normalization_key) { tags.append(badge("Unaccepted proposal", true)); }
         heading.append(tags);
         const actions = node("div", undefined, "actions");
-        const core = readerUrl(data.coreUrl || stats.coreUrl, "venues", venue.place_key);
+        const core = venue.normalization ? data.evidenceUrl : readerUrl(data.coreUrl || stats.coreUrl, "venues", venue.place_key);
         if (core) { actions.append(link("View place proposal ↗", core, "button")); }
+        if (venue.normalization_key) {
+          const grouped = data.recordingsScope === "shared_normalization_hypothesis";
+          actions.append(button(grouped ? "Selected account’s recordings" : "All group recordings", () => navigate({
+            ...params, recordings: grouped ? undefined : "group", offset: 0,
+          })));
+        }
         actions.append(button("Copy link", async () => {
           try { await navigator.clipboard.writeText(location.href); element("status").textContent = "Link copied."; }
           catch { element("status").textContent = "Copy the address from your browser to share this view."; }
@@ -483,6 +529,21 @@
         const grid = node("div", undefined, "detail-grid");
         const primary = node("div");
         const aside = node("aside");
+        const grouped = data.recordingsScope === "shared_normalization_hypothesis";
+        if (grouped) { primary.append(renderRecordings(data, params)); }
+        if (venue.normalization?.hypothesis) {
+          const normalization = venue.normalization;
+          const hypothesis = normalization.hypothesis;
+          const account = node("div");
+          account.append(node("p", "The preferred name and shared membership come from the retained normalization proposal. This is an inferred group; physical identity has not been accepted."),
+            definition({ preferred_name: hypothesis.preferredName, normalized_locality: hypothesis.displayLocation,
+              membership_basis: normalization.membershipBasis, status: normalization.status,
+              observed_source_associations: hypothesis.sourceObservationCount }));
+          primary.append(panel("Shared venue interpretation", account));
+          aside.append(panel("Selected original catalog account", definition({
+            name: venue.original_name, location: venue.location, venue_uuid: venue.uuid, artist: venue.artist_name,
+          })));
+        }
         primary.append(panel("What this record says", definition({ scope: venue.scope, outcome: venue.outcome, reason: venue.reason, grouping_basis: venue.grouping_basis })));
         if (venue.record_kind === "native_observation") { primary.append(panel("Original venue scope", richValue({ origin: venue.original_origin, setlist_links: venue.setlist_links }))); }
         const history = node("div");
@@ -499,12 +560,14 @@
         retained.append(node("summary", "Catalog record & retained fields"), definition(Object.fromEntries(Object.entries(venue).filter(([, value]) => value === null || typeof value !== "object"))));
         aside.append(panel("Record provenance", retained));
         const related = node("div");
-        related.append(node("p", "These existing records carry the same retained place key. This grouping does not establish accepted identity or merge their recording accounts."));
+        related.append(node("p", venue.normalization_key
+          ? "These original catalog accounts share the selected normalization hypothesis. Open an account to inspect its raw wording and recording associations."
+          : "These existing records carry the same retained place key. This grouping does not establish accepted identity or merge their recording accounts."));
         const list = node("ul", undefined, "record-list");
         for (const record of data.relatedRecords) {
           const row = node("li");
-          row.append(link(record.name || "Unnamed catalog venue", detailUrl(record.uuid, params)));
-          row.append(node("p", record.artist_name || "Artist not recorded"), badge(record.outcome, true));
+          row.append(link(record.original_name || record.name || "Unnamed catalog venue", detailUrl(record.uuid, params)));
+          row.append(node("p", [record.location, record.artist_name || "Artist not recorded"].filter(Boolean).join(" · ")), badge(record.outcome, true));
           if (record.uuid === venue.uuid) { row.append(node("span", " · Current record", "subtle")); }
           list.append(row);
         }
@@ -514,7 +577,7 @@
         }
         if (!data.relatedRecords.length) { related.append(node("p", "No other records share this retained place key.")); }
         if (venue.record_kind !== "native_observation") { primary.append(panel("Related catalog records", related)); }
-        primary.append(renderRecordings(data, params));
+        if (!grouped) { primary.append(renderRecordings(data, params)); }
         if (venue.record_kind === "native_observation") { primary.append(renderNativeFiles(data, params)); }
         primary.append(renderEvidence(data.evidenceUrl, signal));
         grid.append(primary, aside);
@@ -541,7 +604,7 @@
             return;
           }
           if (params.id) {
-            const query = new URLSearchParams({ id: params.id, artist: params.artist || "", offset: params.offset || 0, limit: pageSize, fileOffset: params.fileOffset || 0 });
+            const query = new URLSearchParams({ id: params.id, artist: params.artist || "", recordings: params.recordings || "", offset: params.offset || 0, limit: pageSize, fileOffset: params.fileOffset || 0 });
             const data = await get("/api/venue?" + query, request.signal);
             if (!request.signal.aborted) { renderDetail(data, params, request.signal); }
           } else {
@@ -572,7 +635,7 @@
           element("kind").disabled = !stats.nativeRun;
           const coverage = element("coverage");
           coverage.replaceChildren(node("span", "Retained venue proposals"), node("span", "Build: " + valueText(stats.buildState)));
-          for (const [title, value] of [["catalog records", stats.venueRecords], ["place proposals", stats.placeHypotheses], ["artists", stats.artists], ["source records", stats.recordings], ["native observations", stats.nativeCoverage?.observations], ["native input outcomes", stats.nativeCoverage?.parents]]) {
+          for (const [title, value] of [["catalog records", stats.venueRecords], ["place proposals", stats.placeHypotheses], ["shared normalized groups", stats.normalizedHypotheses], ["artists", stats.artists], ["source records", stats.recordings], ["native observations", stats.nativeCoverage?.observations], ["native input outcomes", stats.nativeCoverage?.parents]]) {
             if (value !== undefined) {
               const metric = node("span");
               metric.append(node("strong", count(value)), node("span", " " + title));

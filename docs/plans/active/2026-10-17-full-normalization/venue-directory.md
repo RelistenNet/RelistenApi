@@ -1,30 +1,32 @@
 # Shared venue lookup
 
-Browse the retained full-catalog venue proposals at
-[Venue directory](http://alecs-macbook-pro.tail09dbf.ts.net:18770/).
+Browse shared venue groups at
+[Venue directory](http://alecs-macbook-pro.tail09dbf.ts.net:18776/?q=MSG).
 The lookup searches across artists, with locality, artist, scope and outcome
 filters. A detail page shows the original location account, history citations,
 protected unknowns, rival interpretations, and captured recording/show links.
 
-The current projection contains **216,332 catalog venue records**, **207,304
-existing place hypotheses**, and **4,362 artists**. It connects **292,523 captured
-source UUIDs** to the original recording and show venue fields; 180,070 venue
-records have at least one such association. The SQLite projection occupies
-192,622,592 bytes (184 MiB). Full proposals, alternatives and native JSON remain
-in the original gzip outputs and load on demand.
+The completed projection retains **216,332 catalog venue records** across **4,362
+artists**. The C# normalizer selects **35,271 shared hypotheses** containing
+**100,078 original accounts**. It connects **292,523 captured source UUIDs** to the
+original recording and show venue fields; 180,070 venue records have at least one
+such association. The catalog projection occupies 281,640,960 bytes. A separate
+9,814,016-byte native overlay retains 670 venue observations and 34,139 associated
+files. Full proposals and native evidence remain in the original gzip outputs.
+The [original baseline](http://alecs-macbook-pro.tail09dbf.ts.net:18770/) remains
+available for comparison.
 
 ## Interpret the results
 
-The complete input run uses `shadow-venue-physical-history-v1`. The lookup does
-not rerun today's v2 adapter, add gazetteer evidence, accept physical identities,
-or merge records by name. Each original venue UUID and `proposedPlaceKey` stays
-unchanged. Records sharing an existing place key are linked separately from
-same-name or otherwise competing interpretations. The latter retain their
-original count and 20-example bound; searching the population is independent of
-that bound.
+The current input uses `shadow-venue-physical-history-v3/corpus-hypotheses-v1` with
+its pinned geography evidence. Selected hypotheses supply preferred names,
+normalized locality and shared membership. Every original venue UUID remains
+valid; its evidence retains the raw wording. Physical identity remains unaccepted.
+Competing interpretations retain their original counts and bounded examples;
+searching the population is independent of those example bounds.
 
-A recording list belongs to the **selected legacy venue record**, not every
-member of its place hypothesis. It preserves `source.venue_id` and
+A bare UUID API request lists the **selected legacy venue record**. Normalized
+result links open the explicitly scoped group list described below. Both preserve `source.venue_id` and
 `show_context.venue_id` separately. When those differ, either record can lead to
 the same recording, and the page explains which field supplied the association.
 Recording counts count distinct source UUIDs; show counts count distinct captured
@@ -35,13 +37,73 @@ use the shared reader's `entityKey=source:<uuid>` contract; they preserve file,
 source, show and MP3 ownership. The file reader's current indexing progress can
 affect which files are available through those links.
 
-The largest limitation is the retained physical/history evidence. Most place
-hypotheses still represent separate catalog rows. This particular run contains
+The largest limitation is the retained physical/history evidence. This run contains
 **zero parsed historical-name assertions**; that does not establish that the
 venues had no earlier names. Unknown locality, room parents, relocation,
 coordinate precision and name-validity dates remain visible. See
 [venue resolution](venue-resolution.md) for matching and accepted-publication
 contracts; this lookup grants no additional authority.
+
+## Normalized group view
+
+A new projection can consume the C# adapter's `normalization` proposal. Its selected
+hypothesis supplies the shared key, preferred name, display locality, membership
+basis and support counts. The directory does not match names or choose among rival
+places. When C# selects one hypothesis for “MSG” and “Madison Square Garden,” the
+list shows one **Madison Square Garden** result with the proposed locality and
+member counts. Unresolved accounts, distinct rooms and native observations remain
+separate unless their own producer supplies a supported shared hypothesis.
+
+Search includes the original name and location of every emitted member, the
+preferred name, normalized locality and retained historical names. It is independent
+of C#'s bounded member/name examples. Thus a raw “MSG” or “NY, NY” query can retrieve
+the same group under another artist's filter. Raw wording remains visible on the
+original account and in its immutable evidence.
+
+Normalized result links open the group’s recordings across its supported catalog
+members. The artist filter and pagination apply to that recording list. A source
+UUID appears once even when both its recording and show venue fields match group
+members. Dates, source/show venue IDs, show UUIDs and file links retain their original
+homes. The account links and “Selected account’s recordings” action return to the
+original venue UUID’s narrower recording list. Grouping changes discovery, not
+ownership or accepted physical identity.
+
+## Whole-catalog normalization pass
+
+`shadow-venues` runs only the C# venue adapter over retained catalog inputs. It
+observes the original source/show associations during indexing, then emits venue
+outcomes through the existing checkpointed runner. It does not construct people
+or music adapters, invoke a model, or write production normalization state.
+
+```sh
+RELISTEN_SHADOW_VENUE_GEOGRAPHY='<geography-manifest>#sha256=<digest>' \
+  dotnet tools/RelistenNormalization/bin/LocalAdmissionVerification/RelistenNormalization.dll \
+  shadow-venues <retained-capture-manifest.json> <new-output-directory>
+```
+
+The v3 adapter uses resolved geography, literal names with optional leading
+“the,” and generic initialisms. A selected full-name record anchors each stable
+`venue_hypothesis` key; neither an alias nor a candidate count becomes a canonical
+UUID. The primary `proposedPlaceKey` and `displayName` carry the selected shared
+hypothesis, so directory grouping and display use the actual result. Original
+venue UUIDs, raw names, locality wording and evidence remain available.
+
+A source-observed “MSG” account can select a full “Madison Square Garden” anchor
+in the resolved New York locality. An exact same-artist, same-day source/show
+association provides additional interpretation support. Multiple incompatible
+expansions stay ambiguous. Different known addresses split premises; unknown
+addresses cannot bridge those alternatives without their own compatible context.
+Contradictory source/show accounts stay separate. Rooms and stages without parent
+evidence, explicit historical-name accounts, unresolved geography and missing
+source context do not gain a corpus identity.
+
+Membership, artist and distinct-source counts cover the complete selected group.
+Only eight member, name and source-context examples are repeated in each outcome;
+the directory recovers complete membership from all emitted venue rows. These
+are captured observations, not independent confirmations. Recording-day coverage
+is not an opening date or name-validity interval. `premisesContinuityVerified`
+remains false: unknown historical moves still need evidence. All identities in
+this pass are experimental proposals, with accepted identity and playback unchanged.
 
 ## Native provider venue observations
 
@@ -63,10 +125,28 @@ literal date. Optional catalog source/show links require the retained binding.
 
 These native outcomes are `proposed`, `unresolved` or `not_applicable`, with
 `acceptedIdentity=false`. They can be inspected in the generic shadow reader.
-The directory above still indexes the retained legacy run; native venue outcomes
-are not automatically included in its counts or recording lists.
+The directory includes the completed native wave v3 as a separate overlay. Native
+accounts retain their original revision, root/recording/file scope and exact file
+associations. They are not merged into catalog hypotheses by coincident names or
+UUIDs. Global native-to-catalog venue normalization remains unimplemented; its
+coverage is separate from the shared catalog groups.
 
 ## Useful examples
+
+[MSG](http://alecs-macbook-pro.tail09dbf.ts.net:18776/?q=MSG&locality=New+York+City)
+opens **Madison Square Garden · New York City, New York, US**: 63 original accounts
+across 33 artists, with 923 recordings and 199 captured show UUIDs. The group artist
+filter returns 96 Phish recordings or 712 Grateful Dead recordings. The original
+MSG UUID `bcdf830e-9543-27fd-f851-db137f524991` still opens its own 16-recording
+account and exact “MSG” / “NY, NY” evidence.
+
+A phone check followed the Grateful Dead group to “Brokedown Palace” on source
+`4d9c0ea8-4710-c281-f58e-cd45b85f33ee`; its retained Archive MP3 returned
+`206 audio/mpeg` for a one-byte range request. A sampled Phish blob URL returned
+404. That external availability issue does not change its preserved catalog home;
+the venue layer does not rewrite provider media URLs.
+
+The following counts describe the unchanged baseline on port 18770.
 
 The current literal-field searches return 136 records for
 [Madison Square](http://alecs-macbook-pro.tail09dbf.ts.net:18770/?q=Madison+Square),
@@ -84,7 +164,7 @@ show and MP3 home.
 
 ## Run and recover
 
-The new files are
+The directory implementation is
 [`venue_directory.py`](../../../../tools/RelistenNormalization/venue_directory.py),
 [`venue-directory.html`](../../../../tools/RelistenNormalization/venue-directory.html)
 and [`test_venue_directory.py`](../../../../tools/RelistenNormalization/test_venue_directory.py).
@@ -92,9 +172,9 @@ They do not change the shared reader, people directory, production API or databa
 
 ```sh
 python3 tools/RelistenNormalization/venue_directory.py build \
-  --run local-dev/normalization-data/2026-10-18-shadow-complete-core-ranges-v1 \
+  --run local-dev/normalization-data/2026-10-18-venue-normalization-v3/run \
   --raw local-dev/normalization-data/2026-10-18-shadow-full-raw-v1 \
-  --database local-dev/normalization-data/2026-10-18-venue-directory-v1/directory.sqlite3
+  --database local-dev/normalization-data/2026-10-18-venue-directory-normalized-v2/directory.sqlite3
 ```
 
 Build into a new database. Chunk commits and input identities support `--resume`
@@ -103,25 +183,54 @@ new chunk work; it preserves completed chunks. A partial lookup labels recording
 coverage as incomplete and leaves per-venue counts pending until the final count
 refresh. A changed immutable input is refused. The builder copies only searchable
 fields, compact catalog links and original chunk/line pointers.
+The v2 projection requires a new database; older immutable databases remain readable
+and are not upgraded in place. To obtain normalized groups, supply a completed C#
+run that includes `normalization`. Rebuilding the older v1 input retains
+its original per-account interpretations.
+
+Build the independent native overlay before serving it:
+
+```sh
+python3 tools/RelistenNormalization/venue_directory.py native \
+  --run local-dev/normalization-data/2026-10-18-shadow-native-domain-wave-v3 \
+  --database local-dev/normalization-data/2026-10-18-venue-directory-normalized-v2/native.sqlite3
+```
 
 ```sh
 python3 tools/RelistenNormalization/venue_directory.py serve \
-  --database local-dev/normalization-data/2026-10-18-venue-directory-v1/directory.sqlite3 \
+  --database local-dev/normalization-data/2026-10-18-venue-directory-normalized-v2/directory.sqlite3 \
   --core-url http://alecs-macbook-pro.tail09dbf.ts.net:18765/ \
   --files-url http://alecs-macbook-pro.tail09dbf.ts.net:18767/ \
-  --bind 100.73.204.24 --port 18770
+  --native-database local-dev/normalization-data/2026-10-18-venue-directory-normalized-v2/native.sqlite3 \
+  --native-url http://alecs-macbook-pro.tail09dbf.ts.net:18774/ \
+  --bind 100.73.204.24 --port 18776
 ```
 
 GET contracts are `/api/stats`, `/api/venues`, `/api/venue?id=<native UUID>` and
 `/api/evidence?id=<native UUID>`. List queries support `q`, `locality`, `artist`
 (name substring or UUID), `scope`, `outcome`, `offset` and `limit` (maximum 100).
 Search uses literal, case-folded words from retained names, history and location
-fields. It implements retrieval, not a new normalization policy.
+fields. A selected C# hypothesis produces one list row; its `uuid` is an original
+matching member, including under an artist filter. Old proposals without selected
+normalization and native accounts keep their individual result rows.
 
-Twelve focused Python contract cases pass, including namesakes, Unicode and
-punctuation, history, replacement, source/show provenance, pause/resume and
-partial-count readiness. Generated links were also passed through the actual
+`GET /api/venue?id=<original UUID>` retains the selected-account recording contract.
+Add `recordings=group` to list associations through every catalog member of its
+selected normalization hypothesis. The response identifies this with
+`recordingsScope: shared_normalization_hypothesis`; the default remains
+`selected_legacy_venue_record`. Group rows include their original
+`source_venue_member_uuid` and `show_venue_member_uuid` when the corresponding field
+points to a member. `artist`, `offset` and `limit` apply in both scopes.
+`/api/evidence` always returns the selected UUID's exact retained outcome.
+
+Focused Python contracts cover shared preferred names, complete member-alias search,
+normalized localities, group and selected-account recording scopes, artist filters,
+old database compatibility, distinct rooms/native accounts, Unicode and punctuation,
+history, replacement, source/show provenance, pause/resume and partial-count readiness.
+Generated links were also passed through the actual
 `ShadowIndex` query contract with two distinct source homes. All 292,523 captured
 source/show contexts passed the strict join check. Live HTTP and Chrome search,
-detail, rival/evidence links and playback navigation were checked. Verification
-artifacts remain under the ignored local `2026-10-18-venue-directory-v1` folder.
+detail, rival/evidence links and playback navigation were checked. Baseline
+verification artifacts remain under the ignored local
+`2026-10-18-venue-directory-v1` folder. The normalized projection's build/serve logs
+and `phone-msg.png` are under `2026-10-18-venue-directory-normalized-v2`.

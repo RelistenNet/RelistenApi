@@ -19,9 +19,13 @@ import sqlite3
 import unicodedata
 from urllib.parse import parse_qs, urlencode, urlsplit
 
-VERSION = "retained-venue-directory-v1"
+VERSION = "retained-venue-directory-v2"
 NATIVE_VERSION = "native-venue-overlay-v2"
 FLOOR = 4.5 * 1024**3
+NORMALIZATION_COLUMNS = (
+    "normalization_key", "normalization_status", "normalization_basis", "original_name",
+    "normalized_location", "hypothesis_member_count", "hypothesis_artist_count", "hypothesis_source_count",
+)
 
 
 def encoded(value):
@@ -63,6 +67,10 @@ class VenueDirectoryBuilder:
                     "rawManifestSha256": file_hash(raw_manifest)}
         self._space()
         with closing(sqlite3.connect(self.database)) as db:
+            if db.execute("SELECT 1 FROM sqlite_master WHERE name='metadata'").fetchone():
+                version = db.execute("SELECT value FROM metadata WHERE key='version'").fetchone()
+                if version and json.loads(version[0]) != VERSION:
+                    raise ValueError("Build this projection version into a new database")
             db.execute("PRAGMA journal_mode=DELETE")
             db.execute("PRAGMA temp_store=MEMORY")
             self._schema(db)
@@ -105,9 +113,14 @@ class VenueDirectoryBuilder:
                 scope TEXT,grouping_basis TEXT,outcome TEXT,reason TEXT,artist_uuid TEXT,artist_name TEXT,
                 method TEXT,history_names TEXT,history_count INTEGER,unknown_count INTEGER,
                 alternative_count INTEGER,alternatives_truncated INTEGER,search_text TEXT,
-                chunk TEXT,line INTEGER,source_count INTEGER DEFAULT 0,show_count INTEGER DEFAULT 0);
+                chunk TEXT,line INTEGER,source_count INTEGER DEFAULT 0,show_count INTEGER DEFAULT 0,
+                normalization_key TEXT,normalization_status TEXT,normalization_basis TEXT,original_name TEXT,
+                normalized_location TEXT,hypothesis_member_count INTEGER,hypothesis_artist_count INTEGER,
+                hypothesis_source_count INTEGER);
             CREATE INDEX IF NOT EXISTS venues_place ON venues(place_key);
+            CREATE INDEX IF NOT EXISTS venues_normalization ON venues(normalization_key);
             CREATE INDEX IF NOT EXISTS venues_artist ON venues(artist_uuid);
+            CREATE TABLE IF NOT EXISTS normalization_counts(place_key TEXT PRIMARY KEY,source_count INTEGER,show_count INTEGER);
             CREATE TABLE IF NOT EXISTS artists(id INTEGER PRIMARY KEY,uuid TEXT,name TEXT);
             CREATE TABLE IF NOT EXISTS recordings(source_uuid TEXT PRIMARY KEY,artist_id INTEGER,
                 source_venue_id INTEGER,show_venue_id INTEGER,show_uuid TEXT,
@@ -154,23 +167,34 @@ class VenueDirectoryBuilder:
                     raise ValueError("Unexpected outcome in venue chunk")
                 native = (record.get("evidence") or {}).get("nativeVenue") or {}
                 proposal = record.get("proposal") or {}
+                normalization = proposal.get("normalization") or {}
+                hypothesis = normalization.get("hypothesis") or {}
+                if hypothesis and hypothesis.get("key") != proposal.get("proposedPlaceKey"):
+                    raise ValueError("Selected normalization hypothesis disagrees with the proposed place key")
                 locality = proposal.get("locality") or {}
                 history = [item["name"] for item in proposal.get("pastNames", [])]
-                name = proposal.get("displayName") or native.get("name") or "Unnamed venue"
+                name = hypothesis.get("preferredName") or proposal.get("displayName") or native.get("name") or "Unnamed venue"
                 location = native.get("location") or locality.get("originalWording") or ""
                 search = folded(" ".join(str(value or "") for value in
-                    [name, location, *history, locality.get("city"), locality.get("region"), locality.get("countryCode"), locality.get("address")]))
+                    [name, native.get("name"), normalization.get("originalName"), location,
+                     normalization.get("displayLocation"), *hypothesis.get("names", []), *history,
+                     locality.get("city"), locality.get("region"), locality.get("countryCode"), locality.get("address")]))
                 db.execute("""INSERT OR REPLACE INTO venues(
                     uuid,legacy_id,place_key,name,location,city,region,country,address,scope,grouping_basis,
                     outcome,reason,artist_uuid,artist_name,method,history_names,history_count,unknown_count,
-                    alternative_count,alternatives_truncated,search_text,chunk,line) VALUES(""" + ",".join("?" * 24) + ")", (
+                    alternative_count,alternatives_truncated,search_text,chunk,line,
+                    normalization_key,normalization_status,normalization_basis,original_name,normalized_location,
+                    hypothesis_member_count,hypothesis_artist_count,hypothesis_source_count) VALUES(""" + ",".join("?" * 32) + ")", (
                     record["inputUuid"], native.get("id"), proposal.get("proposedPlaceKey"), name, location,
                     locality.get("city"), locality.get("region"), locality.get("countryCode"), locality.get("address"),
                     proposal.get("scope", "unknown"), proposal.get("groupingBasis", "unavailable"), record["outcome"],
                     record.get("reason"), record["artistUuid"], record["artistName"], record["method"],
                     "\n".join(history), len(history), len(proposal.get("protectedUnknowns", [])),
                     proposal.get("alternativeCount", 0), int(proposal.get("alternativesTruncated", False)), search,
-                    str(path.relative_to(self.run)), line))
+                    str(path.relative_to(self.run)), line,
+                    hypothesis.get("key"), normalization.get("status"), normalization.get("membershipBasis"),
+                    normalization.get("originalName") or native.get("name"), normalization.get("displayLocation"),
+                    hypothesis.get("memberCount"), hypothesis.get("artistCount"), hypothesis.get("sourceObservationCount")))
                 rows += 1
                 if rows % 1000 == 0:
                     self._space()
@@ -205,6 +229,17 @@ class VenueDirectoryBuilder:
         db.execute("""UPDATE venues SET
             source_count=(SELECT count(*) FROM recordings r WHERE r.source_venue_id=venues.legacy_id OR r.show_venue_id=venues.legacy_id),
             show_count=(SELECT count(DISTINCT show_uuid) FROM recordings r WHERE r.source_venue_id=venues.legacy_id OR r.show_venue_id=venues.legacy_id)""")
+        # Aggregate original associations once. Source/show references to two members of one
+        # hypothesis must not double count a recording or change its captured home.
+        db.execute("DELETE FROM normalization_counts")
+        db.execute("""INSERT INTO normalization_counts
+            SELECT place_key,count(DISTINCT source_uuid),count(DISTINCT show_uuid) FROM (
+                SELECT v.normalization_key place_key,r.source_uuid,r.show_uuid FROM recordings r
+                JOIN venues v ON v.legacy_id=r.source_venue_id WHERE v.normalization_key IS NOT NULL
+                UNION ALL
+                SELECT v.normalization_key,r.source_uuid,r.show_uuid FROM recordings r
+                JOIN venues v ON v.legacy_id=r.show_venue_id WHERE v.normalization_key IS NOT NULL)
+            GROUP BY place_key""")
         VenueDirectoryBuilder._record_stats(db)
 
     @staticmethod
@@ -216,7 +251,9 @@ class VenueDirectoryBuilder:
                  "venuesWithRecordings": db.execute("SELECT count(*) FROM venues WHERE source_count>0").fetchone()[0],
                  "historicalNames": db.execute("SELECT coalesce(sum(history_count),0) FROM venues").fetchone()[0],
                  "outcomes": dict(db.execute("SELECT outcome,count(*) FROM venues GROUP BY outcome")),
-                 "scopes": dict(db.execute("SELECT scope,count(*) FROM venues GROUP BY scope"))}
+                 "scopes": dict(db.execute("SELECT scope,count(*) FROM venues GROUP BY scope")),
+                 "normalizedHypotheses": db.execute("SELECT count(DISTINCT normalization_key) FROM venues").fetchone()[0],
+                 "normalizedMembers": db.execute("SELECT count(*) FROM venues WHERE normalization_key IS NOT NULL").fetchone()[0]}
         VenueDirectoryBuilder._metadata(db, coverage=stats)
 
 
@@ -395,10 +432,19 @@ class VenueDirectory:
         db.row_factory = sqlite3.Row
         db.create_function("folded", 1, folded, deterministic=True)
         db.execute("BEGIN")
-        selection = "SELECT v.*, 'legacy_catalog' record_kind, NULL provider FROM venues v"
+        columns = [row[1] for row in db.execute("PRAGMA table_info(venues)")]
+        missing = [name for name in NORMALIZATION_COLUMNS if name not in columns]
+        # Read older immutable projections without altering their schema or inventing groups.
+        catalog = "SELECT v.*" + "".join(",NULL AS " + name for name in missing) + " FROM venues v"
+        db.execute("CREATE TEMP VIEW catalog_venues AS " + catalog)
+        counts = "SELECT * FROM normalization_counts" if db.execute(
+            "SELECT 1 FROM sqlite_master WHERE name='normalization_counts'").fetchone() else (
+            "SELECT NULL place_key,NULL source_count,NULL show_count WHERE 0")
+        db.execute("CREATE TEMP VIEW hypothesis_counts AS " + counts)
+        selection = "SELECT v.*, 'legacy_catalog' record_kind, NULL provider FROM catalog_venues v"
+        columns += missing
         if self.native_database:
             db.execute("ATTACH DATABASE ? AS native", (self.native_database.as_uri() + "?mode=ro",))
-            columns = [row[1] for row in db.execute("PRAGMA table_info(venues)")]
             projection = ",".join("json_extract(summary,'$." + name + "') AS " + name for name in columns)
             selection += " UNION ALL SELECT " + projection + ", 'native_observation', json_extract(summary,'$.provider') FROM native.accounts"
         db.execute("CREATE TEMP VIEW venue_accounts AS " + selection)
@@ -432,10 +478,15 @@ class VenueDirectory:
                 # Literal substring matching keeps user '%'/'_' text literal and
                 # never promotes a retrieval hit into a physical identity claim.
                 if parameter == "locality":
-                    expression = "folded(coalesce(v.location,'')||' '||coalesce(v.city,'')||' '||coalesce(v.region,'')||' '||coalesce(v.country,''))"
+                    expression = "folded(coalesce(v.location,'')||' '||coalesce(v.normalized_location,'')||' '||coalesce(v.city,'')||' '||coalesce(v.region,'')||' '||coalesce(v.country,''))"
                 for word in value.split():
-                    conditions.append(f"instr({expression},?)>0")
-                    values.append(word)
+                    # C# alone selects membership. Every emitted member contributes its raw
+                    # retrieval spellings, even when the retained exemplar list is truncated.
+                    member_expression = expression.replace("v.", "member.")
+                    conditions.append(f"(instr({expression},?)>0 OR (v.normalization_key IS NOT NULL AND EXISTS("
+                        f"SELECT 1 FROM catalog_venues member WHERE member.normalization_key=v.normalization_key "
+                        f"AND instr({member_expression},?)>0)))")
+                    values.extend([word, word])
         artist = parameters.get("artist", "").strip()
         if artist:
             conditions.append("(v.artist_uuid=? OR instr(folded(v.artist_name),?)>0)")
@@ -448,9 +499,20 @@ class VenueDirectory:
             conditions.append("v.record_kind=?")
             values.append(parameters["kind"])
         where = " WHERE " + " AND ".join(conditions) if conditions else ""
+        # A matching member supplies the stable original UUID, including under artist filters.
+        # Unselected/old/native accounts remain individual rows rather than name-based groups.
+        selection = "WITH matched AS (SELECT v.* FROM venue_accounts v" + where + "), selected AS ("
+        selection += "SELECT min(uuid) uuid FROM matched GROUP BY coalesce(normalization_key,uuid)) "
         with closing(self.connect()) as db:
-            total = db.execute("SELECT count(*) FROM venue_accounts v" + where, values).fetchone()[0]
-            rows = [dict(row) for row in db.execute("SELECT v.* FROM venue_accounts v" + where + " ORDER BY source_count DESC,name,uuid LIMIT ? OFFSET ?", values + [limit, offset])]
+            total = db.execute(selection + "SELECT count(*) FROM selected", values).fetchone()[0]
+            rows = [dict(row) for row in db.execute(selection + "SELECT v.*,c.source_count group_source_count,c.show_count group_show_count "
+                "FROM matched v JOIN selected s ON s.uuid=v.uuid LEFT JOIN hypothesis_counts c ON c.place_key=v.normalization_key"
+                " ORDER BY coalesce(c.source_count,v.source_count) DESC,name,v.uuid LIMIT ? OFFSET ?", values + [limit, offset])]
+            for row in rows:
+                if row["normalization_key"]:
+                    row.update(source_count=row["group_source_count"] or 0, show_count=row["group_show_count"] or 0,
+                               counts_scope="shared_normalization_hypothesis")
+                del row["group_source_count"], row["group_show_count"]
             ready = self._complete(db)
         if not ready:
             for row in rows:
@@ -482,17 +544,26 @@ class VenueDirectory:
         with closing(self.connect()) as db:
             if identifier.startswith("native:"):
                 return self._native_detail(db, identifier, parameters) if self.native_database else None
-            selected = db.execute("SELECT * FROM venues WHERE uuid=?", (identifier,)).fetchone()
+            selected = db.execute("SELECT * FROM venue_accounts WHERE uuid=? AND record_kind='legacy_catalog'", (identifier,)).fetchone()
             if selected is None:
                 return None
             venue = dict(selected)
             venue["record_kind"] = "legacy_catalog"
             ready = self._complete(db)
             source_run = json.loads(db.execute("SELECT value FROM metadata WHERE key='sourceRun'").fetchone()[0])
-            related = [dict(row) for row in db.execute("SELECT uuid,name,location,artist_name,artist_uuid,outcome,grouping_basis FROM venues WHERE place_key=? ORDER BY artist_name,uuid LIMIT 100", (venue["place_key"],))]
+            related = [dict(row) for row in db.execute("SELECT uuid,name,original_name,location,normalized_location,artist_name,artist_uuid,outcome,grouping_basis "
+                "FROM venue_accounts WHERE place_key=? AND record_kind='legacy_catalog' ORDER BY artist_name,uuid LIMIT 100", (venue["place_key"],))]
             related_total = db.execute("SELECT count(*) FROM venues WHERE place_key=?", (venue["place_key"],)).fetchone()[0]
-            conditions = ["(r.source_venue_id=? OR r.show_venue_id=?)"]
-            values = [venue["legacy_id"], venue["legacy_id"]]
+            group_recordings = parameters.get("recordings") == "group" and venue["normalization_key"] is not None
+            members = {row["legacy_id"]: row["uuid"] for row in db.execute(
+                "SELECT legacy_id,uuid FROM venues WHERE place_key=?", (venue["place_key"],))}
+            if group_recordings:
+                conditions = ["(r.source_venue_id IN (SELECT legacy_id FROM venues WHERE normalization_key=?) "
+                              "OR r.show_venue_id IN (SELECT legacy_id FROM venues WHERE normalization_key=?))"]
+                values = [venue["normalization_key"], venue["normalization_key"]]
+            else:
+                conditions = ["(r.source_venue_id=? OR r.show_venue_id=?)"]
+                values = [venue["legacy_id"], venue["legacy_id"]]
             artist = parameters.get("artist", "").strip()
             if artist:
                 conditions.append("(a.uuid=? OR instr(folded(a.name),?)>0)")
@@ -511,13 +582,19 @@ class VenueDirectory:
                      protected_unknowns=proposal.get("protectedUnknowns", []), enrichment_tasks=proposal.get("enrichmentTasks", []),
                      coordinates=proposal.get("coordinates"), provider_reference=proposal.get("providerReference"),
                      accepted_identity=proposal.get("acceptedIdentity", False),
-                     alternatives=proposal.get("alternatives", []))
+                     alternatives=proposal.get("alternatives", []), normalization=proposal.get("normalization"))
+        selected_ids = members if group_recordings else {venue["legacy_id"]: identifier}
         for recording in recordings:
-            recording["relationship"] = "recording_and_show_venue" if recording["source_venue_id"] == recording["show_venue_id"] == venue["legacy_id"] else "recording_venue" if recording["source_venue_id"] == venue["legacy_id"] else "show_venue"
+            source_member = selected_ids.get(recording["source_venue_id"])
+            show_member = selected_ids.get(recording["show_venue_id"])
+            recording["relationship"] = "recording_and_show_venue" if source_member and show_member else "recording_venue" if source_member else "show_venue"
+            recording.update(source_venue_member_uuid=source_member, show_venue_member_uuid=show_member)
             recording["filesUrl"] = self.files_url + "?" + urlencode({"domain": "file_contents", "entityKey": "source:" + recording["source_uuid"]})
             recording["coreUrl"] = self.core_url + "?" + urlencode({"domain": "performances", "entityKey": "source:" + recording["source_uuid"]})
         return {"venue": venue, "relatedRecords": related, "relatedTotal": related_total,
-                "recordings": recordings, "recordingsTotal": total, "recordingsScope": "selected_legacy_venue_record", "recordingsComplete": ready, "countsReady": ready, "offset": offset, "limit": limit,
+                "recordings": recordings, "recordingsTotal": total,
+                "recordingsScope": "shared_normalization_hypothesis" if group_recordings else "selected_legacy_venue_record",
+                "recordingsComplete": ready, "countsReady": ready, "offset": offset, "limit": limit,
                 "evidenceUrl": "/api/evidence?" + urlencode({"id": identifier}),
                 "coreUrl": self.core_url, "filesUrl": self.files_url}
 
