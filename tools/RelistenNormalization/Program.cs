@@ -30,7 +30,13 @@ if (
                     or "composition-evaluation"
         )
         || (args.Length is 4 or 5 && args[0] == "musicbrainz-search")
-        || (args.Length == 4 && args[0] == "venue-normalization-refresh")
+        || (
+            args.Length == 4
+            && args[0]
+                is "venue-normalization-refresh"
+                    or "go-set-composition-sources"
+                    or "go-set-composition-supplement"
+        )
         || (
             args.Length is 4 or 5
             && args[0]
@@ -76,6 +82,8 @@ if (
             + "       RelistenNormalization shadow <snapshot.jsonl[.gz]> <extractions.jsonl[.gz]> <output-directory> [--resume]\n"
             + "       RelistenNormalization shadow-inline <snapshot.jsonl[.gz] OR capture-manifest.json> <output-directory> [--resume]\n"
             + "       RelistenNormalization shadow-venues <snapshot.jsonl[.gz] OR capture-manifest.json> <output-directory> [--resume]\n"
+            + "       RelistenNormalization go-set-composition-supplement <request.json> <new-output-directory> <frozen-request-sha256>\n"
+            + "       RelistenNormalization go-set-composition-sources <request.json> <new-output-directory> <frozen-request-sha256>\n"
             + "       RelistenNormalization venue-normalization-refresh <request.json> <new-output-directory> <frozen-request-sha256>\n"
             + "       RelistenNormalization shadow-source-observations <snapshot.jsonl[.gz] OR capture-manifest.json> <output-directory> [--resume]\n"
             + "       RelistenNormalization music-consolidate <input-manifest.json> <output-directory> <frozen-manifest-sha256> [--resume]\n"
@@ -135,6 +143,36 @@ try
                     result.Method,
                 }
             )
+        );
+        return 0;
+    }
+
+    if (args[0] == "go-set-composition-supplement")
+    {
+        var result = await new GoSetCompositionSupplement().RunAsync(
+            args[1],
+            args[2],
+            args[3],
+            cancellation.Token
+        );
+        Console.WriteLine(
+            JsonSerializer.Serialize(result, new JsonSerializerOptions(JsonSerializerDefaults.Web))
+        );
+        return 0;
+    }
+
+    if (args[0] == "go-set-composition-sources")
+    {
+        using var handler = new HttpClientHandler { AllowAutoRedirect = false };
+        using var client = new HttpClient(handler);
+        var result = await new GoSetCompositionSources(client).RunAsync(
+            args[1],
+            args[2],
+            args[3],
+            cancellation.Token
+        );
+        Console.WriteLine(
+            JsonSerializer.Serialize(result, new JsonSerializerOptions(JsonSerializerDefaults.Web))
         );
         return 0;
     }

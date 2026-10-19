@@ -332,6 +332,10 @@ inputs, commands, receipts and unresolved issues in `checkpoint.json` and
 deadline and bounds. Provider calls and completed responses remain recoverable
 in the local database. Acquisition itself accepts no canonical identities.
 
+For first-party cover credits missing from recording notes, use
+[Go-Set evidence acquisition](go-set-composition-sources.md). It retains original
+pages and performer annotations separately from any proposed catalog attachment.
+
 ## Bounded Luna credit extraction
 
 The separate `luna-credits` command uses the real Responses API. It compares retained credit inputs from two cohorts: apparent local taper/transferrer successes, and unresolved or missing local credits. Both receive Luna extraction. Stable resource hashes select up to the requested count in each cohort. This diagnostic selection does not estimate catalog accuracy; independently label and judge the outputs before choosing a fallback policy.

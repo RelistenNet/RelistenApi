@@ -1,0 +1,38 @@
+{
+  "version": "go-set-provider-fixture-captures-v1",
+  "captures": [
+    {
+      "file": "song-such-a-night.html",
+      "requestedUrl": "https://go-set.net/song/such-a-night",
+      "finalUrl": "https://go-set.net/song/such-a-night",
+      "mediaType": "text/html; charset=UTF-8",
+      "statusCode": 200,
+      "bytes": 45998,
+      "sha256": "b4c8b97c12b6bb75f54ff116a3b5be2e28a2a21fa9e0fd9804ff7ce37b1a01e5",
+      "capturedAt": "2026-10-19T03:57:23.545533+00:00",
+      "userAgent": "RelistenNormalization.EvidenceAudit/1.0 (https://relisten.net)"
+    },
+    {
+      "file": "show-2023-04-12.html",
+      "requestedUrl": "https://go-set.net/setlists/?date=2023-04-12",
+      "finalUrl": "https://go-set.net/setlists/?date=2023-04-12",
+      "mediaType": "text/html; charset=UTF-8",
+      "statusCode": 200,
+      "bytes": 28167,
+      "sha256": "6905d99d5c0ad59330149140fde5e6a0e9dcf8dfe881bb0ee17cae19c80723a5",
+      "capturedAt": "2026-10-19T03:57:36.835568+00:00",
+      "userAgent": "RelistenNormalization.EvidenceAudit/1.0 (https://relisten.net)"
+    },
+    {
+      "file": "show-2026-04-30.html",
+      "requestedUrl": "https://go-set.net/setlists/?date=2026-04-30",
+      "finalUrl": "https://go-set.net/setlists/?date=2026-04-30",
+      "mediaType": "text/html; charset=UTF-8",
+      "statusCode": 200,
+      "bytes": 24908,
+      "sha256": "0d1c3aad6eeb71849f8f6a3a6aae7c14c35ed891375367cff88edde89edaecca",
+      "capturedAt": "2026-10-19T03:57:37.091032+00:00",
+      "userAgent": "RelistenNormalization.EvidenceAudit/1.0 (https://relisten.net)"
+    }
+  ]
+}
