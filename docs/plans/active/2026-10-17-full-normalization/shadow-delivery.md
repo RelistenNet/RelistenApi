@@ -4,6 +4,15 @@
 
 Build something Alec can browse and exercise: proposed normalized venues, songs/compositions, credited people, performances, setlists and playable file relationships across the catalog. The first completed run processes every raw record in the retained sample covering 4,379 artists. The full raw capture is now complete: 292,523 recordings and 5,064,097 files across 118 shards. Each shard has its own read-only snapshot; these counts are not one simultaneous historical snapshot. Preserve the exact manifests and reconcile different snapshots. All seven configured importers and Archive intake/collections must appear in the provider ledger, with applicability and available evidence stated.
 
+Judge progress by what a listener can find and play. Searching `MSG / NY, NY`
+should reach Madison Square Garden and its recordings across artists. Opening
+an artist's original venue entry should also reach that shared list when the
+identity is supported. A song page should connect the right composition to
+other artists' performances. A taper or transferrer page should find that
+person's recordings across artists and preserve each recording's actual role.
+Follow these journeys through to playable files. Computed rows and passing
+checks support these outcomes; they do not substitute for them.
+
 A shadow catalog stores proposed results in separate local artifacts or a disposable database. It activates no production acceptance policy. This permits complete computation and inspection while publication performance and release accuracy work continue. Missing source facts remain unresolved; a missing implementation is an engineering gap to finish.
 
 This execution sequence supersedes the evaluation-first milestone. The [standing goal](goal.md) preserves the outcome and [implementation/writing standards](goal.md#implementation-and-writing-standards) across turns. Existing domain contracts remain the basis for accepted production data. Use those contracts in shadow computation where practical without requiring production authority or a complete publication lifecycle to inspect proposed decisions.
@@ -80,7 +89,7 @@ reader contracts.
 
 The [people directory](http://alecs-macbook-pro.tail09dbf.ts.net:18777/) now opens shared person pages with names, aliases, recordings, artist and role filters, original credit quotes and playback links. [Tonedeaf](http://alecs-macbook-pro.tail09dbf.ts.net:18777/?person=shared-person%3Apeople_facts%3A9de2bd6e8a4f53298d78c7f3c56299b9) combines 2,370 recordings across 403 artists; [Timothy Brown](http://alecs-macbook-pro.tail09dbf.ts.net:18777/?person=shared-person%3Apeople_facts%3Ad40f1b4fab9c7492c3cd9146fbd5fcc5) combines 424 across 105. Direct support covers 18,120 recordings across 1,536 artists. The complete source pass supplies the memberships through the shared C# matching policy and exact original credit IDs. Earlier context-only pages remain addressable. Each recording retains its own roles, source and playable files. See the [shared people interface](../../../../tools/RelistenNormalization/shared-people-directory.md) for data ownership and refresh behavior.
 
-The directory contains 1,472 shared person hypotheses from surviving contextual comparisons. Membership requires direct support against an anchor credit. Namesakes, conflicting evidence and overlapping alternatives remain distinguishable; neither matching names nor transitive chains add recordings. Raw name groups remain searchable for observations without a shared assignment. The next person pass will use the existing C# domain policy to include all directly supported occurrences, rather than only the selected contextual cohort.
+The directory contains 1,472 shared person hypotheses from surviving contextual comparisons. Membership requires direct support against an anchor credit. Namesakes, conflicting evidence and overlapping alternatives remain distinguishable; neither matching names nor transitive chains add recordings. Raw name groups remain searchable for observations without a shared assignment.
 
 The refreshed source generation contains 638,887 credits across all 292,523 captured source homes. It preserves 571,458 exact old credits, inserts 67,429 and retires 23,367 changed credits. All 2,296 retained Luna credit mentions remain. Another 408 source actor observations on 406 recordings across 143 artists retain explicit aliases without inventing recording roles.
 
@@ -148,15 +157,16 @@ four concurrent Luna requests, durable cache recovery and explicit spending
 bounds. An optional reader projection can display each model choice, reason and
 alternatives without changing title matches or accepted identities. The full
 selection run started on 2026-10-19 at 01:30 UTC with a $100 job cap and a
-two-hour duration. It reserves space before each batch and stops near the
-5.5 GiB disk reserve; completed responses survive interruption. Whole-run cache
-growth does not need to fit upfront. Its checkpoint is in
+two-hour duration. It stopped at the disk reserve after retaining 1,444 of the
+3,034 results. It reserves space before each batch; completed responses survive
+interruption. Resume the same job and immutable plan when space permits.
+Whole-run cache growth does not need to fit upfront. Its checkpoint is in
 `local-dev/normalization-data/2026-10-18-composition-selection-full-output-v1/`.
 The live reader shows the first 100 completed song results: 82 selected work
 hypotheses and 18 insufficient-evidence results, alongside all original title
 candidates. This is 100 of the 3,034 candidate-bearing song groups, not a measure
 of accuracy. The small completed projection reuses cached responses without
-another paid request while the full run continues. For example,
+another paid request while the full run is paused. For example,
 [Furthur's Crazy Fingers](http://alecs-macbook-pro.tail09dbf.ts.net:18769/#song-group?scope=catalogue&artist=04735701-ff23-9ec4-93fa-f503246310ec&key=repertoire%3Ac48ac0a67fbe6098db592357bb5ab04d)
 shows a proposed Garcia/Hunter match, recording context, the model's reason and
 the separate Alan Hawkshaw alternative. No model choice changes an accepted
@@ -170,6 +180,35 @@ from background knowledge when evaluating these choices. This nonrandom prefix
 does not estimate accuracy or establish a wrong-match label. The pinned cases
 are retained in the execution directory's `semantic-audit.json`; independent
 target credits or listening are the next adjudication step.
+
+Follow-up review established a [Spoon / Memory Lane development regression](../../../research/2026-10-17-full-normalization/scale/development-cases/composition-context-v1.json).
+The supplied pool already contained Eddy Current Suppression Ring's work, but
+the model selected Elliott Smith. Primary provider attribution and artist
+evidence support the band's work at the captured artist-song scope. This is
+one discovered selection error, not five independent observations or verified
+audio identities. The original retained setlists contain unordered membership
+only; the researched cover credit must enter through a separately retained input
+before it can be presented as supplied evidence.
+
+The target-context implementation adds exact recording and setlist witnesses,
+plus observed artist identifiers. A Last Waltz tribute recording
+already retains the program and house-band wording needed to distinguish its
+context; the current artist-and-title request omits it. Reuse the existing core
+reader's complete source-input index, including no-credit recordings. Preserve
+unordered memberships, actual native annotations, missing fields and conflicting
+contexts. Context enriches a new inference request; it does not reassign a
+recording, declare a cover performer to be a composer or rewrite the running
+baseline's cached responses.
+
+The first complete context export retains 100 targets with 1,487 file views,
+1,430 recording contexts and 278 setlist observations. These counts include
+repeated captures; Spoon has five unique unordered setlists observed twice.
+Another 41 recording lookups have no retained context. The first real C# read
+refused empty artist-ID strings. The exporter now preserves those original
+cells while producing a nullable, validated MusicBrainz ID. A corrected export
+stopped at the disk guard before publishing any artifact. Real enriched
+inference and its listener-visible results remain unverified; preserve the
+completed original export and the failed attempt's receipt.
 
 The single largest-request pilot
 established transport and cost behavior, but its unsupported cover assumption

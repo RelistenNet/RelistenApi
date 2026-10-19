@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Relisten.Api.Models.Normalization;
 
 namespace Relisten.Normalization.Batch;
@@ -27,10 +28,41 @@ public sealed record CompositionSelectionPlan(
     int MaximumDurationSeconds,
     long MaximumOutputBytes,
     long MinimumFreeBytes,
-    int Concurrency = 1
+    int Concurrency = 1,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        MusicConsolidationArtifact? TargetContextManifest = null
 );
 
 public sealed record CompositionSelectionOrigin(string Chunk, long Line, string Sha256);
+
+/// <summary>
+/// A source-only export for the original plan's exact targets. The enriched plan
+/// pins this manifest; this manifest pins the base plan, avoiding a circular hash.
+/// </summary>
+public sealed record CompositionSelectionTargetContextManifest(
+    string Version,
+    string State,
+    MusicConsolidationArtifact SelectionPlan,
+    MusicConsolidationArtifact HypothesisManifest,
+    MusicConsolidationArtifact MusicInputManifest,
+    MusicConsolidationArtifact MusicOutputManifest,
+    MusicConsolidationArtifact Catalogue,
+    MusicConsolidationArtifact Normalization,
+    MusicConsolidationArtifact Targets,
+    MusicConsolidationArtifact Texts,
+    IReadOnlyList<CompositionSelectionContextSourceArtifact> SourceManifests,
+    IReadOnlyList<CompositionSelectionContextSourceArtifact> WitnessChunks,
+    long TargetCount,
+    bool Complete
+);
+
+public sealed record CompositionSelectionContextSourceArtifact(
+    string Path,
+    long Bytes,
+    string Sha256,
+    long Rows,
+    string? Run = null
+);
 
 /// <summary>Request measurements are pure; eligibility grants no permission to spend.</summary>
 public sealed record CompositionSelectionPreparedRow(

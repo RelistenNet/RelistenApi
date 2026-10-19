@@ -138,3 +138,69 @@ A model choice never removes another title match, hides audio or changes a
 supported link. The supplied pool may omit the correct composition; even a
 confident explanation can be wrong. Every result keeps `acceptedIdentity` and
 `publicationPermitted` false.
+
+## Include original recording and setlist context
+
+Focused C# contracts pass; actual enriched integration is still unverified. The
+first 100-target preflight refused an unusable artist-ID value before writing
+output. A corrected source export and keyless recheck remain; no enriched paid
+selection has run.
+
+An optional `composition-target-context-v1` export adds original catalogue files,
+recording text, legacy setlist memberships, native files, native recording
+accounts and native setlist passages for each exact scoped song target. A
+setlist passage does not imply audio. Event or program wording can distinguish
+same-title works that artist names alone cannot.
+
+Keep source roles intact: a catalogue artist may be a cover performer, house
+band or collection, and a guest is not automatically the composer. Observed
+artist MusicBrainz IDs retain their own citations. Missing fields stay missing;
+complete coverage means all observed witnesses were included, not complete
+catalogue knowledge or authorship. Mixed contexts remain separate.
+
+The manifest pins the original base plan, hypothesis/music generations,
+catalogue, normalization and source chunks. The exporter verifies original-key
+membership; C# checks the pins, exact target set, provenance and literal text
+hashes. Invalid or incomplete artifacts, missing target/text rows and mismatched
+generations are refused before model admission. Candidate inputs with invalid
+coverage are refused; oversized prompts get an explicit `input_too_large` skip.
+Nothing is silently truncated or replaced by empty context.
+
+Copy the base plan into a separate enriched plan: set version
+`composition-selection-plan-v2`, use a **new capped job UUID**, preserve its
+exact target keys and hypothesis pin, and add `targetContextManifest` with
+absolute `path`, exact `bytes`, `sha256` and `rows: 1`. The context pins the base
+plan rather than this new plan, avoiding a circular hash. Set explicit dollar,
+attempt, duration, concurrency and disk limits for the separate job.
+
+Measure first with the isolated verification runtime:
+
+```sh
+tool=tools/RelistenNormalization/bin/CompositionContextVerification/RelistenNormalization.dll
+env -u OPENAI_API_KEY dotnet "$tool" composition-select \
+  <enriched-plan.json> <new-preflight-output> <enriched-plan-sha256> --preflight
+
+# After reviewing measurements and approving this job's limits:
+dotnet "$tool" composition-select \
+  <enriched-plan.json> <new-execution-output> <enriched-plan-sha256>
+
+# Resume that execution with its original plan and inputs:
+dotnet "$tool" composition-select \
+  <enriched-plan.json> <same-execution-output> <enriched-plan-sha256> --resume
+```
+
+Preflight uses no key, database, cache admission or provider call. It saves
+rendered bytes, cache keys and maximum reservations for every candidate-bearing
+target, including oversized requests. Missing-candidate targets retain a skip
+and no prompt measurement. Execution needs another new output directory.
+
+No-context requests preserve v2 prompt bytes and cache identity. Enriched runs
+report `composition-selection-batch-v2` and use `luna-composition-hypothesis-v3`.
+Requests bind only their target facts and witnesses, so unrelated export targets
+do not invalidate cached requests. Repeated text appears once per target while
+all view citations remain. Rationales distinguish target evidence from background
+familiarity/counts; a candidate ISWC only matches when the target supplies it too.
+
+These remain model hypotheses. The current selection projection accepts v1
+batch/plan outputs; enriched outputs need compatible reader support before
+publication. Neither preflight nor execution updates a reader.

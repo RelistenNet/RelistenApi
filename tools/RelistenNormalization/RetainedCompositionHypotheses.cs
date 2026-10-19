@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Relisten.Api.Models.Normalization;
 
 namespace Relisten.Normalization.Batch;
@@ -54,7 +55,9 @@ public sealed record CompositionHypothesisSong(
     long OriginalMemberships,
     string? ArtistName = null,
     CompositionArtistContext? ArtistContext = null,
-    string? ArtistContextManifestSha256 = null
+    string? ArtistContextManifestSha256 = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        CompositionSelectionTargetContext? TargetContext = null
 );
 
 public sealed record CompositionWorkHypothesis(

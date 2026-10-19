@@ -12,10 +12,12 @@ namespace Relisten.Normalization.Batch;
 /// append-only chunks retain interrupted prefixes and original source coordinates.
 /// Resume never changes attempt policy or retries an uncertain provider attempt.
 /// </summary>
-public sealed class CompositionSelectionBatch
+public sealed partial class CompositionSelectionBatch
 {
     public const string PlanVersion = "composition-selection-plan-v1";
     public const string Version = "composition-selection-batch-v1";
+    public const string TargetContextPlanVersion = "composition-selection-plan-v2";
+    public const string TargetContextVersion = "composition-selection-batch-v2";
     private const int MaximumPlanBytes = 8 * 1024 * 1024;
     private const int MaximumLineCharacters = 64 * 1024 * 1024;
     private const long MaximumChunkCharacters = 8L * 1024 * 1024 * 1024;
@@ -80,8 +82,8 @@ public sealed class CompositionSelectionBatch
 
         var methods = new Dictionary<string, string>
         {
-            [nameof(CompositionSelectionBatch)] = Version,
-            [nameof(LunaCompositionHypothesisSelector)] = LunaCompositionHypothesisSelector.Version,
+            [nameof(CompositionSelectionBatch)] = prepared.BatchVersion,
+            [nameof(LunaCompositionHypothesisSelector)] = prepared.SelectorVersion,
         };
         var completion = Path.Combine(outputDirectory, "manifest.json");
         if (!resume)
@@ -166,7 +168,7 @@ public sealed class CompositionSelectionBatch
                 );
                 foreach (var row in results)
                 {
-                    await run.WriteInputAsync([Result(row)]);
+                    await run.WriteInputAsync([Result(row, prepared.BatchVersion)]);
                 }
                 completed += results.Length;
 
@@ -341,6 +343,7 @@ public sealed class CompositionSelectionBatch
                 "The complete retained hypothesis census differs from its manifest."
             );
         }
+        var contexts = await ReadTargetContextsAsync(plan, manifest, pins, ct);
         var rows = new List<PreparedRow>();
         foreach (var key in plan.Songs)
         {
@@ -354,6 +357,13 @@ public sealed class CompositionSelectionBatch
                     )
                 );
                 continue;
+            }
+            if (contexts is not null)
+            {
+                hypothesis = hypothesis with
+                {
+                    Song = hypothesis.Song with { TargetContext = contexts[Key(key)] },
+                };
             }
             var candidates = hypothesis
                 .Candidates.Select(candidate =>
@@ -386,7 +396,7 @@ public sealed class CompositionSelectionBatch
             .ToDictionary(group => group.Key, group => group.LongCount());
         var eligible = rows.Count(row => row.Row.SkipReason is null);
         var preflight = new CompositionSelectionPreflight(
-            Version,
+            plan.TargetContextManifest is null ? Version : TargetContextVersion,
             expectedSha,
             plan.Mode,
             manifest.Songs,
@@ -411,11 +421,13 @@ public sealed class CompositionSelectionBatch
             ))
             .ToArray();
         var maximumReport = new CompositionSelectionBatchReport(
-            Version,
+            preflight.Version,
             "preflight_completed",
             expectedSha,
             plan.JobUuid,
-            LunaCompositionHypothesisSelector.Version,
+            plan.TargetContextManifest is null
+                ? LunaCompositionHypothesisSelector.Version
+                : LunaCompositionHypothesisSelector.TargetContextVersion,
             preflight,
             long.MaxValue,
             new Dictionary<string, long> { [new string('x', 4096)] = long.MaxValue },
@@ -435,7 +447,8 @@ public sealed class CompositionSelectionBatch
     private static void ValidatePlan(CompositionSelectionPlan plan)
     {
         if (
-            plan.Version != PlanVersion
+            plan.Version
+                != (plan.TargetContextManifest is null ? PlanVersion : TargetContextPlanVersion)
             || plan.JobUuid == Guid.Empty
             || plan.Mode is not ("initial" or "retry_failed")
             || plan.MaximumInputs < 1
@@ -480,7 +493,7 @@ public sealed class CompositionSelectionBatch
             prepared.Plan.Concurrency,
         };
 
-    private static ShadowCatalogResult Result(CompositionSelectionBatchRow row) =>
+    private static ShadowCatalogResult Result(CompositionSelectionBatchRow row, string method) =>
         new(
             "composition_selections",
             Key(row.Input.Key),
@@ -491,7 +504,7 @@ public sealed class CompositionSelectionBatch
             "retained_music_target",
             row.Selection?.Outcome ?? "skipped",
             row.Input.SkipReason ?? row.Selection?.Inference?.Reason,
-            Version,
+            method,
             new[] { row.Input.Key.SongEntityKey },
             row,
             row.Input.HypothesisOrigin
@@ -526,10 +539,10 @@ public sealed class CompositionSelectionBatch
     )
     {
         if (
-            report.Version != Version
+            report.Version != prepared.BatchVersion
             || report.PlanSha256 != prepared.Sha
             || report.JobUuid != prepared.Plan.JobUuid
-            || report.Method != LunaCompositionHypothesisSelector.Version
+            || report.Method != prepared.SelectorVersion
         )
         {
             throw new InvalidDataException(
@@ -668,11 +681,11 @@ public sealed class CompositionSelectionBatch
             );
         }
         return new(
-            Version,
+            prepared.BatchVersion,
             state,
             prepared.Sha,
             prepared.Plan.JobUuid,
-            LunaCompositionHypothesisSelector.Version,
+            prepared.SelectorVersion,
             prepared.Preflight,
             rows.Count,
             rows.Values.GroupBy(row => row.Selection?.Outcome ?? "skipped")
@@ -835,5 +848,13 @@ public sealed class CompositionSelectionBatch
         CompositionSelectionPreflight Preflight,
         Dictionary<string, string> Pins,
         long ControlReserveBytes
-    );
+    )
+    {
+        public string BatchVersion =>
+            Plan.TargetContextManifest is null ? Version : TargetContextVersion;
+        public string SelectorVersion =>
+            Plan.TargetContextManifest is null
+                ? LunaCompositionHypothesisSelector.Version
+                : LunaCompositionHypothesisSelector.TargetContextVersion;
+    }
 }

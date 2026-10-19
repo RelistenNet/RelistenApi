@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Relisten.Api.Models.Normalization;
 
@@ -96,7 +98,90 @@ public sealed record CompositionSelectionWork(
 /// <summary>The complete supplied candidate universe for one cacheable inference request.</summary>
 public sealed record CompositionHypothesisSelectionInput(
     CompositionSelectionSong Song,
-    IReadOnlyList<CompositionSelectionWork> SuppliedCandidates
+    IReadOnlyList<CompositionSelectionWork> SuppliedCandidates,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        CompositionSelectionTargetContext? TargetContext = null
+);
+
+/// <summary>
+/// All retained views of this target. These are source observations, not a claim
+/// that a catalog artist, house band or named guest composed the selected work.
+/// </summary>
+public sealed record CompositionSelectionTargetContext(
+    CompositionSelectionTargetKey Key,
+    CompositionSelectionTargetArtist Artist,
+    CompositionSelectionTargetCoverage Coverage,
+    IReadOnlyList<CompositionSelectionTargetWitness> Witnesses
+);
+
+public sealed record CompositionSelectionTargetKey(
+    string Scope,
+    Guid ArtistUuid,
+    string SongEntityKey
+);
+
+public sealed record CompositionSelectionTargetOrigin(
+    string Run,
+    string Chunk,
+    long Line,
+    string Sha256,
+    string JsonPointer
+);
+
+public sealed record CompositionSelectionTargetArtist(
+    string? Name,
+    Guid? MusicBrainzId,
+    IReadOnlyList<CompositionSelectionTargetObservation> Observations
+);
+
+public sealed record CompositionSelectionTargetObservation(
+    string Field,
+    JsonElement Value,
+    CompositionSelectionTargetOrigin Origin
+);
+
+/// <summary>Complete retrieval may still report unavailable recording text, IDs or other facts.</summary>
+public sealed record CompositionSelectionTargetCoverage(
+    long FileWitnesses,
+    long RecordingContexts,
+    long SetlistWitnesses,
+    long MissingRecordingContexts,
+    bool MissingArtistMbid,
+    long OmittedWitnesses,
+    bool Complete
+);
+
+public sealed record CompositionSelectionTargetText(
+    string Field,
+    string TextSha256,
+    string Value,
+    CompositionSelectionTargetOrigin Origin,
+    string? Format = null
+);
+
+/// <summary>The original typed claim retains its own role and evidence coordinates.</summary>
+public sealed record CompositionSelectionTargetClaim(
+    string Kind,
+    string? Role,
+    string? Value,
+    JsonElement Observation,
+    CompositionSelectionTargetOrigin Origin
+);
+
+public sealed record CompositionSelectionTargetWitness(
+    string Kind,
+    CompositionSelectionTargetOrigin Origin,
+    Guid? FileUuid,
+    Guid? SourceUuid,
+    Guid? ShowUuid,
+    string? NativeFileKey,
+    string? RecordingKey,
+    string? SetlistKey,
+    bool? Ordered,
+    IReadOnlyList<string> MatchingRepertoireKeys,
+    IReadOnlyList<CompositionSelectionTargetText> Texts,
+    IReadOnlyList<CompositionSelectionTargetClaim> Claims,
+    IReadOnlyList<string> MissingFields
 );
 
 /// <summary>

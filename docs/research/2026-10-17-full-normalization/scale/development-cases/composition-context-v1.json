@@ -1,0 +1,241 @@
+{
+  "version": "composition-context-development-case-v1",
+  "caseId": "spoon-memory-lane-target-context",
+  "partition": "development",
+  "labelAuthority": "development_reasoning_with_independent_source_review",
+  "observedAt": "2026-10-19T01:42:14.706493+00:00",
+  "task": "artist_repertoire_to_composition",
+  "summary": "Spoon’s captured Memory Lane repertoire context refers to the Eddy Current Suppression Ring song. The model selected Elliott Smith despite having the ECSR work among its supplied candidates.",
+  "target": {
+    "scope": "catalogue",
+    "artistId": 191,
+    "artistUuid": "0048a309-7914-6680-6710-1fc478ec82dc",
+    "artistName": "Spoon",
+    "songEntityKey": "repertoire:a0d12c390bafd1228e665f95c725011a",
+    "legacySongId": 11709,
+    "legacySongUuid": "853972a7-5a08-f40c-dfe8-089e0c164019",
+    "literalTitle": "Memory Lane",
+    "originalArtistMusicBrainzId": "84eac621-1c5a-49a1-9500-555099c6e184",
+    "hypothesisArtistContextMusicBrainzId": null,
+    "rawSongLine": 11493,
+    "rawArtistLine": 99,
+    "recordingScope": "The hypothesis target is a captured artist dictionary row. Its retained show contexts are unordered setlist memberships, not source/file assignments. No exact playable file was established in this investigation.",
+    "capturedSetlistContexts": [
+      {
+        "setlistUuid": "27b8d3ac-6c6c-60bb-abfc-05d6c6b44de3",
+        "legacySetlistId": 28500,
+        "literalDate": "2015-03-19",
+        "artistId": 191,
+        "upstreamIdentifier": "3cb398b",
+        "venueId": 39602,
+        "venueName": "Auditorium Shores",
+        "venueLocation": "Austin, Texas",
+        "venueUpstreamIdentifier": "setlistfm:73d6caed",
+        "setlistLine": 19535,
+        "membershipPointer": "/unordered_memberships/17/song",
+        "venueLine": 32393,
+        "orderingRetained": false
+      },
+      {
+        "setlistUuid": "d7e6ef39-a9df-1d37-849c-6c40197897aa",
+        "legacySetlistId": 28501,
+        "literalDate": "2015-03-18",
+        "artistId": 191,
+        "upstreamIdentifier": "3bcb2c9c",
+        "venueId": 39603,
+        "venueName": "Cedar Street Courtyard",
+        "venueLocation": "Austin, Texas",
+        "venueUpstreamIdentifier": "setlistfm:bd62d72",
+        "setlistLine": 19536,
+        "membershipPointer": "/unordered_memberships/10/song",
+        "venueLine": 32394,
+        "orderingRetained": false
+      },
+      {
+        "setlistUuid": "cd800081-db8a-bc25-cfbf-be37b6029ce7",
+        "legacySetlistId": 28502,
+        "literalDate": "2015-02-14",
+        "artistId": 191,
+        "upstreamIdentifier": "6bca7666",
+        "venueId": 39551,
+        "venueName": "The Metro Theatre",
+        "venueLocation": "Sydney, New South Wales",
+        "venueUpstreamIdentifier": "setlistfm:3bd63444",
+        "setlistLine": 19537,
+        "membershipPointer": "/unordered_memberships/20/song",
+        "venueLine": 32342,
+        "orderingRetained": false
+      },
+      {
+        "setlistUuid": "eab27423-a9e7-4fd2-ca66-add4757fa512",
+        "legacySetlistId": 28503,
+        "literalDate": "2015-02-12",
+        "artistId": 191,
+        "upstreamIdentifier": "43ca03a3",
+        "venueId": 39604,
+        "venueName": "Chevron Festival Gardens",
+        "venueLocation": "Perth, Western Australia",
+        "venueUpstreamIdentifier": "setlistfm:4bd45332",
+        "setlistLine": 19538,
+        "membershipPointer": "/unordered_memberships/20/song",
+        "venueLine": 32395,
+        "orderingRetained": false
+      },
+      {
+        "setlistUuid": "ffe8cded-b009-ea19-eb69-ffced2645a48",
+        "legacySetlistId": 28504,
+        "literalDate": "2015-02-11",
+        "artistId": 191,
+        "upstreamIdentifier": "33ca0c69",
+        "venueId": 39605,
+        "venueName": "Forum Theatre",
+        "venueLocation": "Melbourne, Victoria",
+        "venueUpstreamIdentifier": "setlistfm:33d61cd5",
+        "setlistLine": 19539,
+        "membershipPointer": "/unordered_memberships/19/song",
+        "venueLine": 32396,
+        "orderingRetained": false
+      }
+    ]
+  },
+  "originalSelection": {
+    "method": "luna-composition-hypothesis-v2",
+    "selectedWorkMbid": "895692cd-5649-4e21-920e-daa510d435de",
+    "targetCoverCreditWasSupplied": false
+  },
+  "expectations": {
+    "originalNarrowInput": {
+      "mustNotSelectWorkMbid": "895692cd-5649-4e21-920e-daa510d435de",
+      "abstentionAllowed": true,
+      "positiveSelectionRequired": false
+    },
+    "withExplicitCoverContext": {
+      "supportedWorkMbid": "c4938822-1dd4-4c7a-9e71-b08ed14b43b2",
+      "coverPerformer": "Eddy Current Suppression Ring",
+      "coverPerformerIsNotAComposerAssertion": true
+    }
+  },
+  "suppliedAlternative": {
+    "pointer": "/works/39",
+    "mbid": "c4938822-1dd4-4c7a-9e71-b08ed14b43b2",
+    "title": "Memory Lane",
+    "iswcs": [
+      "T-060.983.053-6"
+    ],
+    "providerUrl": "https://musicbrainz.org/work/c4938822-1dd4-4c7a-9e71-b08ed14b43b2",
+    "writerRelationships": [
+      {
+        "pointer": "/works/39/relations/0",
+        "role": "writer",
+        "direction": "backward",
+        "artistMbid": "4f1de43c-0ccc-4552-9918-e80eabe9d3b2",
+        "name": "Rob Solid"
+      },
+      {
+        "pointer": "/works/39/relations/1",
+        "role": "writer",
+        "direction": "backward",
+        "artistMbid": "beaadbbc-2139-4aa3-8011-fccb5002ad6f",
+        "name": "Danny Current"
+      },
+      {
+        "pointer": "/works/39/relations/2",
+        "role": "writer",
+        "direction": "backward",
+        "artistMbid": "f26d6e52-b946-4d9e-8e0c-75abbaf23c95",
+        "name": "Mikey Young"
+      },
+      {
+        "pointer": "/works/39/relations/3",
+        "role": "writer",
+        "direction": "backward",
+        "artistMbid": "831e8fc1-79a9-4bbc-bcd4-cb3c9c0bf116",
+        "name": "Brendan Huntley"
+      }
+    ],
+    "performanceRecordingMbid": "4a73abf5-4366-4e4c-b611-bd6b8d55dcb7"
+  },
+  "retainedCoordinates": {
+    "semanticAudit": {
+      "path": "local-dev/normalization-data/2026-10-18-composition-selection-full-execution-v1/semantic-audit.json",
+      "sha256": "8541e7f69cdaf2b6432ed4004aaff98253ade02c59a59066ec87ad85f7aa9b08"
+    },
+    "selection": {
+      "path": "local-dev/normalization-data/2026-10-18-composition-selection-full-output-v1/composition_selections/639279702754971700-32beb839ec5741fcb1851c5ce53ed37f.jsonl.gz",
+      "sha256": "0c7d9c94e0b63c3ae646df2b69612324ff4b1bc52b0e19b478bfb3790a984f91",
+      "line": 1,
+      "jsonPointer": "/proposal/selection",
+      "inputSha256": "5f997496290dacb05efe8ab64fd462c7d3416de7b66c361e1fef861c9d1e2b4d"
+    },
+    "hypothesis": {
+      "path": "local-dev/normalization-data/2026-10-18-composition-hypotheses-output-v1/composition_hypotheses/639279681462888240-07ba109ad10e444d8cc73dccda441740.jsonl.gz",
+      "sha256": "9fd90d1a216f4201d3f5b620c163d2132bd8c47075e7299d6afc72c0fac8cb49",
+      "line": 341,
+      "jsonPointer": "/proposal/song"
+    },
+    "songDictionary": {
+      "path": "local-dev/normalization-data/2026-10-18-shadow-full-raw-v1/0013-songs-1919-34812-attempt-001.jsonl.gz",
+      "sha256": "c67f3fdd59e33e5ff0fa82d30cc6306efa4d27484db36ffde4ca54cefd96f91f"
+    },
+    "setlistShard": {
+      "path": "local-dev/normalization-data/2026-10-18-shadow-full-raw-v1/0014-setlists-5654-80297-attempt-001.jsonl.gz",
+      "sha256": "a560a1af1a39614c9f9642c7c523e1269a5cba66e3007e7bc241073454bf4d62"
+    },
+    "venueShard": {
+      "path": "local-dev/normalization-data/2026-10-18-shadow-full-raw-v1/0007-venues-3383-75945-attempt-001.jsonl.gz",
+      "sha256": "871f4260501c42a880c684f51aa7bb1b068de1facf9b7cb0316150db5170a98a"
+    }
+  },
+  "providerCapture": {
+    "inputFile": {
+      "path": "local-dev/normalization-data/2026-10-18-composition-catalog-acquisition-v4/input-d7a761a4-dfd6-4ff6-8f61-e930df40e197.json",
+      "sha256": "cbfaaa29f426a7b7df8b3b757cc6463c16f9fe02b435e6db435cf943837102f0"
+    },
+    "inputRevisionUuid": "d7a761a4-dfd6-4ff6-8f61-e930df40e197",
+    "payloadSha256": "3bde63589a958a6eaa56c9a3f8955aeb9a85af5337e979ed26d52957691c236f",
+    "resource": {
+      "provider": "musicbrainz.org",
+      "resourceType": "work-search",
+      "providerKey": "7e1c2626301c9f380019852529e99f7fbf832cce1c159f8ca22a84ffffab5059"
+    },
+    "captureVersion": "musicbrainz-work-search-json-v1"
+  },
+  "externalEvidence": [
+    {
+      "url": "https://www.setlist.fm/stats/spoon-73d6ae99.html",
+      "kind": "primary_provider_credit",
+      "observedClaim": "Spoon statistics list Memory Lane as an Eddy Current Suppression Ring cover, with five performances.",
+      "scopeLimit": "Aggregate provider attribution; not an audio comparison and not independently fetched per-show cover credits."
+    },
+    {
+      "url": "https://eddycurrentsuppressionring.bandcamp.com/track/memory-lane",
+      "kind": "artist_catalogue",
+      "observedClaim": "The artist page presents Memory Lane on Primary Colours by Eddy Current Suppression Ring.",
+      "scopeLimit": "Confirms the artist track, not a Spoon performance by itself. The displayed digital release date is not used to date the composition."
+    },
+    {
+      "url": "https://www.abc.net.au/listen/programs/doublej-classic-albums/eddy-current-suppression-ring---primary-colours/10273854",
+      "kind": "broadcaster_artist_interview_feature",
+      "observedClaim": "ABC explicitly identifies Spoon performing an ECSR Memory Lane cover; the same feature identifies Mikey Young, Danny Current, Brendan Huntley and Rob Solid as ECSR members. These names correspond to the retained candidate's writer relationships.",
+      "scopeLimit": "Corroborates repertoire attribution and band membership; does not identify a particular captured audio file."
+    }
+  ],
+  "review": {
+    "conclusion": "The contextual correction is supported at the captured Spoon catalogue-song scope. A second reader checked original hashes, five memberships, candidate identities and primary provider/artist claims.",
+    "originalInputBoundary": "The captured unordered memberships do not themselves contain a cover credit. Follow-up web evidence must remain separate or enter through a newly retained, explicitly sourced input.",
+    "observationUnit": "One discovered artist-song selection error, not five independent errors.",
+    "blindHeldOutAccuracy": false,
+    "audioRenditionIdentityVerified": false,
+    "canonicalAcceptanceAuthorized": false,
+    "developmentArtifact": {
+      "path": "local-dev/normalization-data/2026-10-18-composition-selection-full-execution-v1/adjudication-memory-lane.json",
+      "sha256": "7a70ccd444a111ba9bafa685e771381ad3dbf7f9d0a9ceb17c59ef738805c806"
+    }
+  },
+  "limits": [
+    "No audio was downloaded, auditioned or compared; no whole recording was requested. This adjudication cannot label an individual file or audio boundary.",
+    "Per-show provider cover credits were not independently fetched because primary pages were inaccessible/rate limited. The correction is at artist-repertoire context, supported by aggregate provider attribution plus external corroboration.",
+    "The association of the Forum review with the captured February 11 show follows venue/context; the article itself prints publication date only. The other four captured dates are not individually reviewed here.",
+    "The adjudicator was shown the model choice and rationale before research. This case is not a blinded or previously frozen accuracy sample."
+  ]
+}

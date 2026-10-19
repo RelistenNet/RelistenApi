@@ -59,7 +59,7 @@ public sealed class CachedCompositionHypothesisSelector : ICompositionHypothesis
                 "The song and performer must retain the same artist scope."
             );
         }
-        return new(ToSong(song), candidates.Select(ToWork).ToArray());
+        return new(ToSong(song), candidates.Select(ToWork).ToArray(), song.TargetContext);
     }
 
     private static CompositionSelectionSong ToSong(CompositionHypothesisSong song) =>

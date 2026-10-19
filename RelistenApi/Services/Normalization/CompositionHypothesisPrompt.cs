@@ -16,6 +16,7 @@ namespace Relisten.Normalization;
 internal sealed class CompositionHypothesisPrompt
 {
     internal const string Version = "composition-semantic-facts-v1";
+    internal const string TargetContextVersion = "composition-semantic-target-context-v1";
     private const int MaximumCitationExamples = 2;
     private readonly JsonSerializerOptions json;
     private readonly List<Citation> citations = [];
@@ -30,15 +31,78 @@ internal sealed class CompositionHypothesisPrompt
     {
         var projection = new CompositionHypothesisPrompt(json);
         var works = input.SuppliedCandidates.Select(projection.Work).ToArray();
+        var originalInputSha256 = Convert.ToHexStringLower(
+            SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(input, json))
+        );
+        if (input.TargetContext is not null)
+        {
+            return new
+            {
+                representation = TargetContextVersion,
+                originalInputSha256,
+                song = input.Song,
+                targetContext = TargetContext(input.TargetContext),
+                suppliedCandidates = works,
+                citationPool = projection.citations,
+            };
+        }
+        // Keep the original v2 request representation byte-for-byte when no
+        // context artifact was supplied; old cache entries retain their identity.
         return new
         {
             representation = Version,
-            originalInputSha256 = Convert.ToHexStringLower(
-                SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(input, json))
-            ),
+            originalInputSha256,
             song = input.Song,
             suppliedCandidates = works,
             citationPool = projection.citations,
+        };
+    }
+
+    private static object TargetContext(CompositionSelectionTargetContext context)
+    {
+        // The same original description can support many file views. Retain each
+        // view's ownership/citation, but send its identical literal only once for
+        // this target. No text from another target's export pool enters the prompt.
+        var texts = new Dictionary<string, string>(StringComparer.Ordinal);
+        var witnesses = context
+            .Witnesses.Select(witness => new
+            {
+                witness.Kind,
+                witness.Origin,
+                witness.FileUuid,
+                witness.SourceUuid,
+                witness.ShowUuid,
+                witness.NativeFileKey,
+                witness.RecordingKey,
+                witness.SetlistKey,
+                witness.Ordered,
+                witness.MatchingRepertoireKeys,
+                texts = witness
+                    .Texts.Select(text =>
+                    {
+                        texts[text.TextSha256] = text.Value;
+                        return new
+                        {
+                            text.Field,
+                            text.TextSha256,
+                            text.Origin,
+                            text.Format,
+                        };
+                    })
+                    .ToArray(),
+                witness.Claims,
+                witness.MissingFields,
+            })
+            .ToArray();
+        return new
+        {
+            context.Key,
+            context.Artist,
+            context.Coverage,
+            witnesses,
+            textPool = texts
+                .Select(text => new { sha256 = text.Key, value = text.Value })
+                .ToArray(),
         };
     }
 
