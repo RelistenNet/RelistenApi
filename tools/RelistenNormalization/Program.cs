@@ -32,7 +32,10 @@ if (
         || (args.Length is 4 or 5 && args[0] == "musicbrainz-search")
         || (
             args.Length is 4 or 5
-            && args[0] == "music-consolidate"
+            && args[0]
+                is "music-consolidate"
+                    or "composition-hypotheses"
+                    or "composition-work-searches"
             && (args.Length == 4 || args[4] == "--resume")
         )
         || (args.Length == 6 && args[0] == "luna-credit-fields")
@@ -69,6 +72,8 @@ if (
             + "       RelistenNormalization shadow-venues <snapshot.jsonl[.gz] OR capture-manifest.json> <output-directory> [--resume]\n"
             + "       RelistenNormalization shadow-source-observations <snapshot.jsonl[.gz] OR capture-manifest.json> <output-directory> [--resume]\n"
             + "       RelistenNormalization music-consolidate <input-manifest.json> <output-directory> <frozen-manifest-sha256> [--resume]\n"
+            + "       RelistenNormalization composition-hypotheses <request.json> <output-directory> <frozen-request-sha256> [--resume]\n"
+            + "       RelistenNormalization composition-work-searches <request.json> <output-directory> <frozen-request-sha256> [--resume]\n"
             + "       RelistenNormalization people-shared <completed-source-observations-run> <new-output-directory>\n"
             + "       RelistenNormalization shadow-rows <catalog-rows.jsonl[.gz]> <output-directory> [--resume]\n"
             + "       RelistenNormalization shadow-native <catalog-rows.jsonl[.gz]> <output-directory> [--resume]\n"
@@ -104,6 +109,29 @@ Console.CancelKeyPress += (_, signal) =>
 
 try
 {
+    if (args[0] == "composition-hypotheses")
+    {
+        var result = await new CompositionHypothesisBatch().RunAsync(
+            args[1],
+            args[2],
+            args[3],
+            args.Length == 5,
+            cancellation.Token
+        );
+        Console.WriteLine(
+            JsonSerializer.Serialize(
+                new
+                {
+                    result.Complete,
+                    result.Songs,
+                    result.Works,
+                    result.Outcomes,
+                }
+            )
+        );
+        return result.Complete ? 0 : 1;
+    }
+
     if (args[0] == "music-consolidate")
     {
         await new MusicRepertoireConsolidationBatch().RunAsync(
@@ -426,11 +454,17 @@ try
         );
         return actorReport.State == "completed" ? 0 : 1;
     }
-    if (args[0] is "musicbrainz-acquire" or "musicbrainz-search" or "shadow-compositions-acquire")
+    if (
+        args[0]
+        is "musicbrainz-acquire"
+            or "musicbrainz-search"
+            or "shadow-compositions-acquire"
+            or "composition-work-searches"
+    )
     {
         var commandUuid = Guid.Empty;
         if (
-            args[0] != "shadow-compositions-acquire"
+            args[0] is "musicbrainz-acquire" or "musicbrainz-search"
             && (!Guid.TryParse(args[3], out commandUuid) || commandUuid == Guid.Empty)
         )
         {
@@ -457,6 +491,27 @@ try
                 UserAgent = "RelistenNormalization.Operator/1.0 (https://relisten.net)",
             }
         );
+        if (args[0] == "composition-work-searches")
+        {
+            var result = await new CompositionWorkSearchBatch(
+                new CompositionWorkSearchClient(service, store, evidence)
+            ).RunAsync(args[1], args[2], args[3], args.Length == 5, cancellation.Token);
+            Console.WriteLine(
+                JsonSerializer.Serialize(
+                    new
+                    {
+                        result.State,
+                        result.ReservedServiceCalls,
+                        tasks = result
+                            .Tasks.GroupBy(task => task.State)
+                            .ToDictionary(group => group.Key, group => group.Count()),
+                        result.PublicationPermitted,
+                    }
+                )
+            );
+            return result.State == "completed" ? 0 : 1;
+        }
+
         if (args[0] == "shadow-compositions-acquire")
         {
             var compositionAcquisition = await new ShadowCompositionAcquisitionBatch(

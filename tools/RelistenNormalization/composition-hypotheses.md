@@ -1,0 +1,76 @@
+# Retained composition hypotheses
+
+The composition hypothesis pass retrieves external works for every unique proposed artist-song target in a completed [music consolidation](music-consolidation.md). It uses retained MusicBrainz responses and makes no provider or model requests. The output keeps candidate works separate from existing supported composition links.
+
+A song title or an explicit MusicBrainz work alias can retrieve a candidate. Retrieval uses the shared title normalization and preserves every qualified work ID that matches. A sole retained candidate does not establish uniqueness: the retained pool can miss a same-title work. No candidate produces a catalog composition assignment, canonical writer identity or complete-authorship assertion.
+
+## Inputs and output
+
+`CompositionHypothesisBatch.RunAsync(requestPath, outputDirectory, requestSha256, resume, cancellationToken)` consumes an externally pinned `composition-hypothesis-input-v1` request. The request pins the original music input manifest, completed music output manifest and each retained provider input file by SHA-256, bytes and row count. Provider input formats are explicit:
+
+- `provider_wrappers_jsonl`: the existing ordinary JSONL/gzip `provider_input` envelopes.
+- `input_revision_json`: one original `NormalizationInputRevision`, including its original UUID, resource, payload and payload hash. This permits reuse of newly retained acquisition responses without a synthetic capture or copied wrapper stream.
+
+An optional artist-context manifest supplies the actual display name from the same frozen catalogue cell. Its own hash, music-manifest links and catalogue hash are checked. A display name does not assert authorship or an external artist ID. Missing context remains null.
+
+The pass authenticates the complete original correspondence population before collecting proposed targets. Multiple original titles can contribute to one scoped artist-song target. Compound and variant relations remain visible. A review-only target does not become a candidate-bearing song through this pass.
+
+The completed output has three result domains:
+
+- `retained_work_candidates`: one record per qualified MusicBrainz work ID, including observed titles, explicit aliases, ISWCs, external writer roles, lookup/search assertions and associated recording assertions.
+- `retained_work_search_pages`: all supplied work-search responses, including zero hits, unknown counts and decoded malformed/error responses. Hit order and reported scores remain source observations.
+- `composition_hypotheses`: one record per unique proposed scoped artist-song target. It lists candidate IDs with exact matching title citations and shared matcher diagnostics, or explicitly reports `missing_retained_candidates`.
+
+External artist references retain their provider identity and observed Person/Group type. Recording performer credits do not become composer assertions. The shared matcher receives no canonical writer IDs from these external references; incomplete authorship remains unknown.
+
+## Completion and recovery
+
+A new output directory is required unless `resume` is explicit. Checkpoints bind the exact request and decoder/index/projector versions. Resume rebuilds the same compact candidate and song context, verifies retained acknowledged rows, and continues its original population. It does not refresh source inputs. The pinned completed music manifests retain the original witness provenance; this pass does not require an old upstream catalogue to remain the current catalogue. Exact repeated rows from an interrupted chunk flush are harmless; missing or conflicting acknowledged output prevents completion.
+
+The top `manifest.json` is written last. Cancellation, a changed input, an unsupported response or a capacity refusal leaves retained chunks and an interrupted checkpoint without a completion manifest. Consumers must require the complete top manifest and its pinned artifacts before replacing a browse projection.
+
+Retained inputs have per-response and aggregate byte bounds. The batch also bounds decoded lines, original correspondence counts, output size and free disk space. Crossing a bound rejects completion; it never returns a truncated candidate pool or an empty substitute for unavailable evidence.
+
+## Later inference and browsing
+
+`ICompositionHypothesisSelector` receives the supplied work facts. Its result can select a supplied ID, retain supplied alternatives or abstain. An invented ID is rejected. Inference metadata, including cache and usage receipts, is separate from raw provider assertions. No selector is invoked by the pure hypothesis pass.
+
+The browse consumer can join a hypothesis work to its scoped song groups and use the existing song-to-performance/file routes. Pages must identify these relationships as hypotheses, preserve alternative work IDs and keep supported composition links distinct. Neither search rank nor absence of rivals grants acceptance authority.
+
+A later bounded acquisition can add missing retained work-search responses through the existing shared provider service. Evaluation and authenticated publication remain separate requirements for accepted catalog-to-work correspondence.
+
+## Retrieve missing works
+
+The `composition-work-searches` command retrieves MusicBrainz works for shared
+song titles that lack retained candidates. Its queue contains literal dictionary
+titles and their original song witnesses. The command authenticates the complete
+dictionary and queue before consulting the provider service. It searches works
+directly; performer names do not restrict the writer or composition.
+
+```sh
+dotnet RelistenNormalization.dll composition-work-searches \
+  <request.json> <new-output-directory> <request-sha256>
+```
+
+Use the dedicated local normalization database through
+`RELISTEN_NORMALIZATION_DATABASE_URL`. The command reuses the existing provider
+cache, rate control and evidence capture. It does not import recordings, change
+catalog assignments or start schedules.
+
+The request binds a fresh plan UUID, dictionary manifest, queue artifact and
+execution limits. Limits cover service calls, newly received response bytes,
+output bytes, free space and duration. A zero-call request authenticates the real
+queue without making provider requests. Each search is the initial result page;
+the command does not automatically fetch later pages, recording searches or work
+details. Retained searches can therefore remain incomplete.
+
+The checkpoint records completed, pending, failed and unexecuted tasks. A bound
+or partial result exits with status 1 and retains its state; inspect the manifest
+instead of treating every nonzero exit as a crash. Add `--resume` to continue the
+same request, output directory and original deadline. A new plan is required for
+a fresh deadline. Recorded inputs keep their original capture IDs and hashes.
+
+Feed newly retained input revisions into a new hypothesis request alongside the
+earlier evidence. The pure pass then proposes candidate works for all supplied
+artist-song targets. Acquisition expands the available evidence; it does not
+accept title matches or select a work for a song.

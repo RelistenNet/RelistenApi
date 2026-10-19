@@ -315,63 +315,16 @@ public sealed class MusicRepertoireConsolidationBatch
     )
     {
         await foreach (
-            var line in TextRowsAsync(path, MaximumInputLineCharacters, MaximumMetadataBytes, ct)
+            var line in ShadowJsonLines.ReadTextAsync(
+                path,
+                MaximumInputLineCharacters,
+                MaximumMetadataBytes,
+                ct
+            )
         )
         {
             yield return JsonSerializer.Deserialize<T>(line, ShadowCatalogRun.Json)
                 ?? throw new InvalidDataException("A music metadata row is null.");
-        }
-    }
-
-    private static async IAsyncEnumerable<string> TextRowsAsync(
-        string path,
-        int maximumLine,
-        long maximumCharacters,
-        [EnumeratorCancellation] CancellationToken ct
-    )
-    {
-        await using var file = File.OpenRead(path);
-        await using Stream input = path.EndsWith(".gz", StringComparison.OrdinalIgnoreCase)
-            ? new GZipStream(file, CompressionMode.Decompress, leaveOpen: true)
-            : file;
-        using var reader = new StreamReader(input, new UTF8Encoding(false, true));
-        var buffer = new char[65536];
-        var line = new StringBuilder();
-        long characters = 0;
-        int read;
-        while ((read = await reader.ReadAsync(buffer.AsMemory(), ct)) > 0)
-        {
-            characters += read;
-            if (characters > maximumCharacters)
-            {
-                throw new InvalidDataException(
-                    "The decoded music metadata stream exceeds 2 GiB characters."
-                );
-            }
-            var start = 0;
-            while (start < read)
-            {
-                var newline = Array.IndexOf(buffer, '\n', start, read - start);
-                var end = newline < 0 ? read : newline;
-                if (line.Length + end - start > maximumLine)
-                {
-                    throw new InvalidDataException(
-                        "A music metadata row exceeds 1 MiB characters."
-                    );
-                }
-                line.Append(buffer, start, end - start);
-                if (newline < 0)
-                {
-                    break;
-                }
-                yield return line.ToString();
-                line.Clear();
-                start = newline + 1;
-            }
-        }
-        if (line.Length != 0)
-        {
-            throw new InvalidDataException("Music metadata must retain a final newline.");
         }
     }
 
@@ -422,7 +375,12 @@ public sealed class MusicRepertoireConsolidationBatch
             // silently dropping unknown/tampered properties. Exact repeated chunks
             // from a crash are valid; missing acknowledged keys are never skipped.
             await foreach (
-                var line in TextRowsAsync(path, 32 * 1024 * 1024, MaximumOutputBytes * 16, ct)
+                var line in ShadowJsonLines.ReadTextAsync(
+                    path,
+                    32 * 1024 * 1024,
+                    MaximumOutputBytes * 16,
+                    ct
+                )
             )
             {
                 using var document = JsonDocument.Parse(line);
