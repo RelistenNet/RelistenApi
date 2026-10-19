@@ -146,9 +146,12 @@ The composition selector can process all 3,034 candidate-bearing targets with
 four concurrent Luna requests, durable cache recovery and explicit spending
 bounds. An optional reader projection can display each model choice, reason and
 alternatives without changing title matches or accepted identities. The full
-selection plan is prepared with a $100 job cap and a two-hour duration; it has
-not run because host capacity remains close to the 5.5 GiB reserve. The current
-live reader still shows title-based candidates. The single largest-request pilot
+selection run started on 2026-10-19 at 01:30 UTC with a $100 job cap and a
+two-hour duration. It reserves space before each batch and stops near the
+5.5 GiB disk reserve; completed responses survive interruption. Whole-run cache
+growth does not need to fit upfront. Its checkpoint is in
+`local-dev/normalization-data/2026-10-18-composition-selection-full-output-v1/`.
+The current live reader still shows title-based candidates. The single largest-request pilot
 established transport and cost behavior, but its unsupported cover assumption
 remains a [candidate-coverage review case](../../../../tools/RelistenNormalization/composition-hypotheses.md#select-a-likely-work).
 Inspect the broad results before qualifying automatic acceptance.
