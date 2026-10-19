@@ -134,6 +134,17 @@ pass before they appear here. Broader lookup stopped at the host disk reserve an
 retained its completed inputs. See the [composition interface and
 operations](../../../../tools/RelistenNormalization/composition-discovery.md).
 
+The composition selector can process all 3,034 candidate-bearing targets with
+four concurrent Luna requests, durable cache recovery and explicit spending
+bounds. An optional reader projection can display each model choice, reason and
+alternatives without changing title matches or accepted identities. The full
+selection plan is prepared with a $100 job cap and a two-hour duration; it has
+not run because host capacity remains close to the 5.5 GiB reserve. The current
+live reader still shows title-based candidates. The single largest-request pilot
+established transport and cost behavior, but its unsupported cover assumption
+remains a [candidate-coverage review case](../../../../tools/RelistenNormalization/composition-hypotheses.md#select-a-likely-work).
+Inspect the broad results before qualifying automatic acceptance.
+
 Dictionary citation compaction retains one actual witness per distinct literal
 spelling while keeping every membership in its original setlist result. The
 earlier 50,000-file replay passed independent ownership, title and citation

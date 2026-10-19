@@ -8,8 +8,9 @@ existing music and file readers.
 These suggestions come from literal titles and explicit aliases in the retained
 MusicBrainz work pool. They are unconfirmed. A sole result does not establish
 identity, and an empty result does not establish that no composition exists.
-The current producer includes no model selection. Future inference needs a
-separately authenticated result; the browser does not make that decision.
+The retained-title producer does not choose a work. An optional, separately
+authenticated model result can suggest one of those supplied works. The browser
+keeps the model rationale, provider assertions and literal matches separate.
 
 The original supported composition links remain at `#works`, `/api/works` and
 `/api/work`. `#compositions` opens **Possible versions** when the new projection is
@@ -87,3 +88,53 @@ search labels, preserve the query when switching and offer another category when
 no result is found. Common navigation uses optional
 `stats.navigation = {songs, compositions, venues, tapers}` links; it contains no
 assumed local ports.
+
+
+## Optional model suggestions
+
+A completed selection run covers its approved plan, which may be one pilot song
+or a larger subset. It does not imply that every candidate-bearing song was
+processed. The browser reports the covered plan and the source population
+separately. A song without a saved result remains visibly unprocessed.
+
+Build the separate selection projection without copying or rebuilding the
+composition catalogue:
+
+```sh
+python3 tools/RelistenNormalization/composition_catalogue.py \
+  --composition-database <composition-projection>/compositions.sqlite3 \
+  --manifest <completed-selection-output>/manifest.json \
+  --manifest-sha256 <selection-manifest-sha256> \
+  --database <new-selection-projection>/selections.sqlite3
+```
+
+The default selection cap is 16 MiB; the free-space floor remains 5.5 GiB.
+The builder checks the completed report, saved approved plan and preflight,
+exact scoped input keys, request cache keys, original hypothesis pointers and
+selected/alternative work IDs. C# owns request rendering and fact hashing;
+Python authenticates those saved coordinates. Every saved row must keep its
+prepared input and supplied work IDs. For resumed runs, the last valid row in
+the producer’s chunk order supplies the current result and evidence pointer.
+Incomplete runs, invalid rows or changed source generations leave the previous
+projection intact.
+
+Add `--composition-selections <selection-projection>/selections.sqlite3` to the
+existing serve command. Without this option the title-match experience remains
+available. Remove only this option and restart the owned music reader to roll
+back model display. Its generation includes the selection manifest pin.
+
+`stats.composition_selection_queries` advertises the optional capability, and
+`stats.compositionSelections` gives coverage, outcomes and execution states.
+Song hypothesis responses and work-page song rows add `modelSelection`, or null
+when no saved request covers that song. The fields include `executionState`,
+`outcome`, `inferenceOutcome`, `selectedWorkKey`, `alternativeWorkKeys`,
+`rationale`, `method`, `model` and the saved request keys. The original typed row
+is available at `/api/composition-selection-evidence?scope=&artist=&key=&generation=`.
+
+The UI labels a selected work **Model suggestion · unconfirmed** and links to its
+other artists, existing performances and audio. A valid model abstention is
+separate from a skipped request or a transport, configuration or budget failure.
+A model choice never removes another title match, hides audio or changes a
+supported link. The supplied pool may omit the correct composition; even a
+confident explanation can be wrong. Every result keeps `acceptedIdentity` and
+`publicationPermitted` false.

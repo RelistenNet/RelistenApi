@@ -230,10 +230,249 @@ class CompositionCatalogueBuilder:
             raise CatalogueBuildPaused("Composition projection stopped to preserve free space")
 
 
+class CompositionSelectionBuilder:
+    """Keep authenticated model results separate from retained composition facts."""
+
+    def __init__(self, compositions, manifest, database, *, manifest_sha256,
+                 minimum_free_bytes=int(5.5 * 1024**3), maximum_bytes=16 * 1024**2):
+        self.compositions = Path(compositions).resolve(strict=True)
+        self.manifest = Path(manifest).resolve(strict=True)
+        self.database = Path(database).resolve()
+        self.manifest_sha = manifest_sha256
+        self.minimum_free_bytes = minimum_free_bytes
+        self.maximum_bytes = maximum_bytes
+
+    def _read_plan(self):
+        raw = self.manifest.read_bytes()
+        if len(raw) > MAXIMUM_LINE_BYTES or hashlib.sha256(raw).hexdigest() != self.manifest_sha:
+            raise ValueError("The selection completion manifest differs from its supplied pin")
+        report = json.loads(raw)
+        plan_path = self.manifest.parent / "approved-plan.json"
+        plan_raw = plan_path.read_bytes()
+        if len(plan_raw) > MAXIMUM_LINE_BYTES:
+            raise ValueError("The selection plan exceeds its byte bound")
+        plan = json.loads(plan_raw)
+        if (report.get("version") != "composition-selection-batch-v1" or report.get("state") != "completed"
+                or report.get("publicationPermitted") is not False or report.get("externalUniverseComplete") is not False
+                or hashlib.sha256(plan_raw).hexdigest() != report["planSha256"]
+                or plan.get("version") != "composition-selection-plan-v1" or plan["jobUuid"] != report["jobUuid"]):
+            raise ValueError("Selections require their exact completed, unconfirmed plan")
+        prepared = report["preflight"]
+        expected = {self._key(row["key"]): row for row in prepared["rows"]}
+        keys = [self._key(key) for key in plan["songs"]]
+        if (len(keys) > 100_000 or len(set(keys)) != len(keys) or set(keys) != set(expected)
+                or len(expected) != len(prepared["rows"]) or report["processedInputs"] != len(keys)
+                or prepared["selectedInputs"] != len(keys) or prepared["planSha256"] != report["planSha256"]):
+            raise ValueError("The completed selection plan does not cover its exact scoped inputs")
+        return report, plan, expected
+
+    def build(self):
+        report, plan, expected = self._read_plan()
+        marker = _stamp(self.compositions)
+        with closing(sqlite3.connect(self.compositions.as_uri() + "?mode=ro&immutable=1", uri=True)) as source:
+            source.row_factory = sqlite3.Row
+            metadata = _metadata(source)
+            hypothesis = plan["hypothesisManifest"]
+            hypothesis_path = Path(hypothesis["path"]).resolve(strict=True)
+            if (metadata["manifestSha256"] != hypothesis["sha256"] or hypothesis_path.stat().st_size != hypothesis["bytes"]
+                    or sha256_file(hypothesis_path) != hypothesis["sha256"]):
+                raise MusicNormalizationChanged("Selections belong to another retained composition image")
+            original = json.loads(hypothesis_path.read_bytes())
+            self.database.parent.mkdir(parents=True, exist_ok=True)
+            self._space()
+            building = self.database.with_name(self.database.name + "." + uuid.uuid4().hex + ".building")
+            try:
+                with closing(sqlite3.connect(building)) as db:
+                    db.execute("PRAGMA journal_mode=MEMORY")
+                    db.execute("PRAGMA max_page_count=" + str(self.maximum_bytes // 4096))
+                    db.executescript("CREATE TABLE metadata(key TEXT PRIMARY KEY,value TEXT NOT NULL);"
+                        "CREATE TABLE selections(scope TEXT,artist_uuid TEXT,song_key TEXT,value TEXT,chunk TEXT,line INTEGER,proof_hash BLOB,"
+                        "PRIMARY KEY(scope,artist_uuid,song_key));")
+                    outcomes, actual_outcomes, originals = self._consume(db, source, report, expected, original)
+                    result = {"version": "composition-selections-v1", "state": "completed", "manifest": str(self.manifest),
+                        "manifestSha256": self.manifest_sha, "compositionManifestSha256": metadata["manifestSha256"],
+                        "planSha256": report["planSha256"], "jobUuid": report["jobUuid"], "method": report["method"],
+                        "coveredSongs": len(expected), "candidateSongs": metadata["candidateSongs"],
+                        "outcomes": dict(actual_outcomes), "executionStates": dict(outcomes),
+                        "publicationPermitted": False, "externalUniverseComplete": False}
+                    db.executemany("INSERT INTO metadata VALUES(?,?)", ((key, json.dumps(value)) for key, value in result.items()))
+                    db.commit()
+                self._space()
+                if (_stamp(self.compositions) != marker or sha256_file(self.manifest) != self.manifest_sha
+                        or sha256_file(self.manifest.parent / "approved-plan.json") != report["planSha256"]
+                        or sha256_file(hypothesis_path) != hypothesis["sha256"]):
+                    raise MusicNormalizationChanged("Selection inputs changed before publication")
+                for artifact in report["chunks"]:
+                    _artifact(self.manifest.parent, artifact)
+                for chunk in originals:
+                    _artifact(hypothesis_path.parent, next(item for item in original["chunks"] if item["path"] == chunk))
+                building.replace(self.database)
+                return result
+            finally:
+                building.unlink(missing_ok=True)
+
+    def _consume(self, db, source, report, expected, original):
+        seen, originals = set(), set()
+        for artifact in sorted(report["chunks"], key=lambda item: item["path"]):
+            path = _artifact(self.manifest.parent, artifact)
+            rows = 0
+            with gzip.open(path, "rb") as stream:
+                while line := stream.readline(MAXIMUM_LINE_BYTES + 1):
+                    rows += 1
+                    if len(line) > MAXIMUM_LINE_BYTES or not line.endswith(b"\n"):
+                        raise ValueError("A selection row exceeds the complete-line bound")
+                    record = json.loads(line)
+                    row = record["proposal"]
+                    key = self._key(row["input"]["key"])
+                    digest = _hash(record)
+                    if key not in expected or _hash(row["input"]) != _hash(expected[key]):
+                        raise ValueError("Selection input differs from its saved preflight")
+                    if record["domain"] != "composition_selections" or self._key(json.loads(record["inputKey"]), array=True) != key:
+                        raise ValueError("Selection result changes its scoped input")
+                    seen.add(key)
+                    value = self._selection(source, original, row, originals)
+                    # A completed resumed run can retain an earlier receipt and a
+                    # later cache hit. Follow the producer's last-valid-row order.
+                    db.execute("INSERT INTO selections VALUES(?,?,?,?,?,?,?) ON CONFLICT(scope,artist_uuid,song_key) "
+                        "DO UPDATE SET value=excluded.value,chunk=excluded.chunk,line=excluded.line,proof_hash=excluded.proof_hash", (*key, json.dumps(value), artifact["path"], rows, digest))
+                    self._space()
+            if rows != artifact["rows"]:
+                raise ValueError("Selection chunk row count differs from its manifest")
+        if set(seen) != set(expected):
+            raise ValueError("Selection chunks do not complete their selected plan")
+        actual_outcomes, outcomes = Counter(), Counter()
+        for value, in db.execute("SELECT value FROM selections"):
+            value = json.loads(value)
+            actual_outcomes[value["outcome"]] += 1
+            outcomes[value["executionState"]] += 1
+        if dict(actual_outcomes) != report["outcomes"]:
+            raise ValueError("Selection outcomes differ from their completion manifest")
+        return outcomes, actual_outcomes, originals
+
+    @staticmethod
+    def _key(value, array=False):
+        scope, artist, song = value if array else (value["scope"], value["artistUuid"], value["songEntityKey"])
+        return scope, str(uuid.UUID(artist)), song
+
+    def _selection(self, source, original, row, originals):
+        prepared, selection = row["input"], row["selection"]
+        scope, artist, song = self._key(prepared["key"])
+        parent = source.execute("SELECT chunk,line,artist_uuid FROM songs WHERE scope=? AND song_key=?", (scope, song)).fetchone()
+        origin = prepared["hypothesisOrigin"]
+        artifact = next((item for item in original["chunks"] if origin and item["path"] == origin["chunk"]), None)
+        missing = (parent is None and origin is None and prepared["inputSha256"] is None
+                   and prepared["request"] is None and selection is None
+                   and prepared["skipReason"] == "missing_candidate_bearing_hypothesis")
+        if not missing and (parent is None or parent["artist_uuid"] != artist or not artifact
+                or (parent["chunk"], parent["line"], artifact["sha256"]) != (origin["chunk"], origin["line"], origin["sha256"])):
+            raise ValueError("Selection does not reference its original scoped hypothesis")
+        if origin:
+            originals.add(origin["chunk"])
+        selected, alternatives, request = None, [], prepared["request"]
+        if selection:
+            if prepared["skipReason"] is not None:
+                raise ValueError("A skipped input cannot acquire a model selection")
+            inference = selection.get("inference")
+            if not request or selection["method"] != request["method"]:
+                raise ValueError("Selection method differs from its saved request")
+            if inference:
+                if (inference.get("cacheKey") != request["cacheKey"] or inference["method"] != request["method"]
+                        or inference.get("publicationPermitted") is not False or inference.get("externalUniverseComplete") is not False
+                        or any(inference[name] != selection[name] for name in ("selectedWorkMbid", "alternativeWorkMbids", "rationale"))
+                        or selection["outcome"] != (inference["outcome"] if inference["state"] == "proposed" else inference["state"])):
+                    raise ValueError("Inference differs from its authenticated request or selection")
+            selected = self._work_key(selection["selectedWorkMbid"])
+            alternatives = [self._work_key(value) for value in selection["alternativeWorkMbids"]]
+            candidates = {item[0] for item in source.execute("SELECT work_key FROM candidates WHERE scope=? AND song_key=?", (scope, song))}
+            if any(key not in candidates for key in [selected, *alternatives] if key):
+                raise ValueError("Model selection names a work outside its supplied candidate pool")
+            state = inference["state"] if inference else "unavailable"
+            outcome = selection["outcome"]
+        else:
+            if not prepared["skipReason"]:
+                raise ValueError("A missing selection needs its saved skip reason")
+            inference, state, outcome = None, "skipped", "skipped"
+        return {"executionState": state, "outcome": outcome, "inferenceOutcome": inference["outcome"] if inference else None, "selectedWorkKey": selected,
+            "alternativeWorkKeys": alternatives, "rationale": selection["rationale"] if selection else None,
+            "method": selection["method"] if selection else None, "model": request["model"] if request else None,
+            "reason": inference.get("reason") if inference else prepared["skipReason"],
+            "inputSha256": prepared["inputSha256"], "cacheKey": request["cacheKey"] if request else None,
+            "acceptedIdentity": False, "publicationPermitted": False, "externalUniverseComplete": False}
+
+    @staticmethod
+    def _work_key(value):
+        return "composition:musicbrainz:" + str(uuid.UUID(value)) if value else None
+
+    def _space(self):
+        if shutil.disk_usage(self.database.parent).free < self.minimum_free_bytes:
+            raise CatalogueBuildPaused("Selection projection stopped to preserve free space")
+
+
+class CompositionSelections:
+    """Read a plan's model hypotheses without changing title-based membership."""
+
+    def __init__(self, compositions, database):
+        self.compositions = compositions
+        self.database = Path(database).resolve(strict=True)
+        self.marker = _stamp(self.database)
+        with closing(sqlite3.connect(self.database.as_uri() + "?mode=ro&immutable=1", uri=True)) as db:
+            self.metadata = _metadata(db)
+        if (self.metadata.get("state") != "completed" or self.marker != _stamp(self.database)
+                or self.metadata["compositionManifestSha256"] != compositions.metadata["manifestSha256"]):
+            raise MusicNormalizationChanged("Model selections belong to another composition image")
+
+    def _connect(self):
+        self.compositions.stats()
+        db = sqlite3.connect(self.database.as_uri() + "?mode=ro&immutable=1", uri=True)
+        try:
+            db.row_factory = sqlite3.Row
+            db.execute("BEGIN")
+            actual = _metadata(db)
+            self.compositions.stats()
+            if actual != self.metadata or self.marker != _stamp(self.database):
+                raise MusicNormalizationChanged("Model selections changed. Reload the reader")
+            return db
+        except BaseException:
+            db.close()
+            raise
+
+    def stats(self):
+        with closing(self._connect()):
+            return dict(self.metadata)
+
+    def song(self, scope, artist, key):
+        with closing(self._connect()) as db:
+            row = db.execute("SELECT value FROM selections WHERE scope=? AND artist_uuid=? AND song_key=?", (scope, artist, key)).fetchone()
+            return json.loads(row[0]) if row else None
+
+    def evidence(self, scope, artist, key):
+        with closing(self._connect()) as db:
+            row = db.execute("SELECT chunk,line,proof_hash FROM selections WHERE scope=? AND artist_uuid=? AND song_key=?", (scope, artist, key)).fetchone()
+        if row is None:
+            raise KeyError("No model selection covers this exact scoped song")
+        path = Path(self.metadata["manifest"])
+        raw = path.read_bytes()
+        if hashlib.sha256(raw).hexdigest() != self.metadata["manifestSha256"]:
+            raise MusicNormalizationChanged("The selection completion manifest changed")
+        manifest = json.loads(raw)
+        artifact = next(item for item in manifest["chunks"] if item["path"] == row["chunk"])
+        chunk = _artifact(path.parent, artifact)
+        with gzip.open(chunk, "rb") as stream:
+            for number in range(1, row["line"] + 1):
+                line = stream.readline(MAXIMUM_LINE_BYTES + 1)
+                if not line or len(line) > MAXIMUM_LINE_BYTES:
+                    raise MusicNormalizationChanged("The original selection evidence is unavailable")
+                if number == row["line"]:
+                    result = json.loads(line)
+        if _hash(result) != row["proof_hash"]:
+            raise MusicNormalizationChanged("The original model selection changed")
+        return result
+
+
 class CompositionCatalogue:
     """Read possible versions without promoting retrieval to accepted identity."""
 
-    def __init__(self, groups, database):
+    def __init__(self, groups, database, selections=None):
         self.groups = groups
         self.database = Path(database).resolve(strict=True)
         marker = _stamp(self.database)
@@ -244,6 +483,7 @@ class CompositionCatalogue:
                 or marker != _stamp(self.database)):
             raise MusicNormalizationChanged("Composition suggestions belong to another music image")
         self.marker = marker
+        self.selections = CompositionSelections(self, selections) if selections else None
 
     def _connect(self):
         if _stamp(self.database) != self.marker:
@@ -342,6 +582,8 @@ class CompositionCatalogue:
                 "WHERE c.work_key=? GROUP BY s.scope,s.artist_uuid ORDER BY casefold(s.artist_name),s.scope,s.artist_uuid", (key,))]
             result["songs_limit"], result["songs_offset"] = limit, offset
             result["acceptedIdentity"], result["inference"] = False, None
+            for song in result["songs"]:
+                song["modelSelection"] = self.selections.song(song["scope"], song["artist_uuid"], song["entity_key"]) if self.selections else None
             return result
 
     def song(self, scope, artist, key):
@@ -356,13 +598,15 @@ class CompositionCatalogue:
             if row is None:
                 return {"scope": scope, "song_key": key, "artist_uuid": artist, "candidates": [],
                     "outcome": "missing_retained_candidates", "reason": "no_literal_title_or_explicit_alias_in_the_retained_work_pool",
-                    "acceptedIdentity": False, "inference": None}
+                    "acceptedIdentity": False, "inference": None,
+                    "modelSelection": self.selections.song(scope, artist, key) if self.selections else None}
             result = dict(row)
             result["candidates"] = [self._display(item) for item in db.execute("SELECT w.work_key,w.provider_key,w.title," 
                 "w.writer_names,c.retrieval_basis,c.matching_titles,(SELECT count(*) FROM candidates other INDEXED BY candidates_work "
                 "WHERE other.work_key=w.work_key) song_count FROM candidates c CROSS JOIN works w ON w.work_key=c.work_key "
                 "WHERE c.scope=? AND c.song_key=? ORDER BY c.ordinal", (scope, key))]
             result["acceptedIdentity"], result["inference"] = False, None
+            result["modelSelection"] = self.selections.song(scope, artist, key) if self.selections else None
             return result
 
     def evidence(self, kind, key, scope="", artist=""):
@@ -397,15 +641,19 @@ class CompositionCatalogue:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--normalization", required=True)
+    parser.add_argument("--normalization")
+    parser.add_argument("--composition-database", help="Existing composition projection; build only model selections")
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--manifest-sha256", required=True)
     parser.add_argument("--database", required=True)
     parser.add_argument("--minimum-free-bytes", type=int, default=int(5.5 * 1024**3))
-    parser.add_argument("--maximum-bytes", type=int, default=256 * 1024**2)
+    parser.add_argument("--maximum-bytes", type=int)
     args = parser.parse_args()
-    metadata = CompositionCatalogueBuilder(args.normalization, args.manifest, args.database,
-        manifest_sha256=args.manifest_sha256, minimum_free_bytes=args.minimum_free_bytes, maximum_bytes=args.maximum_bytes).build()
+    if not args.composition_database and not args.normalization:
+        parser.error("Use --normalization for compositions or --composition-database for selections")
+    builder = CompositionSelectionBuilder if args.composition_database else CompositionCatalogueBuilder
+    metadata = builder(args.composition_database or args.normalization, args.manifest, args.database,
+        manifest_sha256=args.manifest_sha256, minimum_free_bytes=args.minimum_free_bytes, maximum_bytes=args.maximum_bytes or (16 * 1024**2 if args.composition_database else 256 * 1024**2)).build()
     print(json.dumps(metadata, ensure_ascii=False), flush=True)
 
 

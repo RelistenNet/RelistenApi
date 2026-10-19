@@ -38,14 +38,16 @@ class MusicQueryUnavailable(ValueError):
 class MusicDiscovery:
     """Read the compact catalogue and proxy bounded, selective source lookups."""
 
-    def __init__(self, catalogue, readers=(), normalization=None, compositions=None, people_url=None, venue_url=None):
+    def __init__(self, catalogue, readers=(), normalization=None, compositions=None, people_url=None, venue_url=None, composition_selections=None):
         self.catalogue = catalogue
         self._catalogue_marker = None
         self._catalogue_stats = None
         self.groups = MusicGroups(catalogue.database, normalization) if normalization else None
         if compositions and not self.groups:
             raise ValueError("Composition suggestions require the matching normalized music image")
-        self.compositions = CompositionCatalogue(self.groups, compositions) if compositions else None
+        if composition_selections and not compositions:
+            raise ValueError("Model selections require the matching composition projection")
+        self.compositions = CompositionCatalogue(self.groups, compositions, composition_selections) if compositions else None
         self.navigation = {"songs": "#songs", "compositions": "#compositions"}
         for name, url in (("tapers", people_url), ("venues", venue_url)):
             if url:
@@ -89,6 +91,9 @@ class MusicDiscovery:
         if self.compositions:
             result["composition_queries"] = True
             result["compositionSuggestions"] = self.compositions.stats()
+            if self.compositions.selections:
+                result["composition_selection_queries"] = True
+                result["compositionSelections"] = self.compositions.selections.stats()
         sources = result["sources"]
         for reader in self.readers:
             if not any((source["scope"], source["run"]) == (reader["scope"], reader["run"]) for source in sources):
@@ -97,7 +102,8 @@ class MusicDiscovery:
         # to this image. Open pages must reload after either mapping changes.
         generation = [result["built_at"], [(s["id"], s["scope"], s["run"], s["reader_url"]) for s in sources],
                       (result.get("normalization") or {}).get("outputManifestSha256"),
-                      (result.get("compositionSuggestions") or {}).get("manifestSha256")]
+                      (result.get("compositionSuggestions") or {}).get("manifestSha256"),
+                      (result.get("compositionSelections") or {}).get("manifestSha256")]
         result["generation"] = hashlib.sha256(json.dumps(generation, separators=(",", ":")).encode()).hexdigest()[:24]
         return result
 
@@ -281,7 +287,7 @@ def handler_for(discovery):
                 if route.path in {"/", "/music-discovery.html"}:
                     return self.send_body(200, Path(__file__).with_name("music-discovery.html").read_bytes(), "text/html; charset=utf-8")
                 catalogue = discovery.catalogue
-                if route.path in {"/api/composition-works", "/api/composition-work", "/api/song-composition-hypotheses", "/api/composition-evidence"}:
+                if route.path in {"/api/composition-works", "/api/composition-work", "/api/song-composition-hypotheses", "/api/composition-evidence", "/api/composition-selection-evidence"}:
                     if not discovery.compositions:
                         raise ValueError("No completed composition suggestions are configured")
                     if route.path != "/api/composition-works" and query.get("generation") != discovery.stats()["generation"]:
@@ -322,6 +328,10 @@ def handler_for(discovery):
                     result = discovery.compositions.song(query.get("scope", ""), query.get("artist", ""), query.get("key", ""))
                 elif route.path == "/api/composition-evidence":
                     result = discovery.compositions.evidence(query.get("kind", ""), query.get("key", ""), query.get("scope", ""), query.get("artist", ""))
+                elif route.path == "/api/composition-selection-evidence":
+                    if not discovery.compositions.selections:
+                        raise ValueError("No completed model selections are configured")
+                    result = discovery.compositions.selections.evidence(query.get("scope", ""), query.get("artist", ""), query.get("key", ""))
                 elif route.path == "/api/works":
                     result = catalogue.works(q=query.get("q", ""), **page(query))
                 elif route.path == "/api/setlists":
@@ -402,6 +412,7 @@ def main():
     project.add_argument("--maximum-bytes", type=int, default=1024**3)
     serve = commands.add_parser("serve", help="Serve the private music browser")
     serve.add_argument("--database", required=True)
+    serve.add_argument("--composition-selections", help="Optional completed unconfirmed model selection projection")
     serve.add_argument("--compositions", help="Completed composition suggestion projection for this exact music image")
     serve.add_argument("--people-url", help="Optional taper directory HTTP(S) origin")
     serve.add_argument("--venue-url", help="Optional venue directory HTTP(S) origin")
@@ -426,7 +437,7 @@ def main():
         print(json.dumps(result, ensure_ascii=False), flush=True)
     else:
         readers = [Source(scope, Path(run), reader) for scope, run, reader in args.reader]
-        discovery = MusicDiscovery(MusicCatalogue(args.database), readers, args.normalization, args.compositions, args.people_url, args.venue_url)
+        discovery = MusicDiscovery(MusicCatalogue(args.database), readers, args.normalization, args.compositions, args.people_url, args.venue_url, args.composition_selections)
         server = ThreadingHTTPServer((args.host, args.port), handler_for(discovery))
         print(json.dumps({"url": f"http://{args.host}:{args.port}/", "database": str(Path(args.database).resolve())}), flush=True)
         server.serve_forever()

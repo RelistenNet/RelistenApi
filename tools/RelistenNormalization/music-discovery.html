@@ -446,18 +446,19 @@
         const result = await api("/api/composition-works?" + query(filters));
         if (token !== generation) return;
         $("content").innerHTML = '<h2>Possible versions</h2><p class="muted">Explore compositions by title, alias or credited writer. These source matches are unconfirmed.</p>'
+          + (stats.compositionSelections ? `<p class="muted">Model request results cover ${stats.compositionSelections.coveredSongs.toLocaleString()} planned songs; the source pool has ${stats.compositionSelections.candidateSongs.toLocaleString()} candidate-bearing songs. Suggestions remain unconfirmed.</p>` : "")
           + `<p><a href="${link("works", {q: filters.q})}">Supported composition links →</a></p>`
           + (result.items.length ? '<div class="grid">' + result.items.map(compositionCard).join("") + '</div>'
             : `<div class="empty"><p>No retained composition matches.</p>${otherSearchLinks("possible-versions", filters)}</div>`);
         $("content").append(pagination(result, (offset) => navigate("compositions", {...Object.fromEntries(params), offset})));
       }
-      function evidenceButton(container, coordinates, label, token) {
+      function evidenceButton(container, coordinates, label, token, route = "/api/composition-evidence") {
         const button = document.createElement("button");
         button.textContent = label;
         button.onclick = async () => {
           button.disabled = true;
           try {
-            const evidence = await api("/api/composition-evidence?" + query({...coordinates, generation: stats.generation}));
+            const evidence = await api(route + "?" + query({...coordinates, generation: stats.generation}));
             if (token !== generation) return;
             const details = document.createElement("details");
             details.open = true;
@@ -473,16 +474,46 @@
         };
         container.append(button);
       }
+      function modelSelection(container, selection, coordinates, token, currentWork = null) {
+        if (!selection) {
+          if (stats.composition_selection_queries)
+            container.insertAdjacentHTML("beforeend", '<p class="muted">No model result covers this song in the configured selection plan.</p>');
+          return;
+        }
+        const box = document.createElement("section");
+        box.className = "section";
+        const suggested = selection.executionState === "proposed" && selection.outcome === "selected" && selection.selectedWorkKey;
+        const abstained = selection.executionState === "proposed" && selection.inferenceOutcome === "insufficient_evidence";
+        const label = suggested ? "Model suggestion · unconfirmed" : abstained ? "Model could not choose a composition" : "Model request did not produce a choice";
+        box.innerHTML = `<h4>${label}</h4><p class="muted">${esc(selection.model || "Model not recorded")} · ${esc(selection.method || selection.executionState)}</p>`;
+        if (suggested) {
+          const text = currentWork === selection.selectedWorkKey ? "The model suggested this composition" : currentWork ? "The model suggested a different composition" : "Open the suggested composition and its other artists";
+          box.insertAdjacentHTML("beforeend", `<p><a href="${link("possible-version", {key: selection.selectedWorkKey})}">${text} →</a></p>`);
+        }
+        const explanation = currentWork ? document.createElement("details") : box;
+        if (currentWork) {
+          explanation.innerHTML = '<summary>Model rationale and saved result</summary>';
+          box.append(explanation);
+        }
+        if (selection.rationale) explanation.insertAdjacentHTML("beforeend", `<p>${esc(selection.rationale)}</p>`);
+        if (selection.reason) explanation.insertAdjacentHTML("beforeend", `<p class="muted">Request status: ${esc(selection.executionState)} · ${esc(selection.reason)}</p>`);
+        explanation.insertAdjacentHTML("beforeend", '<p class="muted">This is a model hypothesis. The retained choices may omit the right composition. Title matches and original audio remain available below.</p>');
+        if (selection.alternativeWorkKeys.length)
+          explanation.insertAdjacentHTML("beforeend", `<p>Model alternatives: ${selection.alternativeWorkKeys.map((key, index) => `<a href="${link("possible-version", {key})}">Alternative ${index + 1}</a>`).join(" · ")}</p>`);
+        evidenceButton(explanation, coordinates, "Inspect saved model result", token, "/api/composition-selection-evidence");
+        container.append(box);
+      }
       async function songCompositions(container, coordinates, token) {
         try {
           const result = await api("/api/song-composition-hypotheses?" + query(coordinates));
           if (token !== generation) return;
           container.innerHTML = '<h3>Possible versions</h3>';
+          modelSelection(container, result.modelSelection, coordinates, token);
           if (!result.candidates.length) {
             container.insertAdjacentHTML("beforeend", '<p class="muted">No composition candidates in the retained source pool. Other versions may exist.</p>');
             return;
           }
-          container.insertAdjacentHTML("beforeend", '<p class="muted">Unconfirmed title or alias matches. No model selection is included in this run.</p><div class="grid">'
+          container.insertAdjacentHTML("beforeend", '<p class="muted">Unconfirmed title or alias matches. Source matches remain separate from any model suggestion.</p><div class="grid">'
             + result.candidates.map((work) => compositionCard(work)).join("") + '</div>');
           evidenceButton(container, {kind: "song", ...coordinates}, "Why these possible versions?", token);
         } catch (error) {
@@ -529,6 +560,7 @@
           entry.innerHTML = card(song, "songs");
           const body = entry.firstElementChild;
           body.insertAdjacentHTML("beforeend", `<p class="muted">Unconfirmed ${song.retrieval_basis === "retained_explicit_work_alias" ? "alias" : "title"} match${song.candidate_count > 1 ? ` · ${song.candidate_count - 1} other possible ${song.candidate_count === 2 ? "version" : "versions"}` : ""}</p>`);
+          modelSelection(body, song.modelSelection, {scope: song.scope, artist: song.artist_uuid, key: song.entity_key}, token, result.work_key);
           const alternatives = document.createElement("details");
           alternatives.innerHTML = '<summary>Possible versions and matching basis</summary>';
           const alternativeBody = document.createElement("div");

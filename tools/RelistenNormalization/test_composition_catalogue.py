@@ -14,7 +14,7 @@ from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import urlopen
 
-from composition_catalogue import CompositionCatalogueBuilder
+from composition_catalogue import CompositionCatalogueBuilder, CompositionSelectionBuilder
 from music_catalogue import MusicCatalogue, MusicCatalogueBuilder, Source
 from music_consolidation import MusicConsolidationExporter, MusicConsolidationProjection, sha256_file
 from music_discovery import MusicDiscovery, handler_for
@@ -167,6 +167,137 @@ class TestCompositionCatalogue(unittest.TestCase):
     def get(self, base, route, **query):
         with urlopen(base + route + "?" + urlencode(query)) as response:
             return json.load(response)
+
+    def write_selections(self, states=("selected",)):
+        output = self.root / "selections"
+        output.mkdir(exist_ok=True)
+        self.selection_database = self.root / "selections.sqlite3"
+        parents = [row for row in self.results if row["domain"] == "composition_hypotheses"]
+        prepared, records = [], []
+        artifact = json.loads(self.manifest.read_text())["chunks"][0]
+        for index, state in enumerate(states):
+            parent = parents[index]
+            key = {"scope": "catalogue", "artistUuid": self.songs[index]["artistUuid"], "songEntityKey": self.songs[index]["entityKey"]}
+            request = {"method": "luna-composition-hypothesis-v2", "model": "gpt-6-luna", "cacheKey": str(index) * 64}
+            row = {"key": key, "inputSha256": "f" * 64,
+                   "hypothesisOrigin": {"chunk": artifact["path"], "sha256": artifact["sha256"], "line": self.results.index(parent) + 1},
+                   "request": request, "skipReason": "request_bound" if state == "skipped" else None}
+            if index == 2:
+                row.update(inputSha256=None, hypothesisOrigin=None, request=None, skipReason="missing_candidate_bearing_hypothesis")
+            prepared.append(row)
+            inference_state = "proposed" if state in {"selected", "insufficient_evidence"} else state
+            choice = MBIDS[0] if state == "selected" else None
+            selection = None if state == "skipped" else {"selectedWorkMbid": choice, "alternativeWorkMbids": [], "outcome": state,
+                "method": request["method"], "rationale": "A model hypothesis, with literal <untrusted> prose.",
+                "inference": {"selectedWorkMbid": choice, "alternativeWorkMbids": [], "outcome": state if inference_state == "proposed" else "insufficient_evidence",
+                    "state": inference_state, "method": request["method"], "rationale": "A model hypothesis, with literal <untrusted> prose.",
+                    "cacheKey": request["cacheKey"], "reason": None if inference_state == "proposed" else "job_budget_exhausted",
+                    "publicationPermitted": False, "externalUniverseComplete": False}}
+            records.append(self.result("composition_selections", json.dumps(list(key.values())), {"input": row, "selection": selection}))
+        plan = {"version": "composition-selection-plan-v1", "jobUuid": SHOWS[0], "songs": [row["key"] for row in prepared],
+                "hypothesisManifest": {"path": str(self.manifest), **self.artifact(self.manifest, 1)}}
+        plan["hypothesisManifest"]["path"] = str(self.manifest)
+        plan_path = output / "approved-plan.json"
+        plan_path.write_text(json.dumps(plan))
+        manifest = {"version": "composition-selection-batch-v1", "state": "completed", "planSha256": sha256_file(plan_path),
+            "jobUuid": plan["jobUuid"], "method": "luna-composition-hypothesis-v2", "processedInputs": len(records),
+            "preflight": {"planSha256": sha256_file(plan_path), "selectedInputs": len(records), "rows": prepared},
+            "chunks": [self.chunk(output, "composition_selections", records)],
+            "outcomes": {state: states.count(state) for state in set(states)}, "publicationPermitted": False, "externalUniverseComplete": False}
+        path = output / "manifest.json"
+        path.write_text(json.dumps(manifest))
+        return path
+
+    def build_selections(self, manifest):
+        return CompositionSelectionBuilder(self.database, manifest, self.selection_database,
+            manifest_sha256=sha256_file(manifest), minimum_free_bytes=0).build()
+
+    def test_partial_model_plan_keeps_alternatives_supported_links_and_audio(self):
+        self.build()
+        manifest = self.write_selections()
+        report = json.loads(manifest.read_text())
+        chunk = manifest.parent / report["chunks"][0]["path"]
+        with gzip.open(chunk, "rt") as stream:
+            repeated = json.loads(next(stream))
+        resumed = json.loads(json.dumps(repeated))
+        resumed["proposal"]["selection"]["inference"]["fromCache"] = True
+        report["chunks"] = [self.chunk(manifest.parent, "composition_selections", [repeated, resumed])]
+        manifest.write_text(json.dumps(report))
+        metadata = self.build_selections(manifest)
+        base = self.serve(handler_for(self.discovery(composition_selections=self.selection_database)))
+        stats = self.get(base, "/api/stats")
+        self.assertEqual((metadata["coveredSongs"], metadata["candidateSongs"]), (1, 2))
+        coordinates = {"scope": "catalogue", "artist": ARTISTS[0], "key": self.songs[0]["entityKey"], "generation": stats["generation"]}
+        song = self.get(base, "/api/song-composition-hypotheses", **coordinates)
+        self.assertEqual(len(song["candidates"]), 2)
+        self.assertEqual(song["modelSelection"]["selectedWorkKey"], self.work_keys[0])
+        self.assertFalse(song["modelSelection"]["acceptedIdentity"])
+        work = self.get(base, "/api/composition-work", key=self.work_keys[1], generation=stats["generation"])
+        self.assertEqual(work["songs"][0]["modelSelection"]["selectedWorkKey"], self.work_keys[0])
+        missing = self.get(base, "/api/song-composition-hypotheses", **{**coordinates, "artist": ARTISTS[1], "key": self.songs[1]["entityKey"]})
+        self.assertIsNone(missing["modelSelection"])
+        proof = self.get(base, "/api/composition-selection-evidence", **coordinates)
+        self.assertEqual(proof["proposal"]["selection"]["selectedWorkMbid"], MBIDS[0])
+        self.assertTrue(proof["proposal"]["selection"]["inference"]["fromCache"])
+        performances = self.get(base, "/api/song-performances", **coordinates)
+        files = self.get(base, "/api/performance-files", **coordinates, homeKey=performances["items"][0]["homeKey"])
+        self.assertEqual(files["total"], 1)
+        self.assertEqual(self.get(base, "/api/works")["total"], 1)
+        old = self.serve(handler_for(self.discovery()))
+        self.assertNotEqual(self.get(old, "/api/stats")["generation"], stats["generation"])
+        with self.assertRaises(HTTPError) as error:
+            self.get(base, "/api/composition-selection-evidence", **{**coordinates, "generation": self.get(old, "/api/stats")["generation"]})
+        self.assertEqual(error.exception.code, 409)
+        error.exception.close()
+        chunk.write_bytes(b"changed original model evidence")
+        with self.assertRaises(HTTPError) as error:
+            self.get(base, "/api/composition-selection-evidence", **coordinates)
+        self.assertEqual(error.exception.code, 409)
+        error.exception.close()
+
+    def test_model_abstention_is_distinct_from_failed_and_skipped_requests(self):
+        self.build()
+        for states in [("insufficient_evidence", "unresolved"), ("skipped",), ("selected", "insufficient_evidence", "skipped")]:
+            with self.subTest(states=states):
+                self.build_selections(self.write_selections(states))
+                discovery = self.discovery(composition_selections=self.selection_database)
+                for index, state in enumerate(states):
+                    result = discovery.compositions.song("catalogue", self.songs[index]["artistUuid"], self.songs[index]["entityKey"])["modelSelection"]
+                    self.assertEqual(result["outcome"], state)
+                    self.assertEqual(result["executionState"], "proposed" if state in {"selected", "insufficient_evidence"} else state)
+                    self.assertEqual(result["selectedWorkKey"], self.work_keys[0] if state == "selected" else None)
+
+    def test_model_foreign_work_or_request_mismatch_preserves_prior_projection(self):
+        self.build()
+        manifest = self.write_selections()
+        self.build_selections(manifest)
+        before = self.selection_database.read_bytes()
+        for mutation in ("candidate", "cache", "origin", "skip", "unfinished"):
+            with self.subTest(mutation=mutation):
+                manifest = self.write_selections()
+                report = json.loads(manifest.read_text())
+                path = manifest.parent / report["chunks"][0]["path"]
+                with gzip.open(path, "rt") as stream:
+                    record = json.loads(next(stream))
+                selection = record["proposal"]["selection"]
+                if mutation == "candidate":
+                    selection["selectedWorkMbid"] = MBIDS[2]
+                    selection["inference"]["selectedWorkMbid"] = MBIDS[2]
+                elif mutation == "cache":
+                    selection["inference"]["cacheKey"] = "different-request"
+                elif mutation == "skip":
+                    record["proposal"]["input"]["skipReason"] = "input_too_large"
+                    report["preflight"]["rows"][0] = record["proposal"]["input"]
+                elif mutation == "origin":
+                    record["proposal"]["input"]["hypothesisOrigin"]["line"] += 1
+                    report["preflight"]["rows"][0] = record["proposal"]["input"]
+                else:
+                    report["state"] = "interrupted"
+                report["chunks"] = [self.chunk(manifest.parent, "composition_selections", [record])]
+                manifest.write_text(json.dumps(report))
+                with self.assertRaises(ValueError):
+                    self.build_selections(manifest)
+                self.assertEqual(self.selection_database.read_bytes(), before)
 
     def test_work_to_other_artists_song_groups_and_exact_audio_preserves_supported_work_routes(self):
         self.build()
