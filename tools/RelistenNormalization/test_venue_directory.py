@@ -146,6 +146,38 @@ class TestVenueDirectory(unittest.TestCase):
         self.assertEqual(directory.search({"scope": "room"})["rows"][0]["uuid"], uid(3))
         self.assertEqual(directory.stats()["normalizedHypotheses"], 1)
         self.assertEqual(directory.stats()["normalizedMembers"], 2)
+        landing = directory.search({})
+        pages = [directory.search({"limit": "1", "offset": str(offset)}) for offset in range(landing["total"])]
+        self.assertEqual([page["rows"][0] for page in pages], landing["rows"])
+        self.assertTrue(all(page["total"] == landing["total"] for page in pages))
+        self.assertEqual(landing["rows"][0]["uuid"], uid(1))
+        self.assertEqual(landing["rows"][0]["original_name"], "MSG")
+        self.assertEqual(landing["rows"][0]["source_count"], 3)
+
+    def test_group_search_words_can_have_different_members_before_selecting_filtered_original(self):
+        key = self.normalized_fixture()
+        for number, alias, city in ((1, "Eastalias", "Northbank"), (4, "Westalias", "Southbank")):
+            proposal = self.rows[number - 1]["proposal"]
+            proposal["pastNames"] = [dict(name=alias, fromYear=None, toYear=None, scope="unknown",
+                relationship="history_unspecified", evidenceField="past_names", evidenceQuote=alias,
+                evidenceOffset=0, evidenceLength=len(alias))]
+            proposal["locality"]["city"] = city
+        self.chunks()
+        directory = self.build()
+
+        for query in ({"q": "Eastalias Westalias", "artist": uid(20)},
+                      {"locality": "Northbank Southbank", "artist": "Other"},
+                      {"q": "Eastalias", "locality": "Southbank", "scope": "place", "kind": "legacy_catalog"}):
+            with self.subTest(query=query):
+                result = directory.search(query)
+                self.assertEqual(result["total"], 1)
+                self.assertEqual(result["rows"][0]["normalization_key"], key)
+                self.assertEqual(result["rows"][0]["uuid"], uid(4) if "artist" in query else uid(1))
+        for query in ({"q": "Eastalias Westalias", "artist": uid(30)},
+                      {"q": "Eastalias absentword"}, {"q": "Eastalias", "scope": "room"}):
+            with self.subTest(query=query):
+                result = directory.search(query)
+                self.assertEqual((result["total"], result["rows"]), (0, []))
 
     def test_original_uuid_detail_keeps_its_raw_evidence_and_selected_recording_home(self):
         key = self.normalized_fixture()
@@ -178,7 +210,10 @@ class TestVenueDirectory(unittest.TestCase):
 
         result = get("/api/venues?q=MSG&limit=1")
         self.assertEqual(result["total"], 1)
-        self.assertEqual(get("/api/venues?q=MSG&limit=1&offset=1")["rows"], [])
+        beyond_page = get("/api/venues?q=MSG&limit=1&offset=1")
+        self.assertEqual((beyond_page["total"], beyond_page["rows"]), (1, []))
+        missing = get("/api/venues?q=absentvenue")
+        self.assertEqual((missing["total"], missing["rows"]), (0, []))
         detail = get("/api/venue?id=" + uid(1))
         self.assertEqual(detail["venue"]["name"], "Madison Square Garden")
         self.assertEqual(detail["venue"]["original_name"], "MSG")

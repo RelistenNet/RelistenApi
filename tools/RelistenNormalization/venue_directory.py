@@ -478,6 +478,8 @@ class VenueDirectory:
         offset, limit = self.page(parameters)
         conditions = []
         values = []
+        member_sets = []
+        member_values = []
         for parameter, expression in (("q", "v.search_text"), ("locality", "v.location")):
             value = folded(parameters.get(parameter, ""))
             if value:
@@ -489,10 +491,14 @@ class VenueDirectory:
                     # C# alone selects membership. Every emitted member contributes its raw
                     # retrieval spellings, even when the retained exemplar list is truncated.
                     member_expression = expression.replace("v.", "member.")
-                    conditions.append(f"(instr({expression},?)>0 OR (v.normalization_key IS NOT NULL AND EXISTS("
-                        f"SELECT 1 FROM catalog_venues member WHERE member.normalization_key=v.normalization_key "
-                        f"AND instr({member_expression},?)>0)))")
-                    values.extend([word, word])
+                    member_set = "member_matches_" + str(len(member_sets))
+                    member_sets.append(f"{member_set} AS MATERIALIZED (SELECT DISTINCT member.normalization_key "
+                        f"FROM catalog_venues member WHERE member.normalization_key IS NOT NULL "
+                        f"AND instr({member_expression},?)>0)")
+                    member_values.append(word)
+                    conditions.append(f"(instr({expression},?)>0 OR v.normalization_key IN "
+                        f"(SELECT normalization_key FROM {member_set}))")
+                    values.append(word)
         artist = parameters.get("artist", "").strip()
         if artist:
             conditions.append("(v.artist_uuid=? OR instr(folded(v.artist_name),?)>0)")
@@ -507,18 +513,36 @@ class VenueDirectory:
         where = " WHERE " + " AND ".join(conditions) if conditions else ""
         # A matching member supplies the stable original UUID, including under artist filters.
         # Unselected/old/native accounts remain individual rows rather than name-based groups.
-        selection = "WITH matched AS (SELECT v.* FROM venue_accounts v" + where + "), selected AS ("
-        selection += "SELECT min(uuid) uuid FROM matched GROUP BY coalesce(normalization_key,uuid)) "
+        # Each word has its own group witness: two words may occur in different members.
+        # Materialize those key sets once, rather than probing each group for every account.
+        selection = "WITH " + ",".join(member_sets + [
+            "matched AS MATERIALIZED (SELECT v.uuid,v.normalization_key,v.source_count,v.name FROM venue_accounts v" + where + ")",
+            "selected AS MATERIALIZED (SELECT min(uuid) uuid FROM matched GROUP BY coalesce(normalization_key,uuid))",
+            "page AS (SELECT v.*,c.source_count group_source_count,c.show_count group_show_count "
+            "FROM matched v JOIN selected s ON s.uuid=v.uuid LEFT JOIN hypothesis_counts c ON c.place_key=v.normalization_key "
+            "ORDER BY coalesce(c.source_count,v.source_count) DESC,name,v.uuid LIMIT ? OFFSET ?)"])
+        # The total survives an empty/out-of-range page; the shared matched image is evaluated once.
+        query = selection + " SELECT page.*,totals.total FROM (SELECT count(*) total FROM selected) totals LEFT JOIN page ON 1 "
+        query += "ORDER BY coalesce(page.group_source_count,page.source_count) DESC,page.name,page.uuid"
         with closing(self.connect()) as db:
-            total = db.execute(selection + "SELECT count(*) FROM selected", values).fetchone()[0]
-            rows = [dict(row) for row in db.execute(selection + "SELECT v.*,c.source_count group_source_count,c.show_count group_show_count "
-                "FROM matched v JOIN selected s ON s.uuid=v.uuid LEFT JOIN hypothesis_counts c ON c.place_key=v.normalization_key"
-                " ORDER BY coalesce(c.source_count,v.source_count) DESC,name,v.uuid LIMIT ? OFFSET ?", values + [limit, offset])]
-            for row in rows:
-                if row["normalization_key"]:
-                    row.update(source_count=row["group_source_count"] or 0, show_count=row["group_show_count"] or 0,
-                               counts_scope="shared_normalization_hypothesis")
-                del row["group_source_count"], row["group_show_count"]
+            result = db.execute(query, member_values + values + [limit, offset]).fetchall()
+            total = result[0]["total"]
+            page = [row for row in result if row["uuid"] is not None]
+            rows = []
+            if page:
+                # Full evidence/search fields belong only to the bounded page, not the
+                # complete matching population. Preserve the SQL page order after hydration.
+                placeholders = ",".join("?" for _ in page)
+                records = {row["uuid"]: dict(row) for row in db.execute(
+                    "SELECT * FROM venue_accounts WHERE uuid IN (" + placeholders + ")",
+                    [row["uuid"] for row in page])}
+                for selected in page:
+                    row = records[selected["uuid"]]
+                    if row["normalization_key"]:
+                        row.update(source_count=selected["group_source_count"] or 0,
+                                   show_count=selected["group_show_count"] or 0,
+                                   counts_scope="shared_normalization_hypothesis")
+                    rows.append(row)
             ready = self._complete(db)
         if not ready:
             for row in rows:

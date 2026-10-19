@@ -96,6 +96,14 @@ See the [directory interface and operations](../../../../tools/RelistenNormaliza
 
 The venue directory covers all 216,332 captured venue rows and 292,523 recording/show homes. The current method groups 100,078 venue members into 35,271 named-place hypotheses using resolved localities, observed names, initials and captured source/show associations. Conflicting addresses, distinct rooms and unresolved names remain separate and browsable. Historical physical continuity is not yet verified; observed recording dates are not opening, closing or name-validity dates. Another 670 native venue accounts retain their original scopes and links to 34,139 files, without a global native-place assignment.
 
+Venue search reuses matching alias groups when counting and listing results.
+On the current read-only projections, searching `MSG` fell from 9.18 seconds to
+0.18 seconds with the same 13 results. Artist filters still select an original
+venue UUID, and an empty page retains the full result count. These measurements
+describe this captured catalog on the local host; they are not a production
+latency guarantee. Search materializes only matching identities and sort fields,
+then loads full records for the requested page.
+
 Venue and taper recording cards now open their tracks and play audio inline.
 Shared navigation connects all discovery pages. A 390-pixel browser check
 followed MSG to the Grateful Dead's 1994-10-19 recording and played “Brokedown
