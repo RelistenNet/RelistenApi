@@ -54,3 +54,27 @@ holdout for another; it must not silently relabel held-out artists as developmen
 or claim that one split establishes both kinds of generalization. Follow the
 [evaluation strategy](../../../plans/active/2026-10-17-full-normalization/evaluation-strategy.md)
 when adding training, tuning and untouched test cases.
+
+## Context-enriched request limits and accounting
+
+The Luna composition selector admits complete context-enriched requests up to
+1,200,000 UTF-8 bytes. Requests without target context retain their 512,000-byte
+limit. Neither path clips candidates or source text to fit. The larger local
+byte limit does not establish that a request fits the provider's token window;
+provider acceptance of the largest retained request must be checked through a
+bounded live trial within the authorized spending limit.
+
+For new context attempts, reservation uses the rendered byte count plus 16,384
+as a conservative input-token bound and includes the full output allowance.
+When that bound exceeds 272,000, reservation uses $0.20 per million input tokens
+and $0.75 per million output tokens. Known usage selects the tier using the
+reported input-token count: $0.10/$0.50 through 272,000 and $0.20/$0.75 above it,
+for the full request. These are undiscounted accounting estimates from the
+[official model card](https://developers.openai.com/api/docs/models/gpt-6-luna),
+not an invoice reconciliation. Missing usage leaves the reservation charged;
+resume does not authorize another paid attempt.
+
+Admission and accounting do not change prompts, method versions, rendered
+request bytes or cache keys. Existing cached responses and historical ledger
+charges remain intact. Generate a fresh preflight and use a new execution
+directory when applying the changed limits; retain earlier receipts as written.

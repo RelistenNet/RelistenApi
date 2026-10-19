@@ -499,6 +499,22 @@ public sealed class TestLunaCompositionHypothesisSelector
     }
 
     [Test]
+    public async Task ContextBeyondTheLocalByteLimitIsNotClippedOrSent()
+    {
+        var input = EnrichedInput(sourceDescription: new string('x', 1_200_000));
+        var handler = new Handler(Response());
+        using var http = new HttpClient(handler);
+        var result = await new LunaCompositionHypothesisSelector(
+            http,
+            null!,
+            () => throw new AssertionException("No key should be requested")
+        ).SelectAsync(Guid.NewGuid(), input);
+
+        result.Reason.Should().Be("input_too_large");
+        handler.Calls.Should().Be(0);
+    }
+
+    [Test]
     public void RepeatedFactsKeepAllCandidatesAndBindEveryOriginalCitationDespiteBoundedExamples()
     {
         var input = Input();
@@ -856,7 +872,8 @@ public sealed class TestLunaCompositionHypothesisSelector
     }
 
     internal static CompositionHypothesisSelectionInput EnrichedInput(
-        bool missingArtistMbid = false
+        bool missingArtistMbid = false,
+        string? sourceDescription = null
     )
     {
         var input = Input();
@@ -930,7 +947,14 @@ public sealed class TestLunaCompositionHypothesisSelector
                         kind == "legacy_setlist_membership" ? true : null,
                         [input.Song.EntityKey],
                         kind is "catalog_recording" or "native_recording"
-                            ? [Text("<b>Été 🌙</b> — original house-band notes", index + 1)]
+                            ?
+                            [
+                                Text(
+                                    sourceDescription
+                                        ?? "<b>Été 🌙</b> — original house-band notes",
+                                    index + 1
+                                ),
+                            ]
                             : [],
                         kind switch
                         {
@@ -966,7 +990,7 @@ public sealed class TestLunaCompositionHypothesisSelector
     // Independently freeze the former v2 envelope and this fixture's compact
     // facts. Calling the production renderer/projection here would hide drift
     // in the no-context request bytes used by existing reusable cache entries.
-    private static string LegacyV2FixtureRequest(CompositionHypothesisSelectionInput input)
+    internal static string LegacyV2FixtureRequest(CompositionHypothesisSelectionInput input)
     {
         var json = new JsonSerializerOptions(JsonSerializerDefaults.Web)
         {
@@ -1130,7 +1154,9 @@ public sealed class TestLunaCompositionHypothesisSelector
     internal sealed class Handler(
         string json,
         CancellationTokenSource? cancellation = null,
-        HttpStatusCode status = HttpStatusCode.OK
+        HttpStatusCode status = HttpStatusCode.OK,
+        long inputTokens = 100,
+        long outputTokens = 200
     ) : HttpMessageHandler
     {
         public int Calls { get; private set; }
@@ -1152,7 +1178,7 @@ public sealed class TestLunaCompositionHypothesisSelector
                 new
                 {
                     status = "completed",
-                    usage = new { input_tokens = 100, output_tokens = 200 },
+                    usage = new { input_tokens = inputTokens, output_tokens = outputTokens },
                     output = new[]
                     {
                         new
@@ -1378,6 +1404,113 @@ public sealed class TestLunaCompositionHypothesisSelectorCache
         limited.SelectedWorkMbid.Should().BeNull();
         handler.Calls.Should().Be(1);
         (await cache.GetJobAsync(job)).AccountedUsd.Should().Be(first.ActualUsd);
+    }
+
+    [TestCase(272_000L)]
+    [TestCase(272_001L)]
+    public async Task CompleteLargeContextReachesHttpAndBillsTheReportedInputTier(long inputTokens)
+    {
+        var literal = new string('x', 600_000);
+        var input = TestLunaCompositionHypothesisSelector.EnrichedInput(sourceDescription: literal);
+        var description = LunaCompositionHypothesisSelector.DescribeRequest(input);
+        description.RenderedBytes.Should().BeGreaterThan(512_000);
+        description.WithinRequestLimit.Should().BeTrue();
+
+        var job = Guid.NewGuid();
+        await cache.CreateJobAsync(
+            job,
+            capUsd: description.MaximumReservedUsd,
+            maximumTotalAttempts: 1
+        );
+        var handler = new TestLunaCompositionHypothesisSelector.Handler(
+            TestLunaCompositionHypothesisSelector.Response(),
+            inputTokens: inputTokens
+        );
+        using var http = new HttpClient(handler);
+        var result = await new LunaCompositionHypothesisSelector(
+            http,
+            cache,
+            () => "fixture-key"
+        ).SelectAsync(job, input);
+
+        using var sent = JsonDocument.Parse(handler.RequestBody!);
+        using var model = JsonDocument.Parse(
+            sent.RootElement.GetProperty("input")[1].GetProperty("content").GetString()!
+        );
+        model
+            .RootElement.GetProperty("targetContext")
+            .GetProperty("textPool")[0]
+            .GetProperty("value")
+            .GetString()
+            .Should()
+            .Be(literal);
+        model
+            .RootElement.GetProperty("suppliedCandidates")
+            .EnumerateArray()
+            .Select(candidate => candidate.GetProperty("workMbid").GetGuid())
+            .Should()
+            .Equal(input.SuppliedCandidates.Select(candidate => candidate.WorkMbid));
+        var expectedCost = inputTokens == 272_000 ? .0273m : .0545502m;
+        result.SelectedWorkMbid.Should().Be(TestLunaCompositionHypothesisSelector.FirstWork);
+        result.ActualUsd.Should().Be(expectedCost);
+        (await cache.GetJobAsync(job)).AccountedUsd.Should().Be(expectedCost);
+        handler.Calls.Should().Be(1);
+    }
+
+    [Test]
+    public async Task LargeContextWithoutUsageRetainsItsLongTierReservationAndDoesNotRetry()
+    {
+        var input = TestLunaCompositionHypothesisSelector.EnrichedInput(
+            sourceDescription: new string('x', 600_000)
+        );
+        var description = LunaCompositionHypothesisSelector.DescribeRequest(input);
+        // Even the 600,000 literal characters alone require this conservative
+        // long-tier reservation, before framing and the output allowance.
+        description.MaximumReservedUsd.Should().BeGreaterThan(.12m);
+        var job = Guid.NewGuid();
+        await cache.CreateJobAsync(job, capUsd: description.MaximumReservedUsd);
+        var handler = new TestLunaCompositionHypothesisSelector.Handler(
+            "{}",
+            status: HttpStatusCode.ServiceUnavailable
+        );
+        using var http = new HttpClient(handler);
+        var selector = new LunaCompositionHypothesisSelector(http, cache, () => "fixture-key");
+        var failed = await selector.SelectAsync(job, input);
+        var resumed = await selector.SelectAsync(job, input);
+
+        failed.Reason.Should().Be("provider_error");
+        failed.ActualUsd.Should().BeNull();
+        resumed.Reason.Should().Be("attempts_exhausted");
+        (await cache.GetJobAsync(job)).AccountedUsd.Should().Be(description.MaximumReservedUsd);
+        handler.Calls.Should().Be(1);
+    }
+
+    [Test]
+    public async Task ExactLegacyCacheReplayPreservesItsHistoricalCharge()
+    {
+        var input = TestLunaCompositionHypothesisSelector.Input();
+        var legacyRequest = TestLunaCompositionHypothesisSelector.LegacyV2FixtureRequest(input);
+        var job = Guid.NewGuid();
+        await cache.CreateJobAsync(job, maximumTotalAttempts: 1);
+        var claim = await cache.TryClaimAsync(job, legacyRequest, .01m, 1, TimeSpan.FromMinutes(3));
+        await cache.CompleteAsync(
+            claim.AttemptUuid!.Value,
+            new(TestLunaCompositionHypothesisSelector.Response(), "historical-receipt", 100, 200),
+            .0001234m
+        );
+        var handler = new TestLunaCompositionHypothesisSelector.Handler("{}");
+        using var http = new HttpClient(handler);
+        var result = await new LunaCompositionHypothesisSelector(
+            http,
+            cache,
+            () => throw new AssertionException("Historical cache replay requires no key")
+        ).SelectAsync(job, input);
+
+        result.FromCache.Should().BeTrue();
+        result.SelectedWorkMbid.Should().Be(TestLunaCompositionHypothesisSelector.FirstWork);
+        result.ActualUsd.Should().BeNull();
+        (await cache.GetJobAsync(job)).AccountedUsd.Should().Be(.0001234m);
+        handler.Calls.Should().Be(0);
     }
 
     [Test]

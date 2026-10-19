@@ -30,6 +30,8 @@ public sealed class LunaCompositionHypothesisSelector(
     // This is a local resource limit, not the provider context limit. The full
     // compact candidate universe is measured and conservatively reserved before admission.
     public const int MaxRenderedRequestBytes = 512_000;
+    private const int MaxTargetContextRequestBytes = 1_200_000;
+    private const int LongContextInputTokens = 272_000;
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
         // This body is JSON sent to Responses, not embedded in HTML. Ordinary
@@ -69,8 +71,13 @@ public sealed class LunaCompositionHypothesisSelector(
             Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(request))),
             Encoding.UTF8.GetByteCount(request),
             suppliedCandidates,
-            Encoding.UTF8.GetByteCount(request) <= MaxRenderedRequestBytes,
-            LunaRecordingCreditExtractor.EstimateReservationUsd(request, Options)
+            Encoding.UTF8.GetByteCount(request)
+                <= (
+                    method == TargetContextVersion
+                        ? MaxTargetContextRequestBytes
+                        : MaxRenderedRequestBytes
+                ),
+            Cost(Encoding.UTF8.GetByteCount(request) + 16384L, Options.MaxOutputTokens, method)
         );
 
     /// <summary>
@@ -231,7 +238,7 @@ public sealed class LunaCompositionHypothesisSelector(
                 LunaCreditResponseException failure => failure.Reason,
                 _ => "invalid_response",
             };
-            var actual = response is null ? (decimal?)null : Cost(response);
+            var actual = response is null ? (decimal?)null : Cost(response, Method(snapshot));
             // Once admitted, cancellation cannot abandon accounting. Missing or
             // out-of-bound usage leaves the entire reservation charged to the job.
             await cache.FailAsync(
@@ -258,17 +265,26 @@ public sealed class LunaCompositionHypothesisSelector(
         await cache.CompleteAsync(
             claim.AttemptUuid!.Value,
             response,
-            Cost(response),
+            Cost(response, Method(snapshot)),
             CancellationToken.None
         );
         return WithReceipt(result with { CacheKey = claim.CacheKey }, response);
     }
 
-    private static decimal Cost(LunaCreditResponse response) =>
-        (
-            response.InputTokens * Options.InputUsdPerMillionTokens
-            + response.OutputTokens * Options.OutputUsdPerMillionTokens
-        ) / 1_000_000m;
+    private static decimal Cost(LunaCreditResponse response, string method) =>
+        Cost(response.InputTokens, response.OutputTokens, method);
+
+    // Admission and prices do not change the rendered request or its cache key.
+    // Historical receipts stay intact; only new context attempts use tiered pricing.
+    // The byte allowance bounds dollars, not the provider's token context window.
+    private static decimal Cost(long inputTokens, long outputTokens, string method)
+    {
+        var longContext = method == TargetContextVersion && inputTokens > LongContextInputTokens;
+        return (
+                inputTokens * (longContext ? .20m : Options.InputUsdPerMillionTokens)
+                + outputTokens * (longContext ? .75m : Options.OutputUsdPerMillionTokens)
+            ) / 1_000_000m;
+    }
 
     private static CompositionHypothesisSelectionResult Unresolved(
         string reason,
@@ -289,7 +305,7 @@ public sealed class LunaCompositionHypothesisSelector(
             ProviderRequestId = response?.ProviderRequestId ?? requestId,
             InputTokens = response?.InputTokens,
             OutputTokens = response?.OutputTokens,
-            ActualUsd = response is null ? null : Cost(response),
+            ActualUsd = response is null ? null : Cost(response, result.Method),
         };
 
     internal static void ValidateInput(CompositionHypothesisSelectionInput input)
