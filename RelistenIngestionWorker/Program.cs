@@ -22,7 +22,15 @@ var sentryOptions = WorkerLogging.Configure(builder);
 using var sentry = sentryOptions == null ? null : SentrySdk.Init(sentryOptions);
 using var host = builder.Build();
 
-var operations = new[] { "import", "batch", "cancel", "rebuild-artist", "repair-jerry-venues" }
+var operations = new[]
+{
+    "import",
+    "batch",
+    "cancel",
+    "rebuild-artist",
+    "kb-llm-catalogue",
+    "repair-jerry-venues",
+}
     .Where(key => builder.Configuration[key] != null)
     .ToArray();
 

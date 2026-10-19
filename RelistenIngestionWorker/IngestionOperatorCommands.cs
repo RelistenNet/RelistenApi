@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Relisten.Api.Models;
 using Relisten.Data;
 using Relisten.Ingestion;
+using Relisten.Ingestion.Workflows;
 using Temporalio.Client;
 
 namespace RelistenIngestionWorker;
@@ -35,12 +36,29 @@ internal sealed class IngestionOperatorCommands(
             "rebuild-artist" => (
                 await imports.RebuildArtistCatalogAsync(new RebuildArtistCatalog(artistId))
             ).WorkflowId,
+            "kb-llm-catalogue" => await imports.BuildKbCatalogueAsync(
+                new BuildKbCatalogue(
+                    artistId,
+                    int.TryParse(configuration["max-chunks"], out var max) ? max : null,
+                    ReaskTitles()
+                )
+            ),
             "repair-jerry-venues" => (
                 await imports.RepairJerryVenuesAsync(new RepairJerryVenues(artistId))
             ).WorkflowId,
             "import" => await ImportArtistAsync(artistId),
             _ => throw new InvalidOperationException($"Unknown operator command: {operation}"),
         };
+    }
+
+    /// --reask="A|B" or --reask-file=path (one title per line): titles to ask about again.
+    private IReadOnlyList<string>? ReaskTitles()
+    {
+        var titles = configuration["reask-file"] is { } file
+            ? File.ReadAllLines(file)
+            : (configuration["reask"] ?? "").Split('|');
+        var list = titles.Select(t => t.Trim()).Where(t => t.Length > 0).ToList();
+        return list.Count == 0 ? null : list;
     }
 
     private async Task<ArtistId> ResolveArtistAsync(string identifier)

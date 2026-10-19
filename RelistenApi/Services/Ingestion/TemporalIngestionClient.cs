@@ -95,6 +95,27 @@ public sealed class TemporalIngestionClient
             (RebuildArtistCatalogWorkflow workflow) => workflow.RunAsync(request, null)
         );
 
+    /// <summary>
+    /// Starts the LLM catalogue for one artist. Its workflow id is separate from imports, so a
+    /// long run never blocks the artist's import; one run per artist at a time.
+    /// </summary>
+    public async Task<string> BuildKbCatalogueAsync(BuildKbCatalogue request)
+    {
+        var workflowId = "kb/catalogue/" + request.Artist;
+        try
+        {
+            var handle = await client.StartWorkflowAsync(
+                (KbCatalogueWorkflow workflow) => workflow.RunAsync(request),
+                Options(workflowId)
+            );
+            return handle.Id;
+        }
+        catch (WorkflowAlreadyStartedException)
+        {
+            throw new ImportAlreadyRunning(workflowId);
+        }
+    }
+
     public Task<ImportHandle<ImportBatchResult>> RefreshCatalogAsync(RefreshCatalog request) =>
         StartBatch(request);
 

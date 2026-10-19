@@ -16,6 +16,12 @@ public static class IngestionServiceRegistration
     public static IServiceCollection AddRelistenCatalogServices(this IServiceCollection services)
     {
         services.AddScoped<CatalogRebuildService>();
+        services.AddSingleton<
+            Relisten.Kb.Catalogue.ICatalogueModel,
+            Relisten.Kb.Catalogue.OpenAiCatalogueModel
+        >();
+        services.AddScoped<Relisten.Kb.Catalogue.CatalogueLlm>();
+        services.AddScoped<Relisten.Kb.Catalogue.CatalogueMatch>();
         services.AddScoped<SetlistShowService, SetlistShowService>();
         services.AddScoped<VenueService, VenueService>();
         services.AddScoped<TourService, TourService>();

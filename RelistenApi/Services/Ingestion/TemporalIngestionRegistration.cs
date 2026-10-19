@@ -71,6 +71,7 @@ public static class TemporalIngestionRegistration
             .AddWorkflow<ArtistRefreshWorkflow>()
             .AddWorkflow<ArchiveItemImportWorkflow>()
             .AddWorkflow<RebuildArtistCatalogWorkflow>()
+            .AddWorkflow<KbCatalogueWorkflow>()
             .AddWorkflow<JerryVenueRepairWorkflow>()
             .AddWorkflow<ArchiveWorkflow>()
             .AddWorkflow<PhishInWorkflow>()
@@ -85,6 +86,7 @@ public static class TemporalIngestionRegistration
         services
             .AddHostedTemporalWorker(IngestionQueues.Database)
             .AddScopedActivities<CatalogActivities>()
+            .AddScopedActivities<KbActivities>()
             .AddScopedActivities<IngestionBatchActivities>()
             .ConfigureOptions(o =>
             {
