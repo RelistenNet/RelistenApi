@@ -21,15 +21,15 @@ A shadow result is a proposed interpretation in separate local artifacts or a di
 
 Reuse the completed experiments and existing services. Process the full captured population with streaming, resumable batches; run model-assisted work at measured throughput within existing spending authorization. Use independent domain agents, integrate their outputs into one reader, and fix broad failure classes. The [evaluation ledger](evaluation-milestone.md#coverage-ledger) guides audit coverage while delivery proceeds. It is no longer a sequence of small labeling prerequisites.
 
-The complete file producer has processed 5,064,097 captured files. The local readers now support cross-artist credit lookup, contextual person hypotheses, shared venue search, music discovery and playback. These features expose the current interpretations and their evidence; they also make the remaining extraction and identity failures visible.
+The current readers now support these listener journeys:
 
-Venue search currently exposes retained observations. It does not yet provide
-complete alias resolution and canonical display: `MSG / NY, NY` remains separate
-from `Madison Square Garden / New York, New York` despite supporting recording
-and show context. The next venue pass must join supported physical identities
-across artists while keeping distinct rooms and uncertain history separate.
+- [Search MSG](http://alecs-macbook-pro.tail09dbf.ts.net:18776/?q=MSG) to open Madison Square Garden and browse its recordings across artists. Supported aliases share a preferred name and locality; original venue records and distinct rooms remain accessible.
+- [Open Timothy Brown](http://alecs-macbook-pro.tail09dbf.ts.net:18777/?person=person-hypothesis%3Aa2e169825b0594a2e62f4cee7db70f09) through a credited name or alias, then filter supported recordings by artist or taper/transferrer role. Shared person pages use direct evidence; raw name groups remain available for unassigned observations.
+- [Search music](http://alecs-macbook-pro.tail09dbf.ts.net:18769/) across the complete captured file population and follow song, work and setlist references into playable recordings. File-title coverage is complete; consolidating title variants into shared artist-song pages is the next music feature.
 
-Start with the [delivery guide](shadow-delivery.md) for current coverage and working links. The [people directory](http://alecs-macbook-pro.tail09dbf.ts.net:18768/?context=1) compares people across artist contexts; the [venue directory](http://alecs-macbook-pro.tail09dbf.ts.net:18770/) follows venue observations into recordings; [music discovery](http://alecs-macbook-pro.tail09dbf.ts.net:18769/) follows repertoire, supported work links and setlists into playable files. Native people, aliases, credits, venue accounts and file interpretations participate in these shared pages, with separate counts and original scopes. The [native reader](http://alecs-macbook-pro.tail09dbf.ts.net:18771/?view=files) retains all 34,139 native files and their optional catalog playback links. Cached composition evidence supplies 31 supported work proposals. Full-file indexing is complete; the complete title replacement follows under a measured resource bound. All 5,000 contextual people questions are processed, and a full source refresh applies the revised credit/alias grammar without relabeling old comparison witnesses. Each feature guide states its current coverage and limits.
+These are proposed interpretations, with original evidence and playback homes retained. The [delivery guide](shadow-delivery.md) states current coverage and remaining gaps. The latest people generation applies the revised credit and alias grammar to all 292,523 captured recordings and includes the revised native provider observations. The [native reader](http://alecs-macbook-pro.tail09dbf.ts.net:18774/?view=files) retains all 34,139 native files and their optional catalog playback links.
+
+Next, expand person membership through the shared domain matching policy, consolidate artist-song aliases and improve cross-artist composition coverage. Neither searchable file titles nor comparison cards alone complete normalization.
 
 Complete the remaining domain coverage, then qualify production acceptance, rehearse backfill and prepare rollout. Production writes and deployment retain their existing approval requirements.
 

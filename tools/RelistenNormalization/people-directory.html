@@ -1055,6 +1055,10 @@
                   ? " · " +
                     count(context.rejectedQuestions) +
                     " questions have no supported retained decision"
+                  : "") +
+                (context.invalidatedByCreditReplacement
+                  ? " · " + count(context.invalidatedByCreditReplacement) +
+                    " earlier comparisons are excluded from this generation because their credit evidence changed"
                   : ""),
             ),
           );

@@ -78,134 +78,29 @@ reader contracts.
 
 ### Cross-artist taper and transferrer lookup
 
-The [people directory](http://alecs-macbook-pro.tail09dbf.ts.net:18768/?q=Aadam)
-provides name search, artist filters, original credit quotes and links to each
-recording's playable files. It processes all 292,523 captured source results;
-253,722 recordings across 4,284 artists contain extracted credits. Multiple
-roles on one source count as one recording. For example, the “Aadam Jacobs”
-name group contains 470 recordings across 96 artists. These counts concern the
-production capture; the separately imported local Jerry/Aadam catalog below has
-its own namespace and population.
+The [people directory](http://alecs-macbook-pro.tail09dbf.ts.net:18777/) now opens shared person pages with names, aliases, recordings, artist and role filters, original credit quotes and playback links. For example, [Timothy Brown](http://alecs-macbook-pro.tail09dbf.ts.net:18777/?person=person-hypothesis%3Aa2e169825b0594a2e62f4cee7db70f09) combines ten supported recordings across nine artists, including the misspelled credited name “imothy Brown.” [Matt Lazor / LazyLightnin'](http://alecs-macbook-pro.tail09dbf.ts.net:18777/?person=person-hypothesis%3Ada0b0033e700576e8626886f961eae72) combines three recordings across three artists. Each recording retains its own roles, source and playable files.
 
-The 26,370 groups use exact normalized names. They are retrieval groups that can
-contain namesakes; aliases and fragmented names can remain separate. The page
-exposes that limitation alongside the evidence. Its base extraction predates
-the newer matcher. A selected-source overlay now reuses 2,296 retained Luna
-credit mentions through the shared C# credit projection. All 2,000 selected
-sources reproduce the original artist and six input fields; none has an input
-mismatch. This adds named credits on 151 recordings across six more artists,
-without another paid request. Local and model interpretations remain labeled;
-their overlap does not inflate recording counts. Model evidence links open the
-actual retained result, while captured dates, source ownership and playable-file
-links remain intact.
+The directory contains 1,472 shared person hypotheses from surviving contextual comparisons. Membership requires direct support against an anchor credit. Namesakes, conflicting evidence and overlapping alternatives remain distinguishable; neither matching names nor transitive chains add recordings. Raw name groups remain searchable for observations without a shared assignment. The next person pass will use the existing C# domain policy to include all directly supported occurrences, rather than only the selected contextual cohort.
 
-The [contextual view](http://alecs-macbook-pro.tail09dbf.ts.net:18768/?context=1)
-exposes 4,677 usable relationship proposals from all 5,000 selected questions:
-2,239 possible same-person links, 216 possible different-person links and 2,222
-insufficient-evidence decisions. The selected cohort uses 7,582 source witnesses
-across 1,837 artists; 4,650 questions cross artist boundaries. These are model
-proposals with checked supporting quotes, not independent accuracy labels or
-accepted identities. Another 323 questions remain missing or rejected.
+The refreshed source generation contains 638,887 credits across all 292,523 captured source homes. It preserves 571,458 exact old credits, inserts 67,429 and retires 23,367 changed credits. All 2,296 retained Luna credit mentions remain. Another 408 source actor observations on 406 recordings across 143 artists retain explicit aliases without inventing recording roles.
 
-The first job stopped at the disk reserve after 2,460 questions. A separate
-pending-only job completed the remaining 2,540 in 15 minutes 21 seconds, without
-resubmitting completed batches. Per-question recovery retained 718 usable answers
-from the first job and 919 from the continuation without new requests. Missing
-answers remain unresolved; duplicate or invented question IDs reject the response.
-Original responses, costs and cancelled-attempt reservations remain unchanged.
+Of the original 5,000 contextual questions, 4,224 decisions still match their exact credit witnesses: 2,026 same-person, 158 different-person and 2,040 insufficient-evidence proposals. Changed credits invalidate 453 earlier comparisons; another 323 were missing or rejected. The original questions, responses and costs remain retained. Combined known token cost is $1.3464393; the ledger retains $1.3971328 including uncertain-call reservations. These are estimates at configured rates, not invoices.
 
-The continuation's configured token cost is $0.6855741. Combined known token cost
-is $1.3464393; the ledger retains $1.3971328 including the original uncertain-call
-reservations. These amounts are estimates at configured rates, not invoices.
-Directory attachment preserves the original 5,000-question denominator, catalog
-credit counts, native observations and recording homes. See the
-[continuation contract](../../../../tools/RelistenNormalization/people-directory.md#pending-only-continuation).
+The native-v3 overlay supplies 882 actor observations, 1,007 role mentions and three role-free aliases across 670 provider inputs. These counts can overlap catalog observations and must not be added as unique people or recordings. The [native reader](http://alecs-macbook-pro.tail09dbf.ts.net:18774/) retains the original scopes, 34,139 files and 3,060 Local playback anchors. “Fil Pate” now has `Other / engineered by`, preserving the engineering wording. Earlier readers remain available for their historical evidence locators.
 
-The reader still groups credits by normalized name wording. Contextual
-same-person proposals appear as pair cards; they do not yet provide a shared
-person page with combined recordings. The next identity view must group only
-directly supported credit occurrences, preserve their roles and original homes,
-and expose conflicting or insufficient evidence. A supported pair must not
-silently absorb every recording in either name bucket or create transitive
-identity merges.
-
-Prose and extraction errors still fragment names before identity matching can
-help. Use the broader contextual results to improve those failure classes. Do
-not grow a list of exceptions for individual names. See the
-[directory interface and operations](../../../../tools/RelistenNormalization/people-directory.md).
-
-The same directory now includes 801 native actor observations, 867 role mentions
-and two role-free alias actors from the complete 670-input native run. Native
-observations may repeat catalog credits; these counts are separate and not
-additive. Original recording, file and selected-root scopes remain inspectable.
-Alias-only observations supply no credit role. The update preserves all 594,825
-catalog credit mentions, recording homes and contextual comparisons. Aadam
-Jacobs still has 470 catalog recordings across 96 artists. Searches for DATPAT
-and bazillion retrieve the native aliases and their exact retained evidence.
-
-The revised native generation is staged separately on
-[port 18774](http://alecs-macbook-pro.tail09dbf.ts.net:18774/). It retains 882 actor
-observations, 1,007 credit mentions and three role-free alias actors. All 670
-inputs preserve their performance, venue, file, composition and setlist proposals;
-all 34,139 files and 3,060 Local playback anchors are unchanged. The new grammar
-corrects “engineered by Fil Pate” to the name “Fil Pate” with `Other` and the
-original engineering wording. Shared people and venue projections still use the
-previous native generation until their explicit replacements. Distinct reader
-ports keep old evidence locators valid during integration.
+See the [directory interface and operations](../../../../tools/RelistenNormalization/people-directory.md) and [continuation contract](../../../../tools/RelistenNormalization/people-directory.md#pending-only-continuation).
 
 ### Shared venue and music lookup
 
-The [venue directory](http://alecs-macbook-pro.tail09dbf.ts.net:18770/) covers
-216,332 retained venue rows across 4,362 artists. It keeps 207,304 proposed place
-keys and all 292,523 recording/show homes. A name search retrieves observations;
-its result count is not a physical-place count. Each venue detail follows the
-selected legacy UUID into recordings and their original playable files. Related
-observations expose shared hypotheses without claiming that every recording
-belongs to the same physical premises. The current projection uses retained v1
-hypotheses; dated historical-name evidence remains absent. A separate 9,814,016-byte
-overlay adds all 670 native venue accounts and exact recording-origin links to
-34,139 native files. It stores each complete recording origin once and keeps the
-legacy database read-only. Native catalog anchors stay in the original native
-reader namespace, even when a Local UUID coincides with a production UUID.
-Raw venue-history prose and competing localities remain cited observations.
-The current directory does not yet normalize scoped aliases and locality labels
-into shared physical-place identities. For example, Furthur's `MSG / NY, NY`
-record remains separate from `Madison Square Garden / New York, New York`, even
-though its recording contexts point to the latter venue for the same artist and
-date. The next venue pass must use that context, retrieve abbreviation candidates,
-group supported identities across artists and display the preferred name and
-locality. Original labels and evidence must remain available. Distinct rooms,
-including the Theatre at MSG, must retain separate identities. Searchable venue
-observations alone do not demonstrate this normalization behavior.
-See the [native integration contract](../../../research/2026-10-17-full-normalization/scale/venue-directory.md)
-and the
-[venue interface and operations](venue-directory.md).
+[Search MSG](http://alecs-macbook-pro.tail09dbf.ts.net:18776/?q=MSG) to open **Madison Square Garden, New York City, New York**. Its page combines 923 captured recordings and 199 show UUIDs across 63 retained venue records and 33 artists. Artist filters reach 96 Phish recordings or 712 Grateful Dead recordings. Original source, show and file ownership remains intact. The original MSG UUID still opens its own raw `MSG / NY, NY` account; normalized result links select the shared recording list.
 
-[Music discovery](http://alecs-macbook-pro.tail09dbf.ts.net:18769/) currently
-projects 24,242 repertoire keys, 31 supported work keys and 38,517 setlist
-accounts. Its catalog, local and native namespaces remain separate. Native
-file titles contribute the existing resolver's song interpretations and
-alternatives; the browser does not match titles again. Exact song keys can open
-individual native files, including authenticated Local playback for “I Am the
-Walrus” and a separately labeled Phish provider link for “Llama.” Exact song/work
-keys also query the current full-file
-reader: Bob Weir's “Poison Ivy” returned 38 playable files with their original
-recording homes. The ordered Grateful Dead account retains three sets and
-18 passages, alongside its source annotations and unresolved song alternatives.
+The venue directory covers all 216,332 captured venue rows and 292,523 recording/show homes. The current method groups 100,078 venue members into 35,271 named-place hypotheses using resolved localities, observed names, initials and captured source/show associations. Conflicting addresses, distinct rooms and unresolved names remain separate and browsable. Historical physical continuity is not yet verified; observed recording dates are not opening, closing or name-validity dates. Another 670 native venue accounts retain their original scopes and links to 34,139 files, without a global native-place assignment.
 
-The complete full-file cache contains 963,490 repertoire keys. Its title
-projection needs 430,202,880 bytes for staging alone, exceeding the earlier
-384 MiB cap. A measured 1 GiB bound covers estimated final descriptors and
-conservative staging overlap. The replacement also uses the staged native-v3
-reader; all existing scoped memberships must survive before publication.
-The next attempt exposed six selected composition witnesses larger than the
-reader's 16 MiB line limit; the largest is 17,654,801 bytes. The projection still
-needs a bounded selected-record reader before this replacement can complete.
-The current completed music catalog remains available. Full-reader
-relationships are queryable, but their titles are explicitly marked unprojected.
-Supported global work correspondences are still sparse. A browse interface does
-not supply missing composition evidence. See the
-[music interface and operations](../../../../tools/RelistenNormalization/music-discovery.md).
+Actual venue navigation reaches the original playable files; a bounded request confirmed audio from one Grateful Dead Archive recording. One sampled Phish URL is stale while current upstream metadata supplies a working replacement. The venue layer preserves the captured URL; provider refresh owns that correction. See the [venue interface and operations](venue-directory.md).
+
+[Music discovery](http://alecs-macbook-pro.tail09dbf.ts.net:18769/) now includes all 963,490 current full-reader repertoire keys, for 971,127 scoped entries in total. It preserves every earlier song, artist, setlist and work membership. Catalog, Local and native scopes stay separate. Thirty-three supported work proposals have 41 work/song links; 38,517 setlist accounts retain their existing ordered or unresolved structure. Forty-three repertoire references have no retained title.
+
+The complete title projection makes the captured files searchable; it does not establish 971,127 independent songs. For example, the Grateful Dead search still splits `09.Scarlet Begonias` from its repertoire entry. The next shared C# interpretation pass must consolidate supported title variants without replacing original keys, erasing compound songs or merging genuine variants. The reader must then combine exact member-key file results and distinct known performance homes. Cross-artist work coverage also remains sparse; artist-song consolidation cannot manufacture composition evidence. See the [music interface and operations](../../../../tools/RelistenNormalization/music-discovery.md).
 
 Dictionary citation compaction retains one actual witness per distinct literal
 spelling while keeping every membership in its original setlist result. The
