@@ -24,12 +24,12 @@ Reuse the completed experiments and existing services. Process the full captured
 The current readers now support these listener journeys:
 
 - [Search MSG](http://alecs-macbook-pro.tail09dbf.ts.net:18776/?q=MSG) to open Madison Square Garden and browse its recordings across artists. Supported aliases share a preferred name and locality; original venue records and distinct rooms remain accessible.
-- [Open Timothy Brown](http://alecs-macbook-pro.tail09dbf.ts.net:18777/?person=person-hypothesis%3Aa2e169825b0594a2e62f4cee7db70f09) through a credited name or alias, then filter supported recordings by artist or taper/transferrer role. Shared person pages use direct evidence; raw name groups remain available for unassigned observations.
+- [Open tonedeaf](http://alecs-macbook-pro.tail09dbf.ts.net:18777/?person=shared-person%3Apeople_facts%3A9de2bd6e8a4f53298d78c7f3c56299b9) to browse 2,370 recordings across 403 artists, or [Timothy Brown](http://alecs-macbook-pro.tail09dbf.ts.net:18777/?person=shared-person%3Apeople_facts%3Ad40f1b4fab9c7492c3cd9146fbd5fcc5) for 424 recordings across 105 artists. Filter by artist or taper/transferrer role, then open the original recording's files. Shared pages use direct evidence; raw name groups remain available for unassigned observations.
 - [Search music](http://alecs-macbook-pro.tail09dbf.ts.net:18769/) across the complete captured file population and follow song, work and setlist references into playable recordings. File-title coverage is complete; consolidating title variants into shared artist-song pages is the next music feature.
 
 These are proposed interpretations, with original evidence and playback homes retained. The [delivery guide](shadow-delivery.md) states current coverage and remaining gaps. The latest people generation applies the revised credit and alias grammar to all 292,523 captured recordings and includes the revised native provider observations. The [native reader](http://alecs-macbook-pro.tail09dbf.ts.net:18774/?view=files) retains all 34,139 native files and their optional catalog playback links.
 
-Next, expand person membership through the shared domain matching policy, consolidate artist-song aliases and improve cross-artist composition coverage. Neither searchable file titles nor comparison cards alone complete normalization.
+Directly supported person pages now cover 18,120 captured recordings across 1,536 artists. Next, consolidate artist-song aliases, improve cross-artist composition coverage and extend person matching to difficult credits without supported accounts. Neither searchable file titles nor comparison cards alone complete normalization.
 
 Complete the remaining domain coverage, then qualify production acceptance, rehearse backfill and prepare rollout. Production writes and deployment retain their existing approval requirements.
 
