@@ -80,9 +80,20 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
         (Guid ArtistUuid, Guid SongUuid),
         CapturedSong
     > descriptorIdentities = [];
+
+    // A boundary-only spelling is a fallback candidate, never a rewrite of a
+    // retained name. Separate indexes preserve exact-title priority and every rival.
+    private readonly Dictionary<
+        (long ArtistId, string Title),
+        Dictionary<Guid, CapturedSong>
+    > songsWithoutWordBoundaries = [];
+    private readonly Dictionary<
+        (Guid ArtistUuid, string Title),
+        Dictionary<Guid, CapturedSong>
+    > descriptorSongsWithoutWordBoundaries = [];
     private readonly IdentityCandidateMatcher matcher = new();
 
-    public string Version => "shadow-repertoire-v6";
+    public string Version => "shadow-repertoire-v7";
 
     public IReadOnlyList<string> DomainsFor(string inputKind) =>
         inputKind is "song_sample" or "track_sample" ? ["repertoire"] : [];
@@ -348,6 +359,17 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
             identity.AddWitness(evidence);
         }
         matches[value.LegacySongUuid] = identity;
+
+        var boundaryKey = (
+            value.ArtistUuid,
+            IdentityCandidateMatcher.RepertoireTitleBoundaryCandidateKey(value.Title)
+        );
+        if (!descriptorSongsWithoutWordBoundaries.TryGetValue(boundaryKey, out var boundaryMatches))
+        {
+            boundaryMatches = [];
+            descriptorSongsWithoutWordBoundaries.Add(boundaryKey, boundaryMatches);
+        }
+        boundaryMatches[value.LegacySongUuid] = identity;
     }
 
     public ShadowRepertoireCandidate? DictionaryIdentity(Guid artistUuid, Guid songUuid)
@@ -362,7 +384,13 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
         string title
     )
     {
-        descriptorSongs.TryGetValue((artistUuid, NormalizeTitle(title)), out var matches);
+        if (!descriptorSongs.TryGetValue((artistUuid, NormalizeTitle(title)), out var matches))
+        {
+            descriptorSongsWithoutWordBoundaries.TryGetValue(
+                (artistUuid, IdentityCandidateMatcher.RepertoireTitleBoundaryCandidateKey(title)),
+                out matches
+            );
+        }
         return CompareCandidates(artistUuid, title, matches);
     }
 
@@ -422,16 +450,7 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
 
         // Decorated controls can reach the producer's default Song class. A normalized
         // imported label supplies no additional evidence that such a mention is musical.
-        if (
-            normalized
-            is "banter"
-                or "stage banter"
-                or "tuning"
-                or "crowd"
-                or "applause"
-                or "band introductions"
-                or "encore break"
-        )
+        if (IsExplicitControlLabel(normalized))
         {
             return Segment("not_applicable", "shadow_guard_explicit_control_label");
         }
@@ -454,7 +473,17 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
         // A passage label can describe music or speech without naming an authored song.
         // Match the whole label so titles such as Soundcheck Blues remain usable. Literal
         // dictionary assertions above still preserve actual catalog identities.
-        if (GenericControlPassage.IsMatch(trimmedTitle))
+        // A boundary spelling of a known control supplies no additional musical
+        // evidence. Reuse the same control grammar; literal dictionary wording won above.
+        if (
+            GenericControlPassage.IsMatch(trimmedTitle)
+            || candidates.Any(candidate =>
+                candidate.Evidence.Any(evidence =>
+                    IsExplicitControlLabel(NormalizeTitle(evidence.Quote))
+                    || GenericControlPassage.IsMatch(evidence.Quote.Trim())
+                )
+            )
+        )
         {
             return Segment("unresolved", "shadow_guard_generic_control_passage");
         }
@@ -510,7 +539,10 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
                 )
                 : Segment(
                     "proposed",
-                    "unique_title_correspondence_is_not_identity_acceptance",
+                    candidates[0]
+                        .Evidence.Any(evidence => NormalizeTitle(evidence.Quote) == normalized)
+                        ? "unique_title_correspondence_is_not_identity_acceptance"
+                        : "unique_boundary_spelling_correspondence_is_not_identity_acceptance",
                     candidates[0].Song,
                     candidates
                 );
@@ -541,11 +573,17 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
     )
     {
         var normalized = NormalizeTitle(title);
-        if (normalized.Length == 0 || !songs.TryGetValue((artistId, normalized), out var matches))
+        if (normalized.Length == 0)
         {
             return [];
         }
-
+        if (!songs.TryGetValue((artistId, normalized), out var matches))
+        {
+            songsWithoutWordBoundaries.TryGetValue(
+                (artistId, IdentityCandidateMatcher.RepertoireTitleBoundaryCandidateKey(title)),
+                out matches
+            );
+        }
         return CompareCandidates(artistUuid, title, matches);
     }
 
@@ -603,6 +641,17 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
         var uuid = row.GetProperty("uuid").GetGuid();
         var evidence = new ShadowRepertoireDictionaryEvidence(inputKey, pointer, name);
         AddWitness(matches, uuid, evidence);
+
+        var boundaryKey = (
+            key.Item1,
+            IdentityCandidateMatcher.RepertoireTitleBoundaryCandidateKey(name)
+        );
+        if (!songsWithoutWordBoundaries.TryGetValue(boundaryKey, out var boundaryMatches))
+        {
+            boundaryMatches = [];
+            songsWithoutWordBoundaries.Add(boundaryKey, boundaryMatches);
+        }
+        AddWitness(boundaryMatches, uuid, evidence);
     }
 
     private static void AddWitness(
@@ -655,6 +704,16 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
             ? pointerOrder < 0
             : StringComparer.Ordinal.Compare(candidate.Quote, current.Quote) < 0;
     }
+
+    private static bool IsExplicitControlLabel(string normalized) =>
+        normalized
+            is "banter"
+                or "stage banter"
+                or "tuning"
+                or "crowd"
+                or "applause"
+                or "band introductions"
+                or "encore break";
 
     private static string LiteralTitleKey(string title) =>
         title.Normalize(NormalizationForm.FormC).Trim().ToUpperInvariant();

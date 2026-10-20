@@ -20,6 +20,14 @@ public sealed class IdentityCandidateMatcher
     /// </summary>
     public static string PeopleNameCandidateKey(string wording) => NameKey(wording);
 
+    /// <summary>
+    /// Retrieves repertoire spellings that differ only at word or punctuation boundaries.
+    /// Callers must preserve artist scope, prefer literal candidates and retain all rivals.
+    /// This key neither changes identity keys nor qualifies automatic acceptance.
+    /// </summary>
+    public static string RepertoireTitleBoundaryCandidateKey(string wording) =>
+        NameKey(wording).Replace(" ", "", StringComparison.Ordinal);
+
     /// <summary>Pin this feature contract in people projections and evaluated policies.</summary>
     public const string PeopleActorFeaturesVersion = "people-actor-context-features-v1";
 

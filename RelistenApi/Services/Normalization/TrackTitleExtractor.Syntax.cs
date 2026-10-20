@@ -24,7 +24,7 @@ public sealed partial class TrackTitleExtractor
     );
 
     private static readonly Regex RecordingTrackFilename = new(
-        @"^(?:[a-z]{1,8})?(?<date>(?:\d{4}|\d{2})[-_.]\d{2}[-_.]\d{2})(?:[ _-]*(?:d|s)\d+[ _.-]*t\d+|[ _-]*(?:(?:set|disc)\s*\d+[ ._-]+)?(?:track|t)\s*\d+[.)]?)[ _.-]+(?<content>.+)$",
+        @"^(?:[a-z]{1,8})?(?<date>(?:\d{4}|\d{2})[-_.]\d{2}[-_.]\d{2})(?:[ _-]*(?:d|s)\d+[ _.-]*t\d+|[ _-]*(?:(?:set|disc)\s*\d+[ ._-]+)?(?:track|t)\s*\d+[.)]?|[ _-]+\d{1,3}[.)]?)[ _.-]+(?<content>.+)$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
     );
 

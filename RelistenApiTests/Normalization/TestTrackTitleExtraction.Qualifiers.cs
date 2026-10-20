@@ -112,6 +112,10 @@ public partial class TestTrackTitleExtraction
     [TestCase("gd81-02-30 s2t10 Scarlet Begonias")]
     [TestCase("gd1900-02-29d1t09_Scarlet Begonias")]
     [TestCase("10 Scarlet")]
+    [TestCase("10Scarlet")]
+    [TestCase("gd86-02-30 16 Wharf Rat")]
+    [TestCase("gd86-03-20 Wharf Rat")]
+    [TestCase("band2024-02-29 1234 Wharf Rat")]
     public void RetainsLiteralNamesAndUnrecognizedSyntax(string raw)
     {
         var result = extractor.Extract(Guid.NewGuid(), raw);
@@ -132,6 +136,34 @@ public partial class TestTrackTitleExtraction
         segment.CoreTitle!.Title.Should().Be("🎹 Café 🌙");
         segment.Evidence.StartCodePoint.Should().Be(3);
         segment.CoreTitle.Evidence.StartCodePoint.Should().Be(3);
+        AssertExtractionEvidence(result);
+    }
+
+    [TestCase("gd86-03-20 16 🎹 Wharf Rat 🌙.flac", "🎹 Wharf Rat 🌙", 14)]
+    [TestCase("band2024-02-29 1 Café.flac", "Café", 17)]
+    [TestCase("ensemble99-12-31 123 Étoile.flac", "Étoile", 21)]
+    public void DatedFilenamePlainTrackCountersKeepUnicodeSongEvidenceWithoutPerformanceInference(
+        string raw,
+        string expected,
+        int startCodePoint
+    )
+    {
+        var result = extractor.Extract(Guid.NewGuid(), raw);
+        var segment = result.Segments.Should().ContainSingle().Subject;
+
+        result.OriginalTitle.Should().Be(raw);
+        segment.Title.Should().Be(expected);
+        segment.Evidence.Quote.Should().Be(expected);
+        segment.Evidence.StartCodePoint.Should().Be(startCodePoint);
+        result
+            .Qualifiers.Should()
+            .Contain(qualifier =>
+                qualifier.StructuralKind == TrackTitleStructuralKind.FilenameMetadata
+            );
+        segment.OccurrenceUuid.Should().BeNull();
+        segment.StartMs.Should().BeNull();
+        segment.EndMs.Should().BeNull();
+        segment.TransitionAfter.Should().Be(TitleTransition.Unknown);
         AssertExtractionEvidence(result);
     }
 

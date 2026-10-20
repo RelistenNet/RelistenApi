@@ -12,7 +12,7 @@ namespace Relisten.Normalization.Batch;
 /// </summary>
 public sealed class MusicRepertoireConsolidator
 {
-    public const string Version = "music-repertoire-consolidation-v1";
+    public const string Version = "music-repertoire-consolidation-v2";
     private static readonly Regex CompoundSeparator = new(
         @"\s+(?:-|\+|&)\s+",
         RegexOptions.CultureInvariant | RegexOptions.NonBacktracking

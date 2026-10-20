@@ -14,7 +14,7 @@ namespace Relisten.Normalization;
 /// </summary>
 public sealed partial class TrackTitleExtractor
 {
-    public const string Version = "track-title-v2";
+    public const string Version = "track-title-v3";
 
     private static readonly Regex OpaqueFilename = new(
         @"(?:\d{4}[-_.]\d{2}[-_.]\d{2}.*t\d+$)|^(?:(?:disc|d)\s*\d+\s*)?(?:track|t)\s*\d+$",

@@ -155,11 +155,15 @@ public sealed class TestMusicRepertoireConsolidator
         AssertCitations(result);
     }
 
-    [Test]
-    public void DictionaryCandidatesStayWithinBothSourceScopeAndArtist()
+    [TestCase("09.Scarlet Begonias", "Scarlet Begonias")]
+    [TestCase("SawMill", "Saw Mill")]
+    public void DictionaryCandidatesStayWithinBothSourceScopeAndArtist(
+        string title,
+        string dictionaryTitle
+    )
     {
         var otherArtist = Guid.Parse("42b9192d-0412-4c2f-80be-718b9ed48e25");
-        var sameScope = Descriptor("09.Scarlet Begonias");
+        var sameScope = Descriptor(title);
         var otherScope = sameScope with { Scope = "captured:another-catalogue" };
         var anotherArtist = sameScope with
         {
@@ -170,7 +174,7 @@ public sealed class TestMusicRepertoireConsolidator
             ),
         };
         var consolidator = new MusicRepertoireConsolidator();
-        consolidator.ObserveDictionary(DictionaryName("Scarlet Begonias", Scarlet));
+        consolidator.ObserveDictionary(DictionaryName(dictionaryTitle, Scarlet));
         foreach (var source in new[] { sameScope, otherScope, anotherArtist })
         {
             consolidator.ObserveDescriptor(source);
@@ -311,6 +315,142 @@ public sealed class TestMusicRepertoireConsolidator
         target.Song.LegacySongUuid.Should().Be(Scarlet);
         target.Evidence.Quote.Should().Be(title);
         target.Relation.Should().Be(MusicRepertoireRelation.IdentityAlias);
+        AssertCitations(result);
+    }
+
+    [TestCase("SawMill", "Saw Mill")]
+    [TestCase("Turn On Your LoveLight", "Turn On Your Love Light")]
+    [TestCase("WestL.A.Fadeaway", "West L.A. Fadeaway")]
+    public void BoundarySpellingUsesTheUniqueScopedDictionaryIdentityWithoutChangingTheOriginalKey(
+        string title,
+        string dictionaryTitle
+    )
+    {
+        var source = Descriptor(title);
+        var result = Resolve(source, DictionaryName(dictionaryTitle, Scarlet));
+
+        result.OriginalKey.Should().Be(source.OriginalKey);
+        result.OriginalTitle.Should().Be(title);
+        result.SourceWitness.Should().Be(source.Witness);
+        var target = result.Targets.Should().ContainSingle().Subject;
+        target.Disposition.Should().Be("proposed");
+        target.Song.LegacySongUuid.Should().Be(Scarlet);
+        target.Song.EntityKey.Should().Be(ShadowRepertoireAdapter.KnownEntityKey(Scarlet));
+        target.Song.Name.Should().Be(dictionaryTitle);
+        target.Relation.Should().Be(MusicRepertoireRelation.IdentityAlias);
+        target.Evidence.Quote.Should().Be(title);
+        AssertCitations(result);
+    }
+
+    [TestCase("A B")]
+    [TestCase("a   b")]
+    public void ExistingLiteralOrNormalizedDictionaryMatchWinsBeforeBoundaryRivals(string title)
+    {
+        var result = Resolve(
+            Descriptor(title),
+            DictionaryName("A B", Scarlet),
+            DictionaryName("AB", Fire)
+        );
+
+        var target = result.Targets.Should().ContainSingle().Subject;
+        target.Disposition.Should().Be("proposed");
+        target.Song.LegacySongUuid.Should().Be(Scarlet);
+        target.Relation.Should().Be(MusicRepertoireRelation.IdentityAlias);
+        AssertCitations(result);
+    }
+
+    [Test]
+    public void BoundaryCollisionsRetainEveryDictionaryIdentityForReview()
+    {
+        var source = Descriptor("ABC");
+        var result = Resolve(source, DictionaryName("AB C", Scarlet), DictionaryName("A BC", Fire));
+
+        result.Disposition.Should().Be("review");
+        result.OriginalKey.Should().Be(source.OriginalKey);
+        result
+            .Targets.Select(target => target.Song.LegacySongUuid)
+            .Should()
+            .BeEquivalentTo(new Guid?[] { Scarlet, Fire });
+        result.Targets.Should().OnlyContain(target => target.Disposition == "review");
+        AssertCitations(result);
+    }
+
+    [TestCase("Cafe", "Café")]
+    [TestCase("SawMills", "Saw Mill")]
+    public void BoundaryFallbackDoesNotFoldDiacriticsOrChangeLetters(
+        string title,
+        string dictionaryTitle
+    )
+    {
+        var source = Descriptor(title);
+        var result = Resolve(source, DictionaryName(dictionaryTitle, Scarlet));
+
+        var target = result.Targets.Should().ContainSingle().Subject;
+        target.Song.LegacySongUuid.Should().BeNull();
+        target.Song.EntityKey.Should().Be(source.OriginalKey);
+        target.Song.Name.Should().Be(title);
+        AssertCitations(result);
+    }
+
+    [TestCase("SawMill Jam", MusicRepertoireRelation.Jam)]
+    [TestCase("SawMill (tease)", MusicRepertoireRelation.Tease)]
+    [TestCase("SawMill Reprise", MusicRepertoireRelation.Reprise)]
+    public void BoundaryFallbackKeepsMusicalVariantsSeparateFromIdentityAliases(
+        string title,
+        MusicRepertoireRelation relation
+    )
+    {
+        var result = Resolve(Descriptor(title), DictionaryName("Saw Mill", Scarlet));
+
+        var target = result.Targets.Should().ContainSingle().Subject;
+        target.Disposition.Should().Be("proposed");
+        target.Song.LegacySongUuid.Should().Be(Scarlet);
+        target.Relation.Should().Be(relation);
+        target.Qualifiers.Should().NotBeEmpty();
+        AssertCitations(result);
+    }
+
+    [TestCase("Ban ter", "Banter")]
+    [TestCase("In tro", "Intro")]
+    [TestCase("Soun dcheck", "Soundcheck")]
+    [TestCase("Ta lk", "Talk")]
+    [TestCase("En core Break", "Encore Break")]
+    public void BoundaryFallbackDoesNotTurnASplitControlLabelIntoAMusicalTarget(
+        string title,
+        string dictionaryTitle
+    )
+    {
+        var source = Descriptor(title);
+        var result = Resolve(source, DictionaryName(dictionaryTitle, Scarlet));
+
+        result.OriginalKey.Should().Be(source.OriginalKey);
+        result.Targets.Should().BeEmpty();
+    }
+
+    [Test]
+    public void BoundaryFallbackKeepsBothKnownCompoundMembersWithoutInventingTransitions()
+    {
+        var result = Resolve(
+            Descriptor("SawMill - LoveLight"),
+            DictionaryName("Saw Mill", Scarlet),
+            DictionaryName("Love Light", Fire)
+        );
+
+        result.Targets.Select(target => target.Song.LegacySongUuid).Should().Equal(Scarlet, Fire);
+        result
+            .Targets.Should()
+            .OnlyContain(target =>
+                target.Disposition == "proposed"
+                && target.Relation == MusicRepertoireRelation.CompoundMember
+            );
+        result
+            .Extraction!.Segments.Should()
+            .OnlyContain(segment =>
+                segment.TransitionAfter == TitleTransition.Unknown
+                && segment.OccurrenceUuid == null
+                && segment.StartMs == null
+                && segment.EndMs == null
+            );
         AssertCitations(result);
     }
 
