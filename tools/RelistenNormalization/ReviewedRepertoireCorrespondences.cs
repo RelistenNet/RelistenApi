@@ -43,7 +43,13 @@ public sealed class ReviewedRepertoireCorrespondences
         foreach (var original in originals)
         {
             var evaluation = resolver.Evaluate(
-                new("songs", "repertoire", StableKey(scope, original.EntityKey), ArtistUuid: artist)
+                new(
+                    "songs",
+                    "repertoire",
+                    StableKey(scope, original.EntityKey),
+                    Literal: original.Name,
+                    ArtistUuid: artist
+                )
             );
             if (evaluation.AppliedRules.Count == 0)
             {

@@ -33,7 +33,8 @@ public sealed partial class RepertoireResolutionPolicyEvaluator
 
     private RepertoireResolutionClaimDecision DecideWithoutTitle(
         RepertoireResolutionClaimContext context,
-        ActiveRepertoireAcceptancePolicy? policy
+        ActiveRepertoireAcceptancePolicy? policy,
+        ExpertKnowledgeEvaluation? knowledge
     )
     {
         var snapshot = context.Candidates;
@@ -124,6 +125,23 @@ public sealed partial class RepertoireResolutionPolicyEvaluator
                 RepertoireResolutionClaimDisposition.Review,
                 "reviewed_external_identity_retracted"
             );
+        }
+
+        if (ReviewedKnowledgeDecision(context, knowledge) is { } reviewed)
+        {
+            return reviewed;
+        }
+        var excluded = KnowledgeTargets(context, knowledge?.ExcludedTargets ?? []).ToHashSet();
+        if (excluded.Count > 0)
+        {
+            // A negative review excludes its named accepted target. It does not reject every
+            // rival or erase the original candidate evidence retained in the page context.
+            snapshot = snapshot with
+            {
+                Facts = snapshot
+                    .Facts.Where(candidate => !excluded.Contains(candidate.Header.Uuid))
+                    .ToArray(),
+            };
         }
 
         var identities = claim

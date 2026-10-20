@@ -26,7 +26,9 @@ public sealed partial class NormalizationRepertoireResolutionProcessor(
     private readonly RepertoireResolutionPolicyEvaluator evaluator = new();
 
     public const string Version =
-        "repertoire-resolution-v2/"
+        "repertoire-resolution-v3/"
+        + ExpertKnowledgeResolver.Version
+        + "/"
         + ArtistSongTitleResolver.Version
         + "/"
         + NormalizationRecordingProcessor.Version
@@ -380,7 +382,11 @@ public sealed partial class NormalizationRepertoireResolutionProcessor(
                 "The source context lacks required registered owner or catalog clocks."
             );
         }
-        var decisions = evaluator.DecidePage(context.Claims, preparation.Policy.Active);
+        var decisions = evaluator.DecidePage(
+            context.Claims,
+            preparation.Policy.Active,
+            expertKnowledge: context.ExpertKnowledge
+        );
         var page = new RepertoireResolutionStage(
             Guid.NewGuid(),
             Guid.NewGuid(),

@@ -68,6 +68,7 @@ public sealed partial class NormalizationCandidateService
             && source.ArtistUuid is { } titleArtist
                 ? await ReadRepertoireTitleIndex(c, t, titleArtist, ct)
                 : null;
+        var knowledge = await ReadRepertoireKnowledgeIndex(c, t, source.ArtistUuid, ct);
         var contexts = new List<RepertoireResolutionClaimContext>();
         var decisionReads = new List<CandidateFactsReadSet>();
         var freshnessComplete = true;
@@ -81,7 +82,8 @@ public sealed partial class NormalizationCandidateService
                 claim,
                 exclusions,
                 ct,
-                titleIndex
+                titleIndex,
+                knowledge
             );
             contexts.Add(context);
             if (context.Candidates is { } snapshot)
@@ -114,7 +116,8 @@ public sealed partial class NormalizationCandidateService
             owners.Artist,
             pinnedPolicy,
             issues.Distinct().ToArray(),
-            freshnessComplete && RepertoireFreshnessComplete(factsContext.Issues, source)
+            freshnessComplete && RepertoireFreshnessComplete(factsContext.Issues, source),
+            knowledge?.Snapshot
         );
     }
 

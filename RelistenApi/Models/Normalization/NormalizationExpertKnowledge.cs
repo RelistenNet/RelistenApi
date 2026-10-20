@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace Relisten.Api.Models.Normalization;
 
@@ -8,7 +9,9 @@ public sealed record ExpertKnowledgeTarget(
     string Domain,
     string Namespace,
     string StableKey,
-    Guid? CanonicalUuid = null
+    Guid? CanonicalUuid = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        Guid? ImportedSongUuid = null
 );
 
 /// <summary>

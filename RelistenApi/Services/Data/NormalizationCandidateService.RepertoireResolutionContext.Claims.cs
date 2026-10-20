@@ -19,7 +19,8 @@ public sealed partial class NormalizationCandidateService
         RepertoireResolutionClaim claim,
         IReadOnlyList<MusicPublication> exclusions,
         CancellationToken ct,
-        RepertoireTitleIndex? titleIndex = null
+        RepertoireTitleIndex? titleIndex = null,
+        RepertoireKnowledgeIndex? knowledge = null
     )
     {
         var association = await ReadRepertoireAssociation(
@@ -44,6 +45,12 @@ public sealed partial class NormalizationCandidateService
             );
         }
         var query = RepertoireClaimQuery(artist, claim, claimFacts);
+        var expertEvaluation = knowledge?.Evaluate(claim, artist);
+        var expertTargets =
+            knowledge == null
+                ? []
+                : await knowledge.TargetsAsync(c, t, artist, expertEvaluation!, ct);
+        await ObserveRepertoireKnowledgeOwners(c, t, expertEvaluation, claimFacts, ct);
         var selection =
             query.Names.Count + query.ExternalIdentities.Count == 0
                 ? new NormalizationCandidateSet(IdentityMatchingDomain.Repertoire, [], false)
@@ -53,6 +60,7 @@ public sealed partial class NormalizationCandidateService
             .Select(assignment => assignment.RepertoireSongUuid)
             .Concat(association?.RepertoireSongUuid is { } previous ? [previous] : [])
             .Concat(titleIndex?.Targets(artist, query.Names) ?? [])
+            .Concat(expertTargets.SelectMany(target => target.RepertoireSongUuids))
             .Distinct()
             .ToArray();
         selection = await IncludeRepertoireTargets(c, t, artist, selection, forced, claimFacts, ct);
@@ -134,6 +142,15 @@ public sealed partial class NormalizationCandidateService
             .Concat(exactIdentities)
             .DistinctBy(value => value.Uuid)
             .ToArray();
-        return new(claim, snapshot, association, assignments, songs, identities, exclusions);
+        return new(
+            claim,
+            snapshot,
+            association,
+            assignments,
+            songs,
+            identities,
+            exclusions,
+            expertTargets
+        );
     }
 }

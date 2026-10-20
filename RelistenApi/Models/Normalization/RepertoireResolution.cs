@@ -102,7 +102,17 @@ public sealed record RepertoireResolutionClaimContext(
     IReadOnlyList<ImportedSongAssignmentChange> ImportedAssignments,
     IReadOnlyList<RepertoireSongChange> ExistingSongs,
     IReadOnlyList<MusicExternalIdentityChange> ExistingExternalIdentities,
-    IReadOnlyList<MusicPublication> ReviewedExclusions
+    IReadOnlyList<MusicPublication> ReviewedExclusions,
+    IReadOnlyList<RepertoireExpertTargetResolution>? ExpertTargets = null
+);
+
+/// <summary>
+/// A reviewed target and its authenticated accepted repertoire identities. Frozen-source keys
+/// remain opaque; only explicit canonical IDs or typed accepted correspondences can bind them.
+/// </summary>
+public sealed record RepertoireExpertTargetResolution(
+    ExpertKnowledgeTarget Target,
+    IReadOnlyList<Guid> RepertoireSongUuids
 );
 
 /// <summary>Page facts and complete owner membership share one primary repeatable-read transaction.</summary>
@@ -114,7 +124,8 @@ public sealed record RepertoireResolutionPageContext(
     RepertoireResolutionOwnerContext? ArtistOwner,
     RepertoireResolutionPolicyState Policy,
     IReadOnlyList<string> Issues,
-    bool FreshnessComplete = true
+    bool FreshnessComplete = true,
+    ExpertKnowledgeSnapshot? ExpertKnowledge = null
 );
 
 public sealed record RepertoireResolutionPreparation(
@@ -140,7 +151,8 @@ public sealed record RepertoireResolutionClaimDecision(
     Guid? RepertoireSongUuid,
     IReadOnlyList<NormalizedEvidenceReference> Evidence,
     string Authority,
-    IReadOnlyList<Guid> CandidateUuids
+    IReadOnlyList<Guid> CandidateUuids,
+    ExpertKnowledgeEvaluation? ExpertKnowledge = null
 );
 
 public enum RepertoireResolutionStageKind

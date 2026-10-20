@@ -91,6 +91,63 @@ public sealed class TestNormalizationExpertKnowledgeResolver
         result.ConflictingTargets.Should().BeEquivalentTo(new[] { Site, Room });
     }
 
+    [Test]
+    public void ImportedAttachmentsPreserveFrozenReferenceIdentityAndConflictingBindingsRemainVisible()
+    {
+        var selector = new ExpertKnowledgeSelector(
+            "repertoire",
+            Literal: "Song",
+            ArtistUuid: Artist
+        );
+        var frozen = new ExpertKnowledgeTarget("songs", "repertoire", "scoped-frozen-reference");
+        var attached = frozen with { ImportedSongUuid = Guid.NewGuid() };
+        var observation = new ExpertKnowledgeObservation(
+            "songs",
+            "repertoire",
+            "imported:source",
+            "Song",
+            Artist
+        );
+
+        Resolver(Rule(selector, frozen), Rule(selector, attached))
+            .Evaluate(observation)
+            .Target.Should()
+            .Be(attached);
+        Resolver(Rule(selector, attached), Rule(selector, frozen, "rejected"))
+            .Evaluate(observation)
+            .Outcome.Should()
+            .Be("excluded_targets");
+        Resolver(
+                Rule(selector, attached),
+                Rule(selector, attached with { ImportedSongUuid = Guid.NewGuid() })
+            )
+            .Evaluate(observation)
+            .Outcome.Should()
+            .Be("conflict");
+    }
+
+    [Test]
+    public void ReviewedTargetCannotDeclareCompetingCanonicalAndImportedAttachments()
+    {
+        var selector = new ExpertKnowledgeSelector(
+            "repertoire",
+            Literal: "Song",
+            ArtistUuid: Artist
+        );
+        var target = new ExpertKnowledgeTarget(
+            "songs",
+            "repertoire",
+            "scoped-frozen-reference",
+            CanonicalUuid: Guid.NewGuid(),
+            ImportedSongUuid: Guid.NewGuid()
+        );
+
+        FluentActions
+            .Invoking(() => Resolver(Rule(selector, target)))
+            .Should()
+            .Throw<ArgumentException>();
+    }
+
     [TestCase("artist")]
     [TestCase("provider")]
     [TestCase("locality")]

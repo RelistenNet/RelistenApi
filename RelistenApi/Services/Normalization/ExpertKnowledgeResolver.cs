@@ -102,9 +102,13 @@ public sealed class ExpertKnowledgeResolver
             .GroupBy(TargetIdentity)
             .SelectMany(group =>
             {
-                // Optional canonical metadata does not change a frozen reference's identity.
-                // Two different actual canonical attachments remain a visible conflict.
-                var canonical = group.Where(target => target.CanonicalUuid != null).ToArray();
+                // An attachment does not change the frozen reference's identity. Different
+                // canonical or imported-song attachments remain a visible conflict.
+                var canonical = group
+                    .Where(target =>
+                        target.CanonicalUuid != null || target.ImportedSongUuid != null
+                    )
+                    .ToArray();
                 return canonical.Length > 0 ? canonical : [group.First()];
             })
             .ToArray();
@@ -197,6 +201,21 @@ public sealed class ExpertKnowledgeResolver
         }
         RequireKey(definition.Target.Namespace, "target namespace");
         RequireKey(definition.Target.StableKey, "target key");
+        if (
+            definition.Target.ImportedSongUuid == Guid.Empty
+            || definition.Target.ImportedSongUuid.HasValue && definition.Domain != "songs"
+        )
+        {
+            throw new ArgumentException(
+                "An imported song attachment requires a song target and a nonempty UUID."
+            );
+        }
+        if (definition.Target.CanonicalUuid.HasValue && definition.Target.ImportedSongUuid.HasValue)
+        {
+            throw new ArgumentException(
+                "A reviewed target can carry one canonical or imported-song attachment, not both."
+            );
+        }
         RequireKey(definition.Selector.Namespace, "selector namespace");
         var selector = definition.Selector;
         if (selector.AccountStableKey != null)
@@ -318,6 +337,7 @@ public sealed class ExpertKnowledgeResolver
             .ThenBy(target => target.Namespace, StringComparer.Ordinal)
             .ThenBy(target => target.StableKey, StringComparer.Ordinal)
             .ThenBy(target => target.CanonicalUuid)
+            .ThenBy(target => target.ImportedSongUuid)
             .ToArray();
 
     private static void RequireKey(string value, string name)

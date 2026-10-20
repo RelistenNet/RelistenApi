@@ -19,7 +19,7 @@ namespace Relisten.Data;
 /// immutable operator ledger and CAS; this table is its current typed index, not another graph.
 /// Evidence files must be retained by the host under its explicitly configured evidence root.
 /// </summary>
-public sealed class NormalizationExpertKnowledgeService(
+public sealed partial class NormalizationExpertKnowledgeService(
     DbService db,
     NormalizationWorkService work,
     string evidenceRoot

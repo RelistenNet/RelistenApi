@@ -293,7 +293,8 @@ public sealed partial class NormalizedMusicService
                     .ToDictionary(
                         value => value.ClaimUuid,
                         value => value.RepertoireSongUuid!.Value
-                    )
+                    ),
+                page.Context.ExpertKnowledge
             )
             .ToDictionary(value => value.ClaimUuid);
         var allocated = new HashSet<Guid>();

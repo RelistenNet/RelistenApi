@@ -242,6 +242,7 @@ public sealed partial class NormalizationCandidateService
             && source.ArtistUuid is { } titleArtist
                 ? await ReadRepertoireTitleIndex(c, t, titleArtist, ct)
                 : null;
+        var knowledge = await ReadRepertoireKnowledgeIndex(c, t, source.ArtistUuid, ct);
         // Keep the original page boundaries: source aliases can connect rivals through another
         // claim on that page. Rechecking a negative alone can incorrectly make it bindable.
         foreach (var page in source.Claims.Chunk(preparation.PageSize))
@@ -261,7 +262,8 @@ public sealed partial class NormalizationCandidateService
                     claim,
                     exclusions,
                     ct,
-                    titleIndex
+                    titleIndex,
+                    knowledge
                 );
                 contexts.Add(context);
                 if (context.Candidates is { } snapshot)
@@ -275,7 +277,13 @@ public sealed partial class NormalizationCandidateService
                     reads.Add(snapshot.ReadSet);
                 }
             }
-            foreach (var current in evaluator.DecidePage(contexts, pinnedPolicy.Active))
+            foreach (
+                var current in evaluator.DecidePage(
+                    contexts,
+                    pinnedPolicy.Active,
+                    expertKnowledge: knowledge?.Snapshot
+                )
+            )
             {
                 if (!negative.Remove(current.ClaimUuid, out var saved))
                 {

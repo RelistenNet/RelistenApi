@@ -29,10 +29,24 @@ public sealed partial class RepertoireResolutionPolicyEvaluator
     public IReadOnlyList<RepertoireResolutionClaimDecision> DecidePage(
         IReadOnlyList<RepertoireResolutionClaimContext> contexts,
         ActiveRepertoireAcceptancePolicy? policy,
-        IReadOnlyDictionary<Guid, Guid>? savedAllocations = null
+        IReadOnlyDictionary<Guid, Guid>? savedAllocations = null,
+        ExpertKnowledgeSnapshot? expertKnowledge = null
     )
     {
-        var decisions = contexts.Select(context => DecideWithoutTitle(context, policy)).ToArray();
+        var knowledgeResolver =
+            expertKnowledge == null ? null : new ExpertKnowledgeResolver(expertKnowledge);
+        var decisions = contexts
+            .Select(context =>
+            {
+                var knowledge = context.Candidates?.Query.ArtistUuid is { } artist
+                    ? knowledgeResolver?.Evaluate(KnowledgeObservation(context.Claim, artist))
+                    : null;
+                return DecideWithoutTitle(context, policy, knowledge) with
+                {
+                    ExpertKnowledge = knowledge?.AppliedRules.Count > 0 ? knowledge : null,
+                };
+            })
+            .ToArray();
         for (var index = 0; index < decisions.Length; index++)
         {
             var decision = decisions[index];
@@ -65,6 +79,7 @@ public sealed partial class RepertoireResolutionPolicyEvaluator
         private readonly Dictionary<string, RepertoireCandidateFacts> existing;
         private readonly Dictionary<string, RepertoireResolutionClaimDecision> byClaimKey;
         private readonly ArtistSongTitleResolver resolver;
+        private readonly ArtistSongTitleCandidate[] titleCandidates;
 
         public TitlePage(
             IReadOnlyList<RepertoireResolutionClaimContext> contexts,
@@ -88,9 +103,11 @@ public sealed partial class RepertoireResolutionPolicyEvaluator
                         .ToArray(),
                     []
                 ));
-            resolver = new ArtistSongTitleResolver(
-                existing.Values.Select(TitleCandidate).Concat(sourceCandidates)
-            );
+            titleCandidates = existing
+                .Values.Select(TitleCandidate)
+                .Concat(sourceCandidates)
+                .ToArray();
+            resolver = new ArtistSongTitleResolver(titleCandidates);
         }
 
         public RepertoireResolutionClaimDecision Resolve(
@@ -103,7 +120,19 @@ public sealed partial class RepertoireResolutionPolicyEvaluator
                 return decision;
             }
 
-            var group = resolver.Resolve(
+            var excludedTargets = KnowledgeTargets(
+                context,
+                decision.ExpertKnowledge?.ExcludedTargets ?? []
+            );
+            var applicable =
+                excludedTargets.Length == 0
+                    ? resolver
+                    : new ArtistSongTitleResolver(
+                        titleCandidates.Where(candidate =>
+                            !excludedTargets.Any(uuid => candidate.EntityKey == CandidateKey(uuid))
+                        )
+                    );
+            var group = applicable.Resolve(
                 context.Candidates!.Query.ArtistUuid!.Value,
                 context.Claim.Title!.Value
             );

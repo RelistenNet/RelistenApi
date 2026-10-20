@@ -53,6 +53,43 @@ public sealed class TestReviewedRepertoireCorrespondences
     }
 
     [Test]
+    public void ArtistLiteralAliasUpdatesAnIndependentAccountAndWithdrawalRestoresItsInterpretation()
+    {
+        var source = First with { Name = "Playin' in the Band" };
+        var target = Second with { Name = "Playing in the Band" };
+        var rule = Rule(source, target);
+        rule = rule with
+        {
+            Definition = rule.Definition with
+            {
+                Selector = new("repertoire", Literal: source.Name, ArtistUuid: Artist),
+            },
+        };
+        var original = Segment(source);
+
+        var result = Observed(ExpertKnowledgeResolver.CreateSnapshot([rule]), source, target)
+            .Apply(Scope, Artist, original);
+        var withdrawn = Observed(
+                ExpertKnowledgeResolver.CreateSnapshot([
+                    rule with
+                    {
+                        Revision = 2,
+                        State = "retracted",
+                    },
+                ]),
+                source,
+                target
+            )
+            .Apply(Scope, Artist, original);
+
+        result.Song.Should().Be(target);
+        result.Knowledge.Should().ContainSingle();
+        withdrawn.Song.Should().Be(source);
+        original.Song.Should().Be(source);
+        result.Evidence.Should().Be(original.Evidence);
+    }
+
+    [Test]
     public void AnUnreviewedRivalRemainsUnresolvedAfterTheReviewedDuplicateIsCollapsed()
     {
         var original = Segment(First, Second, Rival);
@@ -214,7 +251,7 @@ public sealed class TestReviewedRepertoireCorrespondences
 
     private static ShadowRepertoireSegment Segment(params ShadowRepertoireSong[] songs)
     {
-        var extracted = new TrackTitleExtractor().Extract(Artist, "Shared Song").Segments.Single();
+        var extracted = new TrackTitleExtractor().Extract(Artist, songs[0].Name).Segments.Single();
         var matcher = new IdentityCandidateMatcher();
         var diagnostics = songs
             .Select(song => new ShadowRepertoireCandidate(

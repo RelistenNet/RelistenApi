@@ -22,7 +22,7 @@ public sealed partial class NormalizationRepertoireResolutionProcessor
     {
         var songs = new Dictionary<Guid, RepertoireSongChange>();
         var imported = new Dictionary<Guid, ImportedSongAssignmentChange>();
-        var external = new Dictionary<NormalizationResourceKey, MusicExternalIdentityChange>();
+        var external = new Dictionary<Guid, MusicExternalIdentityChange>();
         // Creation precedes same-page correspondences, even when the representative's claim
         // occurs later in source order. Each relationship keeps its own claim evidence.
         foreach (
@@ -85,7 +85,10 @@ public sealed partial class NormalizationRepertoireResolutionProcessor
                     ExpectedRevision = assignment?.ExpectedRevision ?? 0,
                     ImportedSongUuid = importedUuid,
                     RepertoireSongUuid = target,
-                    Basis = "provider_assertion",
+                    Basis =
+                        decision.Authority == "reviewed_expert_knowledge"
+                            ? "validated_match"
+                            : "provider_assertion",
                     Evidence = decision.Evidence,
                 };
             }
@@ -93,7 +96,7 @@ public sealed partial class NormalizationRepertoireResolutionProcessor
     }
 
     private static void AddExternalIdentities(
-        Dictionary<NormalizationResourceKey, MusicExternalIdentityChange> external,
+        Dictionary<Guid, MusicExternalIdentityChange> external,
         RepertoireResolutionClaimContext source,
         RepertoireResolutionClaimDecision decision
     )
@@ -103,6 +106,22 @@ public sealed partial class NormalizationRepertoireResolutionProcessor
         foreach (var identity in claim.Identities)
         {
             var key = identity.Identity;
+            var earlier = external.Values.SingleOrDefault(value =>
+                !value.Retracted
+                && value.Provider == key.Provider
+                && value.ResourceType == key.ResourceType
+                && value.ProviderKey == key.ProviderKey
+            );
+            if (earlier != null)
+            {
+                if (earlier.RepertoireSongUuid != target)
+                {
+                    throw new NormalizationConflictException(
+                        "Conflicting source claims cannot allocate two targets for one qualified song identity."
+                    );
+                }
+                continue;
+            }
             var existing = source.ExistingExternalIdentities.SingleOrDefault(x =>
                 !x.Retracted
                 && x.Provider == key.Provider
@@ -116,33 +135,44 @@ public sealed partial class NormalizationRepertoireResolutionProcessor
                     || !ResolvesTo(source, storedTarget, target)
                 )
                 {
-                    throw new NormalizationConflictException(
-                        "The checked provider song ID already supports another accepted identity."
-                    );
+                    if (
+                        decision.Authority != "reviewed_expert_knowledge"
+                        || existing.Basis == "reviewed"
+                    )
+                    {
+                        throw new NormalizationConflictException(
+                            "The checked provider song ID already supports another accepted identity."
+                        );
+                    }
+                    // External assertion ownership is immutable. Retain its UUID/history and
+                    // explicitly replace the automatic correspondence under the current review.
+                    external[existing.Uuid] = existing with
+                    {
+                        Retracted = true,
+                        Basis = "validated_match",
+                        Evidence = decision.Evidence,
+                    };
                 }
-                continue;
-            }
-            if (external.TryGetValue(key, out var earlier))
-            {
-                if (earlier.RepertoireSongUuid != target)
+                else
                 {
-                    throw new NormalizationConflictException(
-                        "Conflicting source claims cannot allocate two targets for one qualified song identity."
-                    );
+                    continue;
                 }
-                continue;
             }
-            external[key] = new()
+            var uuid = RelationshipUuid(
+                decision.DecisionUuid,
+                "external:" + key.Provider + ":" + key.ResourceType + ":" + key.ProviderKey
+            );
+            external[uuid] = new()
             {
-                Uuid = RelationshipUuid(
-                    decision.DecisionUuid,
-                    "external:" + key.Provider + ":" + key.ResourceType + ":" + key.ProviderKey
-                ),
+                Uuid = uuid,
                 RepertoireSongUuid = target,
                 Provider = key.Provider,
                 ResourceType = key.ResourceType,
                 ProviderKey = key.ProviderKey,
-                Basis = "provider_assertion",
+                Basis =
+                    decision.Authority == "reviewed_expert_knowledge"
+                        ? "validated_match"
+                        : "provider_assertion",
                 Evidence = [identity.Evidence],
             };
         }
@@ -205,7 +235,10 @@ public sealed partial class NormalizationRepertoireResolutionProcessor
             };
         }
         if (
-            decision.Authority is "evaluated_artist_title" or "evaluated_same_page_title"
+            decision.Authority
+                is "evaluated_artist_title"
+                    or "evaluated_same_page_title"
+                    or "reviewed_expert_knowledge"
             || metadataReviewed
         )
         {
