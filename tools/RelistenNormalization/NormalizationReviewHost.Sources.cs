@@ -509,6 +509,43 @@ public sealed partial class NormalizationReviewHost
     /// <summary>Only fixed configured reader origins are fetched. Client evidence URLs are display data.</summary>
     private sealed class ReviewReaderBridge(ReviewHostConfiguration configuration, HttpClient http)
     {
+        internal string EvidenceOrigin(string domain) =>
+            Origin(domain).GetLeftPart(UriPartial.Authority);
+
+        internal string? EvidenceUrl(ReviewReaderItem item)
+        {
+            var path = item.EvidenceUrl;
+            if (
+                string.IsNullOrEmpty(path)
+                || !path.StartsWith('/')
+                || path.StartsWith("//", StringComparison.Ordinal)
+                || path.Contains('\\')
+                || path.Any(char.IsControl)
+                || !Uri.TryCreate(path, UriKind.Relative, out var relative)
+            )
+            {
+                return null;
+            }
+            var origin = Origin(item.Domain);
+            var evidence = new Uri(origin, relative);
+            return
+                evidence.GetLeftPart(UriPartial.Authority)
+                == origin.GetLeftPart(UriPartial.Authority)
+                ? evidence.AbsoluteUri
+                : null;
+        }
+
+        private Uri Origin(string domain) =>
+            new(
+                domain switch
+                {
+                    "venues" => configuration.VenueReader,
+                    "people" => configuration.PeopleReader,
+                    "compositions" or "songs" => configuration.MusicReader,
+                    _ => throw new ArgumentException("Unsupported review domain."),
+                }
+            );
+
         internal async Task<ReviewReaderItem> SourceAsync(
             ReviewReference reference,
             CancellationToken ct
@@ -656,16 +693,10 @@ public sealed partial class NormalizationReviewHost
             CancellationToken ct
         )
         {
-            var reader = domain switch
-            {
-                "venues" => configuration.VenueReader,
-                "people" => configuration.PeopleReader,
-                "compositions" or "songs" => configuration.MusicReader,
-                _ => throw new ArgumentException("Unsupported review domain."),
-            };
+            var reader = Origin(domain);
             query["domain"] = domain;
             var address = new Uri(
-                new Uri(reader),
+                reader,
                 route
                     + "?"
                     + string.Join(

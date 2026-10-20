@@ -6,7 +6,8 @@ import vm from "node:vm";
 import { test } from "node:test";
 
 class Element {
-  constructor() {
+  constructor(tag = "div") {
+    this.tagName = tag.toUpperCase();
     this.value = "";
     this.textContent = "";
     this.children = [];
@@ -35,7 +36,7 @@ function fixture(search = "?domain=compositions&namespace=repertoire&stableKey=%
       return elements.get(id);
     },
     querySelector(selector) { return { value: selections[selector.match(/name="(.*?)"/)[1]] }; },
-    createElement() { return new Element(); },
+    createElement(tag) { return new Element(tag); },
   };
   const requests = [];
   const replies = [];
@@ -47,7 +48,7 @@ function fixture(search = "?domain=compositions&namespace=repertoire&stableKey=%
     return { ok: reply.status < 400, status: reply.status, json: async () => reply.data };
   };
   let sequence = 0;
-  const sandbox = { URLSearchParams };
+  const sandbox = { URL, URLSearchParams };
   vm.runInNewContext(readFileSync(new URL("normalization-review.js", import.meta.url), "utf8"), sandbox);
   const addresses = [];
   const history = { replaceState: (_state, _title, url) => addresses.push(url) };
@@ -301,7 +302,7 @@ test("songs mode searches within exact artist and captured scope, then prepares 
   assert.equal(query.get("domain"), "songs");
   assert.equal(query.get("artistUuid"), artistUuid);
   assert.equal(query.get("scope"), "captured:phish");
-  const [targetButton, currentButton] = f.document.getElementById("candidates").children;
+  const [targetButton, currentButton] = f.document.getElementById("candidates").children.map(row => row.children[0]);
   assert.equal(currentButton.disabled, true);
   assert.equal(currentButton.children[0].textContent, "Tweezer Reprise (this song entry)");
   assert.equal(targetButton.disabled, false);
@@ -319,7 +320,7 @@ test("songs mode searches within exact artist and captured scope, then prepares 
   f.reply({ source: { label: "Tweezer Reprise", artistUuid }, history: [] });
   f.reply({ items: [] });
   await f.page.apply();
-  assert.equal(f.document.getElementById("status").textContent, "Saved for matching. Individual files and setlists have not changed.");
+  assert.equal(f.document.getElementById("status").textContent, "Decision saved. Song groups update on the next normalization run.");
 });
 
 test("invalid songs scope or missing artist stops candidate search with a usable instruction", async () => {
@@ -329,5 +330,57 @@ test("invalid songs scope or missing artist stops candidate search with a usable
     await f.page.search();
     assert.equal(f.requests.length, 0);
     assert.match(f.document.getElementById("candidate-status").textContent, /Open Review again from the song account/);
+  }
+});
+
+test("source and candidate evidence links open original reader evidence separately from selection", async () => {
+  const f = fixture("?domain=venues&namespace=legacy_venue&stableKey=original-venue");
+  const origin = "http://100.73.204.24:18774";
+  const sourceUrl = origin + "/api/evidence?id=original-venue";
+  const targetUrl = origin + "/api/evidence?id=target-venue";
+  f.reply({ source: { label: "MSG", evidenceUrl: sourceUrl }, evidenceOrigin: origin, history: [] });
+  await f.page.loadContext();
+  const sourceLink = f.document.getElementById("source-evidence").children[0];
+  assert.equal(sourceLink.textContent, "Inspect original evidence");
+  assert.equal(sourceLink.href, sourceUrl);
+  assert.equal(sourceLink.target, "_blank");
+  assert.equal(sourceLink.rel, "noopener noreferrer");
+
+  f.document.getElementById("candidate-query").value = "Madison";
+  const targetRef = { domain: "venues", namespace: "legacy_venue", stableKey: "target-venue" };
+  f.reply({ items: [{ label: "Madison Square Garden", targetRef, evidenceUrl: targetUrl }], evidenceOrigin: origin });
+  f.page.selected = null;
+  await f.page.search();
+  const row = f.document.getElementById("candidates").children[0];
+  const [button, evidence] = row.children;
+  assert.equal(button.tagName, "BUTTON");
+  assert.equal(evidence.tagName, "A");
+  assert.equal(evidence.textContent, "Inspect evidence");
+  assert.equal(evidence.href, targetUrl);
+  assert.equal(button.children.some(child => child.tagName === "A"), false);
+  assert.equal(f.page.selected, null);
+  button.listeners.click();
+  assert.deepEqual(f.page.selected.targetRef, targetRef);
+  assert.equal(button.getAttribute("aria-pressed"), "true");
+  assert.equal(f.requests.length, 2, "evidence links navigate without fetching or saving through the review page");
+});
+
+test("external, credential-bearing, malformed and executable evidence URLs are omitted", async () => {
+  const origin = "http://100.73.204.24:18774";
+  for (const evidenceUrl of [
+    "javascript:alert(1)", "data:text/html,unsafe", "https://example.org/evidence",
+    "http://100.73.204.24:19999/api/evidence", "http://user:password@100.73.204.24:18774/api/evidence",
+    "//example.org/evidence", "/api/evidence?id=relative", "not a URL",
+  ]) {
+    const f = fixture("?domain=venues&namespace=legacy_venue&stableKey=original-venue");
+    f.reply({ source: { label: "Original venue", evidenceUrl }, evidenceOrigin: origin, history: [] });
+    await f.page.loadContext();
+    assert.equal(f.document.getElementById("source-evidence").children.length, 0, evidenceUrl);
+    f.document.getElementById("candidate-query").value = "Venue";
+    f.reply({ items: [{ label: "Candidate", targetRef: { domain: "venues", namespace: "legacy_venue", stableKey: "candidate" }, evidenceUrl }], evidenceOrigin: origin });
+    await f.page.search();
+    const row = f.document.getElementById("candidates").children[0];
+    assert.equal(row.children.length, 1, evidenceUrl);
+    assert.equal(row.children[0].tagName, "BUTTON");
   }
 });

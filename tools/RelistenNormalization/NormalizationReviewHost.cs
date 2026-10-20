@@ -210,6 +210,7 @@ public sealed partial class NormalizationReviewHost
             new
             {
                 sourceRef = source.Reference,
+                evidenceOrigin = readers.EvidenceOrigin(source.Domain),
                 source = new
                 {
                     label = source.DisplayName,
@@ -219,6 +220,7 @@ public sealed partial class NormalizationReviewHost
                     source.Provider,
                     source.Locality,
                     source.Date,
+                    evidenceUrl = readers.EvidenceUrl(source),
                 },
                 currentDecision = rule == null
                     ? null
@@ -269,7 +271,9 @@ public sealed partial class NormalizationReviewHost
                     targetRef = item.Reference,
                     label = item.DisplayName,
                     detail = item.Description,
+                    evidenceUrl = readers.EvidenceUrl(item),
                 }),
+                evidenceOrigin = readers.EvidenceOrigin(domain),
                 page.Complete,
                 omittedCount = Math.Max(0, page.Total - page.Items.Length),
             },

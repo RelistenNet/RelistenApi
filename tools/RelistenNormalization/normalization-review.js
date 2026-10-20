@@ -24,6 +24,7 @@
       this.queueCategory = this.query.get("category") || "";
       this.queuePage = null;
       this.selected = null;
+      this.candidateButtons = [];
       this.preparation = null;
       this.prepareAttempt = null;
       this.retractAttempt = null;
@@ -278,7 +279,7 @@
         this.text("accept-label", "These are the same song");
         this.text("reject-label", "These are different songs");
         this.text("account-label", "Only this artist song");
-        this.text("scope-help", "This saves a same-song relationship within this artist and captured catalog scope. Individual files and setlists stay unchanged.");
+        this.text("scope-help", "This saves a same-song relationship within this artist and captured catalog scope. Song groups update on the next normalization run; original files and setlists stay unchanged.");
         this.show("alias-choice", false);
         this.show("alias-fields", false);
         this.element("scope-account").checked = true;
@@ -312,6 +313,9 @@
       const source = context.source || {};
       this.text("source-label", source.label || this.sourceRef.stableKey);
       this.text("source-detail", source.detail);
+      this.element("source-evidence").replaceChildren();
+      const sourceEvidence = this.evidenceLink(source.evidenceUrl, context.evidenceOrigin, "Inspect original evidence");
+      if (sourceEvidence) { this.element("source-evidence").append(sourceEvidence); }
       this.text("source-reference", JSON.stringify(this.sourceRef, null, 2));
       this.element("literal").value = source.literal || "";
       this.element("artist-uuid").value = source.artistUuid || this.sourceRef.artistUuid || "";
@@ -366,6 +370,20 @@
       return element;
     }
 
+    evidenceLink(address, origin, label) {
+      if (!address || !origin) { return null; }
+      try {
+        const url = new URL(address);
+        const allowed = new URL(origin);
+        if (url.protocol !== "http:" || url.origin !== allowed.origin || url.username || url.password) { return null; }
+        const link = this.node("a", label);
+        link.href = url.href;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        return link;
+      } catch (_) { return null; }
+    }
+
     decisionNode(decision) {
       const item = this.node("div", undefined, "history-item");
       const action = (decision.state === "retracted" || decision.action === "retract") ? "Withdrawn" : decision.action === "reject" ? "Rejected" : "Accepted";
@@ -410,6 +428,7 @@
         if (version !== this.searchVersion) { return; }
         const candidates = result.items;
         this.element("candidates").replaceChildren();
+        this.candidateButtons = [];
         for (const candidate of candidates) {
           const button = this.node("button", undefined, "candidate");
           button.type = "button";
@@ -425,7 +444,12 @@
           button.addEventListener("click", () => {
             if (!isCurrentSong) { this.selectTarget(candidate, button); }
           });
-          this.element("candidates").append(button);
+          this.candidateButtons.push(button);
+          const row = this.node("div");
+          row.append(button);
+          const evidence = this.evidenceLink(candidate.evidenceUrl, result.evidenceOrigin, "Inspect evidence");
+          if (evidence) { row.append(evidence); }
+          this.element("candidates").append(row);
         }
         const omitted = result.omittedCount || 0;
         this.text("candidate-status", candidates.length
@@ -441,7 +465,7 @@
       // Keep the server's target reference intact. Labels and reader group keys are not identities.
       this.selected = candidate;
       this.invalidatePreview();
-      for (const item of this.element("candidates").children) { item.setAttribute("aria-pressed", String(item === button)); }
+      for (const item of this.candidateButtons) { item.setAttribute("aria-pressed", String(item === button)); }
       this.text("selected-target", `Selected: ${candidate.label}${candidate.detail ? ` · ${candidate.detail}` : ""}`);
       this.show("selected-target", true);
     }
@@ -518,13 +542,13 @@
         try {
           await this.loadContext();
           this.status(this.sourceRef.domain === "songs"
-            ? "Saved for matching. Individual files and setlists have not changed."
+            ? "Decision saved. Song groups update on the next normalization run."
             : this.sourceRef.domain === "people"
             ? "Saved for normalization. Individual recording credits have not changed."
             : "Decision saved. Reader results may need a refresh before they show the correction.");
         } catch (error) {
           this.show("reload", true);
-          this.status(`${this.sourceRef.domain === "songs" ? "Saved for matching. Individual files and setlists have not changed." : this.sourceRef.domain === "people" ? "Saved for normalization. Individual recording credits have not changed." : "Decision saved."} Could not refresh the current decision: ${error.message}`, true);
+          this.status(`${this.sourceRef.domain === "songs" ? "Decision saved. Song groups update on the next normalization run." : this.sourceRef.domain === "people" ? "Saved for normalization. Individual recording credits have not changed." : "Decision saved."} Could not refresh the current decision: ${error.message}`, true);
         }
       });
     }
