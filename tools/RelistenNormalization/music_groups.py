@@ -303,11 +303,14 @@ class MusicGroups:
             if row is None:
                 return None
             result = dict(row)
-            result["members_total"] = db.execute("SELECT count(*) FROM members m JOIN originals o "
+            # Keep target lookups selective on the full catalog. SQLite otherwise
+            # favors scope-wide primary-key scans before joining original evidence.
+            # The temporary artist projection supplies the same target index.
+            result["members_total"] = db.execute("SELECT count(*) FROM members m INDEXED BY members_target CROSS JOIN originals o "
                 "ON o.scope=m.scope AND o.original_key=m.original_key WHERE m.scope=? AND m.target_key=? "
                 "AND m.disposition='proposed'", (scope, key)).fetchone()[0]
             members = db.execute("""SELECT o.original_key,o.original_title,o.disposition,o.reason,o.sequence_basis,
-                m.relation,m.target_ordinal,m.qualifiers,m.disposition target_disposition,m.reason target_reason FROM members m JOIN originals o
+                m.relation,m.target_ordinal,m.qualifiers,m.disposition target_disposition,m.reason target_reason FROM members m INDEXED BY members_target CROSS JOIN originals o
                 ON o.scope=m.scope AND o.original_key=m.original_key
                 WHERE m.scope=? AND m.target_key=? AND m.disposition='proposed'
                 ORDER BY o.original_key,m.target_ordinal LIMIT ? OFFSET ?""", (scope, key, limit, offset)).fetchall()
@@ -326,7 +329,7 @@ class MusicGroups:
             group = db.execute("SELECT 1 FROM groups WHERE scope=? AND artist_uuid=? AND entity_key=?", (scope, artist, key)).fetchone()
             if not group:
                 raise KeyError("This normalized song group is not in the current image")
-            return [row[0] for row in db.execute("SELECT DISTINCT m.original_key FROM members m JOIN originals o "
+            return [row[0] for row in db.execute("SELECT DISTINCT m.original_key FROM members m INDEXED BY members_target CROSS JOIN originals o "
                 "ON o.scope=m.scope AND o.original_key=m.original_key WHERE m.scope=? AND m.target_key=? "
                 "AND m.disposition='proposed' ORDER BY m.original_key", (scope, key))]
 
@@ -342,8 +345,8 @@ class MusicGroups:
     def member_relations(self, scope, artist, key):
         scope, artist, key = self._coordinates(scope, artist, key)
         with closing(self._connect(artist=artist)) as db:
-            rows = db.execute("""SELECT m.original_key,m.relation,m.qualifiers,o.disposition FROM members m
-                JOIN originals o ON o.scope=m.scope AND o.original_key=m.original_key
+            rows = db.execute("""SELECT m.original_key,m.relation,m.qualifiers,o.disposition FROM members m INDEXED BY members_target
+                CROSS JOIN originals o ON o.scope=m.scope AND o.original_key=m.original_key
                 WHERE m.scope=? AND o.artist_uuid=? AND m.target_key=? AND m.disposition='proposed'
                 ORDER BY m.original_key,m.target_ordinal""", (scope, artist, key))
             relations = {}

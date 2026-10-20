@@ -316,6 +316,44 @@ class TestMusicConsolidationExport(unittest.TestCase):
         raw = get("/api/song", scope="catalogue", key=variant["entityKey"])
         self.assertEqual(raw["title"], variant["name"])
 
+    def test_group_browsing_ignores_unrelated_memberships_in_the_same_catalog_scope(self):
+        song = self.song("repertoire:selected", "Selected song", "legacy-selected")
+        self.chunk("repertoire", song, kind="song_sample")
+        self.build()
+        self.export()
+        descriptor, = self.rows("descriptors.jsonl.gz")
+        self.project(self.outputs([self.correspondence(descriptor, song)]))
+        sidecar = self.root / "normalization.sqlite3"
+        with closing(sqlite3.connect(sidecar)) as db:
+            for index in range(30000):
+                key = "repertoire:unrelated-" + str(index)
+                db.execute("""INSERT INTO originals SELECT scope,?,artist_uuid,original_title,expected_hash,
+                    output_hash,disposition,reason,sequence_basis,chunk,line FROM originals
+                    WHERE scope='catalogue' AND original_key=?""", (key, song["entityKey"]))
+                db.execute("""INSERT INTO members SELECT scope,?,'repertoire:another-song',relation,
+                    target_ordinal,qualifiers,disposition,reason FROM members
+                    WHERE scope='catalogue' AND original_key=?""", (key, song["entityKey"]))
+            db.commit()
+        groups = MusicGroups(self.catalogue, sidecar)
+        connect = groups._connect
+        def bounded_connection(*args, **kwargs):
+            db = connect(*args, **kwargs)
+            ticks = 0
+            def budget():
+                nonlocal ticks
+                ticks += 1
+                return ticks > 30
+            db.set_progress_handler(budget, 100)
+            return db
+        # Bound actual SQLite work instead of wall time or a particular query plan.
+        # Looking up one song must not visit every other song's memberships.
+        with patch.object(groups, "_connect", side_effect=bounded_connection):
+            group = groups.group("catalogue", ARTIST, song["entityKey"])
+            self.assertEqual(group["members_total"], 1)
+            self.assertEqual([row["original_key"] for row in group["members"]], [song["entityKey"]])
+            self.assertEqual(groups.member_keys("catalogue", ARTIST, song["entityKey"]), [song["entityKey"]])
+            self.assertEqual(list(groups.member_relations("catalogue", ARTIST, song["entityKey"])), [song["entityKey"]])
+
     def test_saved_song_projection_updates_search_memberships_and_withdrawal_without_rebuilding(self):
         first = self.song("repertoire:one", "Scarlet", "legacy-one")
         second = self.song("repertoire:two", "Fire", "legacy-two")
