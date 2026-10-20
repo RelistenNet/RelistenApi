@@ -79,7 +79,7 @@ public sealed partial class TestShadowRepertoireAdapter
     }
 
     [Test]
-    public void DuplicateDictionaryTitlesRemainAmbiguousWhileOtherCompoundMentionIsRetained()
+    public void DuplicateDictionaryTitlesShareASongWhileOtherCompoundMentionIsRetained()
     {
         var adapter = new ShadowRepertoireAdapter();
         adapter.Observe(Song(Guid.NewGuid(), "Echoes"));
@@ -88,14 +88,14 @@ public sealed partial class TestShadowRepertoireAdapter
         var result = adapter.Process(Track("Echoes > New Horizon")).Single();
         var track = (ShadowRepertoireTrack)result.Proposal!;
 
-        result.Outcome.Should().Be("unresolved");
-        track.Segments[0].Song.Should().BeNull();
+        result.Outcome.Should().Be("proposed");
+        track.Segments[0].Song!.Name.Should().Be("Echoes");
         track.Segments[0].CandidateSongs.Should().HaveCount(2);
         track.Segments[0].ComparisonDiagnostics.Should().HaveCount(2);
         track.Segments[1].Outcome.Should().Be("proposed");
         track.Segments[1].Song!.Name.Should().Be("New Horizon");
         track.Extraction!.Segments[0].TransitionAfter.Should().Be(TitleTransition.SegueMarker);
-        result.EntityKeys.Should().HaveCount(3);
+        result.EntityKeys.Should().HaveCount(2);
     }
 
     [Test]

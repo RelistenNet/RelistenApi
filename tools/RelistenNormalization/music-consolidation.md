@@ -23,8 +23,9 @@ that previously matched a known song do not become new dictionary assertions.
 The export reads the completed catalogue and original retained witnesses without
 changing reader caches. Every non-null title has an exact JSON value pointer and
 chunk SHA256. Unknown titles keep null pointers. Direct dictionary rows take display
-priority over duplicate membership witnesses. Same-title legacy identities survive
-as separate rivals.
+priority over duplicate membership witnesses. Every legacy identity survives as
+an original account and in the candidate evidence, including ordinary duplicates
+that now resolve to one shared artist-song.
 
 Provider-only runs do not emit their observed catalog dictionaries. For those runs,
 the exporter reads the original ordinary input authenticated by the producer's
@@ -50,7 +51,38 @@ Run the shared `music-consolidate` operator against that pinned manifest. Its
 completed output has one logical `repertoire_correspondences` result per original
 scoped key. Each target retains its relation, disposition, reason, qualifiers and
 supporting text. A partly understood compound can contain a proposed known-song
-target alongside unresolved material. Ambiguous rival targets remain under review.
+target alongside unresolved material. Competing works and conflicting reviewed
+decisions remain under review.
+
+## Same-artist song identity
+
+The shared `ArtistSongTitleResolver` in the API project implements the default:
+one artist's equal normalized titles describe one song. It observes the complete
+supported dictionary before choosing a representative. Case and punctuation use
+one word-normalization policy; accents and word boundaries remain significant.
+Supported aliases connect the whole group, so an imported ID with two names
+cannot lead to different song pages under those names.
+
+The representative is an existing stable key, chosen independently of input
+order. Every original UUID, source witness and dictionary comparison remains
+available. This correspondence combines song identity; it does not combine shows,
+recordings or repeated setlist appearances. A compound file keeps each passage
+and its cited text.
+
+Different nonempty qualified composition sets stop automatic grouping. Missing
+work evidence does not resolve a conflict. A known imported song keeps its own
+identity when an incompatible dictionary target exists or no dictionary row was
+retained. Accepted scoped decisions take precedence over the ordinary default;
+a reviewed deduplication within a group also covers later ordinary duplicates.
+Rejections, competing decisions and unavailable targets remain reviewable.
+Withdrawal recomputes the default from the original dictionary.
+
+`music-repertoire-consolidation-v3` and `shadow-repertoire-v8` consume this policy.
+The shared core is available to runtime resolution, but this batch change alone
+does not update accepted PostgreSQL identities or the local v3 API. Runtime
+publication, automatic refresh after a song review, and later-import enrollment
+remain required integration work. Existing output images are immutable: run a new
+consolidation and projection, then switch the reader after verifying playback.
 
 ## Build and serve the separate normalization projection
 

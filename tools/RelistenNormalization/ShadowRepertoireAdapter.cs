@@ -92,6 +92,13 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
         Dictionary<Guid, CapturedSong>
     > descriptorSongsWithoutWordBoundaries = [];
     private readonly IdentityCandidateMatcher matcher = new();
+    private readonly Dictionary<(long ArtistId, Guid SongUuid), CapturedSong> importedIdentities =
+    [];
+    private readonly Dictionary<(Guid ArtistUuid, long? ArtistId), TitleGroupContext> titleGroups =
+    [];
+    private readonly Dictionary<string, HashSet<string>> qualifiedWorks = new(
+        StringComparer.Ordinal
+    );
 
     private readonly ReviewedRepertoireCorrespondences? reviewed;
     private readonly string? reviewedScope;
@@ -104,12 +111,159 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
         reviewedScope = scope;
     }
 
-    public ShadowRepertoireSegment ApplyReviewedCorrespondence(
+    /// <summary>Applies reviewed authority before the shared same-artist title default.</summary>
+    public ShadowRepertoireSegment ResolveCorrespondence(
         Guid artistUuid,
-        ShadowRepertoireSegment segment
-    ) => reviewed == null ? segment : reviewed.Apply(reviewedScope!, artistUuid, segment);
+        ShadowRepertoireSegment segment,
+        long? artistId = null
+    )
+    {
+        var result = segment;
+        ArtistSongTitleResolution? group = null;
+        if (result.CandidateSongs.Count > 0)
+        {
+            var context = TitleGroups(artistUuid, artistId);
+            group = context.Resolver.Resolve(artistUuid, result.Title ?? result.Evidence.Quote);
+            var originalKeys = result.CandidateSongs.Select(song => song.EntityKey).ToHashSet();
+            if (!originalKeys.IsSubsetOf(group.Members.Select(member => member.EntityKey)))
+            {
+                // A literal whole-title dictionary entry can precede an extracted core.
+                // Boundary-only candidates remain separate unless actual supported names join them.
+                group = context.Resolver.Resolve(artistUuid, result.CandidateSongs[0].Name);
+            }
+            if (!originalKeys.IsSubsetOf(group.Members.Select(member => member.EntityKey)))
+            {
+                group = null;
+            }
+            if (group is { Members.Count: > 1 })
+            {
+                var matches = group.Members.ToDictionary(
+                    member => context.Identities[member.EntityKey].Uuid,
+                    member => context.Identities[member.EntityKey]
+                );
+                var comparisons = CompareCandidates(
+                    artistUuid,
+                    result.Title ?? result.Evidence.Quote,
+                    matches
+                );
+                result = result with
+                {
+                    Song = null,
+                    Outcome = "unresolved",
+                    Reason = "multiple_artist_dictionary_entries",
+                    CandidateSongs = comparisons.Select(candidate => candidate.Song).ToArray(),
+                    ComparisonDiagnostics = comparisons,
+                };
+            }
+        }
 
-    public string Version => "shadow-repertoire-v7";
+        // Review sees every member, including identities joined by supported aliases.
+        // A rejection or conflicting decision must never be erased by the title default.
+        result = reviewed == null ? result : reviewed.Apply(reviewedScope!, artistUuid, result);
+        if (group is not { Members.Count: > 1 })
+        {
+            return result;
+        }
+        if (result.Knowledge is { Count: > 0 })
+        {
+            // An accepted duplicate inside this title group chooses its representative.
+            // It must not make every later ordinary duplicate require another review.
+            var chosen = ReviewedTitleRepresentative(result, group);
+            return chosen == null
+                ? result
+                : result with
+                {
+                    Outcome = "proposed",
+                    Reason = "reviewed_artist_song_correspondence",
+                    Song = chosen,
+                };
+        }
+        if (group.Kind == ArtistSongTitleResolutionKind.ConflictingWorks)
+        {
+            return result with { Reason = "qualified_work_contradiction" };
+        }
+        return result with
+        {
+            Outcome = "proposed",
+            Reason = "same_artist_normalized_title",
+            Song = result.CandidateSongs.Single(song =>
+                song.EntityKey == group.Representative!.EntityKey
+            ),
+        };
+    }
+
+    private ShadowRepertoireSong? ReviewedTitleRepresentative(
+        ShadowRepertoireSegment result,
+        ArtistSongTitleResolution group
+    )
+    {
+        if (
+            result.Song != null
+            || group.Kind != ArtistSongTitleResolutionKind.SharedTitle
+            || result.Knowledge!.Any(value =>
+                value.ExcludedTargets.Count > 0 || value.Outcome == "conflict"
+            )
+        )
+        {
+            return result.Song;
+        }
+        var targets = result
+            .Knowledge.Where(value => value.Outcome == "reviewed_correspondence")
+            .Select(value => value.Target!)
+            .DistinctBy(target =>
+                (target.Domain, target.Namespace, target.StableKey, target.CanonicalUuid)
+            )
+            .ToArray();
+        if (
+            targets.Length != 1
+            || targets[0] is not { Domain: "songs", Namespace: "repertoire", CanonicalUuid: null }
+        )
+        {
+            return null;
+        }
+        var member = group.Members.SingleOrDefault(candidate =>
+            ReviewedRepertoireCorrespondences.StableKey(reviewedScope!, candidate.EntityKey)
+            == targets[0].StableKey
+        );
+        return member == null
+            ? null
+            : result.CandidateSongs.SingleOrDefault(candidate =>
+                candidate.EntityKey == member.EntityKey
+            );
+    }
+
+    private TitleGroupContext TitleGroups(Guid artistUuid, long? artistId)
+    {
+        if (titleGroups.TryGetValue((artistUuid, artistId), out var existing))
+        {
+            return existing;
+        }
+        var identities = (
+            artistId is { } imported
+                ? importedIdentities
+                    .Where(pair => pair.Key.ArtistId == imported)
+                    .Select(pair => pair.Value)
+                : descriptorIdentities
+                    .Where(pair => pair.Key.ArtistUuid == artistUuid)
+                    .Select(pair => pair.Value)
+        ).ToDictionary(song => KnownEntityKey(song.Uuid));
+        var candidates = identities.Select(pair => new ArtistSongTitleCandidate(
+            pair.Key,
+            artistUuid,
+            pair.Value.Witnesses.Values.Select(witness => witness.Quote).ToArray(),
+            qualifiedWorks.TryGetValue(pair.Key, out var works) ? works.ToArray() : []
+        ));
+        var context = new TitleGroupContext(new ArtistSongTitleResolver(candidates), identities);
+        titleGroups.Add((artistUuid, artistId), context);
+        return context;
+    }
+
+    private sealed record TitleGroupContext(
+        ArtistSongTitleResolver Resolver,
+        IReadOnlyDictionary<string, CapturedSong> Identities
+    );
+
+    public string Version => "shadow-repertoire-v8";
 
     public IReadOnlyList<string> DomainsFor(string inputKind) =>
         inputKind is "song_sample" or "track_sample" ? ["repertoire"] : [];
@@ -318,7 +472,7 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
         TrackTitleSegment segment,
         string? originalTitle = null
     ) =>
-        ApplyReviewedCorrespondence(
+        ResolveCorrespondence(
             artistUuid,
             ResolveTitleMentionCore(
                 artistUuid,
@@ -326,7 +480,8 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
                 Candidates(artistId, artistUuid, segment.Title ?? segment.Evidence.Quote),
                 originalTitle == null ? [] : Candidates(artistId, artistUuid, originalTitle),
                 originalTitle
-            )
+            ),
+            artistId
         );
 
     /// <summary>Uses a complete, explicitly scoped descriptor dictionary without inventing native artist IDs.</summary>
@@ -335,7 +490,7 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
         TrackTitleSegment segment,
         string? originalTitle = null
     ) =>
-        ApplyReviewedCorrespondence(
+        ResolveCorrespondence(
             artistUuid,
             ResolveTitleMentionCore(
                 artistUuid,
@@ -348,6 +503,8 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
 
     public void ObserveDictionary(MusicDictionaryName value)
     {
+        titleGroups.Clear();
+        ObserveQualifiedWorks(KnownEntityKey(value.LegacySongUuid), value.WorkKeys);
         var title = NormalizeTitle(value.Title);
         if (title.Length == 0)
         {
@@ -396,6 +553,21 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
             reviewedScope!,
             KnownSong(value.ArtistUuid, value.LegacySongUuid, identity.Name)
         );
+    }
+
+    public void ObserveQualifiedWorks(string entityKey, IReadOnlyList<string> workKeys)
+    {
+        if (workKeys.Count == 0)
+        {
+            return;
+        }
+        if (!qualifiedWorks.TryGetValue(entityKey, out var works))
+        {
+            works = new(StringComparer.Ordinal);
+            qualifiedWorks.Add(entityKey, works);
+        }
+        works.UnionWith(workKeys);
+        titleGroups.Clear();
     }
 
     public ShadowRepertoireCandidate? DictionaryIdentity(Guid artistUuid, Guid songUuid)
@@ -666,7 +838,17 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
         }
         var uuid = row.GetProperty("uuid").GetGuid();
         var evidence = new ShadowRepertoireDictionaryEvidence(inputKey, pointer, name);
-        AddWitness(matches, uuid, evidence);
+        if (!importedIdentities.TryGetValue((key.Item1, uuid), out var identity))
+        {
+            identity = new(uuid, evidence);
+            importedIdentities.Add((key.Item1, uuid), identity);
+        }
+        else
+        {
+            identity.AddWitness(evidence);
+        }
+        matches[uuid] = identity;
+        titleGroups.Clear();
 
         var boundaryKey = (
             key.Item1,
@@ -677,23 +859,7 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
             boundaryMatches = [];
             songsWithoutWordBoundaries.Add(boundaryKey, boundaryMatches);
         }
-        AddWitness(boundaryMatches, uuid, evidence);
-    }
-
-    private static void AddWitness(
-        Dictionary<Guid, CapturedSong> matches,
-        Guid uuid,
-        ShadowRepertoireDictionaryEvidence evidence
-    )
-    {
-        if (!matches.TryGetValue(uuid, out var song))
-        {
-            matches.Add(uuid, new(uuid, evidence));
-        }
-        else
-        {
-            song.AddWitness(evidence);
-        }
+        boundaryMatches[uuid] = identity;
     }
 
     private static bool PreferWitness(
@@ -775,33 +941,10 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
 
     /// <summary>
     /// Retrieves exact word-normalized title candidates. Accents remain significant;
-    /// punctuation and case are not identity evidence. The public matcher supplies diagnostics.
+    /// punctuation and case follow the shared artist-song title default. The matcher retains diagnostics.
     /// </summary>
-    public static string NormalizeTitle(string title)
-    {
-        var result = new StringBuilder();
-        var separator = false;
-        foreach (var rune in title.Normalize(NormalizationForm.FormC).EnumerateRunes())
-        {
-            if (
-                Rune.IsLetterOrDigit(rune)
-                || Rune.GetUnicodeCategory(rune) == UnicodeCategory.NonSpacingMark
-            )
-            {
-                if (separator && result.Length > 0)
-                {
-                    result.Append(' ');
-                }
-                result.Append(Rune.ToLowerInvariant(rune).ToString());
-                separator = false;
-            }
-            else
-            {
-                separator = true;
-            }
-        }
-        return result.ToString();
-    }
+    public static string NormalizeTitle(string title) =>
+        ArtistSongTitleResolver.NormalizeTitle(title);
 
     private sealed class CapturedSong(Guid uuid, ShadowRepertoireDictionaryEvidence witness)
     {

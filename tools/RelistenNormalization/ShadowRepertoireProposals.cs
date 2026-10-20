@@ -37,8 +37,8 @@ public sealed record ShadowRepertoireCandidate(
 );
 
 /// <summary>
-/// A title mention and its proposed local correspondence. Candidates remain separate
-/// when more than one catalog song has the same normalized title. Neither a mention
+/// A title mention and its proposed artist-song correspondence. Imported candidates
+/// remain in diagnostics when duplicate titles share a target. Neither a mention
 /// nor a correspondence establishes an audio boundary or a composition identity.
 /// </summary>
 public sealed record ShadowRepertoireSegment(

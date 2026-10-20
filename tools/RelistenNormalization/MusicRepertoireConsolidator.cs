@@ -12,7 +12,7 @@ namespace Relisten.Normalization.Batch;
 /// </summary>
 public sealed class MusicRepertoireConsolidator
 {
-    public const string Version = "music-repertoire-consolidation-v2";
+    public const string Version = "music-repertoire-consolidation-v3";
     private static readonly Regex CompoundSeparator = new(
         @"\s+(?:-|\+|&)\s+",
         RegexOptions.CultureInvariant | RegexOptions.NonBacktracking
@@ -70,6 +70,8 @@ public sealed class MusicRepertoireConsolidator
             );
         }
         ObserveWorks(descriptor.Scope, descriptor.OriginalKey, descriptor.WorkKeys);
+        Dictionary(descriptor.Scope)
+            .ObserveQualifiedWorks(descriptor.OriginalKey, descriptor.WorkKeys);
         if (
             reviewed != null
             && descriptor.Title != null
@@ -134,7 +136,7 @@ public sealed class MusicRepertoireConsolidator
         // Exact account review can also address an unresolved original descriptor.
         // Segment-level review below separately resolves duplicate dictionary rivals.
         var account = Dictionary(descriptor.Scope)
-            .ApplyReviewedCorrespondence(
+            .ResolveCorrespondence(
                 descriptor.ArtistUuid,
                 new ShadowRepertoireSegment(
                     0,
@@ -172,7 +174,30 @@ public sealed class MusicRepertoireConsolidator
                 .ToHashSet(StringComparer.Ordinal);
             var blocked = account.Song == null;
             var retained = result
-                .Targets.Select(value =>
+                .Targets.SelectMany(value =>
+                {
+                    var excludedDuplicate =
+                        value.Reason == "same_artist_normalized_title"
+                        && value.ComparisonDiagnostics.Any(candidate =>
+                            excluded.Contains(
+                                ReviewedRepertoireCorrespondences.StableKey(
+                                    descriptor.Scope,
+                                    candidate.Song.EntityKey
+                                )
+                            )
+                        );
+                    return excludedDuplicate
+                        ? value.ComparisonDiagnostics.Select(candidate =>
+                            value with
+                            {
+                                Song = candidate.Song,
+                                Disposition = "review",
+                                Reason = "reviewed_song_correspondence_requires_review",
+                            }
+                        )
+                        : [value];
+                })
+                .Select(value =>
                 {
                     var veto =
                         blocked
@@ -259,20 +284,42 @@ public sealed class MusicRepertoireConsolidator
                     title,
                     descriptor.Basis
                 );
+            var correspondence = dictionary.ResolveTitleMention(
+                descriptor.ArtistUuid,
+                Segment(title, 0, title.Length)
+            );
+            // A known imported ID keeps its own identity when distinct qualified works
+            // conflict. Ordinary duplicate IDs share a target; the original key stays
+            // on this result and therefore retains its original memberships and routes.
+            var matched =
+                correspondence.Song?.LegacySongUuid != null
+                && !WorkConflict(
+                    descriptor,
+                    correspondence.Song.EntityKey,
+                    MusicRepertoireRelation.IdentityAlias
+                );
+            var target = matched ? correspondence.Song! : song;
+            var reason = matched ? correspondence.Reason! : "retained_dictionary_identity";
             return Result(
                 "proposed",
-                "retained_dictionary_identity",
+                reason,
                 "single",
                 [
                     Target(
-                        song,
+                        target,
                         MusicRepertoireRelation.IdentityAlias,
                         "proposed",
-                        "retained_dictionary_identity",
+                        reason,
                         Evidence(title, 0, title.Length),
                         extraction.Qualifiers,
-                        candidate == null ? [] : [candidate]
-                    ),
+                        correspondence.ComparisonDiagnostics.Count > 0
+                                ? correspondence.ComparisonDiagnostics
+                            : candidate == null ? []
+                            : [candidate]
+                    ) with
+                    {
+                        Knowledge = correspondence.Knowledge,
+                    },
                 ],
                 extraction
             );

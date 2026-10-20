@@ -9,7 +9,7 @@ namespace RelistenApiTests.Normalization;
 
 /// <summary>Scoped title correspondences remain cited proposals over original member keys.</summary>
 [TestFixture]
-public sealed class TestMusicRepertoireConsolidator
+public sealed partial class TestMusicRepertoireConsolidator
 {
     private const string Scope = "captured:grateful-dead";
     private static readonly Guid Artist = Guid.Parse("d20ca0c1-7219-41a5-9982-f4323c286de1");
@@ -140,7 +140,7 @@ public sealed class TestMusicRepertoireConsolidator
     }
 
     [Test]
-    public void SameTitleDictionaryRivalsRemainVisibleForReview()
+    public void SameTitleDictionaryDuplicatesShareOneSongAndRetainBothImportedCandidates()
     {
         var result = Resolve(
             Descriptor("09.Scarlet Begonias"),
@@ -148,12 +148,13 @@ public sealed class TestMusicRepertoireConsolidator
             DictionaryName("Scarlet Begonias", Fire)
         );
 
-        result.Disposition.Should().Be("review");
-        result
-            .Targets.Select(target => target.Song.LegacySongUuid)
+        result.Disposition.Should().Be("proposed");
+        var target = result.Targets.Should().ContainSingle().Subject;
+        target.Reason.Should().Be("same_artist_normalized_title");
+        target
+            .ComparisonDiagnostics.Select(candidate => candidate.Song.LegacySongUuid)
             .Should()
             .BeEquivalentTo(new Guid?[] { Scarlet, Fire });
-        result.Targets.Should().OnlyContain(target => target.Disposition == "review");
         AssertCitations(result);
     }
 
@@ -480,9 +481,10 @@ public sealed class TestMusicRepertoireConsolidator
         var result = consolidator.Resolve(derived);
         var knownResult = consolidator.Resolve(known);
 
-        unreviewed.Disposition.Should().Be("review");
+        unreviewed.Disposition.Should().Be("proposed");
         unreviewed
-            .Targets.Select(target => target.Song.LegacySongUuid)
+            .Targets.Single()
+            .ComparisonDiagnostics.Select(candidate => candidate.Song.LegacySongUuid)
             .Should()
             .BeEquivalentTo(new Guid?[] { Scarlet, Fire });
         foreach (
@@ -513,7 +515,7 @@ public sealed class TestMusicRepertoireConsolidator
             .Targets.Single()
             .ComparisonDiagnostics.Select(candidate => candidate.Comparison.CandidateUuid)
             .Should()
-            .Equal(Scarlet);
+            .BeEquivalentTo(new Guid?[] { Scarlet, Fire });
         known.LegacySongUuid.Should().Be(Scarlet);
     }
 
@@ -554,13 +556,7 @@ public sealed class TestMusicRepertoireConsolidator
         {
             target
                 .ComparisonDiagnostics.Should()
-                .BeEquivalentTo(
-                    unreviewed
-                        .Targets.Single(original =>
-                            original.Song.EntityKey == target.Song.EntityKey
-                        )
-                        .ComparisonDiagnostics
-                );
+                .BeEquivalentTo(unreviewed.Targets.Single().ComparisonDiagnostics);
             target
                 .Knowledge.Should()
                 .ContainSingle()
