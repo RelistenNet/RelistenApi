@@ -78,6 +78,12 @@ internal sealed class CompositionTargetContextPrompt(JsonSerializerOptions json)
                         new
                         {
                             textIndex,
+                            supportReference = new
+                            {
+                                witnessIndex,
+                                claimIndex = (int?)null,
+                                textIndex = (int?)textIndex,
+                            },
                             text.Field,
                             textPoolId = Text(text),
                             origin = Position(text.Origin),
@@ -85,14 +91,22 @@ internal sealed class CompositionTargetContextPrompt(JsonSerializerOptions json)
                         }
                 )
                 .ToArray(),
-            claims = witness.Claims.Select((claim, index) => Claim(claim, index)).ToArray(),
+            claims = witness
+                .Claims.Select((claim, index) => Claim(claim, witnessIndex, index))
+                .ToArray(),
             witness.MissingFields,
         };
 
-    private object Claim(CompositionSelectionTargetClaim claim, int claimIndex) =>
+    private object Claim(CompositionSelectionTargetClaim claim, int witnessIndex, int claimIndex) =>
         new
         {
             claimIndex,
+            supportReference = new
+            {
+                witnessIndex,
+                claimIndex = (int?)claimIndex,
+                textIndex = (int?)null,
+            },
             claim.Kind,
             claim.Role,
             claim.Value,

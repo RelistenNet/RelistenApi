@@ -16,7 +16,7 @@ namespace Relisten.Normalization;
 internal sealed class CompositionHypothesisPrompt
 {
     internal const string Version = "composition-semantic-facts-v1";
-    internal const string TargetContextVersion = "composition-semantic-target-context-v5";
+    internal const string TargetContextVersion = "composition-semantic-target-context-v6";
     private const int MaximumCitationExamples = 2;
     private static readonly JsonSerializerOptions AttributionJson = new(JsonSerializerDefaults.Web);
     private readonly JsonSerializerOptions json;

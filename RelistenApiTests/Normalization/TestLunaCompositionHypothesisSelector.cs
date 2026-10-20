@@ -127,7 +127,7 @@ public sealed class TestLunaCompositionHypothesisSelector
         LunaCompositionHypothesisSelector
             .DescribeRequest(input)
             .Method.Should()
-            .Be("luna-composition-hypothesis-v8");
+            .Be("luna-composition-hypothesis-v9");
 
         var original = input.TargetContext.Witnesses[2];
         var text = original.Texts.Single() with { Value = "<i>Changed literal source 🌙</i>" };
@@ -890,15 +890,33 @@ public sealed class TestLunaCompositionHypothesisSelector
             .Should()
             .Be(targetText.Value);
         text.TryGetProperty("text", out _).Should().BeFalse();
+        var textReference = text.GetProperty("supportReference");
+        textReference.GetProperty("witnessIndex").GetInt32().Should().Be(2);
+        textReference.GetProperty("textIndex").GetInt32().Should().Be(0);
+        textReference.GetProperty("claimIndex").ValueKind.Should().Be(JsonValueKind.Null);
         var response = EnrichedResponse(
             "target_program_path",
-            [TargetTextReference()],
+            [textReference],
             [SelectedPathReference()]
         );
         LunaCompositionHypothesisSelector
             .ValidateResponse(input, response)
             .PreferencePermitted.Should()
             .BeTrue();
+        var attributionResponse = EnrichedResponse(
+            "target_attribution",
+            [witness.GetProperty("claims")[0].GetProperty("supportReference")],
+            [SelectedPathReference()]
+        );
+        LunaCompositionHypothesisSelector
+            .ValidateResponse(input, attributionResponse)
+            .PreferencePermitted.Should()
+            .BeTrue();
+        var borrowedOwner = System.Text.Json.Nodes.JsonNode.Parse(response)!;
+        borrowedOwner["support"]!["targetReferences"]![0]!["witnessIndex"] = 1;
+        var readBorrowedOwner = () =>
+            LunaCompositionHypothesisSelector.ValidateResponse(input, borrowedOwner.ToJsonString());
+        readBorrowedOwner.Should().Throw<LunaCreditResponseException>();
         var poolIdAsLocalIndex = System.Text.Json.Nodes.JsonNode.Parse(response)!;
         poolIdAsLocalIndex["support"]!["targetReferences"]![0]!["textIndex"] = text.GetProperty(
                 "textPoolId"
@@ -2351,7 +2369,7 @@ public sealed class TestLunaCompositionHypothesisSelectorCache
             .GetArrayLength()
             .Should()
             .Be(1);
-        result.Method.Should().Be("luna-composition-hypothesis-v8");
+        result.Method.Should().Be("luna-composition-hypothesis-v9");
         result.PreferencePermitted.Should().BeFalse();
         result.OutputTokens.Should().Be(4096);
         result.SelectedWorkMbid.Should().Be(TestLunaCompositionHypothesisSelector.FirstWork);

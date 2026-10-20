@@ -25,7 +25,7 @@ public sealed partial class LunaCompositionHypothesisSelector(
 )
 {
     public const string Version = "luna-composition-hypothesis-v2";
-    public const string TargetContextVersion = "luna-composition-hypothesis-v8";
+    public const string TargetContextVersion = "luna-composition-hypothesis-v9";
 
     // This is a local resource limit, not the provider context limit. The full
     // compact candidate universe is measured and conservatively reserved before admission.
@@ -503,6 +503,8 @@ public sealed partial class LunaCompositionHypothesisSelector(
         + " Their membershipEvidence and relationshipEvidence locate the two source assertions; duplicate editions or views are not independent confirmations."
         + " Each path has a pathIndex within its supplied work. Every rendered witness has an explicit witnessIndex; each claim/text has its witness-local claimIndex/textIndex."
         + " Support must copy those explicit indices, with exactly one claimIndex or textIndex, plus supplied workMbid/pathIndex references."
+        + " Each witness text and claim supplies a complete supportReference object. Copy that entire object verbatim into targetReferences; never combine indices from different witnesses."
+        + " A catalog_file and its catalog_recording are separate witnesses even when they share sourceUuid. Program/description text belongs to its recording witness, not to the file witness."
         + " A textPoolId only retrieves a shared literal string; it is never a textIndex or a witnessIndex. Do not renumber a filtered subset of witnesses."
         + " attributionRecordingWorkLinks compile target annotations that actually match a supplied recording performer, using a qualified artist ID or an exact observed performer label."
         + " For target_attribution, cite a compiled link's target and work/path indices; an unrelated performer path cannot support the attribution."
