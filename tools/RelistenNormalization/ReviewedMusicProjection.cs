@@ -214,6 +214,58 @@ public sealed class ReviewedMusicProjection
         }
     }
 
+    /// <summary>
+    /// Reuses the authenticated complete artist context for retained file-title inputs.
+    /// Only the trusted replay service calls this method; HTTP callers cannot supply titles.
+    /// </summary>
+    internal async Task<IReadOnlyList<ReviewedMusicChange>> ResolveFileTitlesAsync(
+        Guid artist,
+        ExpertKnowledgeSnapshot? snapshot,
+        IReadOnlyList<FileTitleReplayTitle> titles,
+        CancellationToken ct
+    )
+    {
+        await gate.WaitAsync(ct);
+        try
+        {
+            foreach (var (path, expected) in files)
+            {
+                if (FileStamp.Read(path) != expected)
+                {
+                    throw new IOException(
+                        "Frozen music evidence changed. Reload a matching completed bundle."
+                    );
+                }
+            }
+            if (!artists.TryGetValue(artist, out var context))
+            {
+                context = await ReadArtistAsync(artist, ct);
+                artists[artist] = context;
+            }
+            var resolver = new RetainedFileTitleReplay(Observe(context, snapshot, titles));
+            var result = new List<ReviewedMusicChange>();
+            foreach (var title in titles)
+            {
+                ct.ThrowIfCancellationRequested();
+                result.Add(
+                    ReviewedMusicChange.From(
+                        resolver.ResolveTitle(
+                            title.Scope,
+                            artist,
+                            title.OriginalTitle,
+                            title.Witness
+                        )
+                    )
+                );
+            }
+            return result;
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
     private ReviewedMusicPage Page(string knowledgeSha256, int offset)
     {
         var page = new ReviewedMusicPage(
@@ -297,7 +349,8 @@ public sealed class ReviewedMusicProjection
 
     private static MusicRepertoireConsolidator Observe(
         ArtistContext context,
-        ExpertKnowledgeSnapshot? knowledge
+        ExpertKnowledgeSnapshot? knowledge,
+        IReadOnlyList<FileTitleReplayTitle>? fileTitles = null
     )
     {
         var resolver = new MusicRepertoireConsolidator(knowledge);
@@ -308,6 +361,13 @@ public sealed class ReviewedMusicProjection
         foreach (var descriptor in context.Descriptors)
         {
             resolver.ObserveDescriptor(descriptor);
+        }
+        if (fileTitles != null)
+        {
+            foreach (var title in fileTitles)
+            {
+                resolver.ObserveRetainedTitle(title.Scope, title.ArtistUuid, title.OriginalTitle);
+            }
         }
         resolver.CompleteObservation();
         return resolver;

@@ -327,7 +327,7 @@ class TestMusicConsolidationExport(unittest.TestCase):
         with closing(sqlite3.connect(sidecar)) as db:
             for index in range(30000):
                 key = "repertoire:unrelated-" + str(index)
-                db.execute("""INSERT INTO originals SELECT scope,?,artist_uuid,original_title,expected_hash,
+                db.execute("""INSERT INTO originals SELECT scope,?,artist_uuid,'Unrelated song',expected_hash,
                     output_hash,disposition,reason,sequence_basis,chunk,line FROM originals
                     WHERE scope='catalogue' AND original_key=?""", (key, song["entityKey"]))
                 db.execute("""INSERT INTO members SELECT scope,?,'repertoire:another-song',relation,
@@ -335,6 +335,8 @@ class TestMusicConsolidationExport(unittest.TestCase):
                     WHERE scope='catalogue' AND original_key=?""", (key, song["entityKey"]))
             db.commit()
         groups = MusicGroups(self.catalogue, sidecar)
+        discovery = MusicDiscovery(MusicCatalogue(self.catalogue), normalization=sidecar)
+        discovery.groups = groups
         connect = groups._connect
         def bounded_connection(*args, **kwargs):
             db = connect(*args, **kwargs)
@@ -353,6 +355,9 @@ class TestMusicConsolidationExport(unittest.TestCase):
             self.assertEqual([row["original_key"] for row in group["members"]], [song["entityKey"]])
             self.assertEqual(groups.member_keys("catalogue", ARTIST, song["entityKey"]), [song["entityKey"]])
             self.assertEqual(list(groups.member_relations("catalogue", ARTIST, song["entityKey"])), [song["entityKey"]])
+            observations = discovery.review_observations(dict(literal="Selected song", artist=ARTIST, domain="songs"))
+            self.assertEqual(observations["total"], 1)
+            self.assertEqual(observations["items"][0]["stableKey"], json.dumps(["catalogue", song["entityKey"]], separators=(",", ":")))
 
     def test_saved_song_projection_updates_search_memberships_and_withdrawal_without_rebuilding(self):
         first = self.song("repertoire:one", "Scarlet", "legacy-one")

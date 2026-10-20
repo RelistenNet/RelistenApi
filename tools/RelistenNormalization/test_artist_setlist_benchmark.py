@@ -12,6 +12,7 @@ import tempfile
 import unittest
 
 from shadow_reader import _pack_text
+from file_title_replay import FileTitleReplayExporter, FileTitleReplayProjection, digest, pin
 
 
 PHISH = "ca53d281-0041-ae33-a050-c87702d93b0c"
@@ -79,9 +80,10 @@ class TestArtistSetlistBenchmark(unittest.TestCase):
                 "memberships": [{"legacySongUuid": legacy, "songEntityKey": key} for legacy, key in songs]}})
 
     def prediction(self, uuid, show, source, segments, artist=PHISH):
-        self.file_rows.append({"domain": "file_contents", "inputUuid": uuid, "artistUuid": artist,
-            "proposal": {"home": {"showUuid": show, "sourceUuid": source},
-                         "titleInterpretation": {"originalTitle": "Été 🌙 > Another song", "segments": segments}}})
+        self.file_rows.append({"domain": "file_contents", "inputKind": "track_sample", "inputUuid": uuid, "artistUuid": artist,
+            "proposal": {"home": {"fileUuid": uuid, "showUuid": show, "sourceUuid": source},
+                         "playback": {"fileUuid": uuid, "showUuid": show, "sourceUuid": source},
+                         "titleInterpretation": {"fileUuid": uuid, "sourceUuid": source, "originalTitle": "Été 🌙 > Another song", "segments": segments}}})
 
     @staticmethod
     def proposed(key):
@@ -106,21 +108,23 @@ class TestArtistSetlistBenchmark(unittest.TestCase):
         with closing(sqlite3.connect(run / ".shadow-reader-v3.sqlite3")) as db, db:
             db.executescript("""
                 CREATE TABLE artists(id INTEGER PRIMARY KEY,uuid TEXT);
-                CREATE TABLE headers(id INTEGER PRIMARY KEY,input_id INTEGER,input_uuid TEXT,artist_id INTEGER);
+                CREATE TABLE headers(id INTEGER PRIMARY KEY,input_id INTEGER,input_uuid TEXT,artist_id INTEGER,kind_id INTEGER);
                 CREATE TABLE input_keys(id INTEGER PRIMARY KEY,data BLOB);
                 CREATE TABLE domains(id INTEGER PRIMARY KEY,name TEXT);
                 CREATE TABLE chunks(id INTEGER PRIMARY KEY,path TEXT,bytes INTEGER,state TEXT);
-                CREATE TABLE records(header_id INTEGER,domain_id INTEGER,chunk_id INTEGER,line_no INTEGER);
+                CREATE TABLE records(id INTEGER PRIMARY KEY,header_id INTEGER,domain_id INTEGER,chunk_id INTEGER,line_no INTEGER);
+                CREATE TABLE terms(id INTEGER PRIMARY KEY,value TEXT);
             """)
             db.executemany("INSERT INTO artists VALUES (?,?)", [(1, PHISH), (2, DEAD)])
+            db.execute("INSERT INTO terms VALUES (1,?)", ("track_sample",))
             db.execute("INSERT INTO domains VALUES (1,?)", (domain,))
             db.execute("INSERT INTO chunks VALUES (1,?,?,'indexed')", (str(chunk.relative_to(run)), chunk.stat().st_size))
             for line, row in enumerate(rows, 1):
                 packed = _pack_text(row.get("inputKey", domain + ":" + row["inputUuid"]))
                 db.execute("INSERT INTO input_keys VALUES (?,?)", (line, packed))
                 input_uuid = None if packed[:1] == b"u" else row["inputUuid"]
-                db.execute("INSERT INTO headers VALUES (?,?,?,?)", (line, line, input_uuid, 1 if row["artistUuid"] == PHISH else 2))
-                db.execute("INSERT INTO records VALUES (?,1,1,?)", (line, line))
+                db.execute("INSERT INTO headers VALUES (?,?,?,?,1)", (line, line, input_uuid, 1 if row["artistUuid"] == PHISH else 2))
+                db.execute("INSERT INTO records VALUES (?,?,1,1,?)", (line, line, line))
 
     def cli(self, **limits):
         request = {"metadata": str(self.metadata), "normalization": str(self.normalization),
@@ -143,6 +147,72 @@ class TestArtistSetlistBenchmark(unittest.TestCase):
 
     def rows(self, name):
         return [json.loads(line) for line in (self.output / name).read_text().splitlines()]
+
+    def replay(self, assignments):
+        """Build the real exporter/projection boundary around typed C# results."""
+        music = self.root / "music-input.json"
+        music.write_text(json.dumps(dict(version="music-consolidation-input-v1", state="completed", sources=[
+            dict(id=1, scope="catalogue", run=str(self.files), index=str(self.files / ".shadow-reader-v3.sqlite3"),
+                 reader_url="http://source.test")])))
+        exported = FileTitleReplayExporter(music, self.root / "replay-input", digest(music), minimum_free_bytes=0).export()
+        output = self.root / "replay-output"
+        output.mkdir()
+        titles = output / "titles.jsonl.gz"
+        with gzip.open(exported["titles"]["path"], "rt") as source, gzip.open(titles, "wt") as target:
+            for title in map(json.loads, source):
+                keys = assignments[title["originalTitle"]]
+                row = dict(scope=title["scope"], artistUuid=title["artistUuid"], originalKey="repertoire:" + str(title["titleId"]),
+                    originalTitle=title["originalTitle"], sourceWitness=title["witness"],
+                    disposition="proposed" if keys else "unresolved", reason="fixture", sequenceBasis="source_title_order",
+                    targets=[dict(song=dict(entityKey=key, name=key, artistUuid=title["artistUuid"], basis="title_derived",
+                                           legacySongUuid=None), relation="compound_member", disposition="proposed",
+                                  reason="fixture", qualifiers=[], evidence=None) for key in keys])
+                target.write(json.dumps(dict(titleId=title["titleId"], correspondence=row)) + "\n")
+        manifest = output / "manifest.json"
+        manifest.write_text(json.dumps(dict(version="retained-file-title-replay-output-v1", state="completed",
+            inputManifestSha256=digest(self.root / "replay-input/manifest.json"), inputManifest=pin(self.root / "replay-input/manifest.json", 1),
+            musicInputManifest=exported["musicInputManifest"], fileMap=exported["fileMap"], titles=pin(titles, exported["titles"]["rows"]),
+            resolverVersion="fixture-resolver", extractorVersion="fixture-extractor", fileReplayVersion="retained-file-title-replay-v2")))
+        projection = self.root / "replay-projection"
+        FileTitleReplayProjection(manifest, projection, digest(manifest)).project()
+        with closing(sqlite3.connect(self.normalization)) as db, db:
+            db.executemany("INSERT INTO metadata VALUES (?,?)", [(key, json.dumps(value)) for key, value in dict(
+                inputManifestSha256=digest(music), resolverVersion="fixture-resolver", extractorVersion="fixture-extractor").items()])
+        return projection / "manifest.json"
+
+    def test_replay_recovers_old_unresolved_titles_replaces_stale_memberships_and_keeps_untitled_fallback(self):
+        files = [("recovered", PHISH, "source", "show"), ("stale", PHISH, "source", "show"),
+                 ("compound", PHISH, "source", "show"), ("untitled", PHISH, "source", "show")]
+        self.population([("show", PHISH)], files)
+        for key in ("stale", "compound", "fallback"):
+            self.mapping("original-" + key, "repertoire:" + key)
+        self.reference("setlist", "show", [("legacy-drums", "repertoire:drums"), ("legacy-space", "repertoire:space"),
+                                              ("legacy-fallback", "repertoire:fallback")])
+        for uuid, _, source, show in files:
+            segments = [] if uuid == "recovered" else [self.proposed("original-" + ("fallback" if uuid == "untitled" else uuid))]
+            self.prediction(uuid, show, source, segments)
+            self.file_rows[-1]["proposal"]["titleInterpretation"]["originalTitle"] = None if uuid == "untitled" else uuid
+        self.freeze()
+        baseline = self.completed()
+        original = self.rows("shows.jsonl")[0]
+        pins = {path: digest(path) for path in self.files.rglob("*") if path.is_file()}
+        replay = self.replay(dict(recovered=["repertoire:drums"], stale=[],
+                                  compound=["repertoire:drums", "repertoire:space", "repertoire:drums"]))
+        self.output = self.root / "replayed-benchmark"
+        result = self.cli(fileTitleReplay=str(replay))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        row = self.rows("shows.jsonl")[0]
+        manifest = json.loads((self.output / "manifest.json").read_text())
+        self.assertEqual(row["rawIdentity"], original["rawIdentity"])
+        self.assertEqual(row["predicted"], original["predicted"])
+        self.assertEqual(row["resolvedIdentity"]["predicted"], ["repertoire:drums", "repertoire:fallback", "repertoire:space"])
+        self.assertEqual((row["resolvedIdentity"]["missing"], row["resolvedIdentity"]["extra"]), ([], []))
+        artist = manifest["artists"][0]
+        self.assertEqual((artist["files_with_replayed_title"], artist["files_using_legacy_prediction_fallback"]), (3, 1))
+        self.assertEqual((artist["replayed_files_with_proposed_targets"], artist["replayed_files_without_proposed_targets"]), (2, 1))
+        self.assertEqual(manifest["fileTitleReplay"]["generation"]["fileReplayVersion"], "retained-file-title-replay-v2")
+        self.assertEqual({path: digest(path) for path in pins}, pins)
+        self.assertEqual(baseline["artists"][0]["rawIdentity"], artist["rawIdentity"])
 
     def test_multisong_presence_reports_missing_extra_and_excludes_candidate_only_or_review_targets(self):
         self.population([("show", PHISH)], [("file-one", PHISH, "source-one", "show"), ("file-two", PHISH, "source-two", "show")])

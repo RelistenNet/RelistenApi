@@ -21,6 +21,7 @@ from composition_catalogue import CompositionCatalogue
 from music_catalogue import MusicCatalogue, MusicCatalogueBuilder, Source
 from music_consolidation import MusicConsolidationExporter, MusicConsolidationProjection
 from music_groups import MusicGroups, MusicNormalizationChanged
+from file_title_membership import FileTitleMembership, FileTitleReplayChanged
 from shadow_music import MAXIMUM_KEYS, MAXIMUM_REQUEST_BYTES
 from reviewed_knowledge import ReviewedKnowledgeClient, ReviewedKnowledgeUnavailable, apply_composition_review
 
@@ -39,7 +40,7 @@ class MusicQueryUnavailable(ValueError):
 class MusicDiscovery:
     """Read the compact catalogue and proxy bounded, selective source lookups."""
 
-    def __init__(self, catalogue, readers=(), normalization=None, compositions=None, people_url=None, venue_url=None, composition_selections=None, review_url=None):
+    def __init__(self, catalogue, readers=(), normalization=None, compositions=None, people_url=None, venue_url=None, composition_selections=None, review_url=None, file_title_replay=None):
         self.catalogue = catalogue
         self._catalogue_marker = None
         self._catalogue_stats = None
@@ -83,6 +84,11 @@ class MusicDiscovery:
 
         if self.groups:
             self.groups.review_client = self.review_client
+        if file_title_replay and not self.groups:
+            raise ValueError("A file-title replay requires its completed music normalization")
+        self.file_title_replay = FileTitleMembership(file_title_replay, self.groups, self.review_client) if file_title_replay else None
+        if self.groups:
+            self.groups.file_title_replay = self.file_title_replay
 
     def stats(self):
         stat = self.catalogue.database.stat()
@@ -109,6 +115,8 @@ class MusicDiscovery:
             if self.compositions.selections:
                 result["composition_selection_queries"] = True
                 result["compositionSelections"] = self.compositions.selections.stats()
+        if getattr(self, "file_title_replay", None):
+            result["fileTitleReplay"] = self.file_title_replay.stats()
         sources = result["sources"]
         for reader in self.readers:
             if not any((source["scope"], source["run"]) == (reader["scope"], reader["run"]) for source in sources):
@@ -119,7 +127,8 @@ class MusicDiscovery:
                       (result.get("normalization") or {}).get("outputManifestSha256"),
                       (result.get("compositionSuggestions") or {}).get("manifestSha256"),
                       (result.get("compositionSelections") or {}).get("manifestSha256"),
-                      (result.get("normalization") or {}).get("knowledgeSha256")]
+                      (result.get("normalization") or {}).get("knowledgeSha256"),
+                      (result.get("fileTitleReplay") or {}).get("manifestSha256")]
         result["generation"] = hashlib.sha256(json.dumps(generation, separators=(",", ":")).encode()).hexdigest()[:24]
         return result
 
@@ -144,6 +153,7 @@ class MusicDiscovery:
                     literal=row["title"] if literal is None else literal, artistUuid=row["artist_uuid"],
                     provider=None, locality=None, date=None, displayName=row["title"],
                     description=description,
+                    importedSongUuid=row.get("legacy_uuid") if domain == "songs" else None,
                     evidenceUrl=route + "?" + urlencode(coordinates))
 
     def _review_work_ref(self, row):
@@ -174,6 +184,8 @@ class MusicDiscovery:
             if row is not None and domain == "compositions" and not row["normalized_group"]:
                 row = None
             items = [self._review_song_ref(row, domain=domain)] if row else []
+            if row and (row.get("replay_only") or row.get("replay_group")):
+                items[0]["evidenceUrl"] = "/api/replay-song?" + urlencode(dict(scope=scope, artist=artist, key=song_key))
         return dict(items=items, total=len(items), complete=True)
 
     def review_candidates(self, parameters):
@@ -208,31 +220,65 @@ class MusicDiscovery:
             raise ValueError("Choose an original song spelling of 1–4096 characters")
         bounds = page(parameters)
         artist = parameters.get("artist", "")
-        artist_filter = " AND g.artist_uuid=?" if artist else ""
-        values = [literal, literal] + ([artist] if artist else [])
-        # The shared C# correspondence owns the original-to-group relationship.
-        # Text equality retrieves observations and never creates a new identity link.
-        selection = ("WITH matched AS (SELECT scope,entity_key FROM groups WHERE title=? UNION "
-                     "SELECT m.scope,m.target_key FROM originals o JOIN members m "
-                     "ON m.scope=o.scope AND m.original_key=o.original_key "
-                     "WHERE o.original_title=? AND m.disposition='proposed') "
-                     "SELECT g.scope,g.entity_key,g.artist_uuid,g.title,g.basis,g.legacy_uuid,1 normalized_group,a.name artist_name FROM matched k JOIN groups g "
-                     "ON g.scope=k.scope AND g.entity_key=k.entity_key LEFT JOIN catalogue.artists a "
-                     "ON a.scope=g.scope AND a.uuid=g.artist_uuid WHERE 1" + artist_filter)
+        # Start with the known artist's indexed catalog rows, then retrieve only
+        # literal originals before joining their memberships. A global matched
+        # graph followed by an artist filter scans the full captured population.
+        if artist and self.groups.literal_indexes:
+            prefix = ("WITH scopes AS MATERIALIZED (SELECT scope FROM catalogue.artists WHERE uuid=?), "
+                "literal_originals AS MATERIALIZED (SELECT o.*,s.basis,s.legacy_uuid FROM scopes scope "
+                "CROSS JOIN originals o INDEXED BY originals_literal ON o.scope=scope.scope "
+                "AND o.artist_uuid=? AND o.original_title=? "
+                "CROSS JOIN catalogue.songs s ON s.scope=o.scope AND s.entity_key=o.original_key), ")
+            groups = ("SELECT g.scope,g.entity_key FROM scopes scope CROSS JOIN groups g INDEXED BY groups_literal "
+                      "ON g.scope=scope.scope AND g.artist_uuid=? AND g.title=?")
+            values = [artist, artist, literal, artist, literal]
+        elif artist:
+            prefix = ("WITH scopes AS MATERIALIZED (SELECT scope FROM catalogue.artists WHERE uuid=?), "
+                "literal_originals AS MATERIALIZED (SELECT o.*,s.basis,s.legacy_uuid FROM scopes scope "
+                "CROSS JOIN catalogue.songs s INDEXED BY songs_artist ON s.scope=scope.scope AND s.artist_uuid=? "
+                "CROSS JOIN originals o ON o.scope=s.scope AND o.original_key=s.entity_key WHERE s.title=? AND o.original_title=s.title), ")
+            groups = ("SELECT g.scope,g.entity_key FROM scopes scope CROSS JOIN groups g INDEXED BY groups_artist "
+                      "ON g.scope=scope.scope AND g.artist_uuid=? WHERE g.title=?")
+            values = [artist, artist, literal, artist, literal]
+        else:
+            prefix = ("WITH literal_originals AS MATERIALIZED (SELECT o.*,s.basis,s.legacy_uuid FROM originals o "
+                "CROSS JOIN catalogue.songs s ON s.scope=o.scope AND s.entity_key=o.original_key WHERE o.original_title=?), ")
+            groups = "SELECT scope,entity_key FROM groups WHERE title=?"
+            values = [literal, literal]
+        # Literal equality retrieves source observations; C# owns every decision
+        # about their correspondence and reusable scope.
+        selection = (prefix + "matched AS (" + groups + " UNION "
+            "SELECT m.scope,m.target_key FROM literal_originals o CROSS JOIN members m "
+            "ON m.scope=o.scope AND m.original_key=o.original_key WHERE m.disposition='proposed') "
+            "SELECT g.scope,g.entity_key,g.artist_uuid,g.title,g.basis,g.legacy_uuid,1 normalized_group,a.name artist_name,0 replay_only "
+            "FROM matched k CROSS JOIN groups g ON g.scope=k.scope AND g.entity_key=k.entity_key "
+            "LEFT JOIN catalogue.artists a ON a.scope=g.scope AND a.uuid=g.artist_uuid")
         if domain == "songs":
-            # Benchmark IDs may name an original descriptor that has no proposed
-            # group. Keep that original account addressable without inventing a link.
-            selection += (" UNION ALL SELECT s.scope,s.entity_key,s.artist_uuid,s.title,s.basis,s.legacy_uuid,0 normalized_group,a.name artist_name "
-                          "FROM originals o JOIN catalogue.songs s ON s.scope=o.scope AND s.entity_key=o.original_key "
-                          "LEFT JOIN catalogue.artists a ON a.scope=s.scope AND a.uuid=s.artist_uuid "
-                          "WHERE o.original_title=? AND NOT EXISTS(SELECT 1 FROM groups g "
-                          "WHERE g.scope=o.scope AND g.entity_key=o.original_key)" + (" AND s.artist_uuid=?" if artist else ""))
-            values.extend([literal] + ([artist] if artist else []))
+            # Unresolved originals remain reviewable without asserting a group.
+            selection += (" UNION ALL SELECT o.scope,o.original_key,o.artist_uuid,o.original_title,o.basis,o.legacy_uuid,0,a.name,0 "
+                "FROM literal_originals o LEFT JOIN catalogue.artists a ON a.scope=o.scope AND a.uuid=o.artist_uuid "
+                "WHERE NOT EXISTS(SELECT 1 FROM groups g WHERE g.scope=o.scope AND g.entity_key=o.original_key)")
         with closing(self.groups._connect(reviewed=False)) as db:
+            if domain == "songs" and self.file_title_replay:
+                interpretations, _ = self.file_title_replay.prepare_browse(db, reviewed=False)
+                replay_scopes = sorted({reader["scope"] for reader in self.file_title_replay.readers})
+                selection += (" UNION ALL SELECT i.scope,i.original_key,i.artist_uuid,t.original_title,'title_derived',NULL,0,a.name,1 "
+                    "FROM replay_files.titles t CROSS JOIN " + interpretations + " i ON i.title_id=t.id "
+                    "LEFT JOIN catalogue.artists a ON a.scope=i.scope AND a.uuid=i.artist_uuid "
+                    "WHERE t.scope IN (" + ",".join("?" for _ in replay_scopes) + ") AND t.original_title=? "
+                    "AND NOT EXISTS(SELECT 1 FROM originals o WHERE o.scope=i.scope AND o.original_key=i.original_key) "
+                    "AND NOT EXISTS(SELECT 1 FROM groups g WHERE g.scope=i.scope AND g.entity_key=i.original_key)"
+                    + (" AND t.artist_uuid=?" if artist else ""))
+                values.extend([*replay_scopes, literal] + ([artist] if artist else []))
             total = db.execute("SELECT count(*) FROM (" + selection + ")", values).fetchone()[0]
             rows = db.execute("SELECT * FROM (" + selection + ") ORDER BY scope,entity_key LIMIT ? OFFSET ?",
                               [*values, bounds["limit"], bounds["offset"]]).fetchall()
-            items = [self._review_song_ref(dict(row), literal, domain) for row in rows]
+            items = []
+            for row in rows:
+                item = self._review_song_ref(dict(row), literal, domain)
+                if row["replay_only"]:
+                    item["evidenceUrl"] = "/api/replay-song?" + urlencode(dict(scope=row["scope"], artist=row["artist_uuid"], key=row["entity_key"]))
+                items.append(item)
         return dict(items=items, total=total, complete=bounds["offset"] == 0 and len(items) == total, **bounds)
 
     def _reviewed_work_references(self, work_key, snapshot):
@@ -316,7 +362,7 @@ class MusicDiscovery:
             raise ValueError("No completed music normalization is configured")
         scope, artist, key = query.get("scope", ""), query.get("artist", ""), query.get("key", "")
         keys = self.groups.member_keys(scope, artist, key)
-        if not keys:
+        if not keys and not self.file_title_replay:
             return [], {"artistUuid": artist, "entityKeys": []}
         if len(keys) > MAXIMUM_KEYS:
             raise MusicQueryUnavailable("This song group exceeds the complete union-query key bound")
@@ -370,22 +416,62 @@ class MusicDiscovery:
             return home["homeKey"]
         return "reader:" + str(source["id"]) + ":" + home["homeKey"]
 
+    def _source_music_rows(self, source, route, payload, query):
+        replay = self.file_title_replay
+        reader_ids = replay.reader_ids(source) if replay else []
+        if not reader_ids:
+            return self._music_pages(source, route, payload) if payload["entityKeys"] else []
+        rows = []
+        for reader_id in reader_ids:
+            if route.endswith("/homes"):
+                rows.extend(replay.homes(query["scope"], query["artist"], query["key"], reader_id))
+            else:
+                rows.extend(replay.files(query["scope"], query["artist"], query["key"], reader_id, payload.get("homeKey")))
+        if payload["entityKeys"]:
+            # The same original query supplies only untitled or uncaptured files;
+            # covered titles use the replay's current C# interpretation instead.
+            fallback = replay.fallback_queries(source, reader_ids[0], lambda record_id: self._read(source, "/api/record?id=" + str(record_id)))
+            fetch = fallback.homes if route.endswith("/homes") else fallback.files
+            offset, total = 0, None
+            while total is None or offset < total:
+                result = fetch({**payload, "limit": 100, "offset": offset})
+                if total is not None and result["total"] != total:
+                    raise MusicQueryUnavailable("Original fallback membership changed during the query")
+                total = result["total"]
+                if not result["items"] and offset < total:
+                    raise MusicQueryUnavailable("Original fallback membership is incomplete")
+                rows.extend(result["items"])
+                offset += len(result["items"])
+        return rows
+
     def performances(self, query):
         sources, payload = self._group_query(query)
         homes = {}
         for source in sources:
-            for home in self._music_pages(source, "/api/music/homes", payload):
+            for home in self._source_music_rows(source, "/api/music/homes", payload, query):
                 identity = self._home_identity(source, home)
                 combined = homes.setdefault(identity, {"homeKey": identity, "kind": home["kind"],
                     "showUuid": home["showUuid"], "sources": [], "fileCountUpperBound": 0,
                     "literalDate": home.get("literalDate"), "performanceLabel": home.get("performanceLabel")})
                 combined["fileCountUpperBound"] += home["fileCount"]
                 combined["sources"].append({"source": source["id"], "homeKey": home["homeKey"],
-                    "fileCount": home["fileCount"], "representativeRecordId": home["representativeRecordId"]})
+                    "fileCount": home["fileCount"], "representativeRecordId": home["representativeRecordId"],
+                    "dateRecordId": home.get("dateRecordId")})
         ordered = sorted(homes.values(), key=lambda home: (home["kind"], home["literalDate"] or "", home["homeKey"]))
         bounds = page(query)
         offset, limit = bounds["offset"], bounds["limit"]
-        return {"items": ordered[offset:offset + limit], "total": len(ordered), **bounds,
+        selected = ordered[offset:offset + limit]
+        by_id = {source["id"]: source for source in sources}
+        for home in selected:
+            if home["literalDate"] is not None:
+                continue
+            evidence = next((item for item in home["sources"] if item.get("dateRecordId") is not None), None)
+            if evidence is not None:
+                record = self._read(by_id[evidence["source"]], "/api/record?id=" + str(evidence["dateRecordId"]))
+                original = (record["record"].get("proposal") or {}).get("home") or {}
+                home.update(literalDate=original.get("literalDate"), performanceType=original.get("performanceType"),
+                            performanceLabel=original.get("performanceLabel"))
+        return {"items": selected, "total": len(ordered), **bounds,
                 "performancesTotal": sum(home["kind"] == "catalog_show" for home in ordered),
                 "unboundAccountsTotal": sum(home["kind"] != "catalog_show" for home in ordered)}
 
@@ -401,13 +487,13 @@ class MusicDiscovery:
             if requested_home.startswith("reader:") and not requested_home.startswith(prefix):
                 continue
             local_home = requested_home[len(prefix):] if requested_home.startswith(prefix) else requested_home
-            for file in self._music_pages(source, "/api/music/files", {**payload, "homeKey": local_home}):
+            for file in self._source_music_rows(source, "/api/music/files", {**payload, "homeKey": local_home}, query):
                 identity = (("native", source["run"], file["nativeFileKey"]) if file["fileKind"] == "native"
                             else ("legacy", file["fileKey"]) if file["fileKey"]
                             else ("legacy", source["run"], file["recordId"]))
                 # Later configured captures have the same display precedence as
                 # the original catalogue. The selected file's exact home survives.
-                interpretations = [relation for key in file["matchingKeys"] for relation in relations.get(key, [])]
+                interpretations = file.get("normalizationRelations") or [relation for key in file["matchingKeys"] for relation in relations.get(key, [])]
                 items[identity] = {**file, "source": source["id"], "normalizationRelations": interpretations}
         ordered = sorted(items.values(), key=lambda item: (str(item["source"]), item["recordId"], item["fileOrdinal"] or -1))
         bounds = page(query)
@@ -434,6 +520,8 @@ class MusicDiscovery:
         key = query.get("nativeFileKey", "")
         if parent < 1 or not key.startswith("native_file:") or len(key) > 300:
             raise ValueError("Choose an exact native file and its retained parent.")
+        if self.file_title_replay:
+            self.file_title_replay.validate_file(source, parent, key)
         return self._read(source, "/api/file?" + urlencode({"parentId": parent, "nativeFileKey": key}))
 
     @staticmethod
@@ -448,7 +536,13 @@ class MusicDiscovery:
         identifier = int(query.get("id", "0"))
         if identifier < 1:
             raise ValueError("Choose an indexed record.")
-        return self._read(source, "/api/record?" + urlencode({"id": identifier}))
+        expected_file = query.get("fileKey")
+        if self.file_title_replay and expected_file:
+            self.file_title_replay.validate_file(source, identifier, expected_file)
+        result = self._read(source, "/api/record?" + urlencode({"id": identifier}))
+        if expected_file and expected_file != "file:" + str(result["record"].get("inputUuid")):
+            raise FileTitleReplayChanged("The original playback response belongs to another file")
+        return result
 
     def _source(self, query):
         # Resolve source IDs from the same published catalogue generation as search.
@@ -509,6 +603,10 @@ def handler_for(discovery):
                     if not discovery.groups:
                         raise ValueError("No completed music normalization is configured")
                     result = discovery.groups.songs(q=query.get("q", ""), artist=query.get("artist", ""), scope=query.get("scope", ""), **page(query))
+                elif route.path == "/api/replay-song":
+                    if not discovery.file_title_replay:
+                        raise ValueError("No completed retained file-title replay is configured")
+                    result = discovery.file_title_replay.original(query.get("scope", ""), query.get("artist", ""), query.get("key", ""), **page(query))
                 elif route.path == "/api/song-group":
                     if query.get("generation") and query["generation"] != discovery.stats()["generation"]:
                         raise CatalogueChanged("The music normalization changed. Reload this song page")
@@ -571,7 +669,7 @@ def handler_for(discovery):
                 if result is None:
                     return self.send_json(404, {"error": "This music identity is not in the current catalogue snapshot."})
                 return self.send_json(200, result)
-            except (CatalogueChanged, MusicNormalizationChanged) as error:
+            except (CatalogueChanged, MusicNormalizationChanged, FileTitleReplayChanged) as error:
                 return self.send_json(409, {"error": str(error)})
             except MusicQueryUnavailable as error:
                 return self.send_json(503, {"error": str(error)})
@@ -636,6 +734,7 @@ def main():
     serve.add_argument("--venue-url", help="Optional venue directory HTTP(S) origin")
     serve.add_argument("--review-url", help="Optional authenticated normalization review HTTP(S) origin")
     serve.add_argument("--normalization", help="Completed C# correspondence sidecar for this exact catalogue")
+    serve.add_argument("--file-title-replay", help="Completed retained file-title replay projection receipt")
     serve.add_argument("--reader", nargs=3, action="append", metavar=("SCOPE", "RUN", "READER"), default=[], help="Additional relationship-only reader; does not claim title discovery coverage")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=18769)
@@ -656,7 +755,7 @@ def main():
         print(json.dumps(result, ensure_ascii=False), flush=True)
     else:
         readers = [Source(scope, Path(run), reader) for scope, run, reader in args.reader]
-        discovery = MusicDiscovery(MusicCatalogue(args.database), readers, args.normalization, args.compositions, args.people_url, args.venue_url, args.composition_selections, args.review_url)
+        discovery = MusicDiscovery(MusicCatalogue(args.database), readers, args.normalization, args.compositions, args.people_url, args.venue_url, args.composition_selections, args.review_url, args.file_title_replay)
         server = ThreadingHTTPServer((args.host, args.port), handler_for(discovery))
         print(json.dumps({"url": f"http://{args.host}:{args.port}/", "database": str(Path(args.database).resolve())}), flush=True)
         server.serve_forever()

@@ -99,18 +99,47 @@ public sealed class MusicRepertoireConsolidator
             return;
         }
 
+        ObserveExtractedTitles(
+            descriptor.Scope,
+            descriptor.ArtistUuid,
+            descriptor.OriginalKey,
+            descriptor.Title
+        );
+    }
+
+    /// <summary>
+    /// Adds cited file-title context before resolution without adding another original
+    /// repertoire account. Full replay and live refresh must observe every retained
+    /// title before freezing, so reviewed targets and display choices do not depend on
+    /// which file is resolved first. The caller authenticates each original title.
+    /// </summary>
+    public void ObserveRetainedTitle(string scope, Guid artistUuid, string title)
+    {
+        RequireObservationPhase();
+        var originalKey = ShadowRepertoireAdapter.ProvisionalEntityKey(artistUuid, title);
+        RememberTitle(scope, artistUuid, originalKey, title);
+        ObserveExtractedTitles(scope, artistUuid, originalKey, title);
+    }
+
+    private void ObserveExtractedTitles(
+        string scope,
+        Guid artistUuid,
+        string originalKey,
+        string title
+    )
+    {
         // Retain only compact display choices, not every extraction/proof graph.
         // An already existing base descriptor wins; other spellings sort ordinally.
-        foreach (var segment in extractor.Extract(descriptor.ArtistUuid, descriptor.Title).Segments)
+        foreach (var segment in extractor.Extract(artistUuid, title).Segments)
         {
             if (segment.Kind != TrackContentKind.Song)
             {
                 continue;
             }
-            RememberTitle(descriptor, segment.Title!);
+            RememberTitle(scope, artistUuid, originalKey, segment.Title!);
             if (segment.CoreTitle is { } core)
             {
-                RememberTitle(descriptor, core.Title);
+                RememberTitle(scope, artistUuid, originalKey, core.Title);
             }
         }
     }
@@ -646,22 +675,19 @@ public sealed class MusicRepertoireConsolidator
             : !sourceWorks.SetEquals(targetWorks);
     }
 
-    private void RememberTitle(MusicRepertoireDescriptor descriptor, string title)
+    private void RememberTitle(string scope, Guid artistUuid, string originalKey, string title)
     {
-        var key = ShadowRepertoireAdapter.ProvisionalEntityKey(descriptor.ArtistUuid, title);
-        var candidate = new PreferredTitle(title, descriptor.OriginalKey == key ? 0 : 1);
+        var key = ShadowRepertoireAdapter.ProvisionalEntityKey(artistUuid, title);
+        var candidate = new PreferredTitle(title, originalKey == key ? 0 : 1);
         if (
-            !preferred.TryGetValue((descriptor.Scope, key), out var existing)
+            !preferred.TryGetValue((scope, key), out var existing)
             || candidate.Priority < existing.Priority
             || candidate.Priority == existing.Priority
                 && StringComparer.Ordinal.Compare(candidate.Name, existing.Name) < 0
         )
         {
-            preferred[(descriptor.Scope, key)] = candidate;
-            reviewed?.Observe(
-                descriptor.Scope,
-                new(key, descriptor.ArtistUuid, null, title, "title_derived")
-            );
+            preferred[(scope, key)] = candidate;
+            reviewed?.Observe(scope, new(key, artistUuid, null, title, "title_derived"));
         }
     }
 

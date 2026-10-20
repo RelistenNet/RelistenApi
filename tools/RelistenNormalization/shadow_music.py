@@ -36,8 +36,9 @@ def uuid_key(value, prefix):
 class ShadowMusicQueries:
     """Use a small indexed key table, independent of SQLite's bind limit."""
 
-    def __init__(self, index):
+    def __init__(self, index, excluded_titles=None):
         self.index = index
+        self.excluded_titles = excluded_titles
 
     def _request(self, query):
         artist = str(uuid.UUID(query.get("artistUuid", "")))
@@ -58,6 +59,19 @@ class ShadowMusicQueries:
                        ((hashlib.blake2b(key.encode(), digest_size=16).digest(), key) for key in keys))
         db.create_function("music_uuid_key", 2, uuid_key, deterministic=True)
         db.execute("CREATE TEMP TABLE selected_music_files AS " + self._selection(), (artist, artist))
+        if self.excluded_titles is not None:
+            database, reader_id = self.excluded_titles
+            db.execute("ATTACH DATABASE ? AS replay_covered_files", (database,))
+            # A replay replaces only an exact captured file with a retained title.
+            # New/untitled files keep their source membership. A changed parent or
+            # child coordinate cannot be silently treated as already replayed.
+            db.execute("""DELETE FROM selected_music_files AS selected WHERE EXISTS (
+                SELECT 1 FROM replay_covered_files.files captured
+                WHERE captured.reader_id=? AND captured.title_id IS NOT NULL
+                  AND captured.file_key=CASE WHEN selected.file_kind='native'
+                      THEN selected.native_key ELSE selected.file_key END
+                  AND captured.record_id=selected.record_id
+                  AND captured.file_ordinal IS selected.file_ordinal)""", (reader_id,))
         db.execute("CREATE INDEX selected_music_home ON selected_music_files(home_key)")
 
     @staticmethod

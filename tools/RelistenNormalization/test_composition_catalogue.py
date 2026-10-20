@@ -283,6 +283,7 @@ class TestCompositionCatalogue(unittest.TestCase):
         next_page = self.get(base, "/api/review-candidates", domain="songs", q="Saint Stephen", artist=ARTISTS[0], scope="catalogue", offset=2)
         self.assertEqual(next_page["items"][0]["displayName"], "Saint Stephen")
         self.assertIn("Title-derived", next_page["items"][0]["description"])
+        self.assertIsNone(next_page["items"][0]["importedSongUuid"])
         browse = self.get(base, "/api/normalized-songs", q="Saint Stephen", artist=ARTISTS[0], scope="catalogue")
         self.assertEqual(browse["items"][0]["title"], "01 Saint Stephen")
 
@@ -311,6 +312,7 @@ class TestCompositionCatalogue(unittest.TestCase):
         original = result["items"][0]
         self.assertEqual(json.loads(original["stableKey"]), ["catalogue", self.songs[0]["entityKey"]])
         self.assertEqual(original["domain"], "songs")
+        self.assertEqual(original["importedSongUuid"], self.songs[0]["legacySongUuid"])
         self.assertIn("/api/song?", original["evidenceUrl"])
         with patch.object(discovery.groups, "group", side_effect=AssertionError("Full song graph requested")), \
                 patch.object(discovery.catalogue, "song", side_effect=AssertionError("Full original graph requested")):

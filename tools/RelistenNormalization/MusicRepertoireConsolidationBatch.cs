@@ -33,7 +33,8 @@ public sealed class MusicRepertoireConsolidationBatch
         string manifestSha256,
         CancellationToken ct = default,
         string? knowledgePath = null,
-        string? knowledgeSha256 = null
+        string? knowledgeSha256 = null,
+        Func<MusicRepertoireConsolidator, CancellationToken, Task>? observeAdditional = null
     )
     {
         var input = await AuthenticateInputAsync(
@@ -42,7 +43,12 @@ public sealed class MusicRepertoireConsolidationBatch
             ct
         );
         var knowledge = await ReadKnowledgeAsync(knowledgePath, knowledgeSha256, ct);
-        return await ObserveCompletePopulationAsync(input, knowledge?.Snapshot, ct);
+        return await ObserveCompletePopulationAsync(
+            input,
+            knowledge?.Snapshot,
+            ct,
+            observeAdditional
+        );
     }
 
     public async Task<MusicConsolidationOutput> RunAsync(
@@ -286,7 +292,8 @@ public sealed class MusicRepertoireConsolidationBatch
     private static async Task<MusicRepertoireConsolidator> ObserveCompletePopulationAsync(
         MusicConsolidationInput input,
         ExpertKnowledgeSnapshot? knowledge,
-        CancellationToken ct
+        CancellationToken ct,
+        Func<MusicRepertoireConsolidator, CancellationToken, Task>? observeAdditional = null
     )
     {
         var resolver = new MusicRepertoireConsolidator(knowledge);
@@ -342,6 +349,10 @@ public sealed class MusicRepertoireConsolidationBatch
         if (resolver.DescriptorCount != input.Descriptors.Rows)
         {
             throw new InvalidDataException("The descriptor stream is incomplete.");
+        }
+        if (observeAdditional != null)
+        {
+            await observeAdditional(resolver, ct);
         }
         resolver.CompleteObservation();
         return resolver;

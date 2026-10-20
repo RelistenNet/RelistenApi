@@ -27,6 +27,7 @@ class MusicNormalizationChanged(ValueError):
 class MusicGroups:
     def __init__(self, catalogue, normalization):
         self.review_client = None
+        self.file_title_replay = None
         self.catalogue = Path(catalogue).resolve(strict=True)
         self.normalization = Path(normalization).resolve(strict=True)
         catalogue_stamp = self._stat(self.catalogue)
@@ -35,6 +36,8 @@ class MusicGroups:
             db.execute("BEGIN")
             self.metadata = {key: json.loads(value) for key, value in db.execute("SELECT key,value FROM metadata")}
             self.outcomes = dict(db.execute("SELECT disposition,count(*) FROM originals GROUP BY disposition"))
+            self.literal_indexes = db.execute("SELECT count(*) FROM sqlite_master WHERE type='index' "
+                "AND name IN ('groups_literal','originals_literal')").fetchone()[0] == 2
         if self.metadata.get("state") != "completed" or sha256_file(self.catalogue) != self.metadata["catalogueSha256"]:
             raise MusicNormalizationChanged("The normalized songs belong to another catalogue image")
         if catalogue_stamp != self._stat(self.catalogue) or normalization_stamp != self._stat(self.normalization):
@@ -70,9 +73,11 @@ class MusicGroups:
                 raise MusicNormalizationChanged("The music images changed while opening the normalized catalogue")
             if reviewed and self.review_client is not None:
                 snapshot = self.review_client.snapshot()
+                deadline = time.monotonic() + 10
                 if any(rule["definition"]["domain"] == "songs" for rule in snapshot["rules"]):
                     changes = self.review_client.music_changes(self.metadata, snapshot)
                     selected = [change for change in changes if artist is None or change["artistUuid"] == artist]
+                    deadline = time.monotonic() + 10
                     self._apply_reviews(db, selected)
             return db
         except BaseException:
@@ -199,20 +204,39 @@ class MusicGroups:
             order = "(casefold(v.title)=?) DESC,(v.legacy_uuid IS NOT NULL) DESC," + order
             order_args = [q.casefold()]
         with closing(self._connect(reviewed=reviewed and (bool(artist) or _excluded_artists is None), artist=artist)) as db:
+            selected_source = "visible"
+            if self.file_title_replay:
+                bindings = self.file_title_replay.prepare_browse(db, artist or None, reviewed=reviewed)
+                replay_sql, replay_args = self.file_title_replay.browse_sql(bindings, q, artist, scope, _excluded_artists or ())
+                interpretations, targets = bindings
+                visible += (", replayed AS MATERIALIZED (" + replay_sql + "), combined AS ("
+                    "SELECT v.* FROM visible v WHERE NOT EXISTS(SELECT 1 FROM replayed r WHERE r.scope=v.scope AND r.entity_key=v.entity_key) "
+                    "AND (v.normalized_group=1 OR NOT EXISTS(SELECT 1 FROM " + interpretations + " i JOIN " + targets
+                    + " t ON t.title_id=i.title_id WHERE i.scope=v.scope AND i.original_key=v.entity_key AND t.disposition='proposed')) "
+                    "UNION ALL SELECT * FROM replayed)")
+                arguments.extend(replay_args)
+                selected_source = "combined"
             # Count and page the same stream once. A second full count repeats
             # all correspondence lookups before the first unfiltered page.
-            rows = db.execute(visible + ", selected AS (SELECT v.*,count(*) OVER() total_rows FROM visible v "
+            rows = db.execute(visible + ", selected AS (SELECT v.*,count(*) OVER() total_rows FROM " + selected_source + " v "
                 "ORDER BY " + order + " LIMIT ? OFFSET ?) "
                 "SELECT v.*,a.name artist_name FROM selected v LEFT JOIN catalogue.artists a "
                 "ON a.scope=v.scope AND a.uuid=v.artist_uuid",
                 (*arguments, *order_args, limit, offset)).fetchall()
-            total = rows[0]["total_rows"] if rows else db.execute(visible + "SELECT count(*) FROM visible", arguments).fetchone()[0]
+            total = rows[0]["total_rows"] if rows else db.execute(visible + "SELECT count(*) FROM " + selected_source, arguments).fetchone()[0]
             items = []
             for row in rows:
                 item = dict(row)
                 item.pop("total_rows")
                 item["member_count"] = db.execute("SELECT count(DISTINCT original_key) FROM members INDEXED BY members_target "
                     "WHERE scope=? AND target_key=? AND disposition='proposed'", (row["scope"], row["entity_key"])).fetchone()[0] if row["normalized_group"] else 1
+                if self.file_title_replay and row["normalized_group"]:
+                    replay_interpretations, replay_targets = bindings
+                    item["member_count"] = db.execute("SELECT count(*) FROM (SELECT m.original_key FROM members m INDEXED BY members_target "
+                        "WHERE m.scope=? AND m.target_key=? AND m.disposition='proposed' UNION SELECT i.original_key FROM "
+                        + replay_targets + " t JOIN " + replay_interpretations + " i ON i.title_id=t.title_id "
+                        "WHERE t.scope=? AND t.artist_uuid=? AND t.target_key=? AND t.disposition='proposed')",
+                        (row["scope"], row["entity_key"], row["scope"], row["artist_uuid"], row["entity_key"])).fetchone()[0]
                 if review_order:
                     item.update(self._review_title_forms(db, row))
                 items.append(item)
@@ -288,7 +312,14 @@ class MusicGroups:
                     "WHERE o.scope=? AND o.artist_uuid=? AND o.original_key=? AND s.artist_uuid=o.artist_uuid",
                     (scope, artist, key)).fetchone()
             if row is None:
-                return None
+                if not self.file_title_replay:
+                    return None
+                original = self.file_title_replay.original_identity(scope, artist, key)
+                result = original or self.file_title_replay.group(scope, artist, key, reviewed=False)
+                if result is not None:
+                    name = db.execute("SELECT name FROM catalogue.artists WHERE scope=? AND uuid=?", (scope, artist)).fetchone()
+                    result["artist_name"] = name[0] if name else None
+                return result
             result = dict(row)
             result.update(self._review_title_forms(db, row))
             return result
@@ -301,7 +332,11 @@ class MusicGroups:
                 "ON a.scope=g.scope AND a.uuid=g.artist_uuid WHERE g.scope=? AND g.artist_uuid=? AND g.entity_key=?",
                 (scope, artist, key)).fetchone()
             if row is None:
-                return None
+                result = self.file_title_replay.details(scope, artist, key, limit, offset) if self.file_title_replay else None
+                if result is not None:
+                    name = db.execute("SELECT name FROM catalogue.artists WHERE scope=? AND uuid=?", (scope, artist)).fetchone()
+                    result["artist_name"] = name[0] if name else None
+                return result
             result = dict(row)
             # Keep target lookups selective on the full catalog. SQLite otherwise
             # favors scope-wide primary-key scans before joining original evidence.
@@ -321,6 +356,8 @@ class MusicGroups:
                 WHERE link.scope=? AND (link.song_key=? OR EXISTS(SELECT 1 FROM members m
                     WHERE m.scope=link.scope AND m.original_key=link.song_key AND m.target_key=?
                     AND m.disposition='proposed' AND m.relation='identity_alias')) ORDER BY w.entity_key""", (scope, key, key))]
+            if self.file_title_replay:
+                result["replayedTitles"] = self.file_title_replay.details(scope, artist, key, limit, offset)
             return result
 
     def member_keys(self, scope, artist, key):
@@ -328,6 +365,8 @@ class MusicGroups:
         with closing(self._connect(artist=artist)) as db:
             group = db.execute("SELECT 1 FROM groups WHERE scope=? AND artist_uuid=? AND entity_key=?", (scope, artist, key)).fetchone()
             if not group:
+                if self.file_title_replay and self.file_title_replay.group(scope, artist, key):
+                    return [key]
                 raise KeyError("This normalized song group is not in the current image")
             return [row[0] for row in db.execute("SELECT DISTINCT m.original_key FROM members m INDEXED BY members_target CROSS JOIN originals o "
                 "ON o.scope=m.scope AND o.original_key=m.original_key WHERE m.scope=? AND m.target_key=? "

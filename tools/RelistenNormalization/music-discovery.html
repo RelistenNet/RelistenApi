@@ -855,7 +855,7 @@
           }
         }
       }
-      async function openRecord(container, source, id, token) {
+      async function openRecord(container, source, id, token, fileKey = null) {
         let panel = container.querySelector(".details");
         if (panel) {
           panel.hidden = !panel.hidden;
@@ -869,7 +869,7 @@
         try {
           const detail = await api(
             "/api/record?" +
-              query({ source: source.id, generation: stats.generation, id }),
+              query({ source: source.id, generation: stats.generation, id, ...(fileKey ? {fileKey} : {}) }),
           );
           if (token !== generation) return;
           const record = detail.record,
@@ -1123,10 +1123,14 @@
         for (const member of row.members) {
           const entry = document.createElement("article");
           entry.className = "card section";
-          entry.innerHTML = `<h3>${esc(member.original_title || "Title unknown")}</h3><span class="tag">${esc(member.relation.replaceAll("_", " "))}</span>${member.disposition !== "proposed" ? '<span class="tag warning">Partial source interpretation</span>' : ''}${member.qualifiers.map((qualifier) => `<span class="tag">${esc(qualifier.replaceAll("_", " "))}</span>`).join("")}<p><a href="${link("song", {scope: row.scope, key: member.original_key, raw: "1"})}">Original title account</a></p><button>Inspect normalization evidence</button>`;
+          const originalUrl = member.replay_only
+            ? "/api/replay-song?" + query({...coordinates, key: member.original_key})
+            : link("song", {scope: row.scope, key: member.original_key, raw: "1"});
+          entry.innerHTML = `<h3>${esc(member.original_title || "Title unknown")}</h3><span class="tag">${esc(member.relation.replaceAll("_", " "))}</span>${member.disposition !== "proposed" ? '<span class="tag warning">Partial source interpretation</span>' : ''}${member.qualifiers.map((qualifier) => `<span class="tag">${esc(qualifier.replaceAll("_", " "))}</span>`).join("")}<p><a href="${originalUrl}">Original title account</a></p><button>Inspect normalization evidence</button>`;
           entry.querySelector("button").onclick = async () => {
             try {
-              const proof = await api("/api/correspondence?" + query({...coordinates, key: member.original_key}));
+              const proof = await api((member.replay_only ? "/api/replay-song?" : "/api/correspondence?")
+                + query({...coordinates, key: member.original_key}));
               if (token !== generation) return;
               const pre = document.createElement("pre");
               pre.textContent = JSON.stringify(proof, null, 2);
@@ -1184,7 +1188,7 @@
             entry.innerHTML = `<button>${esc(file.label || "Original file")}</button><p>${[...labels].map((label) => `<span class="tag">${esc(label.replaceAll("_", " "))}</span>`).join("")}</p>`;
             entry.querySelector("button").onclick = () => file.fileKind === "native"
               ? openNativeFile(entry, source, {parentId: file.recordId, nativeFileKey: file.nativeFileKey}, token)
-              : openRecord(entry, source, file.recordId, token);
+              : openRecord(entry, source, file.recordId, token, file.fileKey);
             container.append(entry);
           }
           container.append(pagination(result, (pageOffset) => groupFiles(container, coordinates, home, token, pageOffset)));
@@ -1336,8 +1340,10 @@
               if (!href) continue;
               const a = document.createElement("a"); a.href = href; a.textContent = label; navigation.append(a);
             }
-            $("coverage").textContent =
-              `Discovery snapshot · ${counts}. ${snapshots}. These are independent indexed snapshots, not the complete computed population. File searches query live readers; new song titles appear after a catalogue rebuild. Native file coverage does not complete the broader full-reader title projection.`;
+            const replay = stats.fileTitleReplay;
+            $("coverage").textContent = replay
+              ? `Discovery snapshot · ${counts}. The file-title pass covers ${replay.fileMap.rows.toLocaleString()} retained files and ${replay.titles.toLocaleString()} distinct titles within artists. Original recording and audio links stay intact. Untitled files retain their earlier supported matches.`
+              : `Discovery snapshot · ${counts}. ${snapshots}. File searches query the original readers; new song titles appear after a catalogue rebuild.`;
           }
           if (kind === "compositions" && stats.composition_queries) await compositionList(params, token);
           else if (kind === "compositions") await list("works", params, token);

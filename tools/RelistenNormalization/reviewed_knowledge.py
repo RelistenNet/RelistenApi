@@ -86,7 +86,15 @@ class ReviewedKnowledgeClient:
 
     def music_changes(self, metadata, snapshot):
         """Read complete sparse C# changes, pinned across every response page."""
-        key = ("music", snapshot["sha256"], metadata["inputManifestSha256"], metadata["outputManifestSha256"])
+        return self._projection_changes("review-projection", metadata["inputManifestSha256"],
+                                        metadata["outputManifestSha256"], snapshot)
+
+    def file_title_changes(self, metadata, snapshot):
+        return self._projection_changes("file-title-review-projection", metadata["inputManifest"]["sha256"],
+                                        metadata["outputManifest"]["sha256"], snapshot)
+
+    def _projection_changes(self, route, input_sha256, output_sha256, snapshot):
+        key = (route, snapshot["sha256"], input_sha256, output_sha256)
         with self.lock:
             if key in self.results:
                 return self.results[key]
@@ -94,7 +102,7 @@ class ReviewedKnowledgeClient:
             while total is None or len(items) < total:
                 query = dict(inputManifestSha256=key[2], outputManifestSha256=key[3],
                              knowledgeSha256=key[1], offset=len(items))
-                page = self._request("/api/music/review-projection?" + urlencode(query), timeout=60)
+                page = self._request("/api/music/" + route + "?" + urlencode(query), timeout=60)
                 if (page.get("inputManifestSha256") != key[2] or page.get("outputManifestSha256") != key[3]
                         or page.get("knowledgeSha256") != key[1] or page.get("offset") != len(items)
                         or not isinstance(page.get("items"), list) or not isinstance(page.get("total"), int)

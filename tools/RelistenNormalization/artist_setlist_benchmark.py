@@ -18,6 +18,7 @@ import sys
 import time
 
 from shadow_reader import _unpack_text
+from file_title_membership import FileTitleMembership
 
 ARTISTS = {
     "ca53d281-0041-ae33-a050-c87702d93b0c": "Phish",
@@ -65,6 +66,9 @@ class Benchmark:
         self.mappings = {}
         self.known = {}
         self.identity_aliases = {}
+        self.replay = None
+        self.replayed_files = {}
+        self.replay_songs = {}
 
     def check(self):
         if time.monotonic() - self.started > self.maximum_seconds:
@@ -152,6 +156,7 @@ class Benchmark:
             if meta.get("state") != "completed":
                 raise ValueError("A completed C# normalization projection is required")
             self.prediction_generation = meta
+            self.metadata = meta
             for row in db.execute("SELECT entity_key,legacy_uuid,title,artist_uuid FROM groups WHERE scope='catalogue' AND artist_uuid IN (?,?)", tuple(ARTISTS)):
                 self.known[row["entity_key"]] = dict(row)
             rows = db.execute("""SELECT o.original_key,o.artist_uuid,o.disposition original_disposition,
@@ -222,6 +227,41 @@ class Benchmark:
                 self.unaligned.append(item)
         self.unprojected = sorted(set(raw) - used)
 
+    def load_replayed_files(self):
+        if not self.request.get("fileTitleReplay"):
+            return
+        # The reader and benchmark consume one authenticated typed image. No
+        # title matching or reference-driven repair happens in this scorer.
+        self.replay = FileTitleMembership(self.request["fileTitleReplay"], self)
+        source = dict(scope="catalogue", run=self.request["fileRun"])
+        if not self.replay.reader_ids(source):
+            raise ValueError("The replay does not capture the benchmark reader")
+        for artist in ARTISTS:
+            for row in self.replay.covered_files("catalogue", artist, self.request["fileRun"]):
+                self.check()
+                uuid = row["fileUuid"]
+                if row["fileKind"] != "legacy" or uuid not in self.active:
+                    continue
+                if self.active[uuid] != (artist, row["showUuid"], row["sourceUuid"]):
+                    raise ValueError("A replayed prediction differs from captured file ownership")
+                if uuid in self.replayed_files:
+                    raise ValueError("A captured file appears twice in the selected replay reader")
+                self.replayed_files[uuid] = dict(targets=[], titleId=row.get("titleId"),
+                    title=row.get("originalTitle"), disposition=row.get("interpretationDisposition"))
+            for row in self.replay.iter_memberships("catalogue", artist, self.request["fileRun"]):
+                self.check()
+                uuid = row["fileUuid"]
+                if row["fileKind"] != "legacy" or uuid not in self.active:
+                    continue
+                replayed = self.replayed_files.get(uuid)
+                if replayed is None:
+                    raise ValueError("A replay membership is outside its covered file population")
+                replayed["targets"].append(row["targetKey"])
+                replayed.update(titleId=row.get("titleId"), title=row.get("originalTitle"),
+                                disposition=row["interpretationDisposition"])
+                self.replay_songs.setdefault(row["targetKey"], dict(entity_key=row["targetKey"],
+                    artist_uuid=artist, title=row.get("targetTitle"), legacy_uuid=row["legacySongUuid"]))
+
     def load_predictions(self):
         seen = set()
         for record, origin in self.selected_records(self.request["fileRun"], "file_contents"):
@@ -255,19 +295,37 @@ class Benchmark:
             self.coverage[(artist, "files_with_original_song_prediction" if original_targets else "files_without_original_song_prediction")] += 1
             self.coverage[(artist, "files_with_prediction")] += 1
             self.coverage[(artist, "unresolved_segments")] += unresolved
+            replayed = self.replayed_files.get(uuid)
+            covered = replayed is not None
+            resolved_targets = set(replayed["targets"]) if covered else targets
+            if self.replay is not None:
+                self.coverage[(artist, "files_with_replayed_title" if covered else "files_using_legacy_prediction_fallback")] += 1
+                if covered:
+                    self.coverage[(artist, "replayed_files_with_proposed_targets" if resolved_targets else "replayed_files_without_proposed_targets")] += 1
             if show:
                 aggregate = self.files.setdefault(show, {"fileCount": 0, "sources": set(),
-                    "predicted": set(), "rawPredicted": set(), "unresolvedSegments": 0, "reviewFiles": []})
+                    "predicted": set(), "rawPredicted": set(), "resolvedPredicted": set(),
+                    "unresolvedSegments": 0, "reviewFiles": [], "resolvedReviewFiles": []})
                 aggregate["fileCount"] += 1
                 aggregate["sources"].add(source)
                 aggregate["predicted"].update(targets)
                 aggregate["rawPredicted"].update(original_targets)
+                aggregate["resolvedPredicted"].update(resolved_targets)
                 aggregate["unresolvedSegments"] += unresolved
                 references = {tuple(item["expected"]) for item in self.references.get(show, [])}
                 if len(references) == 1 and targets - set(next(iter(references))):
                     aggregate["reviewFiles"].append({"fileUuid": uuid, "sourceUuid": source,
                         "title": interpretation.get("originalTitle"), "predicted": sorted(targets),
                         "unresolvedSegments": unresolved, "witness": origin})
+                resolved_references = [{self.identity_aliases.get((artist, key), key) for key in item["expected"]}
+                                       for item in self.references.get(show, [])]
+                expected_sets = {tuple(sorted(keys)) for keys in resolved_references}
+                if len(expected_sets) == 1 and resolved_targets - set(next(iter(expected_sets))):
+                    aggregate["resolvedReviewFiles"].append(dict(fileUuid=uuid, sourceUuid=source,
+                        title=replayed["title"] if covered else interpretation.get("originalTitle"),
+                        predicted=sorted(resolved_targets), witness=origin,
+                        replayTitleId=replayed["titleId"] if covered else None,
+                        predictionBasis="shared_file_title_replay" if covered else "legacy_prediction_fallback"))
         for uuid in set(self.active) - seen:
             self.coverage[(self.active[uuid][0], "files_without_prediction")] += 1
 
@@ -306,9 +364,14 @@ class Benchmark:
         totals = {artist: Counter() for artist in ARTISTS}
         identity_totals = {artist: {name: Counter() for name in ("rawIdentity", "resolvedIdentity")} for artist in ARTISTS}
 
-        def song_details(keys):
-            return [{"entityKey": key, "title": self.known.get(key, {}).get("title"),
-                     "legacySongUuid": self.known.get(key, {}).get("legacy_uuid")} for key in keys]
+        def song_details(keys, current=False):
+            result = []
+            for key in keys:
+                song = self.known.get(key, {})
+                if current:
+                    song = self.replay_songs.get(key, song)
+                result.append(dict(entityKey=key, title=song.get("title"), legacySongUuid=song.get("legacy_uuid")))
+            return result
 
         errors = self.output / "errors.jsonl"
         items = self.output / "shows.jsonl"
@@ -333,14 +396,14 @@ class Benchmark:
                        "capturedRecordingSources": len(self.show_population[show]["sources"]),
                        "unresolvedSegments": files.get("unresolvedSegments", 0)}
                 for name, resolved in (("rawIdentity", False), ("resolvedIdentity", True)):
-                    predictions = predicted if resolved else files.get("rawPredicted", set())
+                    predictions = files.get("resolvedPredicted", predicted) if resolved else files.get("rawPredicted", set())
                     comparison = self.identity_comparison(artist, references, predictions,
                                                           has_predictions=bool(files), resolved=resolved)
-                    comparison["missingSongs"] = song_details(comparison["missing"])
-                    comparison["extraSongs"] = song_details(comparison["extra"])
+                    comparison["missingSongs"] = song_details(comparison["missing"], current=resolved)
+                    comparison["extraSongs"] = song_details(comparison["extra"], current=resolved)
                     row[name] = comparison
                     self.count_comparison(identity_totals[artist][name], comparison)
-                compared_keys = predicted | files.get("rawPredicted", set()) | {key for item in references for key in item["expected"]}
+                compared_keys = predicted | files.get("resolvedPredicted", set()) | files.get("rawPredicted", set()) | {key for item in references for key in item["expected"]}
                 row["identityResolutions"] = [{"originalKey": key, "targetKey": self.identity_aliases[(artist, key)]}
                     for key in sorted(compared_keys) if (artist, key) in self.identity_aliases and self.identity_aliases[(artist, key)] != key]
                 self.write(show_stream, row)
@@ -352,8 +415,11 @@ class Benchmark:
                     count["missing"] += len(missing); count["extra"] += len(extra)
                     count["exact_presence_agreement"] += not missing and not extra
                     count["provisional_prediction_memberships"] += sum(not self.known.get(key, {}).get("legacy_uuid") for key in predicted)
-                if missing or extra or status != "compared":
-                    row["filesForReview"] = files.get("reviewFiles", [])
+                resolved = row["resolvedIdentity"]
+                if missing or extra or status != "compared" or resolved["missing"] or resolved["extra"] or resolved["status"] != "compared":
+                    row["filesForReview"] = files.get("resolvedReviewFiles" if self.replay else "reviewFiles", [])
+                    if self.replay:
+                        row["legacyFilesForReview"] = files.get("reviewFiles", [])
                     self.write(error_stream, row)
             for reference in self.unaligned:
                 self.write(error_stream, {"key": [reference["artistUuid"], "setlist", reference["setlistUuid"]],
@@ -381,6 +447,7 @@ class Benchmark:
             print(f"Population: {len(self.shows)} shows, {len(self.active)} active files", file=sys.stderr, flush=True)
             self.load_references()
             print(f"References: {self.reference_accounts} accounts, {len(self.references)} aligned shows", file=sys.stderr, flush=True)
+            self.load_replayed_files()
             self.load_predictions()
             print(f"Predictions: {len(self.files)} shows", file=sys.stderr, flush=True)
             report = self.publish()
@@ -397,6 +464,10 @@ class Benchmark:
                     "No order, repeats, timings, composition identity or accepted music is evaluated.",
                     "Show-level union can hide disagreement among recordings; file/source coverage is reported separately.",
                     "This whole-artist report excludes the separate native Phish per-file reference comparison."])
+            if self.replay is not None:
+                report["fileTitleReplay"] = dict(receipt=artifact(self.replay.receipt), generation=self.replay.stats(),
+                    reviewed=False, predictionBasis="shared_file_title_replay_with_explicit_uncovered_legacy_fallback")
+                report["limitations"].append("Resolved identity predictions replace covered legacy file segments with the shared frozen file-title replay; raw and existing top-level metrics remain the original baseline.")
             encoded = (json.dumps(report, ensure_ascii=False, indent=2) + "\n").encode()
             if self.written + len(encoded) > self.maximum_bytes:
                 raise ValueError("Completion manifest exceeds remaining output allowance")
@@ -412,8 +483,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--request", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--file-title-replay", type=Path, help="Completed replay projection receipt used by the reader")
     args = parser.parse_args()
     request = json.loads(args.request.read_text())
+    if args.file_title_replay:
+        request["fileTitleReplay"] = str(args.file_title_replay.resolve(strict=True))
     report = Benchmark(request, args.output).run()
     print(json.dumps({"state": report["state"], "artists": report["artists"], "output": str(args.output)}))
 

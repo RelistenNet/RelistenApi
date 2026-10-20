@@ -434,6 +434,8 @@ class MusicConsolidationProjection:
                 PRIMARY KEY(scope,original_key,target_ordinal)) WITHOUT ROWID;
             CREATE INDEX members_target ON members(scope,target_key,original_key);
             CREATE INDEX groups_artist ON groups(scope,artist_uuid);
+            CREATE INDEX groups_literal ON groups(scope,artist_uuid,title);
+            CREATE INDEX originals_literal ON originals(scope,artist_uuid,original_title);
         """)
 
     @staticmethod

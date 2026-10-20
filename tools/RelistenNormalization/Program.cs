@@ -27,6 +27,8 @@ if (
             && args[0] is "people-context" or "people-context-recover" or "people-context-continue"
         )
         || (args.Length == 5 && args[0] == "admit-retained-local")
+        || (args.Length == 4 && args[0] == "file-title-replay")
+        || (args.Length == 7 && args[0] == "file-title-replay" && args[4] == "--knowledge")
         || (args.Length == 3 && args[0] is "shadow-compositions-acquire" or "retained-http-inputs")
         || (
             args.Length == 4
@@ -100,6 +102,7 @@ if (
             + "       RelistenNormalization venue-normalization-refresh <request.json> <new-output-directory> <frozen-request-sha256>\n"
             + "       RelistenNormalization shadow-source-observations <snapshot.jsonl[.gz] OR capture-manifest.json> <output-directory> [--resume]\n"
             + "       RelistenNormalization music-consolidate <input-manifest.json> <output-directory> <frozen-manifest-sha256> [--knowledge <snapshot.json> <snapshot-sha256>] [--resume]\n"
+            + "       RelistenNormalization file-title-replay <input-manifest.json> <new-output-directory> <frozen-manifest-sha256> [--knowledge <snapshot.json> <snapshot-sha256>]\n"
             + "       RelistenNormalization composition-hypotheses <request.json> <output-directory> <frozen-request-sha256> [--resume]\n"
             + "       RelistenNormalization composition-work-searches <request.json> <output-directory> <frozen-request-sha256> [--resume]\n"
             + "       RelistenNormalization composition-select <plan.json> <output-directory> <frozen-plan-sha256> [--resume|--preflight]\n"
@@ -136,6 +139,29 @@ Console.CancelKeyPress += (_, signal) =>
     signal.Cancel = true;
     cancellation.Cancel();
 };
+
+if (args[0] == "file-title-replay")
+{
+    var result = await new FileTitleReplayBatch().RunAsync(
+        args[1],
+        args[2],
+        args[3],
+        cancellation.Token,
+        knowledgePath: args.Length == 7 ? args[5] : null,
+        knowledgeSha256: args.Length == 7 ? args[6] : null
+    );
+    Console.WriteLine(
+        JsonSerializer.Serialize(
+            new
+            {
+                result.State,
+                Titles = result.Titles.Rows,
+                result.Outcomes,
+            }
+        )
+    );
+    return 0;
+}
 
 try
 {

@@ -292,8 +292,8 @@ test("songs mode searches within exact artist and captured scope, then prepares 
   f.reply({ source: { label: "Tweezer Reprise", artistUuid }, history: [] });
   await f.page.start();
   assert.equal(f.document.getElementById("target-heading").textContent, "Resolve this song");
-  assert.equal(f.document.getElementById("alias-choice").hidden, true);
-  assert.equal(f.document.getElementById("scope-alias").disabled, true);
+  assert.equal(f.document.getElementById("alias-choice").hidden, false);
+  assert.equal(f.document.getElementById("scope-alias").disabled, false);
   f.document.getElementById("candidate-query").value = "Tweezer";
   const targetRef = { domain: "songs", namespace: "repertoire", stableKey: JSON.stringify(["captured:phish", "song:target"]), artistUuid };
   f.reply({ items: [{ label: "Tweezer Reprise", targetRef }, { label: "Tweezer Reprise", targetRef: { domain: "songs", namespace: "repertoire", stableKey: sourceKey, artistUuid } }], complete: true });
@@ -320,7 +320,44 @@ test("songs mode searches within exact artist and captured scope, then prepares 
   f.reply({ source: { label: "Tweezer Reprise", artistUuid }, history: [] });
   f.reply({ items: [] });
   await f.page.apply();
-  assert.equal(f.document.getElementById("status").textContent, "Decision saved. Song groups update on the next normalization run.");
+  assert.equal(f.document.getElementById("status").textContent, "Decision saved. Reload the song page to see the correction.");
+});
+
+test("song alias review preserves its exact spelling and fixes the artist scope", async () => {
+  const artistUuid = "77a58ff9-2e01-c59c-b8eb-cff106049b72";
+  const sourceKey = JSON.stringify(["catalogue", "repertoire:variant"]);
+  const f = fixture(`?${new URLSearchParams({ domain: "songs", namespace: "repertoire", stableKey: sourceKey, artistUuid })}`);
+  f.reply({ csrfToken: "session-token", reviewer: "Reviewer" });
+  f.reply({ source: { label: "Playin' in the Band", literal: "Playin' in the Band", artistUuid }, history: [] });
+  await f.page.start();
+  assert.equal(f.document.getElementById("artist-uuid").readOnly, true);
+  f.selections.scope = "alias";
+  const targetRef = { domain: "songs", namespace: "repertoire", stableKey: JSON.stringify(["catalogue", "repertoire:imported"]), artistUuid };
+  f.page.selected = { label: "Playing in the Band", targetRef };
+  f.reply(prepared);
+  await f.page.prepare();
+  assert.equal(f.requests[2].body.scope, "alias");
+  assert.equal(f.requests[2].body.literal, "Playin' in the Band");
+  assert.equal(f.requests[2].body.artistUuid, artistUuid);
+  assert.deepEqual(f.requests[2].body.targetRef, targetRef);
+  assert.match(f.document.getElementById("preview-summary").textContent, /Reuse the exact spelling/);
+});
+
+test("revising a saved alias restores its selector instead of creating an account rule", async () => {
+  const f = fixture();
+  const selector = { literal: "The MSG", artistUuid: "artist-one", provider: "archive.org", locality: "New York", from: "1980-01-01", through: "1990-12-31" };
+  f.page.currentDecision = { scope: "alias", selector };
+  f.document.getElementById("literal").value = "Unrelated current spelling";
+  f.page.revise();
+  assert.equal(f.document.getElementById("scope-account").checked, false);
+  assert.equal(f.document.getElementById("scope-alias").checked, true);
+  assert.equal(f.document.getElementById("alias-fields").hidden, false);
+  f.selections.scope = "alias";
+  f.reply(prepared);
+  await f.page.prepare();
+  const request = f.requests[0].body;
+  assert.equal(request.scope, "alias");
+  for (const [field, value] of Object.entries(selector)) { assert.equal(request[field], value); }
 });
 
 test("invalid songs scope or missing artist stops candidate search with a usable instruction", async () => {

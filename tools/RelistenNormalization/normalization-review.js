@@ -88,17 +88,30 @@
       this.element("apply").addEventListener("click", () => this.apply());
       this.element("edit").addEventListener("click", () => this.invalidatePreview());
       this.element("reload").addEventListener("click", () => this.start());
-      this.element("revise").addEventListener("click", () => {
-        this.invalidatePreview();
-        this.status("Choose the replacement below. Saving keeps the earlier decision in history.");
-        this.element("review-form").scrollIntoView({ behavior: "smooth", block: "start" });
-        this.element("candidate-query").focus();
-      });
+      this.element("revise").addEventListener("click", () => this.revise());
       this.element("retract-form").addEventListener("submit", (event) => {
         event.preventDefault();
         this.retract();
       });
       this.element("retract-reason").addEventListener("input", () => { this.retractAttempt = null; });
+    }
+
+    revise() {
+      const scope = this.currentDecision?.scope || "account";
+      this.element("scope-account").checked = scope === "account";
+      this.element("scope-alias").checked = scope === "alias";
+      const selector = this.currentDecision?.selector;
+      if (selector && scope === "alias") {
+        for (const [field, id] of [["literal", "literal"], ["artistUuid", "artist-uuid"], ["provider", "provider"], ["locality", "locality"], ["from", "from"], ["through", "through"]]) {
+          this.element(id).value = selector[field] || "";
+        }
+      }
+      this.show("alias-fields", scope === "alias");
+      this.updateScopeSummary();
+      this.invalidatePreview();
+      this.status("Choose the replacement below. Saving keeps the earlier decision in history.");
+      this.element("review-form").scrollIntoView({ behavior: "smooth", block: "start" });
+      this.element("candidate-query").focus();
     }
 
     async request(path, body) {
@@ -148,7 +161,7 @@
       this.element("apply").disabled = this.busy || !this.preparation;
       this.element("retract").disabled = this.busy;
       this.element("search").disabled = this.busy;
-      this.element("scope-alias").disabled = this.busy || this.sourceRef.domain === "songs";
+      this.element("scope-alias").disabled = this.busy;
       for (const id of ["queue-filter", "queue-artist", "queue-category"]) { this.element(id).disabled = this.busy; }
       this.element("queue-previous").disabled = this.busy || !this.queuePage || this.queuePage.offset === 0;
       this.element("queue-next").disabled = this.busy || !this.queuePage || this.queuePage.offset + this.queuePage.limit >= this.queuePage.total;
@@ -279,11 +292,11 @@
         this.text("accept-label", "These are the same song");
         this.text("reject-label", "These are different songs");
         this.text("account-label", "Only this artist song");
-        this.text("scope-help", "This saves a same-song relationship within this artist and captured catalog scope. Song groups update on the next normalization run; original files and setlists stay unchanged.");
-        this.show("alias-choice", false);
+        this.text("scope-help", "Save this song relationship, or reuse the exact spelling within this artist. Reload the song page to see the correction. Original files and setlist plays stay unchanged.");
+        this.show("alias-choice", true);
         this.show("alias-fields", false);
         this.element("scope-account").checked = true;
-        this.element("scope-alias").disabled = true;
+        this.element("scope-alias").disabled = this.busy;
         return;
       }
       if (this.sourceRef.domain !== "people") { return; }
@@ -475,7 +488,7 @@
         sourceRef: this.sourceRef,
         targetRef: this.selected.targetRef,
         action: this.checked("action"),
-        scope: this.sourceRef.domain === "songs" ? "account" : this.checked("scope"),
+        scope: this.checked("scope"),
         reason: this.value("reason"),
       };
       if (request.scope === "alias") {
@@ -512,7 +525,7 @@
       const affected = preview.affected;
       this.text("preview-summary", `${request.action === "reject" ? "Reject" : "Use"} ${preview.targetLabel}. ${request.scope === "alias" ? `Reuse the exact name “${request.literal}” within the selected scope.` : this.sourceRef.domain === "people" ? "Apply only to this name group." : "Apply only to this account."}`);
       if (this.sourceRef.domain === "songs") {
-        this.text("preview-summary", `${request.action === "reject" ? "Reject the same-song relationship with" : "Treat this artist song as the same song as"} ${preview.targetLabel}. The artist and captured catalog scope stay fixed.`);
+        this.text("preview-summary", `${request.action === "reject" ? "Reject the same-song relationship with" : "Treat this artist song as the same song as"} ${preview.targetLabel}. ${request.scope === "alias" ? `Reuse the exact spelling “${request.literal}” within this artist.` : "Apply only to this captured song account."}`);
       }
       const items = affected.items;
       const count = affected.count;
@@ -542,13 +555,13 @@
         try {
           await this.loadContext();
           this.status(this.sourceRef.domain === "songs"
-            ? "Decision saved. Song groups update on the next normalization run."
+            ? "Decision saved. Reload the song page to see the correction."
             : this.sourceRef.domain === "people"
             ? "Saved for normalization. Individual recording credits have not changed."
             : "Decision saved. Reader results may need a refresh before they show the correction.");
         } catch (error) {
           this.show("reload", true);
-          this.status(`${this.sourceRef.domain === "songs" ? "Decision saved. Song groups update on the next normalization run." : this.sourceRef.domain === "people" ? "Saved for normalization. Individual recording credits have not changed." : "Decision saved."} Could not refresh the current decision: ${error.message}`, true);
+          this.status(`${this.sourceRef.domain === "songs" ? "Decision saved. Reload the song page to see the correction." : this.sourceRef.domain === "people" ? "Saved for normalization. Individual recording credits have not changed." : "Decision saved."} Could not refresh the current decision: ${error.message}`, true);
         }
       });
     }

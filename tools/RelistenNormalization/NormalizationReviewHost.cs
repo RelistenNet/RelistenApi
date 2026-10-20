@@ -22,6 +22,7 @@ public sealed partial class NormalizationReviewHost
     private readonly ReviewReaderBridge readers;
     private readonly ReviewTailnetAuthentication authentication;
     private ReviewedMusicProjection? musicProjection;
+    private ReviewedFileTitleProjection? fileTitleProjection;
 
     private NormalizationReviewHost(
         ReviewHostConfiguration configuration,
@@ -72,6 +73,23 @@ public sealed partial class NormalizationReviewHost
                 music.InputManifestSha256,
                 music.OutputManifest,
                 music.OutputManifestSha256,
+                ct
+            );
+        }
+        if (configuration.FileTitleReplay is { } replay)
+        {
+            if (host.musicProjection == null)
+            {
+                throw new ArgumentException(
+                    "A file-title replay requires the matching completed music projection."
+                );
+            }
+            host.fileTitleProjection = await ReviewedFileTitleProjection.OpenAsync(
+                host.musicProjection,
+                replay.InputManifest,
+                replay.InputManifestSha256,
+                replay.OutputManifest,
+                replay.OutputManifestSha256,
                 ct
             );
         }
@@ -136,6 +154,10 @@ public sealed partial class NormalizationReviewHost
 
     private void MapRoutes(WebApplication app)
     {
+        app.MapGet(
+            "/api/music/file-title-review-projection",
+            (Func<HttpContext, Task<IResult>>)FileTitleProjectionAsync
+        );
         app.MapGet(
             "/api/session",
             (HttpContext context) =>
@@ -485,6 +507,7 @@ public sealed partial class NormalizationReviewHost
             : rule.State == "rejected" ? "reject"
             : "retract",
             scope = rule.Definition.Selector.AccountStableKey == null ? "alias" : "account",
+            selector = rule.Definition.Selector,
             targetLabel,
             reason = latest?.Reason,
             reviewer = latest?.Operator,

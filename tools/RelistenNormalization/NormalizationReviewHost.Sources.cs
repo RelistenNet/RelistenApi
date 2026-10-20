@@ -27,12 +27,6 @@ public sealed partial class NormalizationReviewHost
         Required(request.Reason, "review reason");
         var source = await readers.SourceAsync(request.SourceRef, context.RequestAborted);
         ValidateSourceNamespace(source);
-        if (source.Domain == "songs" && request.Scope != "account")
-        {
-            throw new ArgumentException(
-                "Repertoire review currently supports exact captured accounts. Reusable aliases need an explicit captured-scope selector first."
-            );
-        }
         var target = await readers.SourceAsync(
             request.TargetRef ?? throw new ArgumentException("Choose a target."),
             context.RequestAborted
@@ -68,7 +62,12 @@ public sealed partial class NormalizationReviewHost
         var definition = new ExpertKnowledgeDefinition(
             source.Domain,
             selector,
-            new(target.Domain, target.Namespace, target.StableKey),
+            new(
+                target.Domain,
+                target.Namespace,
+                target.StableKey,
+                ImportedSongUuid: target.ImportedSongUuid
+            ),
             [placeholder],
             request.Reason
         );
@@ -202,7 +201,8 @@ public sealed partial class NormalizationReviewHost
             new(
                 preparation.Target.Domain,
                 preparation.Target.Namespace,
-                preparation.Target.StableKey
+                preparation.Target.StableKey,
+                ImportedSongUuid: preparation.Target.ImportedSongUuid
             ),
             [pin],
             preparation.Reason
@@ -496,7 +496,8 @@ public sealed partial class NormalizationReviewHost
         string DisplayName,
         string Description,
         string? EvidenceUrl = null,
-        string? OriginalJson = null
+        string? OriginalJson = null,
+        Guid? ImportedSongUuid = null
     )
     {
         internal ReviewReference Reference => new(Domain, Namespace, StableKey, ArtistUuid);

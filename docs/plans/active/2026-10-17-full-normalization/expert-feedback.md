@@ -74,8 +74,9 @@ and its evidence from disposable-test cleanup. The host configuration contains
 fixed reader origins, an evidence root, allowed decimal Tailscale user IDs and
 separate binding and public addresses. There is no OpenAI key requirement.
 
-Song correspondence review is currently limited to exact accounts within the
-same artist and captured scope. Original and title-derived keys remain stable.
+Song correspondence review supports exact accounts and reusable exact spellings
+within one artist. Source and target selection keep the same artist and captured
+scope. Original and title-derived keys remain stable.
 The C# title resolver and consolidator consume accepted direct correspondences;
 they preserve every imported ID and each distinct play. Transitive identity merges
 are not inferred. Rejected candidates do not invent another identity.
@@ -112,6 +113,19 @@ The public normalized API and production publication remain separate consumers.
 A reviewed local correspondence does not itself merge canonical entities, move
 recording ownership or activate a production matching policy. Backfills
 consume the pinned reviewed knowledge and preserve its revision fingerprint.
+
+An imported song target can carry its original song UUID, authenticated by the
+configured reader and retained in the reviewed evidence. This is a source
+reference. Runtime processing binds it through the actual artist-owned catalog
+row and accepted imported-song mapping; it never treats a frozen reader key or
+an imported UUID as a canonical UUID. Unbound targets require resolution.
+
+Runtime rules and catalog publication use the same primary database so rule
+revisions and candidate facts share transaction checks. The isolated preview
+ledger does not become a hidden runtime dependency. The
+[local colocation rehearsal](../../../../tools/normalization-rehearsal/music-review-colocation.md)
+preserves its exact decisions and history in a dedicated catalog clone before
+connecting the local v3 API and review host there.
 
 The live private review page is
 [Review a match](http://alecs-macbook-pro.tail09dbf.ts.net:18778/).
