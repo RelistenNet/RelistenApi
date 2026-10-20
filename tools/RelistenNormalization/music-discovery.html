@@ -521,11 +521,18 @@
         box.append(details);
         container.append(box);
       }
-      function modelSelection(container, selection, coordinates, token, currentWork = null) {
+      function modelSelection(container, selection, coordinates, token, currentWork = null, reviewedDecision = null) {
         if (!selection) {
-          if (stats.composition_selection_queries)
+          if (stats.composition_selection_queries && !reviewedDecision)
             container.insertAdjacentHTML("beforeend", '<p class="muted">No model result covers this song in the configured selection plan.</p>');
           return;
+        }
+        // Reviewed correspondence leads the page; keep the earlier inference as history.
+        if (reviewedDecision) {
+          const history = document.createElement("details");
+          history.innerHTML = '<summary>Original model result</summary>';
+          container.append(history);
+          container = history;
         }
         const box = document.createElement("section");
         box.className = "section";
@@ -559,13 +566,13 @@
           if (token !== generation) return;
           container.innerHTML = '<h3>Possible versions</h3>';
           reviewedComposition(container, result);
-          modelSelection(container, result.modelSelection, coordinates, token);
+          modelSelection(container, result.modelSelection, coordinates, token, null, result.reviewedDecision);
           if (!result.candidates.length) {
             container.insertAdjacentHTML("beforeend", '<p class="muted">No composition candidates in the retained source pool. Other versions may exist.</p>');
             return;
           }
           const excluded = new Set((result.reviewedDecision?.excludedTargets || []).map((target) => target.stableKey));
-          container.insertAdjacentHTML("beforeend", '<p class="muted">Unconfirmed title or alias matches. Source matches remain separate from any model suggestion.</p><div class="grid">'
+          container.insertAdjacentHTML("beforeend", '<div class="grid">'
             + result.candidates.map((work) => compositionCard({...work, reviewedStatus: excluded.has(work.work_key)
               ? "Rejected for this song" : result.preferredBasis === "reviewed" && result.preferredWorkKey === work.work_key
                 ? "Reviewed choice for this song" : null})).join("") + '</div>');
@@ -636,7 +643,7 @@
           const body = entry.firstElementChild;
           body.insertAdjacentHTML("beforeend", `<p class="muted">Unconfirmed ${song.retrieval_basis === "retained_explicit_work_alias" ? "alias" : "title"} match${song.candidate_count > 1 ? ` · ${song.candidate_count - 1} other possible ${song.candidate_count === 2 ? "version" : "versions"}` : ""}</p>`);
           reviewedComposition(body, song);
-          modelSelection(body, song.modelSelection, {scope: song.scope, artist: song.artist_uuid, key: song.entity_key}, token, result.work_key);
+          modelSelection(body, song.modelSelection, {scope: song.scope, artist: song.artist_uuid, key: song.entity_key}, token, result.work_key, song.reviewedDecision);
           const alternatives = document.createElement("details");
           alternatives.innerHTML = '<summary>Possible versions and matching basis</summary>';
           const alternativeBody = document.createElement("div");
