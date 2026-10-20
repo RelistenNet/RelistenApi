@@ -24,7 +24,8 @@ CREATE TABLE kb.runs (
     author_ref  text NOT NULL,                  -- name@version (+ params hash or model), or the user uuid
     note        text,
     started_at  timestamptz NOT NULL DEFAULT now(),
-    finished_at timestamptz
+    finished_at timestamptz,
+    UNIQUE (uuid, author_type, author_ref)      -- rows name their run with its author
 );
 
 -- Provenance, on every catalogue row: author_type, author_ref, confidence (required for
@@ -43,13 +44,14 @@ CREATE TABLE kb.songs (
     author_type     text NOT NULL CHECK (author_type IN ('importer', 'algorithm', 'llm', 'user', 'moderator')),
     author_ref      text NOT NULL,
     confidence      real CHECK (confidence BETWEEN 0 AND 1),
-    run_uuid        uuid NOT NULL REFERENCES kb.runs (uuid),
+    run_uuid        uuid NOT NULL,
     updated_at      timestamptz NOT NULL DEFAULT now(),
     UNIQUE (artist_uuid, slug),
     UNIQUE (artist_uuid, uuid),                 -- target of per-artist references (aliases, merges)
     FOREIGN KEY (artist_uuid, merged_into) REFERENCES kb.songs (artist_uuid, uuid),
     CHECK (merged_into IS DISTINCT FROM uuid),
-    CHECK (author_type NOT IN ('algorithm', 'llm') OR confidence IS NOT NULL)
+    CHECK (author_type NOT IN ('algorithm', 'llm') OR confidence IS NOT NULL),
+    FOREIGN KEY (run_uuid, author_type, author_ref) REFERENCES kb.runs (uuid, author_type, author_ref)
 );
 CREATE INDEX ON kb.songs (artist_uuid);
 
@@ -63,10 +65,11 @@ CREATE TABLE kb.song_aliases (
     author_type text NOT NULL CHECK (author_type IN ('importer', 'algorithm', 'llm', 'user', 'moderator')),
     author_ref  text NOT NULL,
     confidence  real CHECK (confidence BETWEEN 0 AND 1),
-    run_uuid    uuid NOT NULL REFERENCES kb.runs (uuid),
+    run_uuid    uuid NOT NULL,
     updated_at  timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (artist_uuid, normalized),
     CHECK (author_type NOT IN ('algorithm', 'llm') OR confidence IS NOT NULL),
+    FOREIGN KEY (run_uuid, author_type, author_ref) REFERENCES kb.runs (uuid, author_type, author_ref),
     -- an artist's spelling can only name that artist's song
     FOREIGN KEY (artist_uuid, song_uuid) REFERENCES kb.songs (artist_uuid, uuid)
 );
@@ -80,9 +83,10 @@ CREATE TABLE kb.song_evidence (
     author_type       text NOT NULL CHECK (author_type IN ('importer', 'algorithm', 'llm', 'user', 'moderator')),
     author_ref        text NOT NULL,
     confidence        real CHECK (confidence BETWEEN 0 AND 1),
-    run_uuid          uuid NOT NULL REFERENCES kb.runs (uuid),
+    run_uuid          uuid NOT NULL,
     updated_at        timestamptz NOT NULL DEFAULT now(),
-    CHECK (author_type NOT IN ('algorithm', 'llm') OR confidence IS NOT NULL)
+    CHECK (author_type NOT IN ('algorithm', 'llm') OR confidence IS NOT NULL),
+    FOREIGN KEY (run_uuid, author_type, author_ref) REFERENCES kb.runs (uuid, author_type, author_ref)
 );
 CREATE INDEX ON kb.song_evidence (song_uuid);
 
@@ -105,10 +109,11 @@ CREATE TABLE kb.track_songs (
     author_type text NOT NULL CHECK (author_type IN ('importer', 'algorithm', 'llm', 'user', 'moderator')),
     author_ref  text NOT NULL,
     confidence  real CHECK (confidence BETWEEN 0 AND 1),
-    run_uuid    uuid NOT NULL REFERENCES kb.runs (uuid),
+    run_uuid    uuid NOT NULL,
     updated_at  timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (track_uuid, part),
-    CHECK (author_type NOT IN ('algorithm', 'llm') OR confidence IS NOT NULL)
+    CHECK (author_type NOT IN ('algorithm', 'llm') OR confidence IS NOT NULL),
+    FOREIGN KEY (run_uuid, author_type, author_ref) REFERENCES kb.runs (uuid, author_type, author_ref)
 );
 CREATE INDEX ON kb.track_songs (song_uuid) WHERE song_uuid IS NOT NULL;
 

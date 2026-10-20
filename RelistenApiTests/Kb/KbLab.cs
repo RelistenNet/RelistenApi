@@ -261,26 +261,13 @@ public class KbLab
                 // pass gets what the first pass left.
                 for (var passChunks = 0; chunks < maxChunks; passChunks++)
                 {
-                    // Retried like the workflow's step: up to three attempts.
-                    CatalogueChunkResult chunk;
-                    for (var attempt = 1; ; attempt++)
-                    {
-                        try
-                        {
-                            chunk = await llm.RunChunkAsync(
-                                uuid,
-                                skip,
-                                CancellationToken.None,
-                                review,
-                                only
-                            );
-                            break;
-                        }
-                        catch (CatalogueAnswerException e) when (attempt < 3)
-                        {
-                            TestContext.Out.WriteLine($"  {slug}: retrying a step ({e.Message})");
-                        }
-                    }
+                    var chunk = await llm.RunChunkAsync(
+                        uuid,
+                        skip,
+                        CancellationToken.None,
+                        review,
+                        only
+                    );
 
                     if (chunk.Done)
                     {
@@ -290,10 +277,9 @@ public class KbLab
                     chunks++;
                     skip.AddRange(chunk.Asked);
                     curve.Add(chunk.TracksWritten);
-                    if (review)
-                    {
-                        unsure.AddRange(chunk.Review);
-                    }
+                    // As in the workflow: an item stays until a later chunk asks about it again.
+                    unsure.RemoveAll(u => chunk.Asked.Contains(u.Key));
+                    unsure.AddRange(chunk.Review);
 
                     (input, output, songs) = (
                         input + chunk.InputTokens,

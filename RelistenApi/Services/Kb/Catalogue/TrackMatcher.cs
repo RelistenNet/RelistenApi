@@ -66,9 +66,26 @@ public static class TrackMatcher
         var records = new List<TrackPartRecord>();
         foreach (var track in state.UnresolvedTracks.Where(t => t.Title.HasText))
         {
+            // An open medley's resolved parts are kept as they were: the decision that resolved
+            // a one-off spelling has no alias to rediscover.
+            var kept = track
+                .Existing.Where(e => e.Resolved && e.Text != null)
+                .GroupBy(e => TitleNormalizer.Normalize(e.Text!))
+                .ToDictionary(
+                    g => g.Key,
+                    g => new PartDecision(
+                        g.Select(e => e.SongUuid).OfType<Guid>().ToList(),
+                        g.Min(e => e.Confidence) ?? Threshold
+                    )
+                );
             var decisions = track
                 .Title.Parts.Select(p =>
-                    (Part: p, Decision: Decide(p) is { } d && d.Confidence >= Threshold ? d : null)
+                    (
+                        Part: p,
+                        Decision: kept.TryGetValue(p.Key, out var k) ? k
+                        : Decide(p) is { } d && d.Confidence >= Threshold ? d
+                        : null
+                    )
                 )
                 .ToList();
 

@@ -17,7 +17,14 @@ public sealed record CatalogueTrack(
     long SourceId = 0,
     string? Taper = null,
     int? Duration = null
-);
+)
+{
+    /// An open medley's parts as written so far. Its resolved parts are carried forward when
+    /// the track is matched again: a one-off spelling resolved once has no alias to look up.
+    public IReadOnlyList<ExistingPart> Existing { get; init; } = [];
+}
+
+public sealed record ExistingPart(string? Text, Guid? SongUuid, bool Resolved, float? Confidence);
 
 public sealed record CatalogueSetlistSong(Guid Uuid, string Name, string Key, int Plays);
 
@@ -81,6 +88,26 @@ public sealed class CatalogueState
             return result;
         }
 
+        // Open medleys already have some parts: load them so their resolved parts survive.
+        var existing = (
+            await connection.QueryAsync<(
+                Guid Track,
+                string? Text,
+                Guid? Song,
+                bool Resolved,
+                float? Confidence
+            )>(
+                """
+                SELECT ts.track_uuid, ts.text, ts.song_uuid, ts.resolved, ts.confidence
+                FROM kb.track_songs ts
+                WHERE ts.track_uuid = ANY(@open)
+                ORDER BY ts.track_uuid, ts.part
+                """,
+                new { open = tracks.Select(t => t.Uuid).ToArray() },
+                tx
+            )
+        ).ToLookup(r => r.Track, r => new ExistingPart(r.Text, r.Song, r.Resolved, r.Confidence));
+
         var setlist = await connection.QueryAsync<(Guid Uuid, string Name, int Plays)>(
             """
             SELECT ss.uuid, ss.name,
@@ -120,7 +147,10 @@ public sealed class CatalogueState
                     t.SourceId,
                     t.Taper,
                     t.Duration
-                ))
+                )
+                {
+                    Existing = existing[t.Uuid].ToList(),
+                })
                 .ToList(),
             UnmappedSetlistSongs = setlist
                 .Select(s => new CatalogueSetlistSong(

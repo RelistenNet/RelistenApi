@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Dapper;
 using Npgsql;
+using Relisten.Kb.Titles;
 
 namespace Relisten.Kb;
 
@@ -125,15 +126,27 @@ public sealed class KbStore
         IReadOnlyCollection<string> spellings
     )
     {
-        var keys = spellings
+        var normalized = spellings
             .Select(TitleNormalizer.Normalize)
             .Where(k => k.Length > 0)
             .Distinct()
             .ToArray();
-        if (keys.Length == 0)
+        if (normalized.Length == 0)
         {
             return (0, 0);
         }
+
+        // A numbered spelling ("03 tweezer") was decided through its song's alias, as the
+        // matcher folds it: forget by the folded key too, and match parts the same way.
+        var aliasKeys = (
+            await connection.QueryAsync<string>(
+                "SELECT normalized FROM kb.song_aliases WHERE artist_uuid = @artistUuid",
+                new { artistUuid },
+                tx
+            )
+        ).ToHashSet();
+        string Fold(string key) => TrackNumberFold.Fold(key, aliasKeys.Contains);
+        var keys = normalized.Concat(normalized.Select(Fold)).Distinct().ToArray();
 
         var aliases = await connection.ExecuteAsync(
             """
@@ -161,7 +174,9 @@ public sealed class KbStore
             .GroupBy(p => p.Track)
             .Where(g => g.All(p => !AuthorTypes.IsHuman(p.AuthorType)))
             .Where(g =>
-                g.Any(p => p.Text != null && keySet.Contains(TitleNormalizer.Normalize(p.Text)))
+                g.Any(p =>
+                    p.Text != null && keySet.Contains(Fold(TitleNormalizer.Normalize(p.Text)))
+                )
             )
             .Select(g => g.Key)
             .ToArray();

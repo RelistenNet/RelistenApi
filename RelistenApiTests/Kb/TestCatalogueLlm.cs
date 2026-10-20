@@ -92,6 +92,20 @@ internal sealed class ScriptedModel : ICatalogueModel
     }
 }
 
+/// A model whose answer isn't the schema's shape.
+internal sealed class BrokenModel : ICatalogueModel
+{
+    public string ModelId => "broken-1";
+
+    public Task<ModelReply> CompleteAsync(
+        string instructions,
+        string data,
+        string schemaName,
+        string schemaJson,
+        CancellationToken cancellationToken
+    ) => Task.FromResult(new ModelReply("not json", 100, 5));
+}
+
 [TestFixture, NonParallelizable, Category("LocalIngestion")]
 public class TestCatalogueLlm
 {
@@ -348,6 +362,64 @@ public class TestCatalogueLlm
             )
         ).Should().Equal("Sugaree:true", "Unknown Thing:true");
     }
+
+    [Test]
+    public async Task AnAnswerOfTheWrongShapeIsASpentChunkWithNothingWritten()
+    {
+        var chunk = await new CatalogueLlm(db, new BrokenModel()).RunChunkAsync(
+            artist,
+            [],
+            CancellationToken.None
+        );
+
+        // Counted by the caller like any chunk (no retry outside the run's cap), its keys asked.
+        chunk.Done.Should().BeFalse();
+        chunk.Asked.Should().Contain("sugaree");
+        chunk.Unresolved.Should().BeEquivalentTo(chunk.Asked);
+        chunk.InputTokens.Should().Be(100);
+        (await Strings("SELECT name FROM kb.songs WHERE artist_uuid = @artist")).Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task CompletingAnOpenMedleyKeepsItsOneOffPart()
+    {
+        var llm = new CatalogueLlm(db, new ScriptedModel());
+        await llm.RunChunkAsync(artist, [], CancellationToken.None);
+        // "Uncle Song" is one show's spelling: its part is resolved, but no alias remembers it.
+        await db.WithWriteConnection(c =>
+            c.ExecuteAsync(
+                """
+                INSERT INTO source_tracks(source_id, track_position, title, slug, mp3_url, updated_at, artist_id, uuid)
+                SELECT source_id, 50, 'Uncle Song > Unknown Thing', 'uncle', 'https://x/uncle.mp3', now(), artist_id, @uuid
+                FROM source_tracks WHERE artist_id = @artistId LIMIT 1
+                """,
+                new { artistId, uuid = Guid.NewGuid() }
+            )
+        );
+        await llm.RunChunkAsync(artist, [], CancellationToken.None);
+
+        await db.WithWriteConnection(async c =>
+        {
+            var connection = (Npgsql.NpgsqlConnection)c;
+            await using var tx = await connection.BeginTransactionAsync();
+            var store = await KbStore.BeginAsync(connection, tx, AuthorTypes.Moderator, "m1");
+            var song = Guid.CreateVersion7();
+            await store.WriteSongsAsync([new SongRecord(song, artist, "Unknown Thing")]);
+            await store.WriteAliasesAsync([new AliasRecord(artist, "Unknown Thing", song)]);
+            await tx.CommitAsync();
+        });
+        await new CatalogueMatch(db).RunAsync(artist, CancellationToken.None);
+
+        (
+            await Strings(
+                """
+                SELECT coalesce(s.name, '?') || ':' || ts.resolved FROM source_tracks t
+                JOIN kb.track_songs ts ON ts.track_uuid = t.uuid LEFT JOIN kb.songs s ON s.uuid = ts.song_uuid
+                WHERE t.artist_id = @artistId AND t.slug = 'uncle' ORDER BY ts.part
+                """
+            )
+        ).Should().Equal("Me And My Uncle:true", "Unknown Thing:true");
+    }
 }
 
 public class TestCatalogueAnswers
@@ -501,6 +573,7 @@ public class TestKbCatalogueWorkflow
                 o => o.Excluding(r => r.TracksPerChunk).Excluding(r => r.StillUnsure)
             );
         result.TracksPerChunk.Should().Equal(100, 100);
+        result.StillUnsure.Select(r => r.Key).Should().BeEquivalentTo("key1", "key2");
     }
 
     [Test]
@@ -562,5 +635,7 @@ public class TestKbCatalogueWorkflow
         // Two chunks spent the budget: no review pass call at all.
         steps.SkipSizes.Should().Equal(0, 2);
         result.Chunks.Should().Be(2);
+        // The first pass's unsure titles are still reported.
+        result.StillUnsure.Select(r => r.Key).Should().BeEquivalentTo("key1", "key2");
     }
 }

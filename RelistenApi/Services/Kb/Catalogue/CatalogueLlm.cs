@@ -98,17 +98,35 @@ public sealed class CatalogueLlm(DbService db, ICatalogueModel model)
             CatalogueRequest.Schema,
             cancellationToken
         );
-        var answer = CatalogueRequest.Parse(reply.Json, request);
+        // An answer that isn't the schema's shape at all is a spent chunk with nothing
+        // written, not a retry: a retry would be a model call the run's cap doesn't count.
+        CatalogueAnswer answer;
+        try
+        {
+            answer = CatalogueRequest.Parse(reply.Json, request);
+        }
+        catch (CatalogueAnswerException)
+        {
+            answer = new CatalogueAnswer(
+                [],
+                new Dictionary<string, KeyAnswer>(),
+                request.KeyIds.Count
+            );
+        }
 
-        var store = await KbStore.BeginAsync(
-            connection,
-            tx,
-            AuthorTypes.Llm,
-            Author,
-            $"{(review ? "review: " : "")}{chunk.Count} groups"
-        );
-        var written = await Write(store, state, answer, request, keys);
-        await store.FinishAsync();
+        var written = (Songs: 0, Tracks: 0);
+        if (answer.Keys.Count > 0)
+        {
+            var store = await KbStore.BeginAsync(
+                connection,
+                tx,
+                AuthorTypes.Llm,
+                Author,
+                $"{(review ? "review: " : "")}{chunk.Count} groups"
+            );
+            written = await Write(store, state, answer, request, keys);
+            await store.FinishAsync();
+        }
         await tx.CommitAsync(cancellationToken);
 
         var resolved = answer
@@ -479,8 +497,7 @@ public sealed record ReviewItem(
     int? Tapers = null
 );
 
-/// An answer that breaks the request's rules. The step is retried: a fresh answer usually
-/// passes. (A missing configuration is an InvalidOperationException and is not retried.)
+/// An answer that isn't the request's shape. Its chunk counts as asked, with nothing written.
 public sealed class CatalogueAnswerException(string message) : Exception(message);
 
 internal sealed record NewSongAnswer(string Ref, string Name, string? Kind, string? OriginalArtist);
@@ -665,7 +682,7 @@ internal sealed class CatalogueRequest
     /// didn't supply, a repeated or unknown key, songs and not_a_song together or neither) is
     /// rejected and stays unresolved, as does a key that names a rejected new song (duplicate
     /// or unnamed): one bad answer doesn't cost the rest of the chunk. Only an answer that
-    /// isn't the schema's shape at all throws, so the step retries.
+    /// isn't the schema's shape at all throws.
     internal static CatalogueAnswer Parse(string json, CatalogueRequest request)
     {
         JsonNode root;

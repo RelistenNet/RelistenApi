@@ -59,6 +59,9 @@ public class KbCatalogueWorkflow
         var artist = request.Artist.Value;
         var total = new KbCatalogueResult(0, 0, 0, 0, 0, 0, 0);
         var curve = new List<int>();
+        // The recurring titles left unsure, by key: a first-pass item stays unless the review
+        // pass asks about it again, so a run whose cap ends in the first pass still lists them.
+        var unsure = new Dictionary<string, ReviewItem>();
 
         var only = request.Reask is { Count: > 0 } reask ? reask : null;
         if (only != null)
@@ -70,16 +73,15 @@ public class KbCatalogueWorkflow
         }
 
         // First pass: every unresolved title (or only the re-asked ones), most-played first.
-        total = await Pass(artist, review: false, request.MaxChunks, total, curve, only: only);
+        total = await Pass(artist, review: false, request.MaxChunks, total, curve, unsure, only);
 
         // Review pass: the recurring titles still unresolved, asked again with the titles
         // around them as context.
-        var review = new List<ReviewItem>();
         // MaxChunks is the run's whole budget: the review pass gets what the first pass left.
         var remaining = request.MaxChunks is { } cap ? Math.Max(0, cap - total.Chunks) : (int?)null;
         if (remaining != 0)
         {
-            total = await Pass(artist, review: true, remaining, total, curve, review, only);
+            total = await Pass(artist, review: true, remaining, total, curve, unsure, only);
         }
 
         var matched = await Workflow.ExecuteActivityAsync(
@@ -90,7 +92,7 @@ public class KbCatalogueWorkflow
         {
             TracksWritten = total.TracksWritten + matched.TracksWritten,
             TracksPerChunk = curve,
-            StillUnsure = review.OrderByDescending(r => r.Shows).Take(50).ToList(),
+            StillUnsure = unsure.Values.OrderByDescending(r => r.Shows).Take(50).ToList(),
         };
     }
 
@@ -100,8 +102,8 @@ public class KbCatalogueWorkflow
         int? maxChunks,
         KbCatalogueResult total,
         List<int> curve,
-        List<ReviewItem>? unsure = null,
-        IReadOnlyList<string>? only = null
+        Dictionary<string, ReviewItem> unsure,
+        IReadOnlyList<string>? only
     )
     {
         // No key is asked twice in a pass, sure or not.
@@ -120,7 +122,14 @@ public class KbCatalogueWorkflow
 
             skip.AddRange(chunk.Asked);
             curve.Add(chunk.TracksWritten);
-            unsure?.AddRange(chunk.Review);
+            foreach (var key in chunk.Asked)
+            {
+                unsure.Remove(key);
+            }
+            foreach (var item in chunk.Review)
+            {
+                unsure[item.Key] = item;
+            }
             total = total with
             {
                 Chunks = total.Chunks + 1,

@@ -305,6 +305,21 @@ public class TestKbStore
     }
 
     [Test]
+    public async Task AReaskOfANumberedSpellingForgetsTheSpellingItFoldsTo()
+    {
+        var song = Guid.CreateVersion7();
+        var bot = await As(AuthorTypes.Llm, "catalogue-llm@3");
+        await bot.WriteSongsAsync([new SongRecord(song, artist, "Mellow Mood", Confidence: 0.95f)]);
+        await bot.WriteAliasesAsync([new AliasRecord(artist, "Let Me Lie", song, 0.95f)]);
+
+        var forgotten = await (
+            await As(AuthorTypes.Llm, "catalogue-llm@4")
+        ).ForgetMachineDecisionsAsync(artist, ["03 Let Me Lie"]);
+
+        forgotten.Aliases.Should().Be(1);
+    }
+
+    [Test]
     public async Task FillOnlyCompletesAnOpenTrackButNotASettledOne()
     {
         var (a, b, open, settled) = (
