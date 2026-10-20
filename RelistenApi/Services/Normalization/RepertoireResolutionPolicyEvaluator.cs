@@ -93,8 +93,11 @@ public sealed partial class RepertoireResolutionPolicyEvaluator
 
         // A reviewed tombstone remains authority over that relationship. Allocating another
         // assertion UUID must not recreate it; an explicit later active assertion is distinct.
-        var imported = context
-            .ImportedAssignments.Where(value => value.ImportedSongUuid == claim.ImportedSongUuid)
+        var importedAssignments =
+            context.ExpertReevaluation?.IndependentImportedAssignments
+            ?? context.ImportedAssignments;
+        var imported = importedAssignments
+            .Where(value => value.ImportedSongUuid == claim.ImportedSongUuid)
             .ToArray();
         if (
             imported.Any(value => value.Retracted && value.Basis == "reviewed")
@@ -150,9 +153,7 @@ public sealed partial class RepertoireResolutionPolicyEvaluator
         var identified = snapshot
             .Facts.Where(candidate =>
                 identities.Any(identity =>
-                    candidate.ExternalIdentities.Any(value =>
-                        SameIdentity(identity.Identity, value)
-                    )
+                    HasIndependentIdentity(context, candidate, identity.Identity)
                 )
             )
             .ToArray();
@@ -167,9 +168,7 @@ public sealed partial class RepertoireResolutionPolicyEvaluator
         if (
             claim.AliasOf is { } aliasOf
             && !snapshot.Facts.Any(candidate =>
-                candidate.ExternalIdentities.Any(identity =>
-                    SameIdentity(aliasOf.Identity, identity)
-                )
+                HasIndependentIdentity(context, candidate, aliasOf.Identity)
             )
         )
         {
@@ -179,8 +178,8 @@ public sealed partial class RepertoireResolutionPolicyEvaluator
                 "alias_target_unresolved"
             );
         }
-        var importedTargets = context
-            .ImportedAssignments.Where(assignment =>
+        var importedTargets = importedAssignments
+            .Where(assignment =>
                 assignment.ImportedSongUuid == claim.ImportedSongUuid && !assignment.Retracted
             )
             .Select(assignment => assignment.RepertoireSongUuid)
@@ -295,6 +294,19 @@ public sealed partial class RepertoireResolutionPolicyEvaluator
                         identity.ProviderKey,
                         IdentifiesEntity: true
                     ))
+                    .Concat(
+                        (context.ExpertReevaluation?.IndependentExternalIdentities ?? [])
+                            .Where(identity =>
+                                identity.RepertoireSongUuid is { } stored
+                                && CorrespondsTo(context, stored, candidate.Header.Uuid)
+                            )
+                            .Select(identity => new MatchingExternalIdentity(
+                                identity.Provider,
+                                identity.ResourceType,
+                                identity.ProviderKey,
+                                IdentifiesEntity: true
+                            ))
+                    )
                     .ToArray()
             );
             var artifact = policy.Policy.Artifact;

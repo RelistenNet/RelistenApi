@@ -86,7 +86,8 @@ public sealed record RepertoireResolutionAssociation(
     Guid? RepertoireSongUuid,
     RepertoireResolutionClaimDisposition Disposition,
     string Reason,
-    IReadOnlyList<NormalizedEvidenceReference> Evidence
+    IReadOnlyList<NormalizedEvidenceReference> Evidence,
+    string? Authority = null
 );
 
 public sealed record RepertoireResolutionOwnerContext(
@@ -103,7 +104,22 @@ public sealed record RepertoireResolutionClaimContext(
     IReadOnlyList<RepertoireSongChange> ExistingSongs,
     IReadOnlyList<MusicExternalIdentityChange> ExistingExternalIdentities,
     IReadOnlyList<MusicPublication> ReviewedExclusions,
-    IReadOnlyList<RepertoireExpertTargetResolution>? ExpertTargets = null
+    IReadOnlyList<RepertoireExpertTargetResolution>? ExpertTargets = null,
+    RepertoireExpertReevaluation? ExpertReevaluation = null,
+    bool ExpertSupportedCorrespondence = false
+);
+
+/// <summary>
+/// Exact automatic effects whose original expert authority no longer accepts their target.
+/// Current assertions remain on the claim context for publication CAS; these older independent
+/// assertions supply matching evidence only. Immutable stage and music revisions prove ownership.
+/// </summary>
+public sealed record RepertoireExpertReevaluation(
+    RepertoireResolutionAssociation? OriginalAssociation,
+    IReadOnlyList<Guid> ImportedAssignmentUuids,
+    IReadOnlyList<Guid> ExternalIdentityUuids,
+    IReadOnlyList<ImportedSongAssignmentChange> IndependentImportedAssignments,
+    IReadOnlyList<MusicExternalIdentityChange> IndependentExternalIdentities
 );
 
 /// <summary>

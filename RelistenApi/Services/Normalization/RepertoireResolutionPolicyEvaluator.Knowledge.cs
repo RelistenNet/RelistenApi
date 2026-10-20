@@ -113,6 +113,21 @@ public sealed partial class RepertoireResolutionPolicyEvaluator
         );
     }
 
+    private static bool HasIndependentIdentity(
+        RepertoireResolutionClaimContext context,
+        RepertoireCandidateFacts candidate,
+        NormalizationResourceKey key
+    ) =>
+        candidate.ExternalIdentities.Any(identity => SameIdentity(key, identity))
+        || (context.ExpertReevaluation?.IndependentExternalIdentities ?? []).Any(identity =>
+            !identity.Retracted
+            && identity.Provider == key.Provider
+            && identity.ResourceType == key.ResourceType
+            && identity.ProviderKey == key.ProviderKey
+            && identity.RepertoireSongUuid is { } stored
+            && CorrespondsTo(context, stored, candidate.Header.Uuid)
+        );
+
     private static bool CorrespondsTo(
         RepertoireResolutionClaimContext context,
         Guid stored,

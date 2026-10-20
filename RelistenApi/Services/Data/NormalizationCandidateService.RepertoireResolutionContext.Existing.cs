@@ -17,7 +17,10 @@ public sealed partial class NormalizationCandidateService
         NpgsqlTransaction t,
         Guid registration,
         string correspondence,
-        CancellationToken ct
+        CancellationToken ct,
+        Guid? throughDecision = null,
+        bool skipRetained = false,
+        Guid? skipAttempt = null
     )
     {
         // Accepted stages are durable before their account's final acknowledgement. Looking
@@ -27,12 +30,23 @@ public sealed partial class NormalizationCandidateService
                 """
                 SELECT decision_uuid AS "DecisionUuid",registration_uuid AS "RegistrationUuid",attempt_uuid AS "AttemptUuid",
                     claim_uuid AS "ClaimUuid",correspondence_key AS "CorrespondenceKey",repertoire_song_uuid AS "RepertoireSongUuid",
-                    disposition AS "Disposition",reason AS "Reason",
+                    disposition AS "Disposition",reason AS "Reason",authority AS "Authority",
                     CASE WHEN octet_length(evidence::text)<=1048576 THEN evidence::text END AS "Evidence"
                 FROM normalization.repertoire_resolution_associations
-                WHERE registration_uuid=@registration AND correspondence_key=@correspondence ORDER BY sequence DESC LIMIT 1
+                WHERE registration_uuid=@registration AND correspondence_key=@correspondence
+                    AND (@throughDecision::uuid IS NULL OR sequence<=(SELECT sequence FROM normalization.repertoire_resolution_associations WHERE decision_uuid=@throughDecision))
+                    AND (NOT @skipRetained OR authority<>'retained_correspondence')
+                    AND (@skipAttempt::uuid IS NULL OR attempt_uuid<>@skipAttempt)
+                ORDER BY sequence DESC LIMIT 1
                 """,
-                new { registration, correspondence },
+                new
+                {
+                    registration,
+                    correspondence,
+                    throughDecision,
+                    skipRetained,
+                    skipAttempt,
+                },
                 t,
                 cancellationToken: ct
             )
@@ -56,7 +70,8 @@ public sealed partial class NormalizationCandidateService
             row.RepertoireSongUuid,
             Enum.Parse<RepertoireResolutionClaimDisposition>(row.Disposition),
             row.Reason,
-            JsonSerializer.Deserialize<NormalizedEvidenceReference[]>(row.Evidence)!
+            JsonSerializer.Deserialize<NormalizedEvidenceReference[]>(row.Evidence)!,
+            row.Authority
         );
     }
 
@@ -344,6 +359,7 @@ public sealed partial class NormalizationCandidateService
         Guid? RepertoireSongUuid,
         string Disposition,
         string Reason,
+        string Authority,
         string? Evidence
     );
 }

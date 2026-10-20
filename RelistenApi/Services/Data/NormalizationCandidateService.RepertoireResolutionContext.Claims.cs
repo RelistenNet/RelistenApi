@@ -20,7 +20,8 @@ public sealed partial class NormalizationCandidateService
         IReadOnlyList<MusicPublication> exclusions,
         CancellationToken ct,
         RepertoireTitleIndex? titleIndex = null,
-        RepertoireKnowledgeIndex? knowledge = null
+        RepertoireKnowledgeIndex? knowledge = null,
+        Guid? ignoreAssociationAttempt = null
     )
     {
         var association = await ReadRepertoireAssociation(
@@ -28,7 +29,8 @@ public sealed partial class NormalizationCandidateService
             t,
             registrationUuid,
             claim.CorrespondenceKey,
-            ct
+            ct,
+            skipAttempt: ignoreAssociationAttempt
         );
         var assignments = await ReadRepertoireImportedAssignments(c, t, claim.ImportedSongUuid, ct);
         if (artistUuid is not { } artist)
@@ -36,6 +38,17 @@ public sealed partial class NormalizationCandidateService
             return new(claim, null, association, assignments, [], [], exclusions);
         }
         var claimFacts = new CandidateFactsContext();
+        var exactIdentities = await ReadRepertoireClaimIdentities(c, t, artist, claim, ct);
+        var history = knowledge?.History(c, t, artist, ct);
+        var independent =
+            history == null
+                ? null
+                : await history.ReadAsync(association, assignments, exactIdentities);
+        if (history != null)
+        {
+            await history.ObserveOwnersAsync(claimFacts);
+        }
+        var retainedAssociation = independent == null ? association : independent.Association;
         claimFacts.AddArtist(artist);
         if (titleIndex is { Complete: false })
         {
@@ -58,7 +71,20 @@ public sealed partial class NormalizationCandidateService
         var forced = assignments
             .Where(assignment => !assignment.Retracted)
             .Select(assignment => assignment.RepertoireSongUuid)
-            .Concat(association?.RepertoireSongUuid is { } previous ? [previous] : [])
+            .Concat(retainedAssociation?.RepertoireSongUuid is { } previous ? [previous] : [])
+            .Concat(
+                independent?.Effects?.IndependentImportedAssignments.Select(value =>
+                    value.RepertoireSongUuid
+                ) ?? []
+            )
+            .Concat(
+                independent
+                    ?.Effects?.IndependentExternalIdentities.Where(value =>
+                        value.RepertoireSongUuid.HasValue
+                    )
+                    .Select(value => value.RepertoireSongUuid!.Value)
+                    ?? []
+            )
             .Concat(titleIndex?.Targets(artist, query.Names) ?? [])
             .Concat(expertTargets.SelectMany(target => target.RepertoireSongUuids))
             .Distinct()
@@ -101,7 +127,10 @@ public sealed partial class NormalizationCandidateService
                 factKind: "duplicate_provider_identity"
             );
         }
-        var exactIdentities = await ReadRepertoireClaimIdentities(c, t, artist, claim, ct);
+        if (independent?.Effects is { } expired)
+        {
+            facts = RemoveExpiredRepertoireIdentities(facts, expired);
+        }
         if (assignments.Length > 0 || exactIdentities.Length > 0)
         {
             await ReadRepertoireRelationshipOwners(
@@ -145,12 +174,14 @@ public sealed partial class NormalizationCandidateService
         return new(
             claim,
             snapshot,
-            association,
+            retainedAssociation,
             assignments,
             songs,
             identities,
             exclusions,
-            expertTargets
+            expertTargets,
+            independent?.Effects,
+            independent?.ExpertSupported ?? false
         );
     }
 }

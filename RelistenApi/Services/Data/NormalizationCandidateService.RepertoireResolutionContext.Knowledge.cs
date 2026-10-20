@@ -23,6 +23,14 @@ public sealed partial class NormalizationCandidateService
         public ExpertKnowledgeSnapshot Snapshot { get; } = snapshot;
         private readonly ExpertKnowledgeResolver resolver = new(snapshot);
         private readonly Dictionary<ExpertKnowledgeTarget, IReadOnlyList<Guid>> bindings = [];
+        private RepertoireKnowledgeHistory? history;
+
+        public RepertoireKnowledgeHistory History(
+            NpgsqlConnection c,
+            NpgsqlTransaction t,
+            Guid artist,
+            CancellationToken ct
+        ) => history ??= new(c, t, artist, this, ct);
 
         public ExpertKnowledgeEvaluation Evaluate(RepertoireResolutionClaim claim, Guid artist) =>
             resolver.Evaluate(

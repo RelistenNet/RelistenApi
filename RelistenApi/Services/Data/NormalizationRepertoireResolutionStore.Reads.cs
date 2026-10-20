@@ -151,7 +151,7 @@ public sealed partial class NormalizationRepertoireResolutionStore
                 }
                 var rows = await c.QueryAsync<AssociationRow>(
                     new CommandDefinition(
-                        "SELECT decision_uuid AS \"DecisionUuid\",registration_uuid AS \"RegistrationUuid\",attempt_uuid AS \"AttemptUuid\",claim_uuid AS \"ClaimUuid\",correspondence_key AS \"Key\",repertoire_song_uuid AS \"SongUuid\",disposition AS \"Disposition\",reason AS \"Reason\",evidence::text AS \"Evidence\" FROM normalization.repertoire_resolution_associations WHERE attempt_uuid=@attemptUuid AND claim_uuid=ANY(@selected) ORDER BY claim_uuid",
+                        "SELECT decision_uuid AS \"DecisionUuid\",registration_uuid AS \"RegistrationUuid\",attempt_uuid AS \"AttemptUuid\",claim_uuid AS \"ClaimUuid\",correspondence_key AS \"Key\",repertoire_song_uuid AS \"SongUuid\",disposition AS \"Disposition\",reason AS \"Reason\",authority AS \"Authority\",evidence::text AS \"Evidence\" FROM normalization.repertoire_resolution_associations WHERE attempt_uuid=@attemptUuid AND claim_uuid=ANY(@selected) ORDER BY claim_uuid",
                         new { attemptUuid, selected },
                         t,
                         cancellationToken: ct
@@ -166,7 +166,8 @@ public sealed partial class NormalizationRepertoireResolutionStore
                         value.SongUuid,
                         Enum.Parse<RepertoireResolutionClaimDisposition>(value.Disposition),
                         value.Reason,
-                        JsonSerializer.Deserialize<NormalizedEvidenceReference[]>(value.Evidence)!
+                        JsonSerializer.Deserialize<NormalizedEvidenceReference[]>(value.Evidence)!,
+                        value.Authority
                     ))
                     .ToArray();
                 return new RepertoireResolutionDecisionPage(
@@ -246,6 +247,7 @@ public sealed partial class NormalizationRepertoireResolutionStore
         Guid? SongUuid,
         string Disposition,
         string Reason,
+        string Authority,
         string Evidence
     );
 

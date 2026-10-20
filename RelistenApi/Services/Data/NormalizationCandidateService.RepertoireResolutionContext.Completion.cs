@@ -159,6 +159,7 @@ public sealed partial class NormalizationCandidateService
             c,
             t,
             registrationUuid,
+            attemptUuid,
             preparation,
             decisions,
             exclusions,
@@ -212,6 +213,7 @@ public sealed partial class NormalizationCandidateService
         NpgsqlConnection c,
         NpgsqlTransaction t,
         Guid registrationUuid,
+        Guid attemptUuid,
         RepertoireResolutionPreparation preparation,
         IReadOnlyList<RepertoireResolutionClaimDecision> decisions,
         IReadOnlyList<MusicPublication> exclusions,
@@ -263,7 +265,10 @@ public sealed partial class NormalizationCandidateService
                     exclusions,
                     ct,
                     titleIndex,
-                    knowledge
+                    knowledge,
+                    // A retirement-only stage also records its negative association. That is
+                    // this page's result, not prior authority for its final semantic recheck.
+                    ignoreAssociationAttempt: attemptUuid
                 );
                 contexts.Add(context);
                 if (context.Candidates is { } snapshot)
@@ -298,7 +303,7 @@ public sealed partial class NormalizationCandidateService
                 )
                 {
                     throw new NormalizationConflictException(
-                        "A saved negative repertoire decision changed before source acknowledgment."
+                        $"A saved negative repertoire decision changed before source acknowledgment: {saved.Disposition}/{saved.Reason} became {current.Disposition}/{current.Reason}."
                     );
                 }
             }

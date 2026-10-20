@@ -31,6 +31,8 @@ public sealed partial class NormalizationRepertoireResolutionProcessor
             )
         )
         {
+            var source = context.Claims.Single(x => x.Claim.ClaimUuid == decision.ClaimUuid);
+            RetireExpiredExpertEffects(imported, external, source, decision);
             if (
                 decision.RepertoireSongUuid is not { } target
                 || decision.Disposition
@@ -40,7 +42,6 @@ public sealed partial class NormalizationRepertoireResolutionProcessor
             {
                 continue;
             }
-            var source = context.Claims.Single(x => x.Claim.ClaimUuid == decision.ClaimUuid);
             var previous = source.ExistingSongs.SingleOrDefault(x => x.Uuid == target);
             if (songs.TryGetValue(target, out var proposed))
             {
@@ -60,6 +61,54 @@ public sealed partial class NormalizationRepertoireResolutionProcessor
             ImportedSongs = imported.Values.ToArray(),
             ExternalIdentities = external.Values.ToArray(),
         };
+    }
+
+    private static void RetireExpiredExpertEffects(
+        Dictionary<Guid, ImportedSongAssignmentChange> imported,
+        Dictionary<Guid, MusicExternalIdentityChange> external,
+        RepertoireResolutionClaimContext source,
+        RepertoireResolutionClaimDecision decision
+    )
+    {
+        if (source.ExpertReevaluation is not { } expired)
+        {
+            return;
+        }
+        foreach (
+            var value in source.ImportedAssignments.Where(value =>
+                expired.ImportedAssignmentUuids.Contains(value.Uuid)
+            )
+        )
+        {
+            if (
+                decision.RepertoireSongUuid is { } target
+                && ResolvesTo(source, value.RepertoireSongUuid, target)
+            )
+            {
+                continue;
+            }
+            imported[value.ImportedSongUuid] = value with
+            {
+                Retracted = true,
+                Evidence = decision.Evidence,
+            };
+        }
+        foreach (
+            var value in source.ExistingExternalIdentities.Where(value =>
+                expired.ExternalIdentityUuids.Contains(value.Uuid)
+            )
+        )
+        {
+            if (
+                value.RepertoireSongUuid is { } stored
+                && decision.RepertoireSongUuid is { } target
+                && ResolvesTo(source, stored, target)
+            )
+            {
+                continue;
+            }
+            external[value.Uuid] = value with { Retracted = true, Evidence = decision.Evidence };
+        }
     }
 
     private static void AddImportedAssignment(
@@ -136,7 +185,12 @@ public sealed partial class NormalizationRepertoireResolutionProcessor
                 )
                 {
                     if (
-                        decision.Authority != "reviewed_expert_knowledge"
+                        (
+                            decision.Authority != "reviewed_expert_knowledge"
+                            && source.ExpertReevaluation?.ExternalIdentityUuids.Contains(
+                                existing.Uuid
+                            ) != true
+                        )
                         || existing.Basis == "reviewed"
                     )
                     {
@@ -186,6 +240,12 @@ public sealed partial class NormalizationRepertoireResolutionProcessor
     )
     {
         var claim = context.Claim;
+        if (context.ExpertSupportedCorrespondence && previous != null)
+        {
+            // An indirect provider alias may reuse a reviewed correspondence. It must not turn
+            // that rule's dependent spelling into independent accepted metadata after withdrawal.
+            return null;
+        }
         if (previous == null)
         {
             return new()
@@ -438,7 +498,7 @@ public sealed partial class NormalizationRepertoireResolutionProcessor
             && candidate.IdentityClosure.Any(identity => identity.Uuid == stored)
         );
 
-    private static Guid RelationshipUuid(Guid decisionUuid, string purpose)
+    internal static Guid RelationshipUuid(Guid decisionUuid, string purpose)
     {
         var hash = SHA256.HashData(
             Encoding.UTF8.GetBytes(decisionUuid.ToString("D") + ":" + purpose)

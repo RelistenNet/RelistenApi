@@ -749,7 +749,7 @@ public sealed partial class NormalizationRepertoireResolutionStore
         var bound = await c.QuerySingleAsync<ConsumptionPayloadBound>(
             new CommandDefinition(
                 """
-                SELECT count(*) AS "Count",COALESCE(sum(octet_length(evidence::text)+octet_length(correspondence_key)+octet_length(reason)),0)::bigint AS "Bytes",
+                SELECT count(*) AS "Count",COALESCE(sum(octet_length(evidence::text)+octet_length(correspondence_key)+octet_length(reason)+octet_length(authority)),0)::bigint AS "Bytes",
                     COALESCE(max(octet_length(evidence::text)),0)::bigint AS "Largest"
                 FROM normalization.repertoire_resolution_associations WHERE attempt_uuid=@uuid
                 """,
@@ -774,7 +774,7 @@ public sealed partial class NormalizationRepertoireResolutionStore
                 """
                 SELECT decision_uuid AS "DecisionUuid",registration_uuid AS "RegistrationUuid",attempt_uuid AS "AttemptUuid",
                     claim_uuid AS "ClaimUuid",correspondence_key AS "Key",repertoire_song_uuid AS "SongUuid",disposition AS "Disposition",
-                    reason AS "Reason",evidence::text AS "Evidence" FROM normalization.repertoire_resolution_associations WHERE attempt_uuid=@uuid ORDER BY claim_uuid
+                    reason AS "Reason",authority AS "Authority",evidence::text AS "Evidence" FROM normalization.repertoire_resolution_associations WHERE attempt_uuid=@uuid ORDER BY claim_uuid
                 """,
                 new { uuid = attempt.AttemptUuid },
                 t,
@@ -791,7 +791,8 @@ public sealed partial class NormalizationRepertoireResolutionStore
                 row.SongUuid,
                 Enum.Parse<RepertoireResolutionClaimDisposition>(row.Disposition),
                 row.Reason,
-                JsonSerializer.Deserialize<NormalizedEvidenceReference[]>(row.Evidence)!
+                JsonSerializer.Deserialize<NormalizedEvidenceReference[]>(row.Evidence)!,
+                row.Authority
             ))
             .ToArray();
         if (

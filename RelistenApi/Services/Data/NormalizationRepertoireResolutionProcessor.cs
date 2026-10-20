@@ -26,7 +26,7 @@ public sealed partial class NormalizationRepertoireResolutionProcessor(
     private readonly RepertoireResolutionPolicyEvaluator evaluator = new();
 
     public const string Version =
-        "repertoire-resolution-v3/"
+        "repertoire-resolution-v4/"
         + ExpertKnowledgeResolver.Version
         + "/"
         + ArtistSongTitleResolver.Version

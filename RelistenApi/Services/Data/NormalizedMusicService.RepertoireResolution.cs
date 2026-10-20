@@ -78,6 +78,13 @@ public sealed partial class NormalizedMusicService
                 if (stage.Kind == RepertoireResolutionStageKind.AcceptedWrite)
                 {
                     RequireRepertoireAcceptedProof(attempt, stage);
+                    await NormalizationCandidateService.RequireRepertoireExpertReevaluationAsync(
+                        c,
+                        t,
+                        attempt.Registration.RegistrationUuid,
+                        stage.Context,
+                        token
+                    );
                     await RepertoireResolutionPolicyService.RequireStateAsync(
                         c,
                         t,
