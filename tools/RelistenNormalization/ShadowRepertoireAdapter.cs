@@ -93,6 +93,22 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
     > descriptorSongsWithoutWordBoundaries = [];
     private readonly IdentityCandidateMatcher matcher = new();
 
+    private readonly ReviewedRepertoireCorrespondences? reviewed;
+    private readonly string? reviewedScope;
+
+    public ShadowRepertoireAdapter() { }
+
+    public ShadowRepertoireAdapter(ReviewedRepertoireCorrespondences? reviewed, string scope)
+    {
+        this.reviewed = reviewed;
+        reviewedScope = scope;
+    }
+
+    public ShadowRepertoireSegment ApplyReviewedCorrespondence(
+        Guid artistUuid,
+        ShadowRepertoireSegment segment
+    ) => reviewed == null ? segment : reviewed.Apply(reviewedScope!, artistUuid, segment);
+
     public string Version => "shadow-repertoire-v7";
 
     public IReadOnlyList<string> DomainsFor(string inputKind) =>
@@ -302,12 +318,15 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
         TrackTitleSegment segment,
         string? originalTitle = null
     ) =>
-        ResolveTitleMentionCore(
+        ApplyReviewedCorrespondence(
             artistUuid,
-            segment,
-            Candidates(artistId, artistUuid, segment.Title ?? segment.Evidence.Quote),
-            originalTitle == null ? [] : Candidates(artistId, artistUuid, originalTitle),
-            originalTitle
+            ResolveTitleMentionCore(
+                artistUuid,
+                segment,
+                Candidates(artistId, artistUuid, segment.Title ?? segment.Evidence.Quote),
+                originalTitle == null ? [] : Candidates(artistId, artistUuid, originalTitle),
+                originalTitle
+            )
         );
 
     /// <summary>Uses a complete, explicitly scoped descriptor dictionary without inventing native artist IDs.</summary>
@@ -316,12 +335,15 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
         TrackTitleSegment segment,
         string? originalTitle = null
     ) =>
-        ResolveTitleMentionCore(
+        ApplyReviewedCorrespondence(
             artistUuid,
-            segment,
-            DictionaryCandidates(artistUuid, segment.Title ?? segment.Evidence.Quote),
-            originalTitle == null ? [] : DictionaryCandidates(artistUuid, originalTitle),
-            originalTitle
+            ResolveTitleMentionCore(
+                artistUuid,
+                segment,
+                DictionaryCandidates(artistUuid, segment.Title ?? segment.Evidence.Quote),
+                originalTitle == null ? [] : DictionaryCandidates(artistUuid, originalTitle),
+                originalTitle
+            )
         );
 
     public void ObserveDictionary(MusicDictionaryName value)
@@ -370,6 +392,10 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
             descriptorSongsWithoutWordBoundaries.Add(boundaryKey, boundaryMatches);
         }
         boundaryMatches[value.LegacySongUuid] = identity;
+        reviewed?.Observe(
+            reviewedScope!,
+            KnownSong(value.ArtistUuid, value.LegacySongUuid, identity.Name)
+        );
     }
 
     public ShadowRepertoireCandidate? DictionaryIdentity(Guid artistUuid, Guid songUuid)

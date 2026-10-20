@@ -26,6 +26,13 @@ public sealed class MusicRepertoireConsolidator
     private readonly Dictionary<(string Scope, string Key), HashSet<string>> works = [];
     private bool frozen;
 
+    private readonly ReviewedRepertoireCorrespondences? reviewed;
+
+    public MusicRepertoireConsolidator(ExpertKnowledgeSnapshot? knowledge = null)
+    {
+        reviewed = knowledge == null ? null : new(knowledge);
+    }
+
     public long DescriptorCount => originals.Count;
 
     public void ObserveDictionary(MusicDictionaryName name)
@@ -63,6 +70,28 @@ public sealed class MusicRepertoireConsolidator
             );
         }
         ObserveWorks(descriptor.Scope, descriptor.OriginalKey, descriptor.WorkKeys);
+        if (
+            reviewed != null
+            && descriptor.Title != null
+            && (
+                descriptor.LegacySongUuid == null
+                || Dictionary(descriptor.Scope)
+                    .DictionaryIdentity(descriptor.ArtistUuid, descriptor.LegacySongUuid.Value)
+                    == null
+            )
+        )
+        {
+            reviewed?.Observe(
+                descriptor.Scope,
+                new(
+                    descriptor.OriginalKey,
+                    descriptor.ArtistUuid,
+                    descriptor.LegacySongUuid,
+                    descriptor.Title,
+                    descriptor.Basis
+                )
+            );
+        }
         if (descriptor.Title == null || descriptor.LegacySongUuid != null)
         {
             return;
@@ -87,6 +116,122 @@ public sealed class MusicRepertoireConsolidator
     public void CompleteObservation() => frozen = true;
 
     public MusicRepertoireCorrespondence Resolve(MusicRepertoireDescriptor descriptor)
+    {
+        var result = ResolveUnreviewed(descriptor);
+        return ApplyAccountReview(descriptor, result);
+    }
+
+    private MusicRepertoireCorrespondence ApplyAccountReview(
+        MusicRepertoireDescriptor descriptor,
+        MusicRepertoireCorrespondence result
+    )
+    {
+        if (reviewed == null || descriptor.Title == null)
+        {
+            return result;
+        }
+
+        // Exact account review can also address an unresolved original descriptor.
+        // Segment-level review below separately resolves duplicate dictionary rivals.
+        var account = Dictionary(descriptor.Scope)
+            .ApplyReviewedCorrespondence(
+                descriptor.ArtistUuid,
+                new ShadowRepertoireSegment(
+                    0,
+                    TrackContentKind.Song,
+                    descriptor.Title,
+                    Evidence(descriptor.Title, 0, descriptor.Title.Length),
+                    "proposed",
+                    null,
+                    new(
+                        descriptor.OriginalKey,
+                        descriptor.ArtistUuid,
+                        descriptor.LegacySongUuid,
+                        descriptor.Title,
+                        descriptor.Basis
+                    ),
+                    [],
+                    []
+                )
+            );
+        if (account.Knowledge == null)
+        {
+            return result;
+        }
+        if (
+            account.Song == null
+            || !account.Knowledge.Any(value => value.Outcome == "reviewed_correspondence")
+        )
+        {
+            // Negative account review can veto a named target, but it cannot turn
+            // an unresolved original account into a newly proposed song.
+            var excluded = account
+                .Knowledge.SelectMany(value => value.ExcludedTargets)
+                .Where(value => value.Domain == "songs" && value.Namespace == "repertoire")
+                .Select(value => value.StableKey)
+                .ToHashSet(StringComparer.Ordinal);
+            var blocked = account.Song == null;
+            var retained = result
+                .Targets.Select(value =>
+                {
+                    var veto =
+                        blocked
+                        || excluded.Contains(
+                            ReviewedRepertoireCorrespondences.StableKey(
+                                descriptor.Scope,
+                                value.Song.EntityKey
+                            )
+                        );
+                    return value with
+                    {
+                        Disposition = veto ? "review" : value.Disposition,
+                        Reason = veto
+                            ? "reviewed_song_correspondence_requires_review"
+                            : value.Reason,
+                        Knowledge = account.Knowledge,
+                    };
+                })
+                .ToArray();
+            var needsReview = blocked || retained.Any(value => value.Disposition != "proposed");
+            return result with
+            {
+                Disposition = needsReview ? "review" : result.Disposition,
+                Reason = needsReview
+                    ? "reviewed_song_correspondence_requires_review"
+                    : result.Reason,
+                Targets = retained,
+            };
+        }
+        var conflict =
+            account.Song is { } chosen
+            && WorkConflict(descriptor, chosen.EntityKey, MusicRepertoireRelation.IdentityAlias);
+        var disposition = account.Song == null || conflict ? "review" : "proposed";
+        var reason = conflict ? "qualified_work_contradiction" : account.Reason!;
+        IReadOnlyList<ShadowRepertoireSong> targets = account.Song is { } target
+            ? new[] { target }
+            : account.CandidateSongs;
+        return result with
+        {
+            Disposition = disposition,
+            Reason = reason,
+            Targets = targets
+                .Select(song => new MusicRepertoireTarget(
+                    song,
+                    MusicRepertoireRelation.IdentityAlias,
+                    disposition,
+                    reason,
+                    account.Evidence,
+                    result.Extraction?.Qualifiers ?? [],
+                    result.Targets.SelectMany(value => value.ComparisonDiagnostics).ToArray()
+                )
+                {
+                    Knowledge = account.Knowledge,
+                })
+                .ToArray(),
+        };
+    }
+
+    private MusicRepertoireCorrespondence ResolveUnreviewed(MusicRepertoireDescriptor descriptor)
     {
         if (!frozen)
         {
@@ -305,7 +450,10 @@ public sealed class MusicRepertoireConsolidator
                         interpretation.Evidence,
                         qualifiers,
                         interpretation.ComparisonDiagnostics
-                    ),
+                    ) with
+                    {
+                        Knowledge = interpretation.Knowledge,
+                    },
                 ];
             }
             return interpretation
@@ -318,7 +466,10 @@ public sealed class MusicRepertoireConsolidator
                         interpretation.Evidence,
                         qualifiers,
                         interpretation.ComparisonDiagnostics
-                    )
+                    ) with
+                    {
+                        Knowledge = interpretation.Knowledge,
+                    }
                 )
                 .ToArray();
         }
@@ -421,7 +572,10 @@ public sealed class MusicRepertoireConsolidator
                     interpretation.Evidence,
                     qualifiers,
                     interpretation.ComparisonDiagnostics
-                );
+                )
+                {
+                    Knowledge = interpretation.Knowledge,
+                };
             })
             .ToArray();
         return true;
@@ -457,6 +611,10 @@ public sealed class MusicRepertoireConsolidator
         )
         {
             preferred[(descriptor.Scope, key)] = candidate;
+            reviewed?.Observe(
+                descriptor.Scope,
+                new(key, descriptor.ArtistUuid, null, title, "title_derived")
+            );
         }
     }
 
@@ -478,7 +636,7 @@ public sealed class MusicRepertoireConsolidator
     {
         if (!scopes.TryGetValue(scope, out var dictionary))
         {
-            dictionary = new();
+            dictionary = new(reviewed, scope);
             scopes.Add(scope, dictionary);
         }
         return dictionary;

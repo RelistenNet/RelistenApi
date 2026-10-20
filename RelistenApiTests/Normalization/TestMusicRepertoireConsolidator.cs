@@ -1,6 +1,8 @@
+using System.Security.Cryptography;
 using System.Text;
 using FluentAssertions;
 using Relisten.Api.Models.Normalization;
+using Relisten.Normalization;
 using Relisten.Normalization.Batch;
 
 namespace RelistenApiTests.Normalization;
@@ -452,6 +454,161 @@ public sealed class TestMusicRepertoireConsolidator
                 && segment.EndMs == null
             );
         AssertCitations(result);
+    }
+
+    [Test]
+    public void ReviewedDuplicateDictionaryAccountsCollapseWithoutChangingOriginalKeysWitnessesOrMatcherEvidence()
+    {
+        var first = DictionaryName("Shared Song", Scarlet);
+        var second = DictionaryName("Shared Song", Fire);
+        var derived = Descriptor("09.Shared Song");
+        var known = Descriptor("Shared Song") with
+        {
+            OriginalKey = first.SongKey!,
+            LegacySongUuid = Scarlet,
+            Basis = "captured_artist_dictionary",
+        };
+        var snapshot = ReviewedSnapshot(first.SongKey!, second.SongKey!, "accepted");
+        var consolidator = new MusicRepertoireConsolidator(snapshot);
+        consolidator.ObserveDictionary(first);
+        consolidator.ObserveDictionary(second);
+        consolidator.ObserveDescriptor(derived);
+        consolidator.ObserveDescriptor(known);
+        consolidator.CompleteObservation();
+
+        var unreviewed = Resolve(derived, first, second);
+        var result = consolidator.Resolve(derived);
+        var knownResult = consolidator.Resolve(known);
+
+        unreviewed.Disposition.Should().Be("review");
+        unreviewed
+            .Targets.Select(target => target.Song.LegacySongUuid)
+            .Should()
+            .BeEquivalentTo(new Guid?[] { Scarlet, Fire });
+        foreach (
+            var pair in new[]
+            {
+                (Source: derived, Result: result),
+                (Source: known, Result: knownResult),
+            }
+        )
+        {
+            pair.Result.OriginalKey.Should().Be(pair.Source.OriginalKey);
+            pair.Result.SourceWitness.Should().Be(pair.Source.Witness);
+            var target = pair.Result.Targets.Should().ContainSingle().Subject;
+            target.Disposition.Should().Be("proposed");
+            target.Song.LegacySongUuid.Should().Be(Fire);
+            target
+                .Knowledge.Should()
+                .ContainSingle()
+                .Which.SnapshotSha256.Should()
+                .Be(snapshot.Sha256);
+            AssertCitations(pair.Result);
+        }
+        result
+            .Targets.Single()
+            .ComparisonDiagnostics.Should()
+            .BeEquivalentTo(unreviewed.Targets[0].ComparisonDiagnostics);
+        knownResult
+            .Targets.Single()
+            .ComparisonDiagnostics.Select(candidate => candidate.Comparison.CandidateUuid)
+            .Should()
+            .Equal(Scarlet);
+        known.LegacySongUuid.Should().Be(Scarlet);
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public void ARejectedOriginalAccountTargetVetoPreservesActualDictionaryCandidates(
+        bool duplicateDictionary
+    )
+    {
+        var source = Descriptor("09.Shared Song");
+        var first = DictionaryName("Shared Song", Scarlet);
+        var second = DictionaryName("Shared Song", Fire);
+        var names = duplicateDictionary ? new[] { first, second } : new[] { second };
+        var snapshot = ReviewedSnapshot(source.OriginalKey, second.SongKey!, "rejected");
+        var consolidator = new MusicRepertoireConsolidator(snapshot);
+        foreach (var name in names)
+        {
+            consolidator.ObserveDictionary(name);
+        }
+        consolidator.ObserveDescriptor(source);
+        consolidator.CompleteObservation();
+        var unreviewed = Resolve(source, names);
+
+        var result = consolidator.Resolve(source);
+
+        result.Disposition.Should().Be("review");
+        result.OriginalKey.Should().Be(source.OriginalKey);
+        result
+            .Targets.Select(target => target.Song.EntityKey)
+            .Should()
+            .BeEquivalentTo(names.Select(name => name.SongKey));
+        result
+            .Targets.Should()
+            .OnlyContain(target =>
+                target.Disposition == "review" && target.Song.EntityKey != source.OriginalKey
+            );
+        foreach (var target in result.Targets)
+        {
+            target
+                .ComparisonDiagnostics.Should()
+                .BeEquivalentTo(
+                    unreviewed
+                        .Targets.Single(original =>
+                            original.Song.EntityKey == target.Song.EntityKey
+                        )
+                        .ComparisonDiagnostics
+                );
+            target
+                .Knowledge.Should()
+                .ContainSingle()
+                .Which.ExcludedTargets.Should()
+                .ContainSingle()
+                .Which.StableKey.Should()
+                .Be(ReviewedRepertoireCorrespondences.StableKey(Scope, second.SongKey!));
+        }
+    }
+
+    private static ExpertKnowledgeSnapshot ReviewedSnapshot(
+        string sourceKey,
+        string targetKey,
+        string state
+    )
+    {
+        var evidence = Encoding.UTF8.GetBytes(
+            "Synthetic retained duplicate dictionary account review."
+        );
+        var rule = new ExpertKnowledgeRule(
+            Guid.NewGuid(),
+            1,
+            state,
+            new(
+                "songs",
+                new(
+                    "repertoire",
+                    AccountStableKey: ReviewedRepertoireCorrespondences.StableKey(Scope, sourceKey),
+                    ArtistUuid: Artist
+                ),
+                new(
+                    "songs",
+                    "repertoire",
+                    ReviewedRepertoireCorrespondences.StableKey(Scope, targetKey)
+                ),
+                [
+                    new(
+                        "/synthetic/duplicate-song-review.json",
+                        evidence.Length,
+                        Convert.ToHexStringLower(SHA256.HashData(evidence))
+                    ),
+                ],
+                "Synthetic exact duplicate dictionary accounts; original IDs remain separate evidence."
+            ),
+            Guid.NewGuid(),
+            new DateTime(2026, 10, 20, 12, 0, 0, DateTimeKind.Utc)
+        );
+        return ExpertKnowledgeResolver.CreateSnapshot([rule]);
     }
 
     private static MusicRepertoireCorrespondence Resolve(

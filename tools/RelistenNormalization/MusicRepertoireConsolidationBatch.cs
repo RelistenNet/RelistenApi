@@ -28,28 +28,37 @@ public sealed class MusicRepertoireConsolidationBatch
         string outputDirectory,
         string manifestSha256,
         bool resume = false,
-        CancellationToken ct = default
+        CancellationToken ct = default,
+        string? knowledgePath = null,
+        string? knowledgeSha256 = null
     )
     {
         manifestPath = Path.GetFullPath(manifestPath);
         outputDirectory = Path.GetFullPath(outputDirectory);
         var input = await AuthenticateInputAsync(manifestPath, manifestSha256, ct);
+        var knowledge = await ReadKnowledgeAsync(knowledgePath, knowledgeSha256, ct);
         var methods = new Dictionary<string, string>
         {
             [nameof(MusicRepertoireConsolidator)] = MusicRepertoireConsolidator.Version,
             [nameof(TrackTitleExtractor)] = TrackTitleExtractor.Version,
             [nameof(MusicRepertoireConsolidationBatch)] = Version,
         };
+        if (knowledge != null)
+        {
+            methods[nameof(ReviewedRepertoireCorrespondences)] =
+                ReviewedRepertoireCorrespondences.Version + "/" + knowledge.Snapshot.Sha256;
+            methods["reviewedKnowledgeFileSha256"] = knowledge.Artifact.Sha256;
+        }
         var completionPath = Path.Combine(outputDirectory, "manifest.json");
         if (resume && File.Exists(completionPath))
         {
-            return await ReadCompletedAsync(completionPath, manifestSha256, ct);
+            return await ReadCompletedAsync(completionPath, manifestSha256, knowledge, ct);
         }
 
         // Rebuild only the compact deterministic context on resume. Dictionary
         // and preferred spelling decisions must see the same complete population
         // before even the first resumed descriptor is interpreted.
-        var resolver = await ObserveCompletePopulationAsync(input, ct);
+        var resolver = await ObserveCompletePopulationAsync(input, knowledge?.Snapshot, ct);
         CheckResources(Path.GetDirectoryName(outputDirectory)!, outputDirectory);
         await using var run = new ShadowCatalogRun(
             outputDirectory,
@@ -111,6 +120,7 @@ public sealed class MusicRepertoireConsolidationBatch
                 }
             }
             await AuthenticateInputAsync(manifestPath, manifestSha256, ct);
+            await ReadKnowledgeAsync(knowledgePath, knowledgeSha256, ct);
             await run.SaveAsync(completed, "completed", Population(input), ct);
             CheckResources(outputDirectory, outputDirectory);
             await RequireOutputCoverageAsync(
@@ -120,6 +130,14 @@ public sealed class MusicRepertoireConsolidationBatch
                 ct
             );
             var output = await DescribeOutputAsync(outputDirectory, manifestSha256, completed, ct);
+            if (knowledge != null)
+            {
+                output = output with
+                {
+                    KnowledgeSha256 = knowledge.Snapshot.Sha256,
+                    KnowledgeSnapshot = knowledge.Artifact,
+                };
+            }
             await WriteCompletionAsync(completionPath, output, ct);
             return output;
         }
@@ -136,6 +154,45 @@ public sealed class MusicRepertoireConsolidationBatch
             catch { }
             throw;
         }
+    }
+
+    private sealed record ReviewedKnowledge(
+        ExpertKnowledgeSnapshot Snapshot,
+        MusicConsolidationArtifact Artifact
+    );
+
+    private static async Task<ReviewedKnowledge?> ReadKnowledgeAsync(
+        string? path,
+        string? sha256,
+        CancellationToken ct
+    )
+    {
+        if (path == null && sha256 == null)
+        {
+            return null;
+        }
+        if (path == null || sha256 == null)
+        {
+            throw new InvalidDataException(
+                "Reviewed knowledge requires both a snapshot path and an external SHA256."
+            );
+        }
+        path = Path.GetFullPath(path);
+        var length = new FileInfo(path).Length;
+        if (length > 16 * 1024 * 1024)
+        {
+            throw new InvalidDataException("The reviewed knowledge snapshot exceeds 16 MiB.");
+        }
+        await RequireFileAsync(path, length, sha256, ct);
+        var snapshot =
+            JsonSerializer.Deserialize<ExpertKnowledgeSnapshot>(
+                await File.ReadAllBytesAsync(path, ct),
+                ShadowCatalogRun.Json
+            ) ?? throw new InvalidDataException("A reviewed knowledge snapshot is required.");
+        // The shared resolver authenticates the policy version and complete rule hash.
+        _ = new ExpertKnowledgeResolver(snapshot);
+        await RequireFileAsync(path, length, sha256, ct);
+        return new(snapshot, new(path, length, sha256, 1));
     }
 
     private static async Task<MusicConsolidationInput> AuthenticateInputAsync(
@@ -206,10 +263,11 @@ public sealed class MusicRepertoireConsolidationBatch
 
     private static async Task<MusicRepertoireConsolidator> ObserveCompletePopulationAsync(
         MusicConsolidationInput input,
+        ExpertKnowledgeSnapshot? knowledge,
         CancellationToken ct
     )
     {
-        var resolver = new MusicRepertoireConsolidator();
+        var resolver = new MusicRepertoireConsolidator(knowledge);
         var sources = input
             .Sources.Select(source => (source.Scope, Path.GetFullPath(source.Run)))
             .ToHashSet();
@@ -504,6 +562,7 @@ public sealed class MusicRepertoireConsolidationBatch
     private static async Task<MusicConsolidationOutput> ReadCompletedAsync(
         string path,
         string inputSha,
+        ReviewedKnowledge? knowledge,
         CancellationToken ct
     )
     {
@@ -518,6 +577,8 @@ public sealed class MusicRepertoireConsolidationBatch
             || output.InputManifestSha256 != inputSha
             || output.ExtractorVersion != TrackTitleExtractor.Version
             || output.ResolverVersion != MusicRepertoireConsolidator.Version
+            || output.KnowledgeSha256 != knowledge?.Snapshot.Sha256
+            || output.KnowledgeSnapshot?.Sha256 != knowledge?.Artifact.Sha256
         )
         {
             throw new InvalidDataException(

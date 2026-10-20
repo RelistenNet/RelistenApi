@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Relisten.Api.Models.Normalization;
 
 namespace Relisten.Normalization.Batch;
@@ -92,7 +93,11 @@ public sealed record MusicRepertoireTarget(
     NormalizationTextEvidence Evidence,
     IReadOnlyList<TrackTitleQualifier> Qualifiers,
     IReadOnlyList<ShadowRepertoireCandidate> ComparisonDiagnostics
-);
+)
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<ExpertKnowledgeEvaluation>? Knowledge { get; init; }
+}
 
 /// <summary>
 /// One logical result per original scoped key. The raw key and witness always survive.
@@ -120,4 +125,11 @@ public sealed record MusicConsolidationOutput(
     long LogicalRows,
     IReadOnlyList<MusicConsolidationArtifact> Chunks,
     MusicConsolidationArtifact Progress
-);
+)
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? KnowledgeSha256 { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public MusicConsolidationArtifact? KnowledgeSnapshot { get; init; }
+}

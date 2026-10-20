@@ -51,7 +51,11 @@ public sealed record ShadowRepertoireSegment(
     ShadowRepertoireSong? Song,
     IReadOnlyList<ShadowRepertoireSong> CandidateSongs,
     IReadOnlyList<ShadowRepertoireCandidate> ComparisonDiagnostics
-);
+)
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<ExpertKnowledgeEvaluation>? Knowledge { get; init; }
+}
 
 /// <summary>
 /// Preserves the actual extractor response alongside shadow links. IsResolvedByExtractor

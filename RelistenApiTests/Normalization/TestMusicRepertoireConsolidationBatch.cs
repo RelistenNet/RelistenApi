@@ -3,6 +3,8 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using FluentAssertions;
+using Relisten.Api.Models.Normalization;
+using Relisten.Normalization;
 using Relisten.Normalization.Batch;
 
 namespace RelistenApiTests.Normalization;
@@ -54,6 +56,11 @@ public sealed class TestMusicRepertoireConsolidationBatch
             proposal.GetProperty("targets").GetArrayLength().Should().Be(1);
             proposal
                 .GetProperty("targets")[0]
+                .TryGetProperty("knowledge", out _)
+                .Should()
+                .BeFalse();
+            proposal
+                .GetProperty("targets")[0]
                 .GetProperty("song")
                 .GetProperty("entityKey")
                 .GetString()
@@ -71,6 +78,9 @@ public sealed class TestMusicRepertoireConsolidationBatch
             .BeFalse();
 
         var retained = Files(output);
+        var legacyCompletion = JsonSerializer.SerializeToElement(completion, Json);
+        legacyCompletion.TryGetProperty("knowledgeSha256", out _).Should().BeFalse();
+        legacyCompletion.TryGetProperty("knowledgeSnapshot", out _).Should().BeFalse();
         var replay = await batch.RunAsync(
             fixture.Manifest,
             output,
@@ -269,6 +279,189 @@ public sealed class TestMusicRepertoireConsolidationBatch
             );
 
         await replay.Should().ThrowAsync<InvalidDataException>();
+    }
+
+    [Test]
+    public async Task ReviewedSnapshotChangesTheTargetWhileRetainingRawOwnershipAndSupportsReplayAndCheckpointResume()
+    {
+        var fixture = await Export(2);
+        var snapshot = ExpertKnowledgeResolver.CreateSnapshot([ReviewedRule(fixture)]);
+        var knowledge = await WriteKnowledge("accepted-knowledge.json", snapshot);
+        var output = Path.Combine(directory, "reviewed");
+        var batch = new MusicRepertoireConsolidationBatch();
+        var first = await batch.RunAsync(
+            fixture.Manifest,
+            output,
+            fixture.ManifestSha,
+            knowledgePath: knowledge.Path,
+            knowledgeSha256: knowledge.Sha
+        );
+        var rows = await Results(output, first);
+        var proposal = rows.Single(row =>
+                row.GetProperty("proposal").GetProperty("originalKey").GetString()
+                == fixture.Descriptors[0].OriginalKey
+            )
+            .GetProperty("proposal");
+
+        proposal
+            .GetProperty("originalKey")
+            .GetString()
+            .Should()
+            .Be(fixture.Descriptors[0].OriginalKey);
+        proposal.GetProperty("originalTitle").GetString().Should().Be(fixture.Descriptors[0].Title);
+        proposal
+            .GetProperty("sourceWitness")
+            .Deserialize<MusicTitleWitness>(Json)
+            .Should()
+            .Be(fixture.Descriptors[0].Witness);
+        var target = proposal.GetProperty("targets")[0];
+        target
+            .GetProperty("song")
+            .GetProperty("entityKey")
+            .GetString()
+            .Should()
+            .Be(fixture.Names[1].SongKey);
+        target
+            .GetProperty("knowledge")[0]
+            .GetProperty("snapshotSha256")
+            .GetString()
+            .Should()
+            .Be(snapshot.Sha256);
+        target
+            .GetProperty("comparisonDiagnostics")[0]
+            .GetProperty("comparison")
+            .GetProperty("candidateUuid")
+            .GetGuid()
+            .Should()
+            .Be(fixture.Names[0].LegacySongUuid);
+        first.KnowledgeSha256.Should().Be(snapshot.Sha256);
+        first.KnowledgeSnapshot!.Sha256.Should().Be(knowledge.Sha);
+        var retained = Files(output);
+        var replay = await batch.RunAsync(
+            fixture.Manifest,
+            output,
+            fixture.ManifestSha,
+            resume: true,
+            knowledgePath: knowledge.Path,
+            knowledgeSha256: knowledge.Sha
+        );
+        replay.Should().BeEquivalentTo(first);
+        Files(output).Should().BeEquivalentTo(retained);
+
+        File.Delete(Path.Combine(output, "manifest.json"));
+        var resumed = await batch.RunAsync(
+            fixture.Manifest,
+            output,
+            fixture.ManifestSha,
+            resume: true,
+            knowledgePath: knowledge.Path,
+            knowledgeSha256: knowledge.Sha
+        );
+
+        resumed.Complete.Should().BeTrue();
+        resumed.LogicalRows.Should().Be(2);
+        resumed.KnowledgeSha256.Should().Be(snapshot.Sha256);
+        foreach (var chunk in first.Chunks)
+        {
+            Hash(await File.ReadAllBytesAsync(Path.Combine(output, chunk.Path)))
+                .Should()
+                .Be(retained[chunk.Path]);
+        }
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task AChangedReviewedSnapshotCannotReplayACompletedRunOrResumeItsCheckpoint(
+        bool pendingCheckpoint
+    )
+    {
+        var fixture = await Export(2);
+        var rule = ReviewedRule(fixture);
+        var snapshot = ExpertKnowledgeResolver.CreateSnapshot([rule]);
+        var original = await WriteKnowledge("original-knowledge.json", snapshot);
+        var output = Path.Combine(directory, "changed-review");
+        var batch = new MusicRepertoireConsolidationBatch();
+        await batch.RunAsync(
+            fixture.Manifest,
+            output,
+            fixture.ManifestSha,
+            knowledgePath: original.Path,
+            knowledgeSha256: original.Sha
+        );
+        if (pendingCheckpoint)
+        {
+            File.Delete(Path.Combine(output, "manifest.json"));
+        }
+        var changed = ExpertKnowledgeResolver.CreateSnapshot([
+            rule with
+            {
+                State = "retracted",
+                Revision = 2,
+                LastOperationUuid = Guid.NewGuid(),
+            },
+        ]);
+        var replacement = await WriteKnowledge("retracted-knowledge.json", changed);
+        replacement.Sha.Should().NotBe(original.Sha);
+        var retained = Files(output);
+        var replay = () =>
+            batch.RunAsync(
+                fixture.Manifest,
+                output,
+                fixture.ManifestSha,
+                resume: true,
+                knowledgePath: replacement.Path,
+                knowledgeSha256: replacement.Sha
+            );
+
+        await replay.Should().ThrowAsync<InvalidDataException>();
+        Files(output).Should().BeEquivalentTo(retained);
+    }
+
+    private static ExpertKnowledgeRule ReviewedRule(ExportFixture fixture) =>
+        new(
+            Guid.NewGuid(),
+            1,
+            "accepted",
+            new(
+                "songs",
+                new(
+                    "repertoire",
+                    AccountStableKey: ReviewedRepertoireCorrespondences.StableKey(
+                        fixture.Descriptors[0].Scope,
+                        fixture.Descriptors[0].OriginalKey
+                    ),
+                    ArtistUuid: Artist
+                ),
+                new(
+                    "songs",
+                    "repertoire",
+                    ReviewedRepertoireCorrespondences.StableKey(
+                        fixture.Descriptors[0].Scope,
+                        fixture.Names[1].SongKey!
+                    )
+                ),
+                [
+                    new(
+                        fixture.Input.Descriptors.Path,
+                        fixture.Input.Descriptors.Bytes,
+                        fixture.Input.Descriptors.Sha256
+                    ),
+                ],
+                "Synthetic exact descriptor account review against the frozen source descriptor artifact."
+            ),
+            Guid.NewGuid(),
+            new DateTime(2026, 10, 20, 12, 0, 0, DateTimeKind.Utc)
+        );
+
+    private async Task<(string Path, string Sha)> WriteKnowledge(
+        string name,
+        ExpertKnowledgeSnapshot snapshot
+    )
+    {
+        var path = Path.Combine(directory, name);
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(snapshot, Json);
+        await File.WriteAllBytesAsync(path, bytes);
+        return (path, Hash(bytes));
     }
 
     private async Task<ExportFixture> Export(int count)
