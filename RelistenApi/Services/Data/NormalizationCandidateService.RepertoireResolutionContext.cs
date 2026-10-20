@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Dapper;
 using Npgsql;
 using Relisten.Api.Models.Normalization;
+using Relisten.Normalization;
 
 namespace Relisten.Data;
 
@@ -62,6 +63,11 @@ public sealed partial class NormalizationCandidateService
             owners.Artist?.Membership.Owner?.SubjectUuid,
             ct
         );
+        var titleIndex =
+            RepertoireResolutionPolicyEvaluator.SupportsTitleReuse(pinnedPolicy.Active)
+            && source.ArtistUuid is { } titleArtist
+                ? await ReadRepertoireTitleIndex(c, t, titleArtist, ct)
+                : null;
         var contexts = new List<RepertoireResolutionClaimContext>();
         var decisionReads = new List<CandidateFactsReadSet>();
         var freshnessComplete = true;
@@ -74,7 +80,8 @@ public sealed partial class NormalizationCandidateService
                 source.ArtistUuid,
                 claim,
                 exclusions,
-                ct
+                ct,
+                titleIndex
             );
             contexts.Add(context);
             if (context.Candidates is { } snapshot)

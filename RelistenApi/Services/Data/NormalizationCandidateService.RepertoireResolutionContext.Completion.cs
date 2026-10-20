@@ -16,15 +16,17 @@ public sealed partial class NormalizationCandidateService
     public async Task<RepertoireResolutionPageContext> ReadRepertoireResolutionCompletionContextAsync(
         Guid registrationUuid,
         Guid attemptUuid,
-        RepertoireResolutionSourceSnapshot source,
-        RepertoireResolutionPolicyState pinnedPolicy,
+        RepertoireResolutionPreparation preparation,
         IReadOnlyList<RepertoireResolutionClaimDecision> decisions,
         CancellationToken ct = default
     )
     {
+        var source = preparation.Source;
+        var pinnedPolicy = preparation.Policy;
         if (
             registrationUuid == Guid.Empty
             || attemptUuid == Guid.Empty
+            || preparation.PageSize is < 1 or > 1000
             || decisions.Count > NormalizationImportedCatalogService.MaximumRepertoireSongs
         )
         {
@@ -157,8 +159,7 @@ public sealed partial class NormalizationCandidateService
             c,
             t,
             registrationUuid,
-            source,
-            pinnedPolicy,
+            preparation,
             decisions,
             exclusions,
             ct
@@ -211,8 +212,7 @@ public sealed partial class NormalizationCandidateService
         NpgsqlConnection c,
         NpgsqlTransaction t,
         Guid registrationUuid,
-        RepertoireResolutionSourceSnapshot source,
-        RepertoireResolutionPolicyState pinnedPolicy,
+        RepertoireResolutionPreparation preparation,
         IReadOnlyList<RepertoireResolutionClaimDecision> decisions,
         IReadOnlyList<MusicPublication> exclusions,
         CancellationToken ct
@@ -221,57 +221,85 @@ public sealed partial class NormalizationCandidateService
         // Later accepted pages can make an earlier unresolved alias bindable. The original
         // page remains audit evidence, while this final semantic check prevents settling a
         // negative that our own permitted pool changes have already made obsolete.
-        var claims = source.Claims.ToDictionary(value => value.ClaimUuid);
-        var evaluator = new RepertoireResolutionPolicyEvaluator();
-        var reads = new List<CandidateFactsReadSet>();
-        foreach (
-            var saved in decisions.Where(value =>
+        var source = preparation.Source;
+        var pinnedPolicy = preparation.Policy;
+        var negative = decisions
+            .Where(value =>
                 value.Disposition
                     is RepertoireResolutionClaimDisposition.Review
                         or RepertoireResolutionClaimDisposition.Unresolved
             )
-        )
+            .ToDictionary(value => value.ClaimUuid);
+        if (negative.Count == 0)
         {
-            if (
-                !claims.TryGetValue(saved.ClaimUuid, out var claim)
-                || claim.CorrespondenceKey != saved.CorrespondenceKey
-            )
+            return [];
+        }
+
+        var evaluator = new RepertoireResolutionPolicyEvaluator();
+        var reads = new List<CandidateFactsReadSet>();
+        var titleIndex =
+            RepertoireResolutionPolicyEvaluator.SupportsTitleReuse(pinnedPolicy.Active)
+            && source.ArtistUuid is { } titleArtist
+                ? await ReadRepertoireTitleIndex(c, t, titleArtist, ct)
+                : null;
+        // Keep the original page boundaries: source aliases can connect rivals through another
+        // claim on that page. Rechecking a negative alone can incorrectly make it bindable.
+        foreach (var page in source.Claims.Chunk(preparation.PageSize))
+        {
+            if (!page.Any(claim => negative.ContainsKey(claim.ClaimUuid)))
             {
-                throw new NormalizationConflictException(
-                    "A saved negative repertoire decision has no exact source claim."
-                );
+                continue;
             }
-            var context = await ReadRepertoireClaimContext(
-                c,
-                t,
-                registrationUuid,
-                source.ArtistUuid,
-                claim,
-                exclusions,
-                ct
-            );
-            if (context.Candidates is { } snapshot)
+            var contexts = new List<RepertoireResolutionClaimContext>();
+            foreach (var claim in page)
             {
-                if (!RepertoireFreshnessComplete(snapshot.Issues))
+                var context = await ReadRepertoireClaimContext(
+                    c,
+                    t,
+                    registrationUuid,
+                    source.ArtistUuid,
+                    claim,
+                    exclusions,
+                    ct,
+                    titleIndex
+                );
+                contexts.Add(context);
+                if (context.Candidates is { } snapshot)
+                {
+                    if (!RepertoireFreshnessComplete(snapshot.Issues))
+                    {
+                        throw new NormalizationConflictException(
+                            "The final negative repertoire context has missing freshness stamps."
+                        );
+                    }
+                    reads.Add(snapshot.ReadSet);
+                }
+            }
+            foreach (var current in evaluator.DecidePage(contexts, pinnedPolicy.Active))
+            {
+                if (!negative.Remove(current.ClaimUuid, out var saved))
+                {
+                    continue;
+                }
+                if (
+                    current.CorrespondenceKey != saved.CorrespondenceKey
+                    || current.Disposition != saved.Disposition
+                    || current.Reason != saved.Reason
+                    || current.RepertoireSongUuid != saved.RepertoireSongUuid
+                    || current.Authority != saved.Authority
+                )
                 {
                     throw new NormalizationConflictException(
-                        "The final negative repertoire context has missing freshness stamps."
+                        "A saved negative repertoire decision changed before source acknowledgment."
                     );
                 }
-                reads.Add(snapshot.ReadSet);
             }
-            var current = evaluator.Decide(context, pinnedPolicy.Active);
-            if (
-                current.Disposition != saved.Disposition
-                || current.Reason != saved.Reason
-                || current.RepertoireSongUuid != saved.RepertoireSongUuid
-                || current.Authority != saved.Authority
-            )
-            {
-                throw new NormalizationConflictException(
-                    "A saved negative repertoire decision changed before source acknowledgment."
-                );
-            }
+        }
+        if (negative.Count != 0)
+        {
+            throw new NormalizationConflictException(
+                "A saved negative repertoire decision has no exact source claim."
+            );
         }
         return reads.ToArray();
     }

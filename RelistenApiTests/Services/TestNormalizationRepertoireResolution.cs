@@ -15,7 +15,7 @@ namespace RelistenApiTests.Services;
 /// Any evaluated policy used here is a disposable fixture and authorizes no production rule.
 /// </summary>
 [TestFixture, NonParallelizable, Category("LocalIngestion")]
-public sealed class TestNormalizationRepertoireResolution
+public sealed partial class TestNormalizationRepertoireResolution
 {
     private const string Operator = "repertoire-fixture-operator";
     private NormalizationDomainFixture fixture = null!;
@@ -560,7 +560,7 @@ public sealed class TestNormalizationRepertoireResolution
             await ImportedSong(artist, title);
             request = await Dictionary(artist);
         }
-        await ActivatePolicy();
+        await ActivatePolicy(titleReuse: true);
         var processor = Processor();
         var firstUuid = Guid.NewGuid();
         var first = await Drain(() => processor.ResolveAsync(firstUuid, request));
@@ -1660,9 +1660,22 @@ public sealed class TestNormalizationRepertoireResolution
 
     private NormalizationRepertoireResolutionProcessor Processor()
     {
+        return new(
+            fixture.Db,
+            Sources(),
+            new(fixture.Db),
+            policies,
+            new(fixture.Db),
+            fixture.Work,
+            music
+        );
+    }
+
+    private NormalizationRepertoireSourceService Sources()
+    {
         var evidence = new NormalizationEvidenceService(fixture.Db);
         var imported = new NormalizationImportedCatalogService(fixture.Db, evidence);
-        var sources = new NormalizationRepertoireSourceService(
+        return new(
             fixture.Db,
             evidence,
             new(),
@@ -1670,15 +1683,6 @@ public sealed class TestNormalizationRepertoireResolution
             new(fixture.Db),
             new(fixture.Db),
             new(fixture.Db)
-        );
-        return new(
-            fixture.Db,
-            sources,
-            new(fixture.Db),
-            policies,
-            new(fixture.Db),
-            fixture.Work,
-            music
         );
     }
 
@@ -1905,7 +1909,11 @@ public sealed class TestNormalizationRepertoireResolution
         return new(new ImportedRepertoireResolutionSource(snapshot.Capture.Fetch.FetchUuid));
     }
 
-    private async Task<Guid> AcceptedSong(CatalogArtist artist, string title)
+    private async Task<Guid> AcceptedSong(
+        CatalogArtist artist,
+        string title,
+        IReadOnlyList<string>? aliases = null
+    )
     {
         var input = await fixture.Capture(title, "songs");
         var owner = await fixture.Work.GetSubjectAsync(ArtistOwner(artist.Uuid));
@@ -1935,6 +1943,7 @@ public sealed class TestNormalizationRepertoireResolution
                         Uuid = uuid,
                         ArtistUuid = artist.Uuid,
                         DisplayTitle = title,
+                        Aliases = aliases ?? [],
                         Evidence = [input.Reference],
                     },
                 ],
@@ -2251,7 +2260,7 @@ public sealed class TestNormalizationRepertoireResolution
         throw new AssertionException("Pending repertoire work pagination did not terminate.");
     }
 
-    private async Task ActivatePolicy()
+    private async Task ActivatePolicy(bool titleReuse = false)
     {
         var artifact = new RepertoireAcceptancePolicyArtifact(
             Guid.NewGuid(),
@@ -2261,7 +2270,13 @@ public sealed class TestNormalizationRepertoireResolution
             RepertoireResolutionPolicyEvaluator.SourceVersion,
             NormalizationCandidateService.FactsVersion,
             RepertoireResolutionPolicyEvaluator.MatcherVersion,
-            [IdentityMatchRule.QualifiedEntityIdentifier],
+            titleReuse
+                ?
+                [
+                    IdentityMatchRule.QualifiedEntityIdentifier,
+                    IdentityMatchRule.ArtistScopedNormalizedTitle,
+                ]
+                : [IdentityMatchRule.QualifiedEntityIdentifier],
             FixtureOnly: true
         );
         artifact = artifact with

@@ -23,7 +23,13 @@ public sealed partial class NormalizationRepertoireResolutionProcessor
         var songs = new Dictionary<Guid, RepertoireSongChange>();
         var imported = new Dictionary<Guid, ImportedSongAssignmentChange>();
         var external = new Dictionary<NormalizationResourceKey, MusicExternalIdentityChange>();
-        foreach (var decision in decisions)
+        // Creation precedes same-page correspondences, even when the representative's claim
+        // occurs later in source order. Each relationship keeps its own claim evidence.
+        foreach (
+            var decision in decisions.OrderBy(value =>
+                value.Authority == "evaluated_same_page_title"
+            )
+        )
         {
             if (
                 decision.RepertoireSongUuid is not { } target
@@ -169,6 +175,46 @@ public sealed partial class NormalizationRepertoireResolutionProcessor
                 Evidence = decision.Evidence,
             };
         }
+        var metadataReviewed =
+            context.Candidates?.Facts.Any(candidate =>
+                candidate.Header.Uuid == previous.Uuid && candidate.Header.MetadataReviewed == true
+            ) == true;
+        var sharedCreation =
+            decision.Authority == "evaluated_same_page_title" && previous.ExpectedRevision == 0;
+        var unreviewedTitleReuse =
+            decision.Authority == "evaluated_artist_title" && !metadataReviewed;
+        if (sharedCreation || unreviewedTitleReuse)
+        {
+            // Supported aliases must survive the page that introduced them so later imports
+            // can reuse this identity. Incoming names do not replace its display title or basis.
+            var supportedAliases = previous
+                .Aliases.Concat(claim.Aliases.Select(alias => alias.Value))
+                .Concat(claim.Title is { } observed ? [observed.Value] : [])
+                .Where(alias => alias != previous.DisplayTitle)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            if (!sharedCreation && supportedAliases.SequenceEqual(previous.Aliases))
+            {
+                return null;
+            }
+
+            return previous with
+            {
+                Aliases = supportedAliases,
+                Evidence = previous.Evidence.Concat(decision.Evidence).Distinct().ToArray(),
+            };
+        }
+        if (
+            decision.Authority is "evaluated_artist_title" or "evaluated_same_page_title"
+            || metadataReviewed
+        )
+        {
+            // Title reuse does not grant an incoming dictionary authority to rename accepted
+            // or reviewed metadata, including on a later retained-correspondence refresh. Its
+            // exact title remains in the source and assignment proof.
+            return null;
+        }
+
         var usesRetiredIdentityCorrespondence =
             claim.AliasOf == null
             && (

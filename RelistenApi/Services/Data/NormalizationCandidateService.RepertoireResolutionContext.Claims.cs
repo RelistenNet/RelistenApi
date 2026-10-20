@@ -18,7 +18,8 @@ public sealed partial class NormalizationCandidateService
         Guid? artistUuid,
         RepertoireResolutionClaim claim,
         IReadOnlyList<MusicPublication> exclusions,
-        CancellationToken ct
+        CancellationToken ct,
+        RepertoireTitleIndex? titleIndex = null
     )
     {
         var association = await ReadRepertoireAssociation(
@@ -35,6 +36,13 @@ public sealed partial class NormalizationCandidateService
         }
         var claimFacts = new CandidateFactsContext();
         claimFacts.AddArtist(artist);
+        if (titleIndex is { Complete: false })
+        {
+            claimFacts.AddIssue(
+                CandidateFactsIssueKind.CandidateLimit,
+                factKind: "artist_title_graph"
+            );
+        }
         var query = RepertoireClaimQuery(artist, claim, claimFacts);
         var selection =
             query.Names.Count + query.ExternalIdentities.Count == 0
@@ -44,6 +52,7 @@ public sealed partial class NormalizationCandidateService
             .Where(assignment => !assignment.Retracted)
             .Select(assignment => assignment.RepertoireSongUuid)
             .Concat(association?.RepertoireSongUuid is { } previous ? [previous] : [])
+            .Concat(titleIndex?.Targets(artist, query.Names) ?? [])
             .Distinct()
             .ToArray();
         selection = await IncludeRepertoireTargets(c, t, artist, selection, forced, claimFacts, ct);

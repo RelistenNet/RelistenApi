@@ -35,6 +35,7 @@ public enum IdentityMatchRule
     VenueNameAndAddress,
     RepertoireTitleAndComposition,
     CompositionTitleAndCompleteAuthorship,
+    ArtistScopedNormalizedTitle,
 }
 
 /// <summary>Names retain their original wording. A handle is compared only within its provider.</summary>

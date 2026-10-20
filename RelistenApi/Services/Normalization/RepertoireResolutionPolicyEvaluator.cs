@@ -7,14 +7,16 @@ using Relisten.Data;
 namespace Relisten.Normalization;
 
 /// <summary>
-/// Evaluates one claim against its complete artist pool. New decision/identity UUIDs are allocation
-/// proposals: the processor checkpoints them before publication. Pair results alone are not authority.
+/// Evaluates a claim page against its complete artist pool and shared source titles. New decision
+/// and identity UUIDs are allocation proposals, checkpointed by the processor before publication.
+/// Pair results alone do not authorize publication.
 /// </summary>
-public sealed class RepertoireResolutionPolicyEvaluator
+public sealed partial class RepertoireResolutionPolicyEvaluator
 {
     public const string ProcessorVersion = "repertoire-resolution-processor-v1";
     public const string SourceVersion = "repertoire-resolution-source-v1";
-    public const string MatcherVersion = "repertoire-pair-features-v1";
+    public const string MatcherVersion =
+        "repertoire-pair-features-v2/" + ArtistSongTitleResolver.Version;
 
     public static bool Supports(RepertoireAcceptancePolicyArtifact artifact) =>
         artifact.ProcessorVersion == NormalizationRepertoireResolutionProcessor.Version
@@ -23,9 +25,13 @@ public sealed class RepertoireResolutionPolicyEvaluator
         && artifact.MatcherVersion == MatcherVersion
         && artifact.EnabledRules.Count > 0
         && artifact.EnabledRules.Distinct().Count() == artifact.EnabledRules.Count
-        && artifact.EnabledRules.All(rule => rule == IdentityMatchRule.QualifiedEntityIdentifier);
+        && artifact.EnabledRules.All(rule =>
+            rule
+                is IdentityMatchRule.QualifiedEntityIdentifier
+                    or IdentityMatchRule.ArtistScopedNormalizedTitle
+        );
 
-    public RepertoireResolutionClaimDecision Decide(
+    private RepertoireResolutionClaimDecision DecideWithoutTitle(
         RepertoireResolutionClaimContext context,
         ActiveRepertoireAcceptancePolicy? policy
     )
@@ -206,7 +212,7 @@ public sealed class RepertoireResolutionPolicyEvaluator
                     "prior_correspondence_requires_review"
                 );
             }
-            if (ReviewedMetadataConflict(claim, retained[0]))
+            if (ReviewedMetadataConflict(claim, retained[0], policy))
             {
                 return Decision(
                     context,
@@ -236,7 +242,7 @@ public sealed class RepertoireResolutionPolicyEvaluator
                 );
             }
             var candidate = identified[0];
-            if (ReviewedMetadataConflict(claim, candidate))
+            if (ReviewedMetadataConflict(claim, candidate, policy))
             {
                 return Decision(
                     context,
@@ -359,7 +365,8 @@ public sealed class RepertoireResolutionPolicyEvaluator
 
     private static bool ReviewedMetadataConflict(
         RepertoireResolutionClaim claim,
-        RepertoireCandidateFacts target
+        RepertoireCandidateFacts target,
+        ActiveRepertoireAcceptancePolicy? policy
     )
     {
         if (claim.Kind != "dictionary" || target.Header.MetadataReviewed != true)
@@ -372,6 +379,20 @@ public sealed class RepertoireResolutionPolicyEvaluator
         if (current == null)
         {
             return true;
+        }
+        if (SupportsTitleReuse(policy))
+        {
+            // Reusing a reviewed song must remain valid on the next refresh. The evaluated
+            // title rule permits equivalent spelling without granting a metadata overwrite.
+            var names = current
+                .Aliases.Prepend(current.DisplayTitle)
+                .Select(ArtistSongTitleResolver.NormalizeTitle)
+                .ToHashSet(StringComparer.Ordinal);
+            return claim.Title is { } observed
+                    && !names.Contains(ArtistSongTitleResolver.NormalizeTitle(observed.Value))
+                || claim.Aliases.Any(alias =>
+                    !names.Contains(ArtistSongTitleResolver.NormalizeTitle(alias.Value))
+                );
         }
         var unsupportedTitle =
             claim.Title is { } title

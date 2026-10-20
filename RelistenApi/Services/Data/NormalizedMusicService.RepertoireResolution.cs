@@ -285,6 +285,17 @@ public sealed partial class NormalizedMusicService
         }
 
         var evaluator = new RepertoireResolutionPolicyEvaluator();
+        var expectedDecisions = evaluator
+            .DecidePage(
+                page.Context.Claims,
+                page.Context.Policy.Active,
+                page.Decisions.Where(value => value.RepertoireSongUuid.HasValue)
+                    .ToDictionary(
+                        value => value.ClaimUuid,
+                        value => value.RepertoireSongUuid!.Value
+                    )
+            )
+            .ToDictionary(value => value.ClaimUuid);
         var allocated = new HashSet<Guid>();
         foreach (var context in page.Context.Claims)
         {
@@ -298,7 +309,7 @@ public sealed partial class NormalizedMusicService
                 );
             }
 
-            var expected = evaluator.Decide(context, page.Context.Policy.Active) with
+            var expected = expectedDecisions[context.Claim.ClaimUuid] with
             {
                 DecisionUuid = saved.DecisionUuid,
             };
