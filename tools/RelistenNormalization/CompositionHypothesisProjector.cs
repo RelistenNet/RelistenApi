@@ -10,7 +10,7 @@ namespace Relisten.Normalization.Batch;
 /// </summary>
 public sealed class CompositionHypothesisProjector(RetainedCompositionCandidateIndex index)
 {
-    public const string Version = "composition-hypotheses-v1";
+    public const string Version = "composition-hypotheses-v2";
     private readonly IdentityCandidateMatcher matcher = new();
 
     public CompositionHypothesisResult Project(CompositionHypothesisSong song)
@@ -33,8 +33,8 @@ public sealed class CompositionHypothesisProjector(RetainedCompositionCandidateI
             song,
             candidates.Length > 0 ? "hypotheses" : "missing_retained_candidates",
             candidates.Length > 0
-                ? "literal_title_or_explicit_alias_retrieval_requires_correspondence_evidence"
-                : "no_literal_title_or_explicit_alias_in_the_retained_work_pool",
+                ? "retained_title_alias_or_boundary_retrieval_requires_correspondence_evidence"
+                : "no_title_alias_or_boundary_spelling_in_the_retained_work_pool",
             candidates,
             Version
         );
@@ -58,6 +58,40 @@ public sealed class CompositionHypothesisProjector(RetainedCompositionCandidateI
             )
             .Select(alias => alias.Name!)
             .ToArray();
+        var basis =
+            matchingPrimary.Length > 0
+                ? "retained_literal_work_title"
+                : "retained_explicit_work_alias";
+        if (matchingPrimary.Length == 0 && matchingAliases.Length == 0)
+        {
+            var boundaryKeys = titles
+                .Select(IdentityCandidateMatcher.RepertoireTitleBoundaryCandidateKey)
+                .ToHashSet(StringComparer.Ordinal);
+            matchingPrimary = work
+                .Titles.Where(title =>
+                    boundaryKeys.Contains(
+                        IdentityCandidateMatcher.RepertoireTitleBoundaryCandidateKey(title.Value)
+                    )
+                )
+                .ToArray();
+            matchingAliases = work
+                .Aliases.Where(alias =>
+                    alias.Name != null
+                    && boundaryKeys.Contains(
+                        IdentityCandidateMatcher.RepertoireTitleBoundaryCandidateKey(
+                            alias.Name.Value
+                        )
+                    )
+                )
+                .Select(alias => alias.Name!)
+                .ToArray();
+            basis =
+                matchingPrimary.Length > 0
+                    ? "retained_boundary_work_title"
+                    : "retained_boundary_work_alias";
+        }
+        // The original title assertions and matcher inputs remain unchanged.
+        // Boundary retrieval broadens hypotheses; it supplies no identity authority.
         var comparison = matcher.CompareCompositions(
             new CompositionMatchRecord(
                 null,
@@ -92,9 +126,7 @@ public sealed class CompositionHypothesisProjector(RetainedCompositionCandidateI
             work.EntityKey,
             work.Identity,
             [.. matchingPrimary, .. matchingAliases],
-            matchingPrimary.Length > 0
-                ? "retained_literal_work_title"
-                : "retained_explicit_work_alias",
+            basis,
             comparison
         );
     }

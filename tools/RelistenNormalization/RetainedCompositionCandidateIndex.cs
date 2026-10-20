@@ -10,7 +10,7 @@ namespace Relisten.Normalization.Batch;
 /// </summary>
 public sealed class RetainedCompositionCandidateIndex
 {
-    public const string Version = "retained-composition-candidates-v2";
+    public const string Version = "retained-composition-candidates-v3";
     public const int MaximumInputs = 10_000;
     public const int MaximumWorks = 100_000;
     public const int MaximumPayloadBytes = 32 * 1024 * 1024;
@@ -24,6 +24,8 @@ public sealed class RetainedCompositionCandidateIndex
     private readonly Dictionary<string, IReadOnlyList<RetainedCompositionWork>> titles = new(
         StringComparer.Ordinal
     );
+    private readonly Dictionary<string, IReadOnlyList<RetainedCompositionWork>> boundaryTitles =
+        new(StringComparer.Ordinal);
     private IReadOnlyList<RetainedCompositionWork>? completedWorks;
     private IReadOnlyList<MusicBrainzSearchPageObservation>? completedSearchPages;
     private long payloadBytes;
@@ -130,8 +132,17 @@ public sealed class RetainedCompositionCandidateIndex
         completedSearchPages = Array.AsReadOnly(
             searchPages.OrderBy(page => page.Origin.Evidence.InputRevisionUuid).ToArray()
         );
+        IndexNames(titles, ShadowCompositionAdapter.NormalizeTitle);
+        IndexNames(boundaryTitles, IdentityCandidateMatcher.RepertoireTitleBoundaryCandidateKey);
+    }
+
+    private void IndexNames(
+        Dictionary<string, IReadOnlyList<RetainedCompositionWork>> destination,
+        Func<string, string> candidateKey
+    )
+    {
         var names = new Dictionary<string, List<RetainedCompositionWork>>(StringComparer.Ordinal);
-        foreach (var work in completedWorks)
+        foreach (var work in completedWorks!)
         {
             var keys = work
                 .Titles.Select(title => title.Value)
@@ -139,7 +150,7 @@ public sealed class RetainedCompositionCandidateIndex
                     work.Aliases.Where(alias => alias.Name != null)
                         .Select(alias => alias.Name!.Value)
                 )
-                .Select(ShadowCompositionAdapter.NormalizeTitle)
+                .Select(candidateKey)
                 .Where(key => key.Length > 0)
                 .Distinct(StringComparer.Ordinal);
             foreach (var key in keys)
@@ -154,14 +165,19 @@ public sealed class RetainedCompositionCandidateIndex
         }
         foreach (var (key, matches) in names)
         {
-            titles.Add(key, matches.AsReadOnly());
+            destination.Add(key, matches.AsReadOnly());
         }
     }
 
-    public IReadOnlyList<RetainedCompositionWork> Find(string exactTitleOrAlias)
+    public IReadOnlyList<RetainedCompositionWork> Find(string titleOrAlias)
     {
         RequireCompleted();
-        return titles.GetValueOrDefault(ShadowCompositionAdapter.NormalizeTitle(exactTitleOrAlias))
+        // Literal titles/aliases have priority. Only an empty exact bucket uses
+        // boundary spelling; every colliding qualified work remains a candidate.
+        return titles.GetValueOrDefault(ShadowCompositionAdapter.NormalizeTitle(titleOrAlias))
+            ?? boundaryTitles.GetValueOrDefault(
+                IdentityCandidateMatcher.RepertoireTitleBoundaryCandidateKey(titleOrAlias)
+            )
             ?? [];
     }
 

@@ -167,6 +167,125 @@ public sealed class TestCompositionHypotheses
     }
 
     [Test]
+    public void BoundarySpellingRetrievesOriginalCitedWorkWithoutChangingTargetOwnershipOrAuthority()
+    {
+        var input = WorkInput(
+            GarciaHunterWork,
+            "West LA Fadeaway",
+            [Writer("Retained composer", Garcia, "Person", "composer")]
+        );
+        var index = Index(input);
+        var source = Song("West L.A. Fadeaway");
+
+        var result = new CompositionHypothesisProjector(index).Project(source);
+
+        result.Song.Should().BeSameAs(source);
+        var candidate = result.Candidates.Should().ContainSingle().Subject;
+        candidate.WorkIdentity.Identity.ProviderKey.Should().Be(GarciaHunterWork);
+        candidate.RetrievalBasis.Should().Be("retained_boundary_work_title");
+        candidate
+            .MatchingTitles.Should()
+            .ContainSingle()
+            .Which.Value.Should()
+            .Be("West LA Fadeaway");
+        index
+            .Works.Single()
+            .Titles.Should()
+            .ContainSingle()
+            .Which.Value.Should()
+            .Be("West LA Fadeaway");
+        AssertCitations(index.Works, input);
+        AssertHypothesisOnly(result);
+    }
+
+    [Test]
+    public void ExactTitleOrExplicitAliasWinsOverDifferentBoundarySpellingCandidates()
+    {
+        var exact = WorkInput(GarciaHunterWork, "AB");
+        var boundary = WorkInput(HawkshawWork, "A B");
+        var aliased = WorkInput(FirstTomorrowWork, "Other retained title", aliases: ["A.B."]);
+        var index = Index(exact, boundary, aliased);
+        var projector = new CompositionHypothesisProjector(index);
+
+        var literal = projector.Project(Song("AB"));
+        var alias = projector.Project(Song("A.B."));
+
+        literal
+            .Candidates.Should()
+            .ContainSingle()
+            .Which.WorkIdentity.Identity.ProviderKey.Should()
+            .Be(GarciaHunterWork);
+        literal.Candidates.Single().RetrievalBasis.Should().Be("retained_literal_work_title");
+        alias
+            .Candidates.Should()
+            .ContainSingle()
+            .Which.WorkIdentity.Identity.ProviderKey.Should()
+            .Be(FirstTomorrowWork);
+        alias.Candidates.Single().RetrievalBasis.Should().Be("retained_explicit_work_alias");
+        AssertHypothesisOnly(literal);
+        AssertHypothesisOnly(alias);
+    }
+
+    [Test]
+    public void BoundaryCollisionsKeepEveryQualifiedRivalAndItsOriginalTitleEvidence()
+    {
+        var first = WorkInput(GarciaHunterWork, "AB C");
+        var second = WorkInput(HawkshawWork, "A BC");
+        var index = Index(first, second);
+
+        var result = new CompositionHypothesisProjector(index).Project(Song("A.B.C."));
+
+        result
+            .Candidates.Select(candidate => candidate.WorkIdentity.Identity.ProviderKey)
+            .Should()
+            .BeEquivalentTo(GarciaHunterWork, HawkshawWork);
+        result
+            .Candidates.Should()
+            .OnlyContain(candidate => candidate.RetrievalBasis == "retained_boundary_work_title");
+        result
+            .Candidates.SelectMany(candidate => candidate.MatchingTitles)
+            .Select(title => title.Value)
+            .Should()
+            .BeEquivalentTo("AB C", "A BC");
+        AssertCitations(index.Works, first, second);
+        AssertHypothesisOnly(result);
+    }
+
+    [Test]
+    public void BoundaryAliasKeepsItsOriginalAliasCitationRatherThanInventingATitleAssertion()
+    {
+        var input = WorkInput(GarciaHunterWork, "Original title", aliases: ["Mountain Song"]);
+        var index = Index(input);
+
+        var result = new CompositionHypothesisProjector(index).Project(Song("MountainSong"));
+
+        var candidate = result.Candidates.Should().ContainSingle().Subject;
+        candidate.RetrievalBasis.Should().Be("retained_boundary_work_alias");
+        candidate.MatchingTitles.Should().ContainSingle().Which.Value.Should().Be("Mountain Song");
+        candidate
+            .MatchingTitles.Single()
+            .Evidence.Should()
+            .Be(index.Works.Single().Aliases.Single().Name!.Evidence);
+        AssertCitations(index.Works, input);
+        AssertHypothesisOnly(result);
+    }
+
+    [TestCase("West L.A. Fadeaway Jam")]
+    [TestCase("West L.A. Fadeaway / Another Song")]
+    [TestCase("West L.A. Fadeaways")]
+    [TestCase("Wést L.A. Fadeaway")]
+    public void BoundaryRetrievalDoesNotRemoveMusicalWordsCompoundMembersOrDiacritics(string title)
+    {
+        var index = Index(WorkInput(GarciaHunterWork, "West LA Fadeaway"));
+
+        var result = new CompositionHypothesisProjector(index).Project(Song(title));
+
+        result.Candidates.Should().BeEmpty();
+        result.Outcome.Should().Be("missing_retained_candidates");
+        AssertHypothesisOnly(result);
+    }
+
+    [Test]
     public void DifferentCatalogArtistsRetrieveTheSameGlobalExternalWorkWithoutChangingSourceOwnership()
     {
         var index = Index(WorkInput(GarciaHunterWork, "Crazy Fingers"));
@@ -492,7 +611,7 @@ public sealed class TestCompositionHypotheses
             .ContainSingle()
             .Which.Origin.Item.Should()
             .Be(workSearch.Resource);
-        RetainedCompositionCandidateIndex.Version.Should().Be("retained-composition-candidates-v2");
+        RetainedCompositionCandidateIndex.Version.Should().Be("retained-composition-candidates-v3");
         AssertCitations(before.Works, search, recording, lookup, workSearch);
         AssertCitations(after.Works, search, recording, lookup, workSearch);
     }
