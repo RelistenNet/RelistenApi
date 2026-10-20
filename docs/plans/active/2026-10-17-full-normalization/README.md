@@ -13,7 +13,16 @@ No normalization policy has been published to production.
 
 This plan is for a Relisten engineer and the reviewer/operator who will deploy and troubleshoot the system. The [domain contracts](../../../design/2026-10-17-normalization-contracts.md) define identities, responsibilities and additive APIs. The [research record](../../../research/2026-10-17-full-normalization/README.md) owns the data audit; the [evaluation corpus](../../../research/2026-10-17-full-normalization/evaluation/README.md) retains examples and labels. Progress below distinguishes implemented local services from the automatic resolver, evaluation, backfill and rollout still required.
 
-## Next milestone: a usable experimental normalized catalog
+## Next milestone: automatic music identity across the full catalog
+
+Apply the confirmed artist/title default across all imports, connect songs to
+shared compositions, and make corrections automatically update affected results
+and later imports. Deliver the resulting listening journeys through the reader
+and local v3 API, preserving old IDs and playback. Compare the full refreshed
+Phish/GD results against their references. The [milestone and completion criteria](goal.md#next-milestone-automatic-music-identity-across-the-full-catalog)
+keep this work under the full normalization objective.
+
+## Full-catalog delivery approach
 
 Deliver a browsable normalization result across the complete captured catalog and every applicable importer and domain. Run the existing methods now, add the missing domain adapters in parallel, and use sampled source audits to improve actual outputs. Labels, classifier experiments and publication-scale repairs no longer precede the first shadow pass. The [delivery plan](shadow-delivery.md) defines the result and execution sequence; the [standing goal amendment](goal.md) preserves Alec's instruction across turns.
 

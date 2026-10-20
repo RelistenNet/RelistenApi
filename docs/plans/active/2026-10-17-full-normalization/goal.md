@@ -4,9 +4,9 @@ This standing objective defines the outcome and execution standards for the norm
 
 Deliver a working normalization system across every current and future Relisten artist and importer: shared physical venues and locations/history, artist repertoire, cross-artist compositions, people and taper/transferrer credits, performances, ordered setlist occurrences and recording-file contents. Preserve original evidence, stable playback references and reviewed corrections. Full audio lineage and audio analysis remain outside scope.
 
-The next completed milestone is a browsable end-to-end shadow catalog over the complete retained population. Shadow outputs are proposed interpretations stored separately from accepted production data. Start full-population execution with working methods now; implement missing domains in parallel. Every applicable input has an outcome. Unknown information stays unknown, but missing adapters, blanket abstention and error-only domain output remain unfinished work.
+The retained catalog is now browsable, with scoped correction UI and Phish/Grateful Dead reference comparisons. The next milestone is automatic song and composition normalization across the full catalog, described below. Keep implementing the remaining venue, people and taper/transferrer work under the standing objective. Shadow outputs stay separate from accepted production data. Every applicable input needs an outcome; missing adapters, blanket abstention and error-only domain output remain unfinished work.
 
-Use powerful model assistance in throughput-sized bounded jobs within existing spending authorization. Reuse measured rules/model results and caches. Local classifier training is optional when it does not improve delivery. Independently audit stratified outputs and fix broad failure classes rather than serially preparing small labeled packets. Preserve trustworthy held-out evaluation for production qualification without making it a prerequisite for shadow computation.
+Use powerful model assistance in throughput-sized bounded jobs within existing spending authorization. Reuse measured rules/model results and caches. When the evaluation phase is reached, train and compare the small identity matchers and credit extractors required by the [evaluation strategy](evaluation-strategy.md). Measured benefit determines deployment; it does not determine whether those alternatives are tried. Independently audit stratified outputs and fix broad failure classes rather than serially preparing small labeled packets. Preserve trustworthy held-out evaluation for production qualification without making it a prerequisite for shadow computation.
 
 Verification serves integrated delivery: run focused behavioral checks for relevant changes, affected regressions at domain integration and a consolidated broad suite at shared checkpoints. Keep formatter checks before commits/pushes. Historical compatibility and publication performance block the affected release operation, not unrelated shadow domains. Do not report test counts, label counts or another plan as the primary completed outcome.
 
@@ -30,6 +30,44 @@ regressions; retain separate untouched data for independent evaluation.
 Use expert input to resolve concrete ties and improve shared rules. Do not leave
 Alec with static reports or repeated uncertainty labels when he can supply the
 answer. Judge this work by corrected, searchable and playable catalog data.
+
+## Next milestone: automatic music identity across the full catalog
+
+Deliver automatic song and composition normalization across the full retained
+catalog, usable through the discovery reader and local v3 API. Start with the
+shared rule Alec has confirmed: same artist plus the same normalized song title
+means one artist-song identity by default. Duplicate imported IDs alone do not
+create different songs. Concrete evidence of different songs overrides that
+default and supplies a specific review question.
+
+Completion means:
+
+- Apply this rule through the shared resolver across all artists and importers.
+  Preserve each imported ID as a valid reference to the resolved song. Keep
+  performances, repeated setlist appearances, original titles and playback
+  ownership separate and intact.
+- Connect artist songs to shared compositions using provider identities, credits,
+  reviewed knowledge and contextual matching. Resolve routine covers and aliases
+  without asking Alec to label each occurrence. Keep source facts and inferred
+  relationships distinguishable; use the review UI for actual competing answers.
+- Close the correction loop: save a scoped answer, automatically reprocess the
+  affected results, show the correction, and reuse it for later imports. A song
+  correction must not require a separate manual rebuild to become useful.
+- Rebuild the full captured music population and expose the resulting song,
+  composition, performance and playable-file journeys in the reader and local
+  v3 API. Old IDs and saved links must continue to work.
+- Compare the refreshed results against the full retained Phish/GD references.
+  Report missing and wrong matches with denominators, preserving the original-ID
+  baseline and separately scoring resolved song identities. Keep development
+  corrections outside untouched evaluation. Fix recurring failure classes and
+  send concrete remaining disagreements to review.
+
+Judge completion by the resulting catalog: one page per artist song, covers
+connected across artists, distinct playable performances, and corrections that
+improve future matching. A new test total, another report, or a handful of manual
+corrections does not complete this milestone. The broader normalization goal
+continues through venues, people/credits, incremental operation and production
+qualification; this milestone does not authorize production writes or deployment.
 
 ## Experimental development policy
 
