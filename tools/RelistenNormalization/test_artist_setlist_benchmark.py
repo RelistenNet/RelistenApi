@@ -42,8 +42,8 @@ class TestArtistSetlistBenchmark(unittest.TestCase):
         with closing(sqlite3.connect(self.normalization)) as db, db:
             db.executescript("""
                 CREATE TABLE metadata(key TEXT PRIMARY KEY,value TEXT);
-                CREATE TABLE groups(scope TEXT,artist_uuid TEXT,entity_key TEXT,legacy_uuid TEXT,title TEXT);
-                CREATE TABLE originals(scope TEXT,original_key TEXT,artist_uuid TEXT);
+                CREATE TABLE groups(scope TEXT,artist_uuid TEXT,entity_key TEXT,legacy_uuid TEXT,title TEXT,PRIMARY KEY(scope,entity_key));
+                CREATE TABLE originals(scope TEXT,original_key TEXT,artist_uuid TEXT,disposition TEXT);
                 CREATE TABLE members(scope TEXT,original_key TEXT,target_key TEXT,disposition TEXT,relation TEXT);
             """)
             db.execute("INSERT INTO metadata VALUES (?,?)", ("state", json.dumps("completed")))
@@ -60,11 +60,12 @@ class TestArtistSetlistBenchmark(unittest.TestCase):
                     db.execute("INSERT INTO source VALUES (?,?,?)", (sources[source], source, show))
                 db.execute("INSERT INTO source_track VALUES (?,?,?,0)", (uuid, artist, sources[source]))
 
-    def mapping(self, original, target, disposition="proposed"):
+    def mapping(self, original, target, disposition="proposed", relation="identity_alias", artist=PHISH,
+                target_artist=None, original_disposition="proposed"):
         with closing(sqlite3.connect(self.normalization)) as db, db:
-            db.execute("INSERT INTO groups VALUES ('catalogue',?,?,?,?)", (PHISH, target, "legacy-" + target, target))
-            db.execute("INSERT INTO originals VALUES ('catalogue',?,?)", (original, PHISH))
-            db.execute("INSERT INTO members VALUES ('catalogue',?,?,?,'IdentityAlias')", (original, target, disposition))
+            db.execute("INSERT OR IGNORE INTO groups VALUES ('catalogue',?,?,?,?)", (target_artist or artist, target, "legacy-" + target, target))
+            db.execute("INSERT INTO originals VALUES ('catalogue',?,?,?)", (original, artist, original_disposition))
+            db.execute("INSERT INTO members VALUES ('catalogue',?,?,?,?)", (original, target, disposition, relation))
 
     def reference(self, uuid, show, songs, basis="existing_provider_performance_key", candidates=None, reason=None):
         # The separate raw membership account and its C# projection deliberately
@@ -165,6 +166,10 @@ class TestArtistSetlistBenchmark(unittest.TestCase):
         self.assertEqual((artist["expected"], artist["predicted"], artist["intersection"]), (3, 3, 2))
         self.assertAlmostEqual(artist["songPresencePrecision"], 2 / 3)
         self.assertAlmostEqual(artist["songPresenceRecall"], 2 / 3)
+        self.assertEqual((show["resolvedIdentity"]["missing"], show["resolvedIdentity"]["extra"]),
+                         (["song-missing"], ["song-extra"]))
+        self.assertEqual((artist["resolvedIdentity"]["expected"], artist["resolvedIdentity"]["predicted"],
+                          artist["resolvedIdentity"]["intersection"]), (3, 3, 2))
         self.assertEqual(manifest["predictionGeneration"]["generation"], "synthetic-current")
 
     def test_all_captured_shows_remain_visible_without_reference_or_prediction(self):
@@ -284,8 +289,127 @@ class TestArtistSetlistBenchmark(unittest.TestCase):
         first_artist = next(row for row in first_manifest["artists"] if row["artistUuid"] == PHISH)
         second_artist = next(row for row in second_manifest["artists"] if row["artistUuid"] == PHISH)
         self.assertEqual((first_artist["songPresencePrecision"], second_artist["songPresencePrecision"]), (1, 0))
+        self.assertEqual((first_artist["resolvedIdentity"]["songPresencePrecision"],
+                          second_artist["resolvedIdentity"]["songPresencePrecision"]), (1, 0))
+        self.assertEqual(first_show["resolvedIdentity"]["predicted"], second_show["resolvedIdentity"]["predicted"])
         self.assertEqual(first_manifest["inputs"]["normalization"], second_manifest["inputs"]["normalization"])
         self.assertEqual({path.relative_to(self.files): path.read_bytes() for path in self.files.rglob("*") if path.is_file()}, frozen_files)
+
+    def test_distinct_performances_keep_raw_mismatches_and_resolve_current_predictions(self):
+        self.population([("early-show", PHISH), ("late-show", PHISH)],
+                        [("early-file", PHISH, "early-source", "early-show"),
+                         ("late-file", PHISH, "late-source", "late-show")])
+        self.mapping("imported-a", "shared-song")
+        self.mapping("imported-b", "shared-song")
+        for slot in ("early", "late"):
+            self.reference(slot + "-setlist", slot + "-show", [("legacy-b", "imported-b")])
+            self.prediction(slot + "-file", slot + "-show", slot + "-source", [self.proposed("imported-a")])
+        self.freeze()
+
+        manifest = self.completed()
+
+        shows = self.rows("shows.jsonl")
+        self.assertEqual({row["showUuid"] for row in shows}, {"early-show", "late-show"})
+        for row in shows:
+            self.assertEqual((row["expected"], row["predicted"], row["missing"], row["extra"]),
+                             (["imported-b"], ["shared-song"], ["imported-b"], ["shared-song"]))
+            self.assertEqual(row["referenceAccounts"][0]["expected"], ["imported-b"])
+            self.assertEqual((row["rawIdentity"]["expected"], row["rawIdentity"]["predicted"], row["rawIdentity"]["intersection"]),
+                             (["imported-b"], ["imported-a"], 0))
+            self.assertEqual((row["resolvedIdentity"]["expected"], row["resolvedIdentity"]["predicted"],
+                              row["resolvedIdentity"]["missing"], row["resolvedIdentity"]["extra"]),
+                             (["shared-song"], ["shared-song"], [], []))
+            self.assertEqual(row["identityResolutions"], [{"originalKey": "imported-a", "targetKey": "shared-song"},
+                                                        {"originalKey": "imported-b", "targetKey": "shared-song"}])
+        self.assertEqual(len(self.rows("errors.jsonl")), 2)
+        artist = next(row for row in manifest["artists"] if row["artistUuid"] == PHISH)
+        self.assertEqual((artist["rawIdentity"]["expected"], artist["rawIdentity"]["predicted"], artist["rawIdentity"]["intersection"]), (2, 2, 0))
+        resolved = artist["resolvedIdentity"]
+        self.assertEqual((resolved["shows"], resolved["compared"], resolved["expected"], resolved["predicted"], resolved["intersection"]), (2, 2, 2, 2, 2))
+        self.assertEqual((resolved["songPresencePrecision"], resolved["songPresenceRecall"]), (1, 1))
+
+    def test_resolved_predictions_include_consolidation_matches_missing_from_original_assignments(self):
+        self.population([("show", PHISH)], [("file", PHISH, "source", "show")])
+        self.mapping("title-derived", "imported-song")
+        self.reference("setlist", "show", [("legacy", "imported-song")])
+        self.prediction("file", "show", "source", [self.proposed("title-derived")])
+        self.freeze()
+
+        self.completed()
+
+        row = self.rows("shows.jsonl")[0]
+        self.assertEqual(row["rawIdentity"]["predicted"], ["title-derived"])
+        self.assertEqual(row["rawIdentity"]["intersection"], 0)
+        self.assertEqual(row["resolvedIdentity"]["predicted"], ["imported-song"])
+        self.assertEqual(row["resolvedIdentity"]["intersection"], 1)
+
+    def test_compounds_reviews_competing_targets_and_foreign_artists_are_not_identity_aliases(self):
+        cases = [("compound", "compound_member", "proposed", "proposed", PHISH),
+                 ("review-member", "identity_alias", "review", "proposed", PHISH),
+                 ("review-original", "identity_alias", "proposed", "review", PHISH),
+                 ("competing", "identity_alias", "proposed", "proposed", PHISH),
+                 ("foreign", "identity_alias", "proposed", "proposed", DEAD)]
+        self.population([(name, PHISH) for name, *_ in cases],
+                        [(name + "-file", PHISH, name + "-source", name) for name, *_ in cases])
+        for name, relation, disposition, original_disposition, target_artist in cases:
+            self.mapping(name + "-reference", name + "-target", disposition, relation,
+                         target_artist=target_artist, original_disposition=original_disposition)
+            self.mapping(name + "-file-song", name + "-target", target_artist=target_artist)
+            if name == "competing":
+                with closing(sqlite3.connect(self.normalization)) as db, db:
+                    db.execute("INSERT INTO members VALUES ('catalogue',?,?,'review','identity_alias')",
+                               (name + "-reference", "rival"))
+            self.reference(name + "-setlist", name, [(name + "-legacy", name + "-reference")])
+            self.prediction(name + "-file", name, name + "-source", [self.proposed(name + "-file-song")])
+        self.freeze()
+
+        self.completed()
+
+        for row in self.rows("shows.jsonl"):
+            name = row["showUuid"]
+            self.assertEqual(row["resolvedIdentity"]["expected"], [name + "-reference"])
+            self.assertEqual(row["resolvedIdentity"]["missing"], [name + "-reference"])
+            self.assertEqual(row["resolvedIdentity"]["extra"], [name + "-target"])
+            self.assertNotIn(name + "-reference", {item["originalKey"] for item in row["identityResolutions"]})
+
+    def test_identity_equivalent_reference_accounts_preserve_raw_conflict(self):
+        self.population([("show", PHISH)], [("file", PHISH, "source", "show")])
+        self.mapping("imported-a", "shared-song")
+        self.mapping("imported-b", "shared-song")
+        self.reference("first-account", "show", [("legacy-a", "imported-a")])
+        self.reference("second-account", "show", [("legacy-b", "imported-b")])
+        self.prediction("file", "show", "source", [self.proposed("imported-a")])
+        self.freeze()
+
+        manifest = self.completed()
+
+        row = self.rows("shows.jsonl")[0]
+        self.assertEqual(row["status"], "conflicting_reference")
+        self.assertEqual(row["rawIdentity"]["status"], "conflicting_reference")
+        self.assertEqual(row["resolvedIdentity"]["status"], "compared")
+        self.assertEqual(row["resolvedIdentity"]["intersection"], 1)
+        self.assertEqual(len(row["referenceAccounts"]), 2)
+        artist = next(row for row in manifest["artists"] if row["artistUuid"] == PHISH)
+        self.assertEqual((artist["conflicting_reference"], artist["rawIdentity"]["compared"], artist["resolvedIdentity"]["compared"]), (1, 0, 1))
+
+    def test_unbound_original_extraction_does_not_promote_candidates_into_raw_baseline(self):
+        self.population([("show", PHISH)], [("file", PHISH, "source", "show")])
+        self.mapping("candidate", "shared-song")
+        self.reference("setlist", "show", [("legacy", "candidate")])
+        self.prediction("file", "show", "source", [{"outcome": "unresolved", "song": None,
+                        "candidateSongs": [{"entityKey": "candidate"}]}])
+        self.freeze()
+
+        manifest = self.completed()
+
+        row = self.rows("shows.jsonl")[0]
+        self.assertEqual(row["rawIdentity"]["predicted"], [])
+        self.assertEqual(row["resolvedIdentity"]["predicted"], [])
+        artist = next(row for row in manifest["artists"] if row["artistUuid"] == PHISH)
+        self.assertEqual(artist["files_without_original_song_prediction"], 1)
+        self.assertEqual((artist["rawIdentity"]["expected"], artist["rawIdentity"]["predicted"], artist["rawIdentity"]["intersection"]), (1, 0, 0))
+        self.assertIsNone(artist["rawIdentity"]["songPresencePrecision"])
+        self.assertEqual(artist["resolvedIdentity"]["songPresenceRecall"], 0)
 
     def test_prediction_source_ownership_mismatch_refuses_completion(self):
         self.population([("show", PHISH)], [("file", PHISH, "captured-source", "show")])

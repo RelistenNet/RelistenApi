@@ -135,6 +135,39 @@ class TestShadowMusic(unittest.TestCase):
             restarted = ShadowMusicQueries(ShadowIndex(self.run))
         self.assertEqual(restarted.homes(self.query())["items"], result["items"])
 
+    def test_popular_song_pages_every_performance_and_keeps_playback_at_its_original_home(self):
+        shows = [f"00000000-0000-0000-0002-{ordinal:012d}" for ordinal in range(115)]
+        records = [self.legacy(ordinal * 2 + file_index + 1, show=show)
+                   for ordinal, show in enumerate(shows) for file_index in range(2)]
+        self.chunk("100", *records)
+        self.index.scan_once()
+        base = self.serve()
+
+        homes = []
+        for offset in (0, 100):
+            result = self.post(base, "/api/music/homes", self.query(limit=100, offset=offset))
+            self.assertEqual(result["total"], len(shows))
+            homes.extend(result["items"])
+
+        self.assertEqual({home["showUuid"] for home in homes}, set(shows))
+        self.assertEqual(len(homes), len(shows))
+        self.assertTrue(all(home["fileCount"] == 2 for home in homes))
+        last_home = homes[-1]
+        files = []
+        for offset in (0, 1):
+            result = self.post(base, "/api/music/files", self.query(
+                homeKey=last_home["homeKey"], limit=1, offset=offset))
+            self.assertEqual(result["total"], 2)
+            files.extend(result["items"])
+
+        self.assertEqual(len({file["fileKey"] for file in files}), 2)
+        for file in files:
+            with urlopen(base + "/api/record?id=" + str(file["recordId"])) as response:
+                original = json.load(response)
+            self.assertEqual(file["showKey"], last_home["homeKey"])
+            self.assertEqual(original["record"]["proposal"]["home"]["showUuid"], last_home["showUuid"])
+            self.assertEqual(original["playback"], ["https://audio.test/original.mp3"])
+
     def test_replay_and_missing_chunks_remove_memberships_without_date_fallback(self):
         self.chunk("100", self.legacy(1), self.legacy(2, show=None))
         self.index.scan_once()

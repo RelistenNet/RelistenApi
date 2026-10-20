@@ -3,7 +3,8 @@
 
 This is an exposed development comparison, not ordered-setlist or per-file gold.
 The benchmark never matches names or dates: C# owns both title interpretation and
-proposed reference alignment. Source SQLite images are opened read-only.
+proposed reference alignment. Source SQLite images are opened read-only. Original
+assignments, current targets and identity-resolved comparisons remain separate.
 """
 import argparse
 from collections import Counter, defaultdict
@@ -22,7 +23,7 @@ ARTISTS = {
     "ca53d281-0041-ae33-a050-c87702d93b0c": "Phish",
     "77a58ff9-2e01-c59c-b8eb-cff106049b72": "Grateful Dead",
 }
-VERSION = "artist-setlist-reference-benchmark-v1"
+VERSION = "artist-setlist-reference-benchmark-v2"
 MAX_LINE = 32 * 1024**2
 
 
@@ -63,6 +64,7 @@ class Benchmark:
         self.active = {}
         self.mappings = {}
         self.known = {}
+        self.identity_aliases = {}
 
     def check(self):
         if time.monotonic() - self.started > self.maximum_seconds:
@@ -150,13 +152,26 @@ class Benchmark:
             if meta.get("state") != "completed":
                 raise ValueError("A completed C# normalization projection is required")
             self.prediction_generation = meta
-            for row in db.execute("SELECT entity_key,legacy_uuid,title FROM groups WHERE scope='catalogue' AND artist_uuid IN (?,?)", tuple(ARTISTS)):
+            for row in db.execute("SELECT entity_key,legacy_uuid,title,artist_uuid FROM groups WHERE scope='catalogue' AND artist_uuid IN (?,?)", tuple(ARTISTS)):
                 self.known[row["entity_key"]] = dict(row)
-            rows = db.execute("""SELECT o.original_key,m.target_key,m.disposition,m.relation
+            rows = db.execute("""SELECT o.original_key,o.artist_uuid,o.disposition original_disposition,
+                m.target_key,m.disposition,m.relation
                 FROM originals o JOIN members m ON m.scope=o.scope AND m.original_key=o.original_key
                 WHERE o.scope='catalogue' AND o.artist_uuid IN (?,?)""", tuple(ARTISTS))
             for row in rows:
                 self.mappings.setdefault(row["original_key"], []).append(dict(row))
+            # A compound or a competing review target is not identity evidence.
+            # The scorer consumes the exact image's one-target correspondences;
+            # it never learns equivalences from the expected show memberships.
+            for original, mappings in self.mappings.items():
+                if len(mappings) != 1:
+                    continue
+                mapping = mappings[0]
+                target = self.known.get(mapping["target_key"], {})
+                if (mapping["original_disposition"] == "proposed" and mapping["disposition"] == "proposed"
+                        and mapping["relation"] == "identity_alias"
+                        and target.get("artist_uuid") == mapping["artist_uuid"]):
+                    self.identity_aliases[(mapping["artist_uuid"], original)] = mapping["target_key"]
 
     def load_references(self):
         raw = {}
@@ -218,6 +233,7 @@ class Benchmark:
                 raise ValueError("Predicted file home disagrees with captured ownership")
             seen.add(uuid)
             targets = set()
+            original_targets = set()
             unresolved = 0
             interpretation = proposal.get("titleInterpretation") or {}
             for segment in interpretation.get("segments", []):
@@ -226,6 +242,7 @@ class Benchmark:
                     unresolved += segment.get("outcome") != "not_applicable"
                     continue
                 key = song["entityKey"]
+                original_targets.add(key)
                 mapped = self.mappings.get(key)
                 if mapped is None:
                     unresolved += 1
@@ -235,14 +252,16 @@ class Benchmark:
                 unresolved += not proposed
             if not interpretation:
                 unresolved += 1
+            self.coverage[(artist, "files_with_original_song_prediction" if original_targets else "files_without_original_song_prediction")] += 1
             self.coverage[(artist, "files_with_prediction")] += 1
             self.coverage[(artist, "unresolved_segments")] += unresolved
             if show:
                 aggregate = self.files.setdefault(show, {"fileCount": 0, "sources": set(),
-                    "predicted": set(), "unresolvedSegments": 0, "reviewFiles": []})
+                    "predicted": set(), "rawPredicted": set(), "unresolvedSegments": 0, "reviewFiles": []})
                 aggregate["fileCount"] += 1
                 aggregate["sources"].add(source)
                 aggregate["predicted"].update(targets)
+                aggregate["rawPredicted"].update(original_targets)
                 aggregate["unresolvedSegments"] += unresolved
                 references = {tuple(item["expected"]) for item in self.references.get(show, [])}
                 if len(references) == 1 and targets - set(next(iter(references))):
@@ -252,8 +271,40 @@ class Benchmark:
         for uuid in set(self.active) - seen:
             self.coverage[(self.active[uuid][0], "files_without_prediction")] += 1
 
+    def identity_comparison(self, artist, references, predicted, has_predictions, resolved):
+        """Score one show without borrowing expected memberships for prediction."""
+        def identity(key):
+            return self.identity_aliases.get((artist, key), key) if resolved else key
+
+        expected_sets = {tuple(sorted({identity(key) for key in item["expected"]})) for item in references}
+        expected = set(next(iter(expected_sets))) if len(expected_sets) == 1 else set()
+        predicted = {identity(key) for key in predicted}
+        status = ("missing_reference" if not references else "conflicting_reference" if len(expected_sets) != 1
+                  else "empty_reference" if not expected else "missing_predictions" if not has_predictions else "compared")
+        return {"status": status, "expected": sorted(expected), "predicted": sorted(predicted),
+                "missing": sorted(expected - predicted), "extra": sorted(predicted - expected),
+                "intersection": len(expected & predicted)}
+
+    @staticmethod
+    def count_comparison(count, comparison):
+        count["shows"] += 1
+        count[comparison["status"]] += 1
+        if comparison["status"] == "compared":
+            for name in ("expected", "predicted", "missing", "extra"):
+                count[name] += len(comparison[name])
+            count["intersection"] += comparison["intersection"]
+            count["exact_presence_agreement"] += not comparison["missing"] and not comparison["extra"]
+
+    @staticmethod
+    def summarize(count):
+        return {**{name: count[name] for name in ("shows", "compared", "expected", "predicted", "intersection",
+                                                "missing", "extra", "exact_presence_agreement")}, **count,
+                "songPresencePrecision": count["intersection"] / count["predicted"] if count["predicted"] else None,
+                "songPresenceRecall": count["intersection"] / count["expected"] if count["expected"] else None}
+
     def publish(self):
         totals = {artist: Counter() for artist in ARTISTS}
+        identity_totals = {artist: {name: Counter() for name in ("rawIdentity", "resolvedIdentity")} for artist in ARTISTS}
 
         def song_details(keys):
             return [{"entityKey": key, "title": self.known.get(key, {}).get("title"),
@@ -281,6 +332,17 @@ class Benchmark:
                        "missingFilePredictions": self.show_population[show]["files"] - files.get("fileCount", 0),
                        "capturedRecordingSources": len(self.show_population[show]["sources"]),
                        "unresolvedSegments": files.get("unresolvedSegments", 0)}
+                for name, resolved in (("rawIdentity", False), ("resolvedIdentity", True)):
+                    predictions = predicted if resolved else files.get("rawPredicted", set())
+                    comparison = self.identity_comparison(artist, references, predictions,
+                                                          has_predictions=bool(files), resolved=resolved)
+                    comparison["missingSongs"] = song_details(comparison["missing"])
+                    comparison["extraSongs"] = song_details(comparison["extra"])
+                    row[name] = comparison
+                    self.count_comparison(identity_totals[artist][name], comparison)
+                compared_keys = predicted | files.get("rawPredicted", set()) | {key for item in references for key in item["expected"]}
+                row["identityResolutions"] = [{"originalKey": key, "targetKey": self.identity_aliases[(artist, key)]}
+                    for key in sorted(compared_keys) if (artist, key) in self.identity_aliases and self.identity_aliases[(artist, key)] != key]
                 self.write(show_stream, row)
                 count = totals[artist]
                 count["shows"] += 1; count[status] += 1
@@ -305,7 +367,8 @@ class Benchmark:
                 "activeFiles": sum(v[0] == artist for v in self.active.values()),
                 **{key: value for (owner, key), value in self.coverage.items() if owner == artist},
                 "songPresencePrecision": count["intersection"] / count["predicted"] if count["predicted"] else None,
-                "songPresenceRecall": count["intersection"] / count["expected"] if count["expected"] else None})
+                "songPresenceRecall": count["intersection"] / count["expected"] if count["expected"] else None,
+                **{name: self.summarize(counts) for name, counts in identity_totals[artist].items()}})
         return {"artists": results, "referenceAccounts": self.reference_accounts,
                 "unalignedReferenceAccounts": len(self.unaligned), "unprojectedReferenceAccounts": len(self.unprojected),
                 "outputs": [artifact(items), artifact(errors)]}
@@ -325,6 +388,9 @@ class Benchmark:
                 inputs={name: artifact(self.request[name]) for name in ["metadata", "normalization", "rawSetlists"]},
                 request=self.request, source=artifact(__file__), predictionGeneration=self.prediction_generation, selectedChunks=list(self.chunk_pins.values()),
                 limitations=["Development-exposed whole-artist song-presence comparison, not release accuracy.",
+                    "Raw identity scores use original proposed segment song keys; existing top-level scores retain post-consolidation targets.",
+                    "Resolved identity scores map current predicted targets and original references through same-artist one-target proposed identity_alias correspondences only.",
+                    "Identity correspondence proposals are development policy, not independent identity truth or accepted music.",
                     "Reference membership IDs were not provided to per-recording title predictions; candidate dictionary is shared.",
                     "Existing C# unique-exact-artist-date alignments are proposals; no Python date matching.",
                     "Missing/extra song presence may reflect incomplete recordings or reference omissions, not a false file label.",

@@ -37,6 +37,59 @@ truth, order, repeats, audio alignment or composition identity. Missing songs ca
 reflect incomplete recordings; extra songs can reflect omitted reference entries,
 spoken introductions, a provisional title or a genuine matching error.
 
+## Compare original IDs and resolved identities separately
+
+Version 2 keeps the existing top-level comparison and review queue. Their
+`expected` set contains imported reference song keys; `predicted` contains current
+post-consolidation targets. This comparison can report an extra and a missing
+membership when two imported IDs now share one artist-song. Retained version 1
+runs remain the historical baseline and must not be overwritten.
+
+Each show row and artist summary also contains two explicit comparisons:
+
+- `rawIdentity` compares original proposed file-segment song keys with original
+  reference keys, before consolidation. Unresolved segments and candidate-only
+  alternatives do not become predictions. The artist summary reports
+  `files_with_original_song_prediction` and
+  `files_without_original_song_prediction`; files without any retained prediction
+  remain in `files_without_prediction`. The raw comparison can therefore expose
+  incomplete original extraction even when current consolidation has improved.
+- `resolvedIdentity` compares **current consolidated predictions** with reference
+  memberships after mapping both through the same completed normalization image.
+  Only one-target, same-artist `identity_alias` correspondences whose original and
+  target dispositions are `proposed` can resolve an imported key. Compound
+  members, review targets, competing targets and foreign artist targets do not
+  establish identity. The scorer adds no title rule and does not use reference
+  memberships to change predictions.
+
+All three comparisons stay at the original show UUID. Separate early and late
+performances remain separate. Song-presence sets already discard repeated plays;
+this benchmark cannot measure repeated occurrences or ordered setlists.
+
+Each comparison reports its own status and denominators: compared shows,
+expected and predicted memberships, intersection, missing and extra memberships,
+and exact-presence agreements. Precision uses predicted memberships; recall uses
+expected memberships. Counts include only shows with a nonempty, nonconflicting
+reference and a retained file interpretation. A zero denominator produces a null
+rate. Resolved reference accounts may agree after their original song IDs map to
+one identity; that show can be compared in `resolvedIdentity` while its original
+status remains `conflicting_reference`. Always include each comparison's show
+count when interpreting a rate.
+
+`shows.jsonl` retains original reference accounts, post-consolidation predictions,
+raw predictions, resolved membership sets and missing/extra song details.
+`identityResolutions` records the imported-key-to-target pairs used for that show.
+The normalization image fingerprint pins the source of those pairs. Existing
+`errors.jsonl` inclusion and `filesForReview` logic still follow the original
+top-level mismatch, so resolved agreement does not erase the original review
+lead. Reviewers can inspect the nested comparisons to distinguish an imported-ID
+disagreement from an unresolved song-presence disagreement.
+
+Resolved agreement measures the effect of current normalization policy. It does
+not independently validate a proposed merge, prove a reference complete, or
+establish untouched release accuracy. Development corrections and exposed
+Phish/GD references stay outside untouched evaluation.
+
 ## Run
 
 Create a JSON request with these existing paths:
@@ -75,72 +128,58 @@ compares exact provider file identities and retains the original reference
 evidence. The whole-artist report below remains a song-presence comparison; it
 does not imply that all 1,893 original provider responses are retained.
 
-## Completed comparison
+## Completed full-catalog comparison
 
-The retained run is
-`local-dev/normalization-data/2026-10-20-reference-benchmark-v1/run-v4/manifest.json`
-(SHA256 `accfbfd09654e2ef038702a66feecbd2cf7b4c040d2a0f46f76ff36124ec5bdf`).
-It completed in 35.09 seconds and found predictions for all 420,200 active files.
-All 4,208 reference accounts were present in the projection. The 3,863 aligned
-accounts use the existing C# `unique_exact_artist_date` proposal, covering 3,834
-shows; 345 accounts remain unaligned. No accepted performance binding is claimed.
+The current run is
+`local-dev/normalization-data/2026-10-19-automatic-music-v1/reference-benchmark/manifest.json`.
+It uses the complete 971,127-descriptor music rebuild with the shared artist/title
+default. All 420,200 active Phish/GD files have a current consolidated prediction.
+The original-ID, consolidated-target and resolved-identity comparisons remain
+separate in the output. These are exposed development comparisons.
 
-- **Phish:** All 1,893 shows are compared. The intersection is 37,055 presences,
-  against 37,821 predicted and 38,146 reference presences: 97.975% precision and
-  97.140% recall on this comparison. Exactly 1,352 shows agree completely; the
-  queue retains 1,091 missing and 766 extra presences. Five title segments remain
-  unresolved.
-- **Grateful Dead:** 1,897 of 2,081 shows are compared. The intersection is 24,452,
-  against 48,292 predicted and 38,038 reference presences: 50.634% precision and
-  64.283% recall. Exactly two shows agree completely. Sixteen have empty
-  references, 140 have no aligned reference and 28 have conflicting accounts.
-  The queue retains 13,586 missing and 23,840 extra presences, including 22,710
-  provisional predicted identities; 110,995 title segments remain unresolved.
+- **Phish:** All 1,893 shows are compared. The resolved intersection is 37,055
+  presences, against 37,821 predicted and 38,146 reference presences: 97.975%
+  precision and 97.140% recall. Exactly 1,352 shows agree completely; 1,091
+  reference presences are missing and 766 predictions are extra. This result is
+  unchanged by the duplicate-identity default.
+- **Grateful Dead:** 1,897 of 2,081 shows are compared. The resolved intersection
+  is 26,980 presences, against 48,617 predicted and 37,395 reference presences:
+  55.495% precision and 72.149% recall. The resolved comparison retains 10,415
+  missing and 21,637 extra presences. Sixteen shows have empty references, 140
+  lack an aligned reference and 28 have conflicting accounts. Two shows agree
+  completely. Song normalization remains substantially unfinished for GD.
 
-This exposes a broad GD normalization gap. Examples include `Saw Mill` versus
-reference `Sawmill`, several `West L.A. Fadeaway` spellings, and file-like
-`gd86-03-20 16 Wharf Rat` titles that remain separate identities. These are
-review leads with original evidence, not independently adjudicated alias labels.
-The show-level union also hides disagreement between recordings of the same show;
-per-show captured file/source counts accompany the comparison.
+GD's original reference IDs contain 38,038 memberships in the compared shows;
+the resolved view has 37,395 because duplicate song IDs no longer count as
+different songs in one show. The original-ID baseline remains in `rawIdentity`.
+Do not interpret the smaller resolved denominator as additional independent
+proof of correct merges. Source titles, original reference accounts and each
+original-to-target mapping remain inspectable.
 
-The complete report stores 22,793,479 bytes of show rows and 47,519,932 bytes of
-review rows. The initial 64 MiB output guard stopped near the end without a
-completion manifest. Its partial files remain alongside the earlier format
-failures. The completed run uses the separate `request-v2.json` with a 128 MiB
-allowance; it does not truncate the queue or change predictions to fit the bound.
+The same run's historical top-level comparison uses consolidated predictions
+against unchanged original reference IDs. GD has 25,923 intersections, 12,115
+missing and 22,694 extra presences in that view. The untouched prior output is
+`2026-10-20-reference-benchmark-v1/run-v5/manifest.json`; its corresponding GD
+counts are 24,471 intersections, 13,567 missing and 21,601 extra. This preserves
+the earlier baseline while showing that matching changes can both recover
+references and add predictions that still need examination.
 
-Ten public CLI contracts cover multisong/missing/extra outcomes, candidate and
-review exclusion, repeated-membership presence, complete show coverage, ownership
-refusal, packed reader UUIDs, native proposal-array separation, output bounds and
-existing-directory preservation. A counterfactual reference-label change leaves
-file predictions unchanged while changing scores and the error queue. Fresh source correctness and separate
-readability reviews are complete. No provider, model, production write or .NET
-execution was needed for this comparison.
+The broad remaining GD gap includes title-derived accounts, provider spelling
+variants and file-like titles. The current prediction union contains 20,457
+provisional memberships. A show-level union also hides disagreements between
+recordings of one show. Use the retained file witnesses and review UI to inspect
+recurring failures; another merge of routine duplicate IDs alone will not close
+this gap.
 
-## Full-population title-rule iteration
+The output contains 54,912,233 bytes of show rows and 73,165,419 bytes of review
+rows. It uses a 512 MiB maximum output allowance without truncating the queue.
+Public CLI contracts cover independent score denominators, identity-equivalent
+reference conflicts, ownership, compounds, reviews, repeated performances,
+original prediction preservation and failure boundaries. Counterfactual
+reference changes affect scoring without changing predictions. No model calls
+or production writes were needed for this comparison.
 
-The updated shared title rules processed all 971,127 descriptors from the original
-complete bundle. The completed output is
-`local-dev/normalization-data/2026-10-20-music-consolidation-v2/manifest.json`
-(SHA256 `1897fd3d41e4e9277dfd6fe0d200466ecf4f2305b85bde94297331b1eda8dd52`).
-Its 911 MiB read projection retains every original descriptor. No reviewed song
-correspondences were supplied to this run.
-
-`2026-10-20-reference-benchmark-v1/run-v5/manifest.json` scores that projection
-against the same original reference and recording population. Phish totals are
-unchanged. GD extra predicted memberships fell from 23,840 to 21,601, while
-missing memberships fell from 13,586 to 13,567. Precision is 53.115% and recall
-64.333%. More title variants now reach dictionary candidates, including ambiguous
-duplicate entries; this iteration does not solve the dictionary identity problem.
-
-The GD dictionary has 557 entries but 501 distinct literal titles. Examples are
-three Drums entries, two Space entries and three Playing in the Band entries.
-These are distinct imported IDs. Expert song correspondences preserve those IDs
-and each play while giving matching a shared artist-song target. Any score using
-reviewed identity equivalences must be reported separately from raw-ID scores.
-
-The separate [Phish file comparison](phish-file-reference.md) now supplies a
-title-only, exact provider-track comparison for all 3,112 retained native files.
-Its disagreements include abbreviations such as HYHU and TMWSIY. They are
-concrete alias-development cases with original provider song references.
+The separate [Phish file comparison](phish-file-reference.md) supplies a title-only,
+exact provider-track comparison for all 3,112 retained native files. Abbreviations
+such as HYHU and TMWSIY remain useful alias-development cases with original
+provider song references.
