@@ -183,6 +183,34 @@ BEGIN
     RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
 END $$;
 
+-- Songs are per artist: a setlist song or a track maps only onto its own artist's song. The
+-- upstream row is found through public.setlist_songs / public.source_tracks; one that is gone
+-- (no FK, see above) can't be checked.
+CREATE FUNCTION kb.same_artist() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    owner uuid;
+BEGIN
+    IF NEW.song_uuid IS NULL THEN
+        RETURN NEW;
+    END IF;
+    IF TG_TABLE_NAME = 'song_evidence' THEN
+        SELECT a.uuid INTO owner FROM public.setlist_songs ss JOIN public.artists a ON a.id = ss.artist_id
+        WHERE ss.uuid = NEW.setlist_song_uuid;
+    ELSE
+        SELECT a.uuid INTO owner FROM public.source_tracks t JOIN public.artists a ON a.id = t.artist_id
+        WHERE t.uuid = NEW.track_uuid;
+    END IF;
+    IF owner IS NOT NULL AND owner IS DISTINCT FROM (SELECT artist_uuid FROM kb.songs WHERE uuid = NEW.song_uuid) THEN
+        RAISE EXCEPTION '% maps onto another artist''s song %', TG_TABLE_NAME, NEW.song_uuid;
+    END IF;
+    RETURN NEW;
+END $$;
+
+CREATE TRIGGER song_evidence_same_artist BEFORE INSERT OR UPDATE ON kb.song_evidence
+    FOR EACH ROW EXECUTE FUNCTION kb.same_artist();
+CREATE TRIGGER track_songs_same_artist BEFORE INSERT OR UPDATE ON kb.track_songs
+    FOR EACH ROW EXECUTE FUNCTION kb.same_artist();
+
 CREATE TRIGGER songs_guard BEFORE UPDATE OR DELETE ON kb.songs
     FOR EACH ROW EXECUTE FUNCTION kb.guard_people();
 CREATE TRIGGER songs_log AFTER INSERT OR UPDATE OR DELETE ON kb.songs
