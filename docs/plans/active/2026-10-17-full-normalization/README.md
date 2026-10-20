@@ -9,7 +9,7 @@ Required domains are artist repertoire, cross-artist compositions, people and re
 Automatic matching is the active implementation step. Storage, processing,
 reviewed publication and additive API reads work locally. Independent accuracy
 evaluation, catalog-scale cost checks, full backfill and rollout remain required.
-No automatic matching policy is active.
+No normalization policy has been published to production.
 
 This plan is for a Relisten engineer and the reviewer/operator who will deploy and troubleshoot the system. The [domain contracts](../../../design/2026-10-17-normalization-contracts.md) define identities, responsibilities and additive APIs. The [research record](../../../research/2026-10-17-full-normalization/README.md) owns the data audit; the [evaluation corpus](../../../research/2026-10-17-full-normalization/evaluation/README.md) retains examples and labels. Progress below distinguishes implemented local services from the automatic resolver, evaluation, backfill and rollout still required.
 
@@ -39,7 +39,9 @@ and played “Sugar Magnolia” inline. Original source evidence remains availab
 an unavailable upstream audio URL produces a visible error rather than a new
 recording assignment.
 
-Directly supported person pages now cover 18,120 captured recordings across 1,536 artists. Artist-song pages consolidate the full captured title population through the shared C# interpretation. Composition pages now connect 2,656 retained works to 8,389 candidate song groups and their existing playback journeys. A retained 100-song composition run now supplies 35 preferred model choices using writer, provider-cover and recording context; 60 cases lack distinguishing evidence and five failed the response contract. All candidate works and playback remain available. These are model proposals, with their original evidence and alternatives retained. Expert decisions have separate authority and do not overwrite the recorded model result.
+Directly supported person pages cover 18,120 captured recordings across 1,536 artists. Artist-song pages apply the shared C# interpretation to all 971,127 captured title records. Composition discovery connects 2,656 retained works to 10,321 candidate song groups and their original recordings. The refreshed 100-song model run produced 44 selections and 56 insufficient-evidence results, with no invalid responses, for $1.19500785. Forty selections pass the evidence-ownership requirements for a preferred model suggestion; four remain available without preference. This is development coverage of 100 of 10,321 candidate groups, not an accuracy estimate.
+
+The [expert feedback screen](expert-feedback.md) now saves scoped corrections, exclusions and history. Phish and Grateful Dead reference disagreements link directly to reviewable song accounts. A reference-checked development correction now connects Furthur’s “West L.A. Fadeaway” to the Garcia/Hunter work in the live reader. It preserves the original model result and each recording’s playback home. Corrections remain separate from untouched evaluation labels.
 
 The broader listener audit found venue gaps beyond MSG. A retained locality
 supplement now resolves Morrison, Colorado, and shared whole-token spelling

@@ -38,11 +38,19 @@ reconciles that population and its outcomes while retaining only candidate-beari
 song rows, every work ID, searchable literal facts and original evidence pointers.
 It does not copy the music database or read file bodies.
 
-The live expanded local generation contains 896,216 proposed song targets,
-2,656 works, 8,389 candidate-bearing targets and 887,827 targets without retained
-candidates. The browser serves this generation, including competing same-title
-works. These counts describe the captured input and retained work pool; they do
-not establish complete composition coverage.
+The current local reader serves generation `1f5161e4f8df48981cf996bb`. Its full
+971,127-entry title input produces 891,334 proposed song targets. The composition
+projection retains 2,656 works, 10,321 candidate-bearing targets, 94,358 candidate
+relationships and 881,013 targets without retained candidates. It occupies
+49,704,960 bytes, about 49.7 MB. These counts describe the captured input and
+supplied work pool, including same-title rivals; they do not establish complete
+composition coverage. The [generation receipt](../../local-dev/normalization-data/2026-10-20-composition-refresh-preparation-v1/next-v4/projection-receipt.json)
+pins the sources and output.
+
+The C# `composition-hypotheses-v2` projector uses the shared title boundary
+fallback to retrieve spelling variants, including `West L.A. Fadeaway` and
+`West LA Fadeaway`. Python displays the supplied groups and alternatives; it does
+not decide work identity.
 
 The default projection cap is 256 MiB and the free-space floor is 5.5 GiB. Failure
 removes the private build and preserves the previous published projection. Keep
@@ -95,6 +103,14 @@ A completed selection run covers its approved plan, which may be one pilot song
 or a larger subset. It does not imply that every candidate-bearing song was
 processed. The browser reports the covered plan and the source population
 separately. A song without a saved result remains visibly unprocessed.
+
+The current v9 selection projection covers 100 of the 10,321 candidate-bearing
+targets: 44 selected works and 56 insufficient-evidence results, with no execution
+failures. Forty choices permit a preferred suggestion; four raw choices remain
+unpreferred. Another 10,221 targets have no model result. The reported token cost
+is $1.19500785 at configured rates. These are development results and proposals,
+not an accuracy measurement. The [selection receipt](../../local-dev/normalization-data/2026-10-20-composition-refresh-preparation-v1/next-v4/selection-projection-receipt.json)
+retains the exact counts, source pins and model method.
 
 Build the separate selection projection without copying or rebuilding the
 composition catalogue:
@@ -177,10 +193,10 @@ absolute `path`, exact `bytes`, `sha256` and `rows: 1`. The context pins the bas
 plan rather than this new plan, avoiding a circular hash. Set explicit dollar,
 attempt, duration, concurrency and disk limits for the separate job.
 
-Measure first with the isolated verification runtime:
+Measure first with an isolated v9 verification runtime. Set `tool` to the absolute
+path of its `RelistenNormalization.dll`; keep that runtime unchanged during the job:
 
 ```sh
-tool=tools/RelistenNormalization/bin/CompositionContextVerification/RelistenNormalization.dll
 env -u OPENAI_API_KEY dotnet "$tool" composition-select \
   <enriched-plan.json> <new-preflight-output> <enriched-plan-sha256> --preflight
 
@@ -200,8 +216,9 @@ and no prompt measurement. Execution needs another new output directory.
 
 No-context requests preserve v2 prompt bytes and cache identity. New enriched
 runs report `composition-selection-batch-v2` and use
-`luna-composition-hypothesis-v8`; older enriched results retain their original
-methods and requests. Use a verified v8 runtime for the commands above. Requests bind only
+`luna-composition-hypothesis-v9`; older enriched results retain their original
+methods and requests. Use a verified v9 runtime for the commands above and check
+the saved preflight method before execution. Requests bind only
 their target facts and witnesses, so unrelated export targets do not invalidate
 cached requests.
 
@@ -224,9 +241,10 @@ target audio is the same external recording. All original candidate facts and
 rivals remain supplied. The model must reconcile target program/performer facts,
 those paths and writer roles before invoking background familiarity.
 
-V8 keeps medium reasoning and the 8,192-token output allowance; no-context v2
-keeps low reasoning, its 2,048-token allowance and exact request bytes/cache
-identity. V8 has a separate method/cache identity from earlier enriched runs. The current local
+V9 uses medium reasoning and an 8,192-token output allowance; historical
+no-context v2 keeps low reasoning, its 2,048-token allowance and exact request
+bytes/cache identity. V9 has a separate method/cache identity from earlier
+enriched runs. The current local
 limits are 2,000,000 UTF-8 request bytes with target context and 512,000 without;
 neither is a provider token-window guarantee. Preflight measures the complete
 request and reserves its full output allowance before any admission.
@@ -237,8 +255,8 @@ updates a reader.
 
 ## Source references for a preferred suggestion
 
-V7 adds a typed `support` result with a closed basis and exact references to the
-current target's witness/claim/text positions and supplied work/path indexes.
+The current v9 method returns typed `support` with a closed basis and exact
+references to the target’s witness/claim/text positions and supplied work/path indexes.
 The bases are `target_attribution`, `target_program_path`,
 `target_recording_path`, `background_only` and `none`. An attribution basis must
 point to an actual `cover_artist` or `original_performer` passage annotation
@@ -250,18 +268,14 @@ recording aliases cannot substitute for that performer. A recording basis must i
 the supplied path. A title, date, catalog-artist name or remembered association
 cannot supply a missing recording identity.
 
-V8 renders explicit `witnessIndex`, `claimIndex` and witness-local `textIndex`
-values. `textPoolId` only retrieves a shared literal; it is never a support
-index. Compiled `attributionRecordingWorkLinks` expose the exact target
-annotation, matching recording credit and supplied work/path positions. A
-performer need not be the work writer: the recording's observed performance-to-work
-relationship supplies that link. All original facts and rivals remain available.
-
-The v7 trial was interrupted after two observed contract failures: ambiguous
-local-versus-pool text addresses, and a cover attribution paired with an unrelated
-recording performer. Its outputs remain immutable. V8 fixes those boundaries;
-its runtime and listener outcomes still require verification. These observations
-are not an accuracy estimate.
+Each rendered witness text and claim supplies a complete `supportReference`
+object with `witnessIndex`, `claimIndex` and witness-local `textIndex`. The model
+must copy that object verbatim rather than reconstruct indices. `textPoolId`
+retrieves a shared literal; it is not a support reference. Compiled
+`attributionRecordingWorkLinks` expose the exact target annotation, matching
+recording credit and supplied work/path positions. A performer need not be the
+writer: the recording’s observed performance-to-work relationship supplies that
+link. All original facts and rivals remain available.
 
 The core computes `preferencePermitted`. A selected, source-referenced proposal
 needs valid target evidence and a real path for that selected work. Background
@@ -272,7 +286,12 @@ candidates, but only `preferredWorkKey` may drive preferred labels or links.
 Historical results without the new flag remain inspectable and unqualified.
 
 Validation establishes reference ownership and structure, not that a provider
-attribution or the model's interpretation is true. Cover/original-performer
+attribution or the model’s interpretation is true. In particular, a program-path
+reference can point to real source text while its connection to the work remains
+weak. The [selection receipt](../../local-dev/normalization-data/2026-10-20-composition-refresh-preparation-v1/next-v4/selection-projection-receipt.json)
+retains Jamie McLean Band’s “Such a Night” theme-based rationale. Keep its weak
+program connection as a source-audit question, not an independently validated
+match. Cover/original-performer
 attribution is not a composer credit. A proposed correspondence from a primary
 setlist to this artist-scoped target must retain its own evidence and declared
 development basis, separately from the provider's original annotation. It does
@@ -285,5 +304,5 @@ an adjudicator's expected work ID as a source claim. Date/title searches retriev
 candidates; they do not establish the attachment. Missing or conflicting facts
 remain explicit. [Go-Set acquisition and supplementation](go-set-composition-sources.md)
 retain new cover credits without changing the original recording notes or
-assigning provider occurrences to catalog recordings. The candidate-only browser
-remains available while a new model result is prepared.
+assigning provider occurrences to catalog recordings. Candidate alternatives and
+original playback remain available alongside the optional model projection.

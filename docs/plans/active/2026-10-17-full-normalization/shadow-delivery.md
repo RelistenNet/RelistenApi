@@ -129,115 +129,82 @@ The same pass covers all 971,127 original scoped keys. Known dictionary titles t
 
 ### Composition discovery across artists
 
-[Possible versions](http://alecs-macbook-pro.tail09dbf.ts.net:18769/#compositions)
-now connects retained works to artist-song pages and their original recordings.
-Search by title, alias, writer or work ID. The current projection includes all
-1,024 qualified retained works, 3,034 candidate song groups and 27,555 alternative
-relationships. It preserves the 33 earlier supported work pages and their routes.
+The composition journey is **work → another artist’s song → performance →
+original audio**. [Music discovery](http://alecs-macbook-pro.tail09dbf.ts.net:18769/#compositions)
+provides that path through Possible versions. The current retained generation
+builds on all 971,127 original scoped title entries. Its completed C# pass covers
+891,334 proposed artist-song targets and retains:
 
-[Crazy Fingers](http://alecs-macbook-pro.tail09dbf.ts.net:18769/#possible-version?key=composition%3Amusicbrainz%3A8973193c-be9e-450d-9e26-2cced570c5aa)
-shows the Garcia/Hunter work separately from Alan Hawkshaw's work. A 390-pixel
-browser journey followed the Garcia/Hunter page to Alex Jordan, two distinct show
-UUIDs, the 2023-07-25 recording and its original “Crazy Fingers >” Archive MP3.
-These song-to-work relationships remain unconfirmed title or alias matches.
-Model suggestions appear beside the processed songs; every alternative stays
-accessible.
+- 2,656 qualified MusicBrainz works;
+- 10,321 targets with candidates, connected by 94,358 alternative relationships;
+- 881,013 targets without a candidate in the supplied work pool.
 
-The C# pass covers every one of the 896,216 proposed artist-song targets. It
-explicitly records 893,182 targets without candidates in the supplied work pool.
-The browse projection uses only 15.6 MB beside the unchanged song catalog and
-does not copy recording files. This generation uses the earlier retained provider
-pool; newly acquired work searches, including Watchtower, need a subsequent C#
-pass before they appear here. Broader lookup stopped at the host disk reserve and
-retained its completed inputs. See the [composition interface and
-operations](../../../../tools/RelistenNormalization/composition-discovery.md).
+The separate browse projection occupies 49,704,960 bytes, about 49.7 MB. It does
+not copy the song catalog or recording files. The [generation manifest](../../../../local-dev/normalization-data/2026-10-20-composition-hypotheses-v4/manifest.json)
+and [projection receipt](../../../../local-dev/normalization-data/2026-10-20-composition-refresh-preparation-v1/next-v4/projection-receipt.json)
+pin the complete inputs, methods, counts and output. These are retained-generation
+counts; the reader’s `/api/stats` identifies the generation actually being served.
 
-The composition selector can process all 3,034 candidate-bearing targets with
-four concurrent Luna requests, durable cache recovery and explicit spending
-bounds. An optional reader projection can display each model choice, reason and
-alternatives without changing title matches or accepted identities. The full
-selection run started on 2026-10-19 at 01:30 UTC with a $100 job cap and a
-two-hour duration. It stopped at the disk reserve after retaining 1,444 of the
-3,034 results. It reserves space before each batch; completed responses survive
-interruption. Retain those results as the comparison baseline. Assess the
-context-enriched requests before spending on more requests that omit recording
-descriptions and setlists. Any resume must use the same immutable plan;
-context-enriched work uses a separate job. Whole-run cache growth does not need
-to fit upfront. Its checkpoint is in
-`local-dev/normalization-data/2026-10-18-composition-selection-full-output-v1/`.
-The live reader shows 100 context-enriched song results: 71 selected work
-hypotheses, 19 insufficient-evidence results and ten requests that exceed the
-current byte limit, alongside all original title candidates. This is 100 of the
-3,034 candidate-bearing song groups, not a measure of accuracy. The original
-artist-and-title results remain available as the comparison baseline. For example,
-[Furthur's Crazy Fingers](http://alecs-macbook-pro.tail09dbf.ts.net:18769/#song-group?scope=catalogue&artist=04735701-ff23-9ec4-93fa-f503246310ec&key=repertoire%3Ac48ac0a67fbe6098db592357bb5ab04d)
-retains the Garcia/Hunter and Alan Hawkshaw alternatives and its original
-recordings. Its new complete context exceeds the current request limit; this
-does not withhold any recording or remove a title-based candidate. No model
-choice changes an accepted identity or recording assignment.
+Candidate retrieval uses `composition-hypotheses-v2` and the shared title
+boundary fallback. Literal titles and explicit aliases retrieve works; boundary
+normalization can recover spelling differences such as `West L.A. Fadeaway` and
+`West LA Fadeaway`. Every qualifying work ID remains a separate candidate,
+including same-title rivals. Neither a sole hit nor the absence of another work
+establishes identity. Missing candidates describe the supplied pool, not the
+existence of a composition. C# owns matching; the browse projection authenticates
+and displays its results.
 
-An independent read of the first 40 results found useful abstentions and
-namesake distinctions, together with unsupported cover and genre assumptions.
-Some rationales use an unrelated work's recording count or ISWC as though it
-established the target song's identity. Keep target-specific evidence separate
-from background knowledge when evaluating these choices. This nonrandom prefix
-does not estimate accuracy or establish a wrong-match label. The pinned cases
-are retained in the execution directory's `semantic-audit.json`; independent
-target credits or listening are the next adjudication step.
+Model selection adds a separate interpretation. The refreshed context plan covers
+100 of the 10,321 candidate-bearing targets. Its [context manifest](../../../../local-dev/normalization-data/2026-10-20-composition-target-context-v3/manifest.json),
+[prepared requests](../../../../local-dev/normalization-data/2026-10-20-composition-selection-refreshed100-preflight-v2/manifest.json)
+and [selection report](../../../../local-dev/normalization-data/2026-10-20-composition-selection-refreshed100-v2/manifest.json)
+retain the exact target set and execution results. This subset does not estimate
+accuracy across the catalog. Serving a completed selection report is a separate
+reader cutover; the saved run alone does not publish its results.
 
-Follow-up review established a [Spoon / Memory Lane development regression](../../../research/2026-10-17-full-normalization/scale/development-cases/composition-context-v1.json).
-The supplied pool already contained Eddy Current Suppression Ring's work, but
-the model selected Elliott Smith. Primary provider attribution and artist
-evidence support the band's work at the captured artist-song scope. This is
-one discovered selection error, not five independent observations or verified
-audio identities. The original retained setlists contain unordered membership
-only; the researched cover credit must enter through a separately retained input
-before it can be presented as supplied evidence.
+The `luna-composition-hypothesis-v9` method uses explicit support handles for
+supplied target witnesses and recording-to-work paths. Core validation checks
+that a model reference belongs to this target and the selected candidate’s
+actual supplied path. It distinguishes target attribution, program context and
+recording evidence from background familiarity. Writers, ISWCs, popularity and
+recording counts can describe a candidate without connecting it to this song.
+Validation proves reference ownership and structure; it does not prove the
+provider’s claim or the model’s interpretation true.
 
-The target-context implementation adds exact recording and setlist witnesses,
-plus observed artist identifiers. A Last Waltz tribute recording
-already retains the program and house-band wording needed to distinguish its
-context; the current artist-and-title request omits it. Reuse the existing core
-reader's complete source-input index, including no-credit recordings. Preserve
-unordered memberships, actual native annotations, missing fields and conflicting
-contexts. Context enriches a new inference request; it does not reassign a
-recording, declare a cover performer to be a composer or rewrite the running
-baseline's cached responses.
+Context preserves original recording notes, file titles, unordered legacy
+setlist memberships, native passages and observed artist identifiers with their
+citations. A setlist passage does not imply available audio. A cover performer,
+house band or catalog artist is not automatically a composer. Mixed contexts,
+missing fields and oversized requests remain explicit; no first-recording
+sample or silent truncation substitutes for complete observed context.
 
-The first complete context export retains 100 targets with 1,487 file views,
-1,430 recording contexts and 278 setlist observations. These counts include
-repeated captures; Spoon has five unique unordered setlists observed twice.
-Another 41 recording lookups have no retained context. The first real C# read
-refused empty artist-ID strings. The exporter now preserves those original
-cells while producing a nullable, validated MusicBrainz ID. A corrected export
-stopped at the disk guard before publishing any artifact. After space recovered,
-a third export completed and loaded successfully through the actual C# request
-preparation. Ninety of its 100 requests fit; ten exceed the current size limit,
-with a largest request of 2,293,822 bytes. Compact repeated source references
-without removing recording or setlist evidence before the paired model run.
-The [integration receipt](../../../research/2026-10-17-full-normalization/scale/evidence/composition-target-context-first100-v1.json)
-pins these inputs and measurements. The subsequent [context-enriched run](../../../research/2026-10-17-full-normalization/scale/evidence/composition-target-context-selection-first100-v1.json)
-executed the 90 fitting requests for an estimated $0.4410058 at configured token
-rates. Its results are live in the reader. Spoon now remains unresolved instead
-of receiving Elliott Smith's work. The Last Waltz example still favors Lincoln
-Chase; neither supplied candidate has a retained connection to that program.
-Retrieve program-specific recording/release credits for such cases rather than
-treating a candidate's popularity as target evidence. Separate official-program
-research provisionally favors Dr. John's work; it has not verified this audio.
-Preserve all completed and failed attempts separately. The v4 source compacts
-repeated references and distinguishes our title interpretations from raw source
-facts; its build and real request measurements remain pending disk capacity.
+The [Spoon / Memory Lane development case](../../../research/2026-10-17-full-normalization/scale/development-cases/composition-context-v1.json)
+explains why these distinctions matter: an earlier model chose Elliott Smith
+although Eddy Current Suppression Ring’s work was already supplied. The original
+retained setlists contain unordered memberships without that cover credit.
+Separately retained provider attribution must keep its own citation and role;
+research cannot be relabeled as an original recording claim. This is a discovered
+regression, not a catalog-wide error estimate. The
+[development record](../../../research/2026-10-17-full-normalization/scale/composition-development-selection.md)
+and [evaluation strategy](evaluation-strategy.md) retain the cases and qualification work.
 
-The single largest-request pilot
-established transport and cost behavior, but its unsupported cover assumption
-remains a [candidate-coverage review case](../../../../tools/RelistenNormalization/composition-hypotheses.md#select-a-likely-work).
-Inspect the broad results before qualifying automatic acceptance.
+The public reader keeps the original 33 supported work routes at `#works`,
+`/api/works` and `/api/work`. Possible versions use qualified
+`composition:musicbrainz:<work-MBID>` keys, scoped artist-song coordinates and
+existing performance/file routes. Actual show UUIDs distinguish performances;
+recording and playback ownership stays with the original files. All supplied
+alternatives remain accessible when a model chooses another work or abstains.
+The raw model choice and rationale stay separate from a permitted preferred link
+and from [reviewed expert decisions](expert-feedback.md).
 
-Dictionary citation compaction retains one actual witness per distinct literal
-spelling while keeping every membership in its original setlist result. The
-earlier 50,000-file replay passed independent ownership, title and citation
-checks with all 575,103 memberships intact. See the
-[dictionary-context receipt](../../../research/2026-10-17-full-normalization/scale/evidence/shadow-dictionary-context-v1.json).
+Use the [composition interface and operations](../../../../tools/RelistenNormalization/composition-discovery.md)
+for list/detail/evidence routes, paging bounds, generation checks, projection
+builds and reader flags. Use the [producer and selection contracts](../../../../tools/RelistenNormalization/composition-hypotheses.md)
+for acquisition, immutable plans, request limits and cache recovery. Build a new
+projection against matching completed inputs before replacing a reader; changed
+generations require open pages to reload. Removing the optional selection flag
+rolls back model display without removing candidates, supported links or audio.
+Keep the original manifests and chunks for evidence and replay.
 
 ### Jerry and Aadam Jacobs
 
@@ -330,49 +297,19 @@ independent identity evaluation remain necessary before automatic acceptance.
 Physical-venue and composition rules are implemented and tested; broader
 location/history evidence and independent qualification remain open.
 
-The MusicBrainz acquisition stopped at its original 45-minute deadline. Its
-plan contains 33,496 commands and remains incomplete. The 1,860 retained responses
-are frozen in provider wave v2 alongside the separately identified original Jerry
-page. They include 1,318 recording lookups and 126
-work lookups. The retained recording relationships name 127 work IDs; one target
-has no full lookup. Search results and unhydrated rivals remain evidence, without
-an accepted catalog assignment. Later responses require a new replay selection.
-That follow-on closed at its original deadline with 3,073 retained inputs.
-A new bounded acquisition reuses completed captures and durable resource history
-before issuing new requests. Two subsequent attempts retained 20 more responses,
-for 3,093 total, then closed at the disk reserve. Acquisition remains incomplete;
-the deadline-limited attempts stay closed. Its request retains a 2,000-invocation,
-45-minute limit and a 128 MiB actual retained-payload limit. The separate 16,777,216,000-byte invocation
-allowance reserves a conservative 8 MiB per attempted call; it is not a disk
-allocation. The monitor stops at 4.6 GiB free space. New captures remain separate
-from the frozen provider wave until a new replay selection admits them.
-
-The newer cached-composition replay admits all 3,093 retained MusicBrainz inputs
-without another provider or model call. It preserves the original revisions,
-payload hashes and primary proof packet. All 575,103 embedded song memberships
-in the captured sets exactly match the complete 16,605-song dictionary, so the
-existing song-shard command supplies the same repertoire context without
-re-emitting setlists. The replay produced 54,861 outcomes and 32 linked song
-rows across 15 artists, naming 31 distinct works. These remain supported
-composition proposals, not accepted identities. There are 125 song results
-with artist-repertoire ambiguity.
-
-The [cached-composition reader](http://alecs-macbook-pro.tail09dbf.ts.net:18773/?domain=compositions)
-indexes the complete replay. Music discovery incorporates its supported links
-alongside the earlier source contributions: 31 works and 35 scoped work/song
-associations. “Crazy Fingers” links the separate Grateful Dead and Dark Star
-Orchestra repertoire identities through the same cited work. Source-specific
-relationships remain inspectable; a local Grateful Dead identity retains its
-own namespace. The larger external acquisition plan remains incomplete.
-
-The [provider-wave receipt](../../../research/2026-10-17-full-normalization/scale/evidence/shadow-provider-wave-v2.json)
-pins the exact frozen manifest and input bytes. The phone reader now includes
-this wave. The new replay changed 11 catalog composition results from unresolved
-to proposed for two Grateful Dead works, “Crazy Fingers” and “Queen Jane
-Approximately.” The independent audit traced every new catalog link through its
-performer, recording and work evidence. Every file retained its original title,
-ownership and playback coordinates. See the
-[replay receipt](../../../research/2026-10-17-full-normalization/scale/evidence/shadow-local-provider-wave-v2-replay-v1.json).
+Retained MusicBrainz responses keep their original revisions, payload hashes,
+search pages and typed recording/work relationships. A new hypothesis generation
+admits an explicit frozen input selection; new captures do not alter an existing
+run. The [candidate-search plan](musicbrainz-candidate-search.md) defines acquisition
+and the [composition section](#composition-discovery-across-artists) describes the
+current retained generation. The historical
+[cached-composition reader](http://alecs-macbook-pro.tail09dbf.ts.net:18773/?domain=compositions)
+retains the supported replay’s source-specific relationships. Its
+[provider-wave receipt](../../../research/2026-10-17-full-normalization/scale/evidence/shadow-provider-wave-v2.json)
+and [replay receipt](../../../research/2026-10-17-full-normalization/scale/evidence/shadow-local-provider-wave-v2-replay-v1.json)
+preserve the exact inputs and audit of newly supported links. Current discovery
+keeps those supported relationships distinct from title candidates and model
+suggestions.
 
 A separate 2,000-record Luna wave completed in 425 seconds with $0.278385
 accounted in its ledger: 1,952 validated extraction results and 48 unresolved

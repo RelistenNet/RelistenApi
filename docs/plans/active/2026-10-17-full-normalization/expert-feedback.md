@@ -34,14 +34,17 @@ projections so a saved correction cannot rewrite the evidence that justified it.
 
 ## Review journey
 
-1. Open an original account and choose its correct target.
+1. Open an original account. Inspect its evidence and each candidate’s evidence,
+   then choose the correct target. Evidence links open separately from selection.
 2. Apply the correction to that account, or to an exact spelling within an explicit
    artist, provider, locality or date scope. Other spellings need their own alias.
 3. Preview current affected accounts and record the reason.
 4. Save. The service pins the original evidence, checks the current revision and
    records an attributed operation. Retrying the same operation is idempotent.
-5. Reload the directory to see the reviewed result. History retains the earlier
-   decision; withdrawal creates a new revision and removes its matching authority.
+5. Reload venue or composition results to see the correction. Song groups use the
+   saved correspondence on the next normalization run. Individual recording
+   credits stay unchanged. History retains earlier decisions; withdrawal creates
+   a new revision and removes the withdrawn decision’s matching authority.
 
 The host rechecks evidence between preview and save. Changed source evidence or
 an intervening decision requires a new preview. A failed save does not partially
@@ -102,3 +105,42 @@ headers returned HTTP 403. The 390-pixel review layout was checked in the browse
 opened the Phish TMWSIY account, and target search returned the imported
 The Man Who Stepped Into Yesterday song before title-derived variants. No song
 decision was saved during this browser check.
+
+Source and target evidence URLs resolve only within the configured reader origin.
+The review host accepts root-relative paths, and the browser rejects executable,
+external and credential-bearing links. Original evidence remains read-only.
+
+## Current reader and development correction
+
+The music reader now uses generation `1f5161e4f8df48981cf996bb`. Song grouping,
+composition hypotheses and model selections were replaced together; the exact
+previous command is retained for rollback in
+`local-dev/normalization-data/2026-10-20-expert-knowledge/music-cutover-receipt-v1.json`.
+The generation covers all 971,127 original title records. It retains 10,321
+candidate song groups and 2,656 external works; 100 groups have model results.
+
+Furthur’s “West L.A. Fadeaway” demonstrates an actual correction. Shared spelling
+retrieval recovered the Garcia/Hunter candidate after the artist dictionary
+standardized “LA” to “L.A.”. The model still declined to select it. Codex checked
+the official song credits and the matching Furthur performance reference, then
+saved an account-scoped development correspondence through the UI. The reader
+now prefers the reviewed work while retaining the original model result under
+expandable history and all 16 linked performances. This decision is attributed as a Codex development
+correction in its reason; it is not a human adjudication by Alec.
+
+The permanent rule is `310d15c8-5085-4f3f-39bb-268b9bdd39ee`, revision 1. Its
+reference check and public response are retained as
+`furthur-west-la-reference-check.json` and
+`furthur-reviewed-composition-http.json` in the expert-knowledge directory. The
+reference check cites the [official Garcia/Hunter credits](https://www.dead.net/song/west-l-fadeaway)
+and [Furthur’s February 12, 2010 performance record](https://www.setlist.fm/setlist/furthur/2010/hampton-coliseum-hampton-va-33deb4c9.html).
+The decision is development-known evidence and must not enter untouched accuracy
+measurements as an independent answer.
+
+Evidence ownership checks establish which source a model cited. They do not
+establish that the model interpreted the source correctly. One Jamie McLean
+“Such a Night” suggestion relies on a weak connection between a New Orleans
+festival and a Last Waltz recording. Keep that as a semantic review lead. The
+exact result and the five separately inspected development cases are retained in
+`2026-10-20-composition-refresh-preparation-v1/next-v4/selection-projection-receipt.json`
+and `source-audit.json`. Neither is a population accuracy estimate.
