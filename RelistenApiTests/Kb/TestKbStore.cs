@@ -244,6 +244,23 @@ public class TestKbStore
     }
 
     [Test]
+    public async Task ARevertSkipsASongLaterWorkDependsOn()
+    {
+        var song = Guid.CreateVersion7();
+        var first = await As(AuthorTypes.Llm, "catalogue-llm@4");
+        await first.WriteSongsAsync([new SongRecord(song, artist, "Sugaree", Confidence: 0.95f)]);
+        await (await As(AuthorTypes.Llm, "catalogue-llm@5")).WriteAliasesAsync([
+            new AliasRecord(artist, "Shugaree", song, 0.95f),
+        ]);
+
+        var (reverted, skipped) = await (await As(AuthorTypes.Moderator, "m1")).RevertRunAsync(
+            first.Run
+        );
+
+        (reverted, skipped).Should().Be((0, 1));
+    }
+
+    [Test]
     public async Task ARevertLeavesRowsChangedSince()
     {
         var song = Guid.CreateVersion7();

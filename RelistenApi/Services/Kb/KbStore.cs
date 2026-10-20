@@ -46,6 +46,25 @@ public sealed record AliasRecord(
 
 public sealed record EvidenceRecord(Guid SetlistSongUuid, Guid SongUuid, float? Confidence = null);
 
+/// Whether a track row is a decision or follows from one (string-theory ddl/002_kb.sql).
+public static class TrackBasis
+{
+    /// Derived: the part's song name is the song's name.
+    public const string SongName = "song_name";
+
+    /// Derived: the part's song name is an alias.
+    public const string Alias = "alias";
+
+    /// Derived: the parse says it isn't a song (tuning, crowd).
+    public const string Noise = "noise";
+
+    /// Derived: a part nothing places yet (resolved = false), in an open medley.
+    public const string Open = "open";
+
+    /// A decision about this track alone: the LLM on a one-off spelling, a person.
+    public const string Ruling = "ruling";
+}
+
 /// One part of a track's title. A track's parts are written together.
 public sealed record TrackPartRecord(
     Guid TrackUuid,
@@ -55,7 +74,9 @@ public sealed record TrackPartRecord(
     bool SegueAfter = false,
     IReadOnlyList<string>? Qualifiers = null,
     float? Confidence = null,
-    bool Resolved = true
+    bool Resolved = true,
+    string Basis = TrackBasis.Ruling,
+    IReadOnlyList<string>? Notes = null
 );
 
 /// The one writer of the kb song catalogue (string-theory ddl/002_kb.sql). A store is a run:
@@ -67,6 +88,7 @@ public sealed class KbStore
 {
     private readonly NpgsqlConnection connection;
     private readonly NpgsqlTransaction tx;
+    private readonly HashSet<Guid> tracksTouched = [];
 
     private KbStore(
         NpgsqlConnection connection,
@@ -280,41 +302,74 @@ public sealed class KbStore
                 tx
             );
             var list = string.Join(", ", columns);
-            await connection.ExecuteAsync(
-                change.Op switch
-                {
-                    "insert" => $"DELETE FROM kb.{change.Table} t USING {keyRow} k WHERE {match}",
-                    "update" =>
-                        $"UPDATE kb.{change.Table} t SET ({list}) = (SELECT {list} FROM jsonb_populate_record(NULL::kb.{change.Table}, @Before::jsonb)) FROM {keyRow} k WHERE {match}",
-                    _ =>
-                        $"INSERT INTO kb.{change.Table} ({list}) SELECT {list} FROM jsonb_populate_record(NULL::kb.{change.Table}, @Before::jsonb)",
-                },
-                args,
-                tx
-            );
+            // A row later work depends on (a song an alias or track now names) can't go: that
+            // change is skipped and reported, and the rest of the revert goes ahead.
+            await tx.SaveAsync("revert_change");
+            try
+            {
+                await connection.ExecuteAsync(
+                    change.Op switch
+                    {
+                        "insert" =>
+                            $"DELETE FROM kb.{change.Table} t USING {keyRow} k WHERE {match}",
+                        "update" =>
+                            $"UPDATE kb.{change.Table} t SET ({list}) = (SELECT {list} FROM jsonb_populate_record(NULL::kb.{change.Table}, @Before::jsonb)) FROM {keyRow} k WHERE {match}",
+                        _ =>
+                            $"INSERT INTO kb.{change.Table} ({list}) SELECT {list} FROM jsonb_populate_record(NULL::kb.{change.Table}, @Before::jsonb)",
+                    },
+                    args,
+                    tx
+                );
+                await tx.ReleaseAsync("revert_change");
+            }
+            catch (PostgresException e) when (e.SqlState == PostgresErrorCodes.ForeignKeyViolation)
+            {
+                await tx.RollbackAsync("revert_change");
+                skipped++;
+                continue;
+            }
+
             reverted++;
         }
 
         return (reverted, skipped);
     }
 
-    /// How many distinct tracks this run has changed so far, from its own change log.
-    public Task<int> TracksChangedAsync() =>
-        connection.ExecuteScalarAsync<int>(
-            """
-            SELECT count(DISTINCT row_key ->> 'track_uuid') FROM kb.changes
-            WHERE run_uuid = @Run AND table_name = 'track_songs'
-            """,
-            new { Run },
-            tx
-        );
+    /// How many distinct tracks this run has written or cleared so far. Derived track rows
+    /// aren't in kb.changes, so the store counts them; FinishAsync records the count.
+    public int TracksTouched => tracksTouched.Count;
 
     public Task FinishAsync() =>
         connection.ExecuteAsync(
-            "UPDATE kb.runs SET finished_at = clock_timestamp() WHERE uuid = @Run",
-            new { Run },
+            "UPDATE kb.runs SET finished_at = clock_timestamp(), tracks_rebuilt = @Touched WHERE uuid = @Run",
+            new { Run, Touched = tracksTouched.Count },
             tx
         );
+
+    /// Removes a machine's rows from these tracks (a track a person wrote is left alone), so
+    /// they are unresolved again: the matcher's answer for them is gone.
+    public async Task<int> ClearTracksAsync(IReadOnlyCollection<Guid> tracks)
+    {
+        if (tracks.Count == 0)
+        {
+            return 0;
+        }
+
+        var cleared = (
+            await connection.QueryAsync<Guid>(
+                """
+                DELETE FROM kb.track_songs t WHERE t.track_uuid = ANY(@tracks)
+                  AND NOT EXISTS (SELECT 1 FROM kb.track_songs p WHERE p.track_uuid = t.track_uuid
+                                  AND p.author_type IN ('user', 'moderator'))
+                RETURNING t.track_uuid
+                """,
+                new { tracks = tracks.ToArray() },
+                tx
+            )
+        ).Distinct().ToList();
+        tracksTouched.UnionWith(cleared);
+        return cleared.Count;
+    }
 
     // The update clause a write may apply: only a changed value, never by a machine over a
     // person's row, never in fill-only mode.
@@ -450,6 +505,19 @@ public sealed class KbStore
         );
     }
 
+    /// Removes one alias. A machine can't remove a person's (the trigger refuses it), so it
+    /// skips them. The tracks that rested on it are cleared by the next match.
+    public Task<int> DeleteAliasAsync(Guid artistUuid, string alias) =>
+        connection.ExecuteAsync(
+            $"""
+            DELETE FROM kb.song_aliases
+            WHERE artist_uuid = @artistUuid AND normalized = @normalized
+              {(Human ? "" : "AND author_type NOT IN ('user', 'moderator')")}
+            """,
+            new { artistUuid, normalized = TitleNormalizer.Normalize(alias) },
+            tx
+        );
+
     public async Task<int> WriteEvidenceAsync(
         IReadOnlyList<EvidenceRecord> evidence,
         KbWriteMode mode = KbWriteMode.Upsert
@@ -485,8 +553,9 @@ public sealed class KbStore
         );
     }
 
-    /// Replaces each listed track's parts. A track a person set is left alone by machines;
-    /// in fill-only mode only tracks with no parts yet are written.
+    /// Replaces each listed track's parts and returns how many tracks changed. A track a
+    /// person set is left alone by machines; in fill-only mode only tracks with no parts yet
+    /// (or an open medley's) are written.
     public async Task<int> WriteTrackSongsAsync(
         IReadOnlyList<TrackPartRecord> parts,
         KbWriteMode mode = KbWriteMode.Upsert
@@ -521,11 +590,12 @@ public sealed class KbStore
         }
 
         // Parts past a track's new last part go; the rest update only where they differ.
-        var removed = await connection.ExecuteAsync(
+        var removed = await connection.QueryAsync<Guid>(
             """
             DELETE FROM kb.track_songs t
             USING (SELECT track, max(part) AS last FROM unnest(@tracks, @partNumbers) AS x(track, part) GROUP BY track) n
             WHERE t.track_uuid = n.track AND t.part > n.last
+            RETURNING t.track_uuid
             """,
             new
             {
@@ -535,21 +605,26 @@ public sealed class KbStore
             tx
         );
 
-        var written = await connection.ExecuteAsync(
+        var written = await connection.QueryAsync<Guid>(
             """
-            INSERT INTO kb.track_songs (track_uuid, part, song_uuid, text, segue_after, qualifiers, resolved,
-                                        author_type, author_ref, confidence, run_uuid)
+            INSERT INTO kb.track_songs (track_uuid, part, song_uuid, text, segue_after, qualifiers, notes, resolved,
+                                        basis, author_type, author_ref, confidence, run_uuid)
             SELECT x.track, x.part, x.song, x.text, x.segue,
-                   coalesce(string_to_array(nullif(x.qualifiers, ''), ','), '{}'), x.resolved,
-                   @AuthorType, @AuthorRef, x.confidence, @Run
-            FROM unnest(@tracks, @partNumbers, @songs, @texts, @segues, @qualifiers, @resolved, @confidences)
-                 AS x(track, part, song, text, segue, qualifiers, resolved, confidence)
+                   coalesce(string_to_array(nullif(x.qualifiers, ''), ','), '{}'),
+                   coalesce(string_to_array(nullif(x.notes, ''), chr(31)), '{}'), x.resolved,
+                   x.basis, @AuthorType, @AuthorRef, x.confidence, @Run
+            FROM unnest(@tracks, @partNumbers, @songs, @texts, @segues, @qualifiers, @notes, @resolved, @bases, @confidences)
+                 AS x(track, part, song, text, segue, qualifiers, notes, resolved, basis, confidence)
             ON CONFLICT (track_uuid, part) DO UPDATE SET song_uuid = EXCLUDED.song_uuid, text = EXCLUDED.text,
-                segue_after = EXCLUDED.segue_after, qualifiers = EXCLUDED.qualifiers, resolved = EXCLUDED.resolved,
+                segue_after = EXCLUDED.segue_after, qualifiers = EXCLUDED.qualifiers, notes = EXCLUDED.notes,
+                resolved = EXCLUDED.resolved, basis = EXCLUDED.basis,
                 author_type = EXCLUDED.author_type, author_ref = EXCLUDED.author_ref,
                 confidence = EXCLUDED.confidence, run_uuid = EXCLUDED.run_uuid, updated_at = now()
-            WHERE (kb.track_songs.song_uuid, kb.track_songs.text, kb.track_songs.segue_after, kb.track_songs.qualifiers, kb.track_songs.resolved)
-                  IS DISTINCT FROM (EXCLUDED.song_uuid, EXCLUDED.text, EXCLUDED.segue_after, EXCLUDED.qualifiers, EXCLUDED.resolved)
+            WHERE (kb.track_songs.song_uuid, kb.track_songs.text, kb.track_songs.segue_after, kb.track_songs.qualifiers,
+                   kb.track_songs.notes, kb.track_songs.resolved, kb.track_songs.basis)
+                  IS DISTINCT FROM (EXCLUDED.song_uuid, EXCLUDED.text, EXCLUDED.segue_after, EXCLUDED.qualifiers,
+                   EXCLUDED.notes, EXCLUDED.resolved, EXCLUDED.basis)
+            RETURNING track_uuid
             """,
             new
             {
@@ -562,12 +637,17 @@ public sealed class KbStore
                 texts = writable.Select(p => p.Text).ToArray(),
                 resolved = writable.Select(p => p.Resolved).ToArray(),
                 segues = writable.Select(p => p.SegueAfter).ToArray(),
-                // Comma-joined: a text[][] parameter must be rectangular.
+                // Joined: a text[][] parameter must be rectangular. Notes are free text, so
+                // they join on the unit separator.
                 qualifiers = writable.Select(p => string.Join(',', p.Qualifiers ?? [])).ToArray(),
+                notes = writable.Select(p => string.Join('\u001f', p.Notes ?? [])).ToArray(),
+                bases = writable.Select(p => p.Basis).ToArray(),
                 confidences = writable.Select(p => p.Confidence).ToArray(),
             },
             tx
         );
-        return removed + written;
+        var changed = removed.Concat(written).ToHashSet();
+        tracksTouched.UnionWith(changed);
+        return changed.Count;
     }
 }

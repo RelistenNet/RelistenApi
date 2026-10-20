@@ -19,34 +19,62 @@ public sealed record CatalogueTrack(
     int? Duration = null
 )
 {
-    /// An open medley's parts as written so far. Its resolved parts are carried forward when
-    /// the track is matched again: a one-off spelling resolved once has no alias to look up.
+    /// The track's parts as written so far. Its rulings are carried forward when the track is
+    /// matched again (a one-off spelling resolved once has no alias to look up); a person's
+    /// row locks the track.
     public IReadOnlyList<ExistingPart> Existing { get; init; } = [];
+
+    /// No parts yet, or a part nobody has placed (an open medley).
+    public bool Unresolved => Existing.Count == 0 || Existing.Any(e => !e.Resolved);
+
+    public bool Locked => Existing.Any(e => AuthorTypes.IsHuman(e.AuthorType));
 }
 
-public sealed record ExistingPart(string? Text, Guid? SongUuid, bool Resolved, float? Confidence);
+public sealed record ExistingPart(
+    string? Text,
+    Guid? SongUuid,
+    bool Resolved,
+    float? Confidence,
+    string Basis = TrackBasis.Ruling,
+    string AuthorType = AuthorTypes.Algorithm,
+    bool SegueAfter = false
+);
 
 public sealed record CatalogueSetlistSong(Guid Uuid, string Name, string Key, int Plays);
 
 public sealed record CatalogueSong(Guid Uuid, string Name, string? Kind);
 
-/// One artist's catalogue as it stands: its unresolved tracks (no kb.track_songs rows yet),
-/// its unmapped upstream setlist songs, its songs and its alias table. Everything that decides
-/// what to ask or match next is read fresh from the database, so a stopped run resumes where
-/// it left off and a re-run only sees what is still unresolved.
+/// One artist's catalogue as it stands: its tracks (only the unresolved ones unless every
+/// track is asked for, which a rebuild of derived rows needs), its unmapped upstream setlist
+/// songs, its songs and its alias table. Everything that decides what to ask or match next is
+/// read fresh from the database, so a stopped run resumes where it left off and a re-run only
+/// sees what is still unresolved.
 public sealed class CatalogueState
 {
     public required Guid ArtistUuid { get; init; }
     public required string ArtistName { get; init; }
-    public required IReadOnlyList<CatalogueTrack> UnresolvedTracks { get; init; }
+    public required IReadOnlyList<CatalogueTrack> Tracks { get; init; }
     public required IReadOnlyList<CatalogueSetlistSong> UnmappedSetlistSongs { get; init; }
     public required IReadOnlyList<CatalogueSong> Songs { get; init; }
     public required IReadOnlyDictionary<string, Guid> Aliases { get; init; }
 
+    public IEnumerable<CatalogueTrack> UnresolvedTracks => Tracks.Where(t => t.Unresolved);
+
+    /// Song names are looked up directly, so a name needs no alias. A name two songs share
+    /// matches neither.
+    public IReadOnlyDictionary<string, Guid> SongNames =>
+        songNames ??= Songs
+            .GroupBy(s => TitleNormalizer.Normalize(s.Name))
+            .Where(g => g.Key.Length > 0 && g.Count() == 1)
+            .ToDictionary(g => g.Key, g => g.Single().Uuid);
+
+    private IReadOnlyDictionary<string, Guid>? songNames;
+
     public static async Task<CatalogueState> LoadAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction? tx,
-        Guid artistUuid
+        Guid artistUuid,
+        bool allTracks = false
     )
     {
         var artist = await connection.QuerySingleAsync<(int Id, string Name)>(
@@ -69,10 +97,11 @@ public sealed class CatalogueState
             FROM source_tracks t JOIN sources s ON s.id = t.source_id
             WHERE t.artist_id = @Id AND NOT t.is_orphaned
               -- unresolved: no parts yet, or a part nobody has placed (an open medley)
-              AND (NOT EXISTS (SELECT 1 FROM kb.track_songs ts WHERE ts.track_uuid = t.uuid)
+              AND (@allTracks
+                   OR NOT EXISTS (SELECT 1 FROM kb.track_songs ts WHERE ts.track_uuid = t.uuid)
                    OR EXISTS (SELECT 1 FROM kb.track_songs ts WHERE ts.track_uuid = t.uuid AND NOT ts.resolved))
             """,
-            new { artist.Id },
+            new { artist.Id, allTracks },
             tx
         );
 
@@ -88,25 +117,44 @@ public sealed class CatalogueState
             return result;
         }
 
-        // Open medleys already have some parts: load them so their resolved parts survive.
+        // The parts already written: rulings survive a re-match, people's rows lock a track.
         var existing = (
             await connection.QueryAsync<(
                 Guid Track,
                 string? Text,
                 Guid? Song,
                 bool Resolved,
-                float? Confidence
+                float? Confidence,
+                string Basis,
+                string AuthorType,
+                bool SegueAfter
             )>(
                 """
-                SELECT ts.track_uuid, ts.text, ts.song_uuid, ts.resolved, ts.confidence
-                FROM kb.track_songs ts
-                WHERE ts.track_uuid = ANY(@open)
+                SELECT ts.track_uuid, ts.text, ts.song_uuid, ts.resolved, ts.confidence, ts.basis, ts.author_type, ts.segue_after
+                FROM kb.track_songs ts JOIN source_tracks t ON t.uuid = ts.track_uuid
+                WHERE CASE WHEN @allTracks THEN t.artist_id = @Id ELSE ts.track_uuid = ANY(@open) END
                 ORDER BY ts.track_uuid, ts.part
                 """,
-                new { open = tracks.Select(t => t.Uuid).ToArray() },
+                new
+                {
+                    artist.Id,
+                    allTracks,
+                    open = allTracks ? [] : tracks.Select(t => t.Uuid).ToArray(),
+                },
                 tx
             )
-        ).ToLookup(r => r.Track, r => new ExistingPart(r.Text, r.Song, r.Resolved, r.Confidence));
+        ).ToLookup(
+            r => r.Track,
+            r => new ExistingPart(
+                r.Text,
+                r.Song,
+                r.Resolved,
+                r.Confidence,
+                r.Basis,
+                r.AuthorType,
+                r.SegueAfter
+            )
+        );
 
         var setlist = await connection.QueryAsync<(Guid Uuid, string Name, int Plays)>(
             """
@@ -129,8 +177,20 @@ public sealed class CatalogueState
             tx
         );
 
+        // An alias of a merged song names its survivor (readers follow merged_into).
         var aliases = await connection.QueryAsync<(string Normalized, Guid Song)>(
-            "SELECT normalized, song_uuid FROM kb.song_aliases WHERE artist_uuid = @artistUuid",
+            """
+            WITH RECURSIVE survivor AS (
+                SELECT uuid AS song, uuid, merged_into, 0 AS depth FROM kb.songs WHERE artist_uuid = @artistUuid
+                UNION ALL
+                SELECT s.song, m.uuid, m.merged_into, s.depth + 1
+                FROM survivor s JOIN kb.songs m ON m.uuid = s.merged_into
+                WHERE s.depth < 20
+            )
+            SELECT a.normalized, v.uuid
+            FROM kb.song_aliases a JOIN survivor v ON v.song = a.song_uuid AND v.merged_into IS NULL
+            WHERE a.artist_uuid = @artistUuid
+            """,
             new { artistUuid },
             tx
         );
@@ -139,7 +199,7 @@ public sealed class CatalogueState
         {
             ArtistUuid = artistUuid,
             ArtistName = artist.Name,
-            UnresolvedTracks = tracks
+            Tracks = tracks
                 .Select(t => new CatalogueTrack(
                     t.Uuid,
                     t.ShowId,

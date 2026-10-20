@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
@@ -9,9 +8,10 @@ namespace Relisten.Kb.Catalogue;
 
 public sealed record CatalogueMatchResult(int TracksWritten, int EvidenceWritten);
 
-/// The deterministic pass (no LLM): resolves an artist's unresolved tracks and setlist songs
-/// from the alias table as it stands. It ends every LLM catalogue run, and is cheap enough to
-/// run after imports to place new uploads of known songs.
+/// The deterministic pass (no LLM): rebuilds every derived track row of an artist from its
+/// songs and aliases as they stand, places tracks that now resolve, and maps setlist songs.
+/// So a person's fix to a song or an alias reaches every track on the next match. It ends
+/// every LLM catalogue run, and is cheap enough to run after imports and edits.
 public sealed class CatalogueMatch(DbService db)
 {
     public async Task<CatalogueMatchResult> RunAsync(
@@ -28,7 +28,7 @@ public sealed class CatalogueMatch(DbService db)
             tx
         );
 
-        var state = await CatalogueState.LoadAsync(connection, tx, artistUuid);
+        var state = await CatalogueState.LoadAsync(connection, tx, artistUuid, allTracks: true);
         var store = await KbStore.BeginAsync(
             connection,
             tx,
@@ -39,12 +39,13 @@ public sealed class CatalogueMatch(DbService db)
             TrackMatcher.Evidence(state),
             KbWriteMode.FillOnly
         );
-        await store.WriteTrackSongsAsync(TrackMatcher.Match(state), KbWriteMode.FillOnly);
-        // Tracks this run changed: an open medley re-matched to the same parts is not one.
-        var tracks = await store.TracksChangedAsync();
+        var match = TrackMatcher.Match(state);
+        await store.ClearTracksAsync(match.Cleared);
+        // Upsert: derived rows follow the songs and aliases; unchanged rows aren't written.
+        await store.WriteTrackSongsAsync(match.Records);
         await store.FinishAsync();
         await tx.CommitAsync(cancellationToken);
 
-        return new CatalogueMatchResult(tracks, evidence);
+        return new CatalogueMatchResult(store.TracksTouched, evidence);
     }
 }

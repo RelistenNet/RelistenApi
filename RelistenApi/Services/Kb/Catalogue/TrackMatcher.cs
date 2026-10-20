@@ -6,57 +6,96 @@ using Relisten.Kb.Titles;
 namespace Relisten.Kb.Catalogue;
 
 /// How one title part resolves: to songs (usually one; an unparsed combination can be
-/// several, in order), to nothing (not a song), with a confidence. Null = unresolved.
-public sealed record PartDecision(IReadOnlyList<Guid> Songs, float Confidence);
+/// several, in order), to nothing (not a song), with a confidence and the basis it rests on
+/// (TrackBasis). Qualifier is one the lookup lifted out of the name ("reprise" for "Plane
+/// Crash reprise"). Null = unresolved.
+public sealed record PartDecision(
+    IReadOnlyList<Guid> Songs,
+    float Confidence,
+    string Basis = TrackBasis.Ruling,
+    string? Qualifier = null
+)
+{
+    /// For a ruling kept by position: the normalised text it was written for.
+    public string? Text { get; init; }
+}
 
-/// Deterministic title matching (string-theory docs/matching.md T1): each part of an
-/// unresolved track resolves by exact alias (0.95; a leading track number folds away when the
-/// rest is a known spelling, TrackNumberFold), then a unique alias a typo away (0.9),
-/// then the parser's noise hint (tuning, crowd, banter: not a song, 0.95). Callers can add
-/// decisions of their own (the LLM's answers for keys the alias table can't hold). A track
-/// is written only when every part resolves at or above the threshold.
+/// Rows to write, and tracks whose machine rows no longer follow from anything (an alias they
+/// rested on is gone): cleared, they are unresolved again.
+public sealed record MatchResult(
+    IReadOnlyList<TrackPartRecord> Records,
+    IReadOnlyList<Guid> Cleared
+);
+
+/// Deterministic title matching (string-theory docs/matching.md T1). Each part's song name is
+/// looked up among the artist's song names, then its aliases (each also with a leading track
+/// number folded away, TrackNumberFold, and with a trailing qualifier word lifted out), at
+/// 0.95; then the callers' own decisions (the LLM's rulings); then the parser's noise hint
+/// (tuning, crowd: not a song, 0.95); then a unique name or alias a typo away (0.9).
+///
+/// Rows that follow from songs and aliases are derived (basis song_name, alias, noise, open)
+/// and rebuilt on every match, so a fixed alias reaches every track. A machine's ruling on a
+/// track is kept unless an exact name or alias now decides that part; a person's row locks the
+/// track.
 public static class TrackMatcher
 {
-    public const string Author = "title-matcher@1.0.0";
+    public const string Author = "title-matcher@2.0.0";
     public const float Threshold = 0.9f;
+    private const float Exact = 0.95f;
 
-    public static IReadOnlyList<TrackPartRecord> Match(
+    public static MatchResult Match(
         CatalogueState state,
         IReadOnlyDictionary<string, PartDecision>? extra = null
     )
     {
-        var typoIndex = state
-            .Aliases.Keys.GroupBy(k => k[0])
-            .ToDictionary(g => g.Key, g => g.ToList());
+        var known = state
+            .SongNames.Select(n => (n.Key, Song: n.Value, Basis: TrackBasis.SongName))
+            .Concat(
+                state
+                    .Aliases.Where(a => !state.SongNames.ContainsKey(a.Key))
+                    .Select(a => (a.Key, Song: a.Value, Basis: TrackBasis.Alias))
+            )
+            .ToDictionary(k => k.Key, k => (k.Song, k.Basis));
+        var typoIndex = known.Keys.GroupBy(k => k[0]).ToDictionary(g => g.Key, g => g.ToList());
         var cache = new Dictionary<TitlePart, PartDecision?>();
+
+        PartDecision? Lookup(string key, string? qualifier)
+        {
+            key = TrackNumberFold.Fold(
+                key,
+                k => known.ContainsKey(k) || extra?.ContainsKey(k) == true
+            );
+            if (known.TryGetValue(key, out var hit))
+            {
+                return new PartDecision([hit.Song], Exact, hit.Basis, qualifier);
+            }
+
+            return extra != null && extra.TryGetValue(key, out var given)
+                ? given with
+                {
+                    Basis = TrackBasis.Ruling,
+                    Qualifier = qualifier,
+                }
+                : null;
+        }
 
         PartDecision? Decide(TitlePart part)
         {
-            if (cache.TryGetValue(part, out var known))
+            if (cache.TryGetValue(part, out var cached))
             {
-                return known;
+                return cached;
             }
 
-            PartDecision? decision = null;
-            var key = TrackNumberFold.Fold(
-                part.Key,
-                k => state.Aliases.ContainsKey(k) || extra?.ContainsKey(k) == true
-            );
-            if (extra != null && extra.TryGetValue(key, out var given))
+            var decision =
+                Lookup(part.Key, null)
+                ?? (part.Bare != null ? Lookup(part.Bare, part.BareQualifier) : null);
+            if (decision == null && part.Hint == PartHint.Noise)
             {
-                decision = given;
+                decision = new PartDecision([], Exact, TrackBasis.Noise);
             }
-            else if (state.Aliases.TryGetValue(key, out var song))
+            else if (decision == null && TypoMatch(part.Key, typoIndex) is { } near)
             {
-                decision = new PartDecision([song], 0.95f);
-            }
-            else if (part.Hint == PartHint.Noise)
-            {
-                decision = new PartDecision([], 0.95f);
-            }
-            else if (TypoMatch(key, typoIndex) is { } near)
-            {
-                decision = new PartDecision([state.Aliases[near]], 0.9f);
+                decision = new PartDecision([known[near].Song], Threshold, known[near].Basis);
             }
 
             cache[part] = decision;
@@ -64,43 +103,60 @@ public static class TrackMatcher
         }
 
         var records = new List<TrackPartRecord>();
-        foreach (var track in state.UnresolvedTracks.Where(t => t.Title.HasText))
+        var cleared = new List<Guid>();
+        foreach (var track in state.Tracks.Where(t => t.Title.HasText && !t.Locked))
         {
-            // An open medley's resolved parts are kept as they were: the decision that resolved
-            // a one-off spelling has no alias to rediscover.
-            var kept = track
-                .Existing.Where(e => e.Resolved && e.Text != null)
-                .GroupBy(e => TitleNormalizer.Normalize(e.Text!))
-                .ToDictionary(
-                    g => g.Key,
-                    g => new PartDecision(
-                        g.Select(e => e.SongUuid).OfType<Guid>().ToList(),
-                        g.Min(e => e.Confidence) ?? Threshold
-                    )
-                );
+            var (rulings, byPosition) = Rulings(track);
+            // When the parse has as many parts as the written rows (the text moved under a newer
+            // parser), a ruling no text matches is kept at its position.
+            var aligned = byPosition.Count == track.Title.Parts.Count;
             var decisions = track
-                .Title.Parts.Select(p =>
-                    (
-                        Part: p,
-                        Decision: kept.TryGetValue(p.Key, out var k) ? k
-                        : Decide(p) is { } d && d.Confidence >= Threshold ? d
-                        : null
-                    )
+                .Title.Parts.Select(
+                    (p, i) =>
+                    {
+                        var d = Decide(p);
+                        var ruling =
+                            rulings.TryGetValue(p.Key, out var queue) && queue.Count > 0
+                                ? queue.Dequeue()
+                            // Kept by position only while its text still names this part
+                            // ("12 - nebraska" for "nebraska"): a retitled track ("Foo" now
+                            // "Bar") isn't the decision it was.
+                            : aligned
+                            && byPosition[i] is { Text: { } was }
+                            && $" {was} ".Contains($" {p.Key} ")
+                                ? byPosition[i]
+                            : null;
+                        // An exact name or alias decides a part over a ruling; a guess doesn't.
+                        if (
+                            d is
+                            { Basis: TrackBasis.SongName or TrackBasis.Alias, Confidence: >= Exact }
+                        )
+                        {
+                            return (Part: p, Decision: d);
+                        }
+
+                        return (
+                            Part: p,
+                            Decision: ruling ?? (d is { } g && g.Confidence >= Threshold ? g : null)
+                        );
+                    }
                 )
                 .ToList();
 
             // A track is written when every part resolves, or, for a medley, when at least one
-            // part resolves to a song: the known parts are kept and the rest marked unresolved,
-            // so "(Check) Funky Bitch > Dream On > X" still shows Funky Bitch and Dream On.
+            // part resolves to a song: the known parts are kept and the rest left open, so
+            // "(Check) Funky Bitch > Dream On > X" still shows Funky Bitch and Dream On.
             var anySong = decisions.Any(d => d.Decision is { Songs.Count: > 0 });
             if (decisions.Any(d => d.Decision == null) && !(anySong && decisions.Count > 1))
             {
+                if (track.Existing.Count > 0)
+                {
+                    cleared.Add(track.Uuid);
+                }
+
                 continue;
             }
 
-            var confidence = decisions
-                .Where(d => d.Decision != null)
-                .Min(d => d.Decision!.Confidence);
             var number = 1;
             foreach (var (part, decision) in decisions)
             {
@@ -114,13 +170,19 @@ public static class TrackMatcher
                             part.Text,
                             part.SegueAfter,
                             part.Qualifiers,
-                            confidence,
-                            Resolved: false
+                            Threshold,
+                            Resolved: false,
+                            Basis: TrackBasis.Open,
+                            Notes: part.Notes
                         )
                     );
                     continue;
                 }
 
+                var qualifiers =
+                    decision.Qualifier == null || part.Qualifiers.Contains(decision.Qualifier)
+                        ? part.Qualifiers
+                        : [.. part.Qualifiers, decision.Qualifier];
                 // A part naming several songs (an unparsed "space wrangler walkin") becomes one
                 // record per song, each segueing into the next.
                 var songs =
@@ -137,25 +199,109 @@ public static class TrackMatcher
                             songs[i],
                             part.Text,
                             last ? part.SegueAfter : true,
-                            last ? part.Qualifiers : [],
-                            confidence
+                            last ? qualifiers : [],
+                            decision.Confidence,
+                            Basis: decision.Basis,
+                            Notes: last ? part.Notes : []
                         )
                     );
                 }
             }
         }
 
-        return records;
+        return new MatchResult(records, cleared);
     }
 
-    /// Upstream setlist songs whose name is now an alias.
+    /// A machine's rulings on a track, by song name, in title order: the decision that
+    /// resolved a one-off spelling has no alias to rediscover. Consecutive rows with one text
+    /// joined by segues are one decision (a part naming several songs); a text that recurs (a
+    /// sandwich, "Rebula > Jam > Rebula") is one decision per occurrence.
+    /// Also returns the written parts in order, as rulings or null (derived), for a parse
+    /// whose text moved.
+    private static (
+        Dictionary<string, Queue<PartDecision>> ByKey,
+        List<PartDecision?> ByPosition
+    ) Rulings(CatalogueTrack track)
+    {
+        var rulings = new Dictionary<string, Queue<PartDecision>>();
+        var byPosition = new List<PartDecision?>();
+        var run = new List<ExistingPart>();
+
+        void Close()
+        {
+            if (run.Count == 0)
+            {
+                return;
+            }
+
+            var key = KeyOf(run[0].Text!);
+            if (!rulings.TryGetValue(key, out var queue))
+            {
+                rulings[key] = queue = new Queue<PartDecision>();
+            }
+
+            // A part never names one song twice in a row: repeats are a duplicated ruling.
+            var songs = run.Select(e => e.SongUuid).OfType<Guid>().ToList();
+            queue.Enqueue(
+                new PartDecision(
+                    songs.Where((s, i) => i == 0 || s != songs[i - 1]).ToList(),
+                    run.Min(e => e.Confidence) ?? Threshold
+                )
+            );
+            byPosition.Add(queue.Last() with { Text = TitleNormalizer.Normalize(run[0].Text!) });
+            run.Clear();
+        }
+
+        string? previous = null;
+        foreach (var part in track.Existing)
+        {
+            var ruling = part.Basis == TrackBasis.Ruling && part.Resolved && part.Text != null;
+            if (run.Count > 0 && (!ruling || part.Text != run[0].Text || !run[^1].SegueAfter))
+            {
+                Close();
+            }
+
+            if (ruling)
+            {
+                run.Add(part);
+            }
+            // Derived rows of one part naming several songs share a text, joined by segues.
+            else if (!(part.Text == previous && byPosition.Count > 0 && byPosition[^1] == null))
+            {
+                byPosition.Add(null);
+            }
+
+            previous = part.Text;
+        }
+
+        Close();
+        return (rulings, byPosition);
+    }
+
+    /// A written part's key as the current parser reads its text, so a ruling written under an
+    /// earlier parse ("(Check) Jam", before soundchecks were lifted out) still matches.
+    public static string KeyOf(string text)
+    {
+        var parsed = TitleParser.Parse(text).Parts;
+        return parsed.Count == 1 ? parsed[0].Key : TitleNormalizer.Normalize(text);
+    }
+
+    /// Upstream setlist songs whose name is a song's name or an alias.
     public static IReadOnlyList<EvidenceRecord> Evidence(
         CatalogueState state,
-        float confidence = 0.95f
+        float confidence = Exact
     ) =>
         state
-            .UnmappedSetlistSongs.Where(s => state.Aliases.ContainsKey(s.Key))
-            .Select(s => new EvidenceRecord(s.Uuid, state.Aliases[s.Key], confidence))
+            .UnmappedSetlistSongs.Select(s =>
+                (
+                    s.Uuid,
+                    Song: state.SongNames.TryGetValue(s.Key, out var named) ? named
+                    : state.Aliases.TryGetValue(s.Key, out var aliased) ? aliased
+                    : (Guid?)null
+                )
+            )
+            .Where(s => s.Song != null)
+            .Select(s => new EvidenceRecord(s.Uuid, s.Song!.Value, confidence))
             .ToList();
 
     private static string? TypoMatch(string key, IReadOnlyDictionary<char, List<string>> index)

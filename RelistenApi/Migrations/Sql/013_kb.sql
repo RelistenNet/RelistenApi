@@ -1,4 +1,4 @@
--- RelistenNet/string-theory ddl/002_kb.sql (WS-5 revision, 2026-10-19), copied verbatim.
+-- RelistenNet/string-theory ddl/002_kb.sql (WS-5 revision, 2026-10-20), copied verbatim.
 
 -- The song catalogue (docs/catalogue.md). Revised 2026-10-19 (WS-5): plain tables are the
 -- source of truth, replacing the claims, predicate registry and projections ratified with
@@ -25,8 +25,22 @@ CREATE TABLE kb.runs (
     note        text,
     started_at  timestamptz NOT NULL DEFAULT now(),
     finished_at timestamptz,
+    tracks_rebuilt integer,                     -- tracks whose kb.track_songs rows this run wrote or cleared (derived rows aren't logged per row)
     UNIQUE (uuid, author_type, author_ref)      -- rows name their run with its author
 );
+
+-- A run is history: kb.changes names it, and replaying a change (a revert) needs it as it
+-- was. It is never deleted, and only its finish (finished_at, tracks_rebuilt) is updated.
+CREATE FUNCTION kb.runs_immutable() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP = 'DELETE' OR (NEW.uuid, NEW.author_type, NEW.author_ref, NEW.started_at)
+                           IS DISTINCT FROM (OLD.uuid, OLD.author_type, OLD.author_ref, OLD.started_at) THEN
+        RAISE EXCEPTION 'kb.runs rows are history; only finished_at, tracks_rebuilt and note change';
+    END IF;
+    RETURN NEW;
+END $$;
+CREATE TRIGGER runs_immutable BEFORE UPDATE OR DELETE ON kb.runs
+    FOR EACH ROW EXECUTE FUNCTION kb.runs_immutable();
 
 -- Provenance, on every catalogue row: author_type, author_ref, confidence (required for
 -- machines, which are gated on it; people are 1 by convention), run_uuid, updated_at.
@@ -91,11 +105,17 @@ CREATE TABLE kb.song_evidence (
 CREATE INDEX ON kb.song_evidence (song_uuid);
 
 -- What a track's title says it holds, one row per part in order (docs/matching.md T1).
--- song_uuid NULL = not a song (tuning, crowd) or not matched; text keeps the part as titled.
--- soundcheck: played at soundcheck, the same day but not part of the show ("(Check) Harpua").
--- A track's parts are written together, so they share provenance. A medley whose parts are
--- partly known keeps the known ones; the rest have resolved = false, and later runs may fill
--- them in without that counting as changing a settled fact.
+-- song_uuid NULL = not a song (tuning, crowd) or not matched; text keeps the part's song name
+-- as titled, notes what the title said about the recording ("aud -> sbd", "John Hartford
+-- cover"). soundcheck: played at soundcheck, the same day but not part of the show.
+-- basis says whether a row is a decision or follows from one (decided 2026-10-20):
+-- - song_name, alias, noise, open: derived by the matcher from the artist's songs, aliases
+--   and the title parse (open: a medley part nothing places yet, resolved = false). Rebuilt on every match, so fixing a song or an alias reaches every track;
+--   not logged per row (kb.runs.tracks_rebuilt counts them).
+-- - ruling: a decision about this track alone (the LLM on a one-off spelling, any person's
+--   correction). Fill-only for machines, logged like every decision.
+-- A medley whose parts are partly known keeps the known ones; the rest have resolved = false,
+-- and later runs may fill them in without that counting as changing a settled fact.
 CREATE TABLE kb.track_songs (
     track_uuid  uuid NOT NULL,                  -- public.source_tracks.uuid; no FK
     part        integer NOT NULL CHECK (part >= 1),
@@ -105,7 +125,10 @@ CREATE TABLE kb.track_songs (
     resolved    boolean NOT NULL DEFAULT true,   -- false: a part nobody has placed yet; the track stays open
     qualifiers  text[] NOT NULL DEFAULT '{}'
                 CHECK (qualifiers <@ ARRAY['reprise', 'partial', 'unfinished', 'instrumental', 'acoustic',
-                                           'with_guest', 'continued', 'tape_flip', 'soundcheck']),
+                                           'with_guest', 'continued', 'tape_flip', 'soundcheck',
+                                           'tease', 'intro', 'outro']),
+    notes       text[] NOT NULL DEFAULT '{}',
+    basis       text NOT NULL DEFAULT 'ruling' CHECK (basis IN ('song_name', 'alias', 'noise', 'open', 'ruling')),
     author_type text NOT NULL CHECK (author_type IN ('importer', 'algorithm', 'llm', 'user', 'moderator')),
     author_ref  text NOT NULL,
     confidence  real CHECK (confidence BETWEEN 0 AND 1),
@@ -113,6 +136,7 @@ CREATE TABLE kb.track_songs (
     updated_at  timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (track_uuid, part),
     CHECK (author_type NOT IN ('algorithm', 'llm') OR confidence IS NOT NULL),
+    CHECK (author_type NOT IN ('user', 'moderator') OR basis = 'ruling'),  -- a person's row is a decision
     FOREIGN KEY (run_uuid, author_type, author_ref) REFERENCES kb.runs (uuid, author_type, author_ref)
 );
 CREATE INDEX ON kb.track_songs (song_uuid) WHERE song_uuid IS NOT NULL;
@@ -143,13 +167,19 @@ END $$;
 CREATE TRIGGER changes_immutable BEFORE UPDATE OR DELETE ON kb.changes
     FOR EACH ROW EXECUTE FUNCTION kb.changes_immutable();
 
--- Appends one kb.changes row. Trigger arguments name the primary key columns.
+-- Appends one kb.changes row. Trigger arguments name the primary key columns. A derived
+-- track row (basis other than ruling, before and after) is not logged: it follows from rows
+-- that are, and the matcher rebuilds it.
 CREATE FUNCTION kb.log_change() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
     old_row jsonb := CASE WHEN TG_OP IN ('UPDATE', 'DELETE') THEN to_jsonb(OLD) END;
     new_row jsonb := CASE WHEN TG_OP IN ('INSERT', 'UPDATE') THEN to_jsonb(NEW) END;
     key     jsonb;
 BEGIN
+    IF coalesce(old_row ->> 'basis', 'derived') <> 'ruling' AND coalesce(new_row ->> 'basis', 'derived') <> 'ruling'
+       AND coalesce(old_row, new_row) ? 'basis' THEN
+        RETURN NULL;
+    END IF;
     SELECT jsonb_object_agg(k, coalesce(new_row, old_row) -> k) INTO key FROM unnest(TG_ARGV) AS k;
     INSERT INTO kb.changes (table_name, row_key, op, before, after, author_type, author_ref, run_uuid)
     VALUES (TG_TABLE_NAME, key, lower(TG_OP), old_row, new_row,

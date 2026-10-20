@@ -331,6 +331,113 @@ public class KbLab
         await AssertInvariants(connection);
     }
 
+    /// Each artist's catalogue as it stands, with its alias count and the size of the change
+    /// log. Reads only.
+    [Test, Explicit("Prints the lab's numbers; run deliberately")]
+    public async Task Evaluate()
+    {
+        await using var connection = await Open(Db(labUrl));
+        foreach (var (slug, uuid) in await Artists(connection))
+        {
+            if (
+                await connection.ExecuteScalarAsync<long>(
+                    "SELECT count(*) FROM kb.songs WHERE artist_uuid = @uuid",
+                    new { uuid }
+                ) == 0
+            )
+            {
+                continue;
+            }
+
+            var aliases = await connection.ExecuteScalarAsync<long>(
+                "SELECT count(*) FROM kb.song_aliases WHERE artist_uuid = @uuid",
+                new { uuid }
+            );
+            TestContext.Out.WriteLine(
+                $"{await KbEvaluation.EvaluateAsync(connection, slug)}, {aliases} aliases"
+            );
+        }
+
+        TestContext.Out.WriteLine(
+            "kb.changes: "
+                + await connection.ExecuteScalarAsync<string>(
+                    "SELECT count(*) || ' rows, ' || pg_size_pretty(pg_total_relation_size('kb.changes')) FROM kb.changes"
+                )
+        );
+    }
+
+    /// One-off, for a lab built before 2026-10-20 ("song names, not titles"): removes the
+    /// machine aliases the new rule wouldn't have stored (a song's own name, a title with a
+    /// track number or notes around the name), then rebuilds every artist's track rows. A row
+    /// the rebuild can't derive stays a ruling.
+    [Test, Explicit("Rewrites the lab's catalogue; run deliberately")]
+    public async Task PruneAliasesToSongNames()
+    {
+        var db = Db(labUrl);
+        await using var connection = await Open(db);
+        foreach (var (slug, uuid) in await Artists(connection))
+        {
+            var names = (
+                await connection.QueryAsync<(Guid Uuid, string Name)>(
+                    "SELECT uuid, name FROM kb.songs WHERE artist_uuid = @uuid AND merged_into IS NULL",
+                    new { uuid }
+                )
+            ).ToDictionary(s => s.Uuid, s => TitleNormalizer.Normalize(s.Name));
+            if (names.Count == 0)
+            {
+                continue;
+            }
+
+            var aliases = (
+                await connection.QueryAsync<(
+                    string Normalized,
+                    string Alias,
+                    Guid Song,
+                    string AuthorType,
+                    float? Confidence
+                )>(
+                    "SELECT normalized, alias, song_uuid, author_type, confidence FROM kb.song_aliases WHERE artist_uuid = @uuid",
+                    new { uuid }
+                )
+            ).ToList();
+            var known = names.Values.Concat(aliases.Select(a => a.Normalized)).ToHashSet();
+
+            await using var tx = await connection.BeginTransactionAsync();
+            var store = await KbStore.BeginAsync(
+                connection,
+                tx,
+                AuthorTypes.Algorithm,
+                "alias-prune@1",
+                "song names, not titles"
+            );
+            var removed = 0;
+            foreach (var alias in aliases.Where(a => !AuthorTypes.IsHuman(a.AuthorType)))
+            {
+                var parts = TitleParser.Parse(alias.Alias).Parts;
+                var cleaned =
+                    parts.Count == 1 ? TrackNumberFold.Fold(parts[0].Key, known.Contains) : "";
+                if (cleaned == alias.Normalized && cleaned != names.GetValueOrDefault(alias.Song))
+                {
+                    continue;
+                }
+
+                // Not re-keyed under its cleaned spelling: that is usually title noise the
+                // parser can't see ("01 freeborn man set1"), or loses a qualifier ("pinball
+                // wizard tease"). Its tracks keep their rows as rulings.
+                await store.DeleteAliasAsync(uuid, alias.Alias);
+                removed++;
+            }
+
+            await store.FinishAsync();
+            await tx.CommitAsync();
+
+            var rebuilt = await new CatalogueMatch(db).RunAsync(uuid, CancellationToken.None);
+            TestContext.Out.WriteLine(
+                $"{slug}: {aliases.Count} aliases, {removed} removed; rebuild touched {rebuilt.TracksWritten} tracks"
+            );
+        }
+    }
+
     /// For artists without an upstream setlist there is no automatic answer key: the report
     /// lists every song the run created and a random sample of title → song decisions to judge.
     private static async Task WriteReport(

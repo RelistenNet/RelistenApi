@@ -10,6 +10,7 @@ using Relisten.Kb;
 using Relisten.Kb.Catalogue;
 using Temporalio.Activities;
 using Temporalio.Client;
+using Temporalio.Exceptions;
 using Temporalio.Testing;
 using Temporalio.Worker;
 
@@ -229,7 +230,7 @@ public class TestCatalogueLlm
             )
         )
             .Should()
-            .Equal("me and my uncle", "sugaree"); // the one-show typo resolved its track, no alias
+            .BeEmpty(); // song names match directly; the one-show typo is a ruling on its track
         (
             await Strings(
                 "SELECT s.name FROM kb.song_evidence e JOIN kb.songs s ON s.uuid = e.song_uuid JOIN setlist_songs ss ON ss.uuid = e.setlist_song_uuid WHERE ss.artist_id = @artistId"
@@ -240,7 +241,8 @@ public class TestCatalogueLlm
         (
             await Strings(
                 """
-                SELECT t.title || ' = ' || coalesce(s.name, CASE WHEN ts.resolved THEN '-' ELSE '?' END) FROM source_tracks t
+                SELECT t.title || ' = ' || coalesce(s.name, CASE WHEN ts.resolved THEN '-' ELSE '?' END) || ' (' || ts.basis || ')'
+                FROM source_tracks t
                 JOIN kb.track_songs ts ON ts.track_uuid = t.uuid LEFT JOIN kb.songs s ON s.uuid = ts.song_uuid
                 WHERE t.artist_id = @artistId ORDER BY t.track_position, ts.part
                 """
@@ -248,15 +250,15 @@ public class TestCatalogueLlm
         )
             .Should()
             .Equal(
-                "Me And My Uncle = Me And My Uncle",
-                "Me & My Uncle > = Me And My Uncle",
-                "Mee and My Uncle = Me And My Uncle",
-                "Sugaree = Sugaree",
-                "Tuning = -",
-                "Mystery Jam = -",
+                "Me And My Uncle = Me And My Uncle (song_name)",
+                "Me & My Uncle > = Me And My Uncle (song_name)",
+                "Mee and My Uncle = Me And My Uncle (ruling)",
+                "Sugaree = Sugaree (song_name)",
+                "Tuning = - (noise)",
+                "Mystery Jam = - (ruling)",
                 // the medley keeps its known part; the unknown one is open (?)
-                "Sugaree > Unknown Thing = Sugaree",
-                "Sugaree > Unknown Thing = ?"
+                "Sugaree > Unknown Thing = Sugaree (song_name)",
+                "Sugaree > Unknown Thing = ? (open)"
             );
         (await Strings("SELECT DISTINCT author_type FROM kb.songs WHERE artist_uuid = @artist"))
             .Should()
@@ -420,6 +422,184 @@ public class TestCatalogueLlm
             )
         ).Should().Equal("Me And My Uncle:true", "Unknown Thing:true");
     }
+
+    private Task AsModerator(Func<KbStore, Task> write) =>
+        db.WithWriteConnection(async c =>
+        {
+            var connection = (Npgsql.NpgsqlConnection)c;
+            await using var tx = await connection.BeginTransactionAsync();
+            var store = await KbStore.BeginAsync(connection, tx, AuthorTypes.Moderator, "m1");
+            await write(store);
+            await store.FinishAsync();
+            await tx.CommitAsync();
+            return 0;
+        });
+
+    private Task AddTrack(string title, string slug) =>
+        db.WithWriteConnection(c =>
+            c.ExecuteAsync(
+                """
+                INSERT INTO source_tracks(source_id, track_position, title, slug, mp3_url, updated_at, artist_id, uuid)
+                SELECT source_id, 60 + (SELECT count(*) FROM source_tracks WHERE artist_id = @artistId), @title, @slug,
+                       'https://x/' || @slug || '.mp3', now(), artist_id, @uuid
+                FROM source_tracks WHERE artist_id = @artistId LIMIT 1
+                """,
+                new
+                {
+                    artistId,
+                    title,
+                    slug,
+                    uuid = Guid.NewGuid(),
+                }
+            )
+        );
+
+    private Task<IEnumerable<string>> Placed(string slug) =>
+        db.WithWriteConnection(c =>
+            c.QueryAsync<string>(
+                """
+                SELECT coalesce(s.name, '-') || ' (' || ts.basis || ')' || coalesce(' [' || array_to_string(nullif(ts.qualifiers, '{}'), ',') || ']', '')
+                FROM source_tracks t JOIN kb.track_songs ts ON ts.track_uuid = t.uuid LEFT JOIN kb.songs s ON s.uuid = ts.song_uuid
+                WHERE t.artist_id = @artistId AND t.slug = @slug ORDER BY ts.part
+                """,
+                new { artistId, slug }
+            )
+        );
+
+    private Task<Guid> SongNamed(string name) =>
+        db.WithWriteConnection(c =>
+            c.QuerySingleAsync<Guid>(
+                "SELECT uuid FROM kb.songs WHERE artist_uuid = @artist AND name = @name",
+                new { artist, name }
+            )
+        );
+
+    [Test]
+    public async Task AnAliasOfAMergedSongPlacesItsSurvivor()
+    {
+        await new CatalogueLlm(db, new ScriptedModel()).RunChunkAsync(
+            artist,
+            [],
+            CancellationToken.None
+        );
+        var sugaree = await SongNamed("Sugaree");
+        var duplicate = Guid.CreateVersion7();
+        await AsModerator(async s =>
+        {
+            await s.WriteSongsAsync([new SongRecord(duplicate, artist, "Sugaree Two")]);
+            await s.WriteAliasesAsync([new AliasRecord(artist, "Big Sugar", duplicate)]);
+        });
+        await db.WithWriteConnection(async c =>
+        {
+            var connection = (Npgsql.NpgsqlConnection)c;
+            await using var tx = await connection.BeginTransactionAsync();
+            await KbStore.BeginAsync(connection, tx, AuthorTypes.Moderator, "m1", "merge");
+            await connection.ExecuteAsync(
+                "UPDATE kb.songs SET merged_into = @sugaree WHERE uuid = @duplicate",
+                new { sugaree, duplicate },
+                tx
+            );
+            await tx.CommitAsync();
+            return 0;
+        });
+        await AddTrack("Big Sugar", "merged");
+
+        await new CatalogueMatch(db).RunAsync(artist, CancellationToken.None);
+
+        (await Placed("merged")).Should().Equal("Sugaree (alias)");
+    }
+
+    [Test]
+    public async Task AnExpertsAliasFixReachesEveryTrackButNoRuling()
+    {
+        await new CatalogueLlm(db, new ScriptedModel()).RunChunkAsync(
+            artist,
+            [],
+            CancellationToken.None
+        );
+        var sugaree = await SongNamed("Sugaree");
+        var uncle = await SongNamed("Me And My Uncle");
+        await AsModerator(s =>
+            s.WriteAliasesAsync([new AliasRecord(artist, "Big Sugar", sugaree)])
+        );
+        await AddTrack("Big Sugar", "big1");
+        await AddTrack("05 - Big Sugar *", "big2");
+        var match = new CatalogueMatch(db);
+        await match.RunAsync(artist, CancellationToken.None);
+        (await Placed("big2")).Should().Equal("Sugaree (alias)");
+
+        // The expert finds "Big Sugar" is Me And My Uncle and fixes the alias once.
+        await AsModerator(s => s.WriteAliasesAsync([new AliasRecord(artist, "Big Sugar", uncle)]));
+        var rebuilt = await match.RunAsync(artist, CancellationToken.None);
+
+        rebuilt.TracksWritten.Should().Be(2);
+        (await Placed("big1")).Should().Equal("Me And My Uncle (alias)");
+        (await Placed("big2")).Should().Equal("Me And My Uncle (alias)");
+        // The LLM's ruling on a one-off spelling is a decision: the rebuild leaves it.
+        (await Placed("t2"))
+            .Should()
+            .Equal("Me And My Uncle (ruling)");
+        // Derived rows aren't logged; the run counts them.
+        (
+            await Strings(
+                "SELECT DISTINCT c.after ->> 'basis' FROM kb.changes c JOIN source_tracks t ON t.uuid = (c.row_key ->> 'track_uuid')::uuid WHERE c.table_name = 'track_songs' AND c.after IS NOT NULL AND t.artist_id = @artistId"
+            )
+        )
+            .Should()
+            .Equal("ruling");
+        (
+            await Strings(
+                "SELECT r.tracks_rebuilt::text FROM kb.runs r WHERE r.author_ref = 'title-matcher@2.0.0' ORDER BY r.started_at DESC LIMIT 1"
+            )
+        )
+            .Should()
+            .Equal("2");
+    }
+
+    [Test]
+    public async Task AnExactAliasReplacesAMachinesRulingAndALostAliasClearsItsTracks()
+    {
+        await new CatalogueLlm(db, new ScriptedModel()).RunChunkAsync(
+            artist,
+            [],
+            CancellationToken.None
+        );
+        var sugaree = await SongNamed("Sugaree");
+        await AsModerator(s =>
+            s.WriteAliasesAsync([new AliasRecord(artist, "Mystery Jam", sugaree)])
+        );
+        var match = new CatalogueMatch(db);
+        await match.RunAsync(artist, CancellationToken.None);
+        (await Placed("t5")).Should().Equal("Sugaree (alias)");
+
+        await AsModerator(s => s.DeleteAliasAsync(artist, "Mystery Jam"));
+        await match.RunAsync(artist, CancellationToken.None);
+
+        // Nothing places it now: it is unresolved again, for the next LLM run.
+        (await Placed("t5"))
+            .Should()
+            .BeEmpty();
+    }
+
+    [Test]
+    public async Task AReprisesSongIsTheSongUnlessTheRepriseIsItsOwnSong()
+    {
+        await new CatalogueLlm(db, new ScriptedModel()).RunChunkAsync(
+            artist,
+            [],
+            CancellationToken.None
+        );
+        await AddTrack("Sugaree Reprise >", "rep1");
+        await AddTrack("Uncle Song Reprise", "rep2");
+        await AsModerator(s =>
+            s.WriteSongsAsync([new SongRecord(Guid.CreateVersion7(), artist, "Uncle Song Reprise")])
+        );
+
+        await new CatalogueMatch(db).RunAsync(artist, CancellationToken.None);
+
+        (await Placed("rep1")).Should().Equal("Sugaree (song_name) [reprise]");
+        (await Placed("rep2")).Should().Equal("Uncle Song Reprise (song_name)");
+    }
 }
 
 public class TestCatalogueAnswers
@@ -463,6 +643,12 @@ public class TestCatalogueAnswers
         answer.Rejected.Should().Be(2);
     }
 
+    [TestCase("Not Fade Away", "not fade away sbb 1972", "not fade away")]
+    [TestCase("", "tuning", "tuning")]
+    [TestCase("Dark Star", "not fade away", "not fade away")] // not in the title: the key
+    public void ASongTextMustBeWordsOfItsTitle(string songText, string key, string expected) =>
+        CatalogueLlm.SpelledName(songText, key).Should().Be(expected);
+
     [TestCase("not json")]
     [TestCase("""{"keys": []}""")]
     public void AnAnswerOfTheWrongShapeThrows(string json) =>
@@ -503,10 +689,20 @@ public class TestKbCatalogueWorkflow
         public List<string> Forgotten { get; } = [];
         public List<int?> OnlySizes { get; } = [];
         public int Matches { get; private set; }
+        public int Attempts { get; private set; }
+
+        /// The first chunk fails after (say) its model call.
+        public bool FailFirst { get; init; }
 
         [Activity("Kb.CatalogueChunk")]
         public CatalogueChunkResult CatalogueChunk(KbCatalogueChunkInput input)
         {
+            Attempts++;
+            if (FailFirst && Attempts == 1)
+            {
+                throw new ApplicationFailureException("database went away", nonRetryable: false);
+            }
+
             SkipSizes.Add(input.Skip.Count);
             OnlySizes.Add(input.Only?.Count);
             return SkipSizes.Count <= 2
@@ -637,5 +833,33 @@ public class TestKbCatalogueWorkflow
         result.Chunks.Should().Be(2);
         // The first pass's unsure titles are still reported.
         result.StillUnsure.Select(r => r.Key).Should().BeEquivalentTo("key1", "key2");
+    }
+
+    [Test]
+    public async Task AFailedChunkCountsAgainstTheCap()
+    {
+        var steps = new Steps { FailFirst = true };
+        using var workflows = new TemporalWorker(
+            environment.Client,
+            new TemporalWorkerOptions(IngestionQueues.Workflows).AddWorkflow<KbCatalogueWorkflow>()
+        );
+        using var database = new TemporalWorker(
+            environment.Client,
+            new TemporalWorkerOptions(IngestionQueues.Database).AddAllActivities(steps)
+        );
+
+        var result = await workflows.ExecuteAsync(() =>
+            database.ExecuteAsync(() =>
+                environment.Client.ExecuteWorkflowAsync(
+                    (KbCatalogueWorkflow w) =>
+                        w.RunAsync(new BuildKbCatalogue(new ArtistId(Guid.NewGuid()), 2, null)),
+                    new WorkflowOptions("test/" + Guid.NewGuid(), IngestionQueues.Workflows)
+                )
+            )
+        );
+
+        // Two calls in all: the failed one (not retried by Temporal) and one more.
+        steps.Attempts.Should().Be(2);
+        result.Chunks.Should().Be(2);
     }
 }

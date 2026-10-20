@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Relisten.Kb.Catalogue;
 using Relisten.Kb.Titles;
 
 namespace RelistenApiTests.Kb;
@@ -79,6 +80,63 @@ public class TestTitleParser
         int position,
         string expected
     ) => Describe(TitleParser.Parse(raw, position)).Should().Be(expected);
+
+    private static string DescribeNotes(ParsedTitle parsed) =>
+        string.Join(
+            " | ",
+            parsed.Parts.Select(p =>
+                p.Key
+                + (p.Qualifiers.Count > 0 ? $" [{string.Join(",", p.Qualifiers)}]" : "")
+                + (p.Notes.Count > 0 ? $" {{{string.Join(";", p.Notes)}}}" : "")
+                + (p.Bare != null ? $" ~{p.Bare}+{p.BareQualifier}" : "")
+                + (p.SegueAfter ? " >" : "")
+            )
+        );
+
+    /// Titles from production (2026-10-20): only the song name is the key; the rest is
+    /// position, file name, marks or notes about the recording.
+    [TestCase("05 - Scarlet Begonias **(aud -> sbd)", 5, "scarlet begonias {aud -> sbd}")]
+    [TestCase("gd74-09-11d1t05 Scarlet Begonias.flac", 5, "scarlet begonias")]
+    [TestCase("Bertha *", 1, "bertha")]
+    [TestCase("Playing in the Band >", 4, "playing in the band >")]
+    [TestCase(
+        "I'm Still Here (John Hartford cover) (>)",
+        3,
+        "im still here {John Hartford cover} >"
+    )]
+    [TestCase(
+        "16 Randall Collins - (Norman Blake cover) (>) Haul de Woodpile Down - (Sam Patterson Trio cover)",
+        16,
+        "randall collins {Norman Blake cover} > | haul de woodpile down {Sam Patterson Trio cover}"
+    )]
+    [TestCase("Time Ed > (Second Cousins? >)", 2, "time ed > | second cousins >")]
+    [TestCase(
+        "15 Ol’ Rickard (2) > Rueben’s Train (2)",
+        15,
+        "ol rickard {2} > | ruebens train {2}"
+    )]
+    [TestCase("Not Fade Away SBB", 9, "not fade away {SBB}")]
+    [TestCase(
+        "Hard To Handle * SBB -> Hey Bulldog Jam SBB -> Hard To Handle Reprise SBB *",
+        7,
+        "hard to handle {SBB} > | hey bulldog jam {SBB} > | hard to handle reprise {SBB} ~hard to handle+reprise"
+    )]
+    [TestCase("Plane Crash reprise", 3, "plane crash reprise ~plane crash+reprise")]
+    [TestCase(
+        "Feel Like A Stranger Reprise +",
+        3,
+        "feel like a stranger reprise ~feel like a stranger+reprise"
+    )]
+    [TestCase("Nebraska (reprise)", 3, "nebraska [reprise]")]
+    [TestCase("Jam + @@ ->", 3, "jam >")]
+    [TestCase("08 NO2.mp3", 8, "no2")]
+    [TestCase("5:15", 3, "5 15")]
+    [TestCase("05:12 - Nebraska", 3, "nebraska")]
+    [TestCase("4:43) Nebraska", 3, "nebraska")]
+    [TestCase("01:26 ] intro", 3, "intro")]
+    [TestCase("Dark Star (w/ St. Stephen tease)", 3, "dark star {w/ St. Stephen tease}")]
+    public void CutsATitleDownToSongNames(string raw, int position, string expected) =>
+        DescribeNotes(TitleParser.Parse(raw, position)).Should().Be(expected);
 
     [TestCase("wsp2007-07-13d2t02")]
     [TestCase("kglw2017-04-10t06.flac")]
@@ -167,4 +225,165 @@ public class TestTrackNumberFold
     [TestCase("1999", "1999")]
     public void ANumberFoldsOnlyIntoAKnownSpelling(string key, string expected) =>
         TrackNumberFold.Fold(key, Known.Contains).Should().Be(expected);
+}
+
+public class TestTrackMatcher
+{
+    [Test]
+    public void ARulingWrittenUnderAnEarlierParseStillMatches()
+    {
+        var (jam, track) = (Guid.NewGuid(), Guid.NewGuid());
+        var state = new Relisten.Kb.Catalogue.CatalogueState
+        {
+            ArtistUuid = Guid.NewGuid(),
+            ArtistName = "Phish",
+            Songs = [],
+            Aliases = new Dictionary<string, Guid>(),
+            UnmappedSetlistSongs = [],
+            Tracks =
+            [
+                new Relisten.Kb.Catalogue.CatalogueTrack(
+                    track,
+                    1,
+                    TitleParser.Parse("(Check) Meat Jam", 1)
+                )
+                {
+                    Existing = [new("(Check) Meat Jam", jam, true, 0.95f)],
+                },
+            ],
+        };
+
+        Relisten
+            .Kb.Catalogue.TrackMatcher.Match(state)
+            .Records.Select(r => $"{r.SongUuid == jam}:{r.Basis}:{string.Join(",", r.Qualifiers!)}")
+            .Should()
+            .Equal("True:ruling:soundcheck");
+    }
+
+    [TestCase("05:12 - Nebraska", "12 - Nebraska")]
+    [TestCase(
+        "07 BillS2018-09-06 07 Pike Co brkdwn_Little Maggie set1",
+        "BillS2018-09-06 07 Pike Co brkdwn_Little Maggie set1"
+    )]
+    public void ARulingWhoseTextMovedIsKeptAtItsPosition(string title, string written)
+    {
+        var (song, track) = (Guid.NewGuid(), Guid.NewGuid());
+        var state = new Relisten.Kb.Catalogue.CatalogueState
+        {
+            ArtistUuid = Guid.NewGuid(),
+            ArtistName = "moe.",
+            Songs = [],
+            Aliases = new Dictionary<string, Guid>(),
+            UnmappedSetlistSongs = [],
+            Tracks =
+            [
+                new Relisten.Kb.Catalogue.CatalogueTrack(track, 1, TitleParser.Parse(title, 7))
+                {
+                    Existing = [new(written, song, true, 0.95f)],
+                },
+            ],
+        };
+
+        Relisten
+            .Kb.Catalogue.TrackMatcher.Match(state)
+            .Records.Select(r => r.SongUuid == song)
+            .Should()
+            .Equal(true);
+    }
+
+    private static Relisten.Kb.Catalogue.CatalogueState OneTrack(
+        string title,
+        params Relisten.Kb.Catalogue.ExistingPart[] existing
+    ) =>
+        new()
+        {
+            ArtistUuid = Guid.NewGuid(),
+            ArtistName = "moe.",
+            Songs = [],
+            Aliases = new Dictionary<string, Guid>(),
+            UnmappedSetlistSongs = [],
+            Tracks =
+            [
+                new Relisten.Kb.Catalogue.CatalogueTrack(
+                    Guid.NewGuid(),
+                    1,
+                    TitleParser.Parse(title, 1)
+                )
+                {
+                    Existing = existing,
+                },
+            ],
+        };
+
+    [Test]
+    public void ARetitledTrackDropsTheRulingItsOldTitleHad()
+    {
+        var state = OneTrack("Bar", new ExistingPart("Foo", Guid.NewGuid(), true, 0.95f));
+
+        var match = Relisten.Kb.Catalogue.TrackMatcher.Match(state);
+
+        match.Records.Should().BeEmpty();
+        match.Cleared.Should().Equal(state.Tracks[0].Uuid);
+    }
+
+    [Test]
+    public void AnOpenMedleysPlacedPartIsNotAskedAgain()
+    {
+        var state = OneTrack(
+            "Uncle Song > Unknown Thing",
+            new ExistingPart("Uncle Song", Guid.NewGuid(), true, 0.95f, SegueAfter: true),
+            new ExistingPart("Unknown Thing", null, false, 0.9f, "open")
+        );
+
+        Relisten
+            .Kb.Catalogue.CatalogueLlm.UnresolvedKeys(state)
+            .Keys.Should()
+            .Equal("unknown thing");
+    }
+
+    [Test]
+    public void ASandwichKeepsOneRulingPerOccurrence()
+    {
+        var (rebubula, dragon, track) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        var state = new Relisten.Kb.Catalogue.CatalogueState
+        {
+            ArtistUuid = Guid.NewGuid(),
+            ArtistName = "moe.",
+            Songs =
+            [
+                new Relisten.Kb.Catalogue.CatalogueSong(rebubula, "Rebubula", "song"),
+                new Relisten.Kb.Catalogue.CatalogueSong(dragon, "Paper Dragon", "song"),
+            ],
+            Aliases = new Dictionary<string, Guid>(),
+            UnmappedSetlistSongs = [],
+            Tracks =
+            [
+                new Relisten.Kb.Catalogue.CatalogueTrack(
+                    track,
+                    1,
+                    TitleParser.Parse("Rebula > Paper Dragon > Rebula", 1)
+                )
+                {
+                    // "Rebula" is a one-off spelling the LLM ruled on, at both ends.
+                    Existing =
+                    [
+                        // A duplicate left by title-matcher@2.0.0 before this fix.
+                        new("Rebula", rebubula, true, 0.95f, SegueAfter: true),
+                        new("Rebula", rebubula, true, 0.95f, SegueAfter: true),
+                        new("Paper Dragon", dragon, true, 0.95f, "song_name", SegueAfter: true),
+                        new("Rebula", rebubula, true, 0.95f),
+                    ],
+                },
+            ],
+        };
+
+        var records = Relisten.Kb.Catalogue.TrackMatcher.Match(state).Records;
+
+        records
+            .Select(r =>
+                $"{r.Part}:{(r.SongUuid == rebubula ? "Rebubula" : "Paper Dragon")}:{r.Basis}"
+            )
+            .Should()
+            .Equal("1:Rebubula:ruling", "2:Paper Dragon:song_name", "3:Rebubula:ruling");
+    }
 }

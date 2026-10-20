@@ -34,7 +34,7 @@ public sealed record CatalogueChunkResult(
 /// unresolved (a combination whose other part nobody knows), and must not be asked forever.
 public sealed class CatalogueLlm(DbService db, ICatalogueModel model)
 {
-    public const string PromptVersion = "catalogue-llm@4";
+    public const string PromptVersion = "catalogue-llm@5";
     public const int ChunkGroups = 50;
     public const int ChunkKeys = 150;
 
@@ -235,10 +235,25 @@ public sealed class CatalogueLlm(DbService db, ICatalogueModel model)
     internal static Dictionary<string, KeyInfo> UnresolvedKeys(CatalogueState state)
     {
         // Numbered variants of a known spelling ("10 waiting for the punchline") fold into it,
-        // so they are matched rather than asked about or stored (TrackNumberFold).
+        // so they are matched rather than asked about or stored (TrackNumberFold). A song name
+        // the matcher already places (a name, an alias, or one with a trailing qualifier word
+        // lifted out) isn't asked about.
+        bool Known(string k) => state.SongNames.ContainsKey(k) || state.Aliases.ContainsKey(k);
+        // An open medley's parts that are already placed (a ruling on a one-off spelling) are
+        // settled: only its open parts are asked about.
         var parts = state
-            .UnresolvedTracks.SelectMany(t => t.Title.Parts.Select(p => (Track: t, Part: p)))
+            .UnresolvedTracks.SelectMany(t =>
+            {
+                var placed = t
+                    .Existing.Where(e => e.Resolved && e.Text != null)
+                    .Select(e => TrackMatcher.KeyOf(e.Text!))
+                    .ToHashSet();
+                return t
+                    .Title.Parts.Where(p => !placed.Contains(p.Key))
+                    .Select(p => (Track: t, Part: p));
+            })
             .Where(x => x.Part.Hint == PartHint.Song)
+            .Where(x => x.Part.Bare == null || !Known(TrackNumberFold.Fold(x.Part.Bare, Known)))
             .ToList();
         var spellings = parts.Select(x => x.Part.Key).ToHashSet();
         var fromTracks = parts
@@ -246,17 +261,12 @@ public sealed class CatalogueLlm(DbService db, ICatalogueModel model)
                 (
                     x.Track,
                     x.Part,
-                    Key: TrackNumberFold.Fold(
-                        x.Part.Key,
-                        k => state.Aliases.ContainsKey(k) || spellings.Contains(k)
-                    )
+                    Key: TrackNumberFold.Fold(x.Part.Key, k => Known(k) || spellings.Contains(k))
                 )
             )
-            .Where(x => !state.Aliases.ContainsKey(x.Key))
+            .Where(x => !Known(x.Key))
             .GroupBy(x => x.Key);
-        var setlist = state
-            .UnmappedSetlistSongs.Where(s => !state.Aliases.ContainsKey(s.Key))
-            .ToLookup(s => s.Key);
+        var setlist = state.UnmappedSetlistSongs.Where(s => !Known(s.Key)).ToLookup(s => s.Key);
 
         var keys = new Dictionary<string, KeyInfo>();
         foreach (var group in fromTracks)
@@ -420,11 +430,12 @@ public sealed class CatalogueLlm(DbService db, ICatalogueModel model)
             KbWriteMode.FillOnly
         );
 
-        // A key naming one song resolves every track using it in this chunk. It is stored as
-        // an alias only if it will match again: a spelling seen in two or more shows, the
-        // song's own name, or an upstream setlist name (setlist evidence is matched through
-        // aliases). One-off spellings ("cassidy 080925 201809 trmic") resolve their track in
-        // kb.track_songs and go no further. Combinations and non-songs only resolve tracks.
+        // Song names, not titles (docs/llm.md §3). The answer's song_text is the span of the
+        // title that names the song. Song names match directly, so a span that is the song's
+        // name needs no alias; another spelling is stored as an alias only if it will match
+        // again (seen at two or more shows, or an upstream setlist name). Anything else the
+        // answer decides (a one-off spelling, a title whose song name is wrapped in noise the
+        // parser left, a combination, not a song) becomes a ruling on its tracks.
         var nameKeys = state
             .Songs.Select(s => (s.Uuid, s.Name))
             .Concat(newSongs.Select(s => (s.Uuid, s.n.Name)))
@@ -435,29 +446,40 @@ public sealed class CatalogueLlm(DbService db, ICatalogueModel model)
         foreach (var (key, decision) in sure)
         {
             var songs = decision.SongRefs.Select(r => refs[r]).ToList();
-            if (songs.Count == 1)
+            var ruling = new PartDecision(songs, decision.Confidence);
+            if (songs.Count != 1)
             {
-                aliases[key] = songs[0];
-                var info = keys[key];
-                if (
-                    info.Usage.Shows >= 2
-                    || info.Setlist.Count > 0
-                    || nameKeys.GetValueOrDefault(songs[0]) == key
-                )
-                {
-                    aliasRecords.Add(
-                        new AliasRecord(
-                            state.ArtistUuid,
-                            info.Display,
-                            songs[0],
-                            decision.Confidence
-                        )
-                    );
-                }
+                extra[key] = ruling;
+                continue;
+            }
+
+            var info = keys[key];
+            var spelled = SpelledName(decision.SongText, key);
+            if (spelled != key)
+            {
+                extra[key] = ruling;
+            }
+
+            if (spelled == nameKeys.GetValueOrDefault(songs[0]) || aliases.ContainsKey(spelled))
+            {
+                continue;
+            }
+
+            if (info.Usage.Shows >= 2 || info.Setlist.Count > 0)
+            {
+                aliases[spelled] = songs[0];
+                aliasRecords.Add(
+                    new AliasRecord(
+                        state.ArtistUuid,
+                        spelled == key ? info.Display : decision.SongText!.Trim(),
+                        songs[0],
+                        decision.Confidence
+                    )
+                );
             }
             else
             {
-                extra[key] = new PartDecision(songs, decision.Confidence);
+                extra[key] = ruling;
             }
         }
 
@@ -467,19 +489,34 @@ public sealed class CatalogueLlm(DbService db, ICatalogueModel model)
         {
             ArtistUuid = state.ArtistUuid,
             ArtistName = state.ArtistName,
-            UnresolvedTracks = state.UnresolvedTracks,
+            Tracks = state.Tracks,
             UnmappedSetlistSongs = state.UnmappedSetlistSongs,
-            Songs = state.Songs,
+            Songs =
+            [
+                .. state.Songs,
+                .. newSongs.Select(s => new CatalogueSong(s.Uuid, s.n.Name, s.n.Kind)),
+            ],
             Aliases = aliases,
         };
         await store.WriteEvidenceAsync(
             TrackMatcher.Evidence(updated, Threshold),
             KbWriteMode.FillOnly
         );
-        await store.WriteTrackSongsAsync(TrackMatcher.Match(updated, extra), KbWriteMode.FillOnly);
+        await store.WriteTrackSongsAsync(
+            TrackMatcher.Match(updated, extra).Records,
+            KbWriteMode.FillOnly
+        );
 
         // Tracks this run changed: an open medley re-matched to the same parts is not one.
-        return (newSongs.Count, await store.TracksChangedAsync());
+        return (newSongs.Count, store.TracksTouched);
+    }
+
+    /// The song name an answer read in a title: its song_text, normalised, when that is a run
+    /// of the key's words; otherwise the key itself.
+    internal static string SpelledName(string? songText, string key)
+    {
+        var spelled = TitleNormalizer.Normalize(songText ?? "");
+        return spelled.Length > 0 && $" {key} ".Contains($" {spelled} ") ? spelled : key;
     }
 }
 
@@ -507,7 +544,8 @@ internal sealed record KeyAnswer(
     bool Unknown,
     float Confidence,
     string Rationale,
-    string? NotASong = null
+    string? NotASong = null,
+    string? SongText = null
 );
 
 /// Rejected counts the keys with no usable answer (missing, or breaking the rules).
@@ -558,6 +596,10 @@ internal sealed class CatalogueRequest
           only when no known song fits, and reuse that n-id for its other spellings.
         - song_names: the names of those songs, in the same order, exactly as known_songs or
           new_songs spell them. They are checked against the ids.
+        - song_text: the part of the key's text that names the song, exactly as written there,
+          without track numbers, file names, recording notes ("sbd", "aud -> sbd") or other
+          words around it. For "Not Fade Away sbb 1972" it is "Not Fade Away". Empty when the
+          key names no song or several.
         - not_a_song: tuning, banter, crowd, filler (tape noise, silence), or jam for an unnamed
           jam. A named jam fans recognise across shows is a song of kind jam. Drums and Space
           are songs of kind segment. Use unknown when you can't tell. Leave songs empty
@@ -596,12 +638,13 @@ internal sealed class CatalogueRequest
               "items": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["id", "key_text", "songs", "song_names", "not_a_song", "confidence", "rationale"],
+                "required": ["id", "key_text", "songs", "song_names", "song_text", "not_a_song", "confidence", "rationale"],
                 "properties": {
                   "id": {"type": "string", "pattern": "^k[0-9]+$"},
                   "key_text": {"type": "string"},
                   "songs": {"type": "array", "items": {"type": "string", "pattern": "^[sn][0-9]+$"}},
                   "song_names": {"type": "array", "items": {"type": "string"}},
+                  "song_text": {"type": "string"},
                   "not_a_song": {"type": ["string", "null"], "enum": ["tuning", "banter", "crowd", "filler", "jam", "unknown", null]},
                   "confidence": {"type": "number"},
                   "rationale": {"type": "string"}
@@ -761,7 +804,8 @@ internal sealed class CatalogueRequest
                 notASong == "unknown",
                 Math.Clamp((float)(double)node["confidence"]!, 0, 1),
                 (string?)node["rationale"] ?? "",
-                notASong
+                notASong,
+                (string?)node["song_text"]
             );
         }
 

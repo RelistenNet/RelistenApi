@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Relisten.Kb.Catalogue;
 using Temporalio.Common;
+using Temporalio.Exceptions;
 using Temporalio.Workflows;
 
 namespace Relisten.Ingestion.Workflows;
@@ -52,6 +53,19 @@ public class KbCatalogueWorkflow
             NonRetryableErrorTypes = ["InvalidOperationException"],
         },
     };
+
+    // A chunk calls the model before it writes, so a retried chunk is another paid call.
+    // It isn't retried by Temporal: the pass counts a failed chunk against MaxChunks and moves
+    // on, and stops after a few failures in a row.
+    private static readonly ActivityOptions ChunkStep = new()
+    {
+        TaskQueue = IngestionQueues.Database,
+        StartToCloseTimeout = TimeSpan.FromMinutes(10),
+        HeartbeatTimeout = TimeSpan.FromSeconds(30),
+        RetryPolicy = new RetryPolicy { MaximumAttempts = 1 },
+    };
+
+    private const int FailuresInARow = 3;
 
     [WorkflowRun]
     public async Task<KbCatalogueResult> RunAsync(BuildKbCatalogue request)
@@ -108,13 +122,27 @@ public class KbCatalogueWorkflow
     {
         // No key is asked twice in a pass, sure or not.
         var skip = new List<string>();
+        var failures = 0;
         for (var chunks = 0; maxChunks is not { } max || chunks < max; chunks++)
         {
-            var chunk = await Workflow.ExecuteActivityAsync(
-                (KbActivities a) =>
-                    a.CatalogueChunk(new KbCatalogueChunkInput(artist, skip, review, only)),
-                Step
-            );
+            CatalogueChunkResult chunk;
+            try
+            {
+                chunk = await Workflow.ExecuteActivityAsync(
+                    (KbActivities a) =>
+                        a.CatalogueChunk(new KbCatalogueChunkInput(artist, skip, review, only)),
+                    ChunkStep
+                );
+                failures = 0;
+            }
+            catch (ActivityFailureException) when (++failures < FailuresInARow)
+            {
+                // It may have paid for a model call: it counts as a chunk, with nothing written.
+                curve.Add(0);
+                total = total with { Chunks = total.Chunks + 1 };
+                continue;
+            }
+
             if (chunk.Done)
             {
                 break;

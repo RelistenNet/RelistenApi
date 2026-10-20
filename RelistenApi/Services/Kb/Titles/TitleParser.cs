@@ -16,14 +16,23 @@ public enum PartHint
 }
 
 /// One song-sized piece of a track title: "Scarlet Begonias >" is one part with SegueAfter.
-/// Key is the normalised text (TitleNormalizer) every lookup and grouping uses.
+/// Key is the normalised song name (TitleNormalizer) every lookup and grouping uses. Notes
+/// are what the title said about the recording ("aud -> sbd", "John Hartford cover"), never
+/// part of the name. Bare is the key without a trailing qualifier word ("plane crash" for
+/// "Plane Crash reprise"), tried only when the key itself names no song, so a band whose
+/// reprise is its own song ("Tweezer Reprise") keeps it.
 public sealed record TitlePart(
     string Text,
     string Key,
     IReadOnlyList<string> Qualifiers,
     bool SegueAfter,
     PartHint Hint
-);
+)
+{
+    public IReadOnlyList<string> Notes { get; init; } = [];
+    public string? Bare { get; init; }
+    public string? BareQualifier { get; init; }
+}
 
 /// A parsed track title. Parts is empty when the title carries no song text at all (a bare
 /// file name such as "wsp2007-07-13d2t02"); such tracks can only be labelled through other
@@ -34,14 +43,16 @@ public sealed record ParsedTitle(string Raw, IReadOnlyList<TitlePart> Parts)
 }
 
 /// The deterministic first stage of title matching (string-theory docs/matching.md T1 step 1):
-/// strips file names, identifiers, track numbers, footnote markers and durations; splits on
-/// segue markers; and lifts known qualifiers out of parentheses. Parentheses it doesn't know
-/// stay in the text, because some are part of the name ("Axilla (Part II)").
+/// cuts a title down to song names. It strips file names, identifiers, track numbers,
+/// footnote markers and durations; splits on segue markers outside brackets; lifts known
+/// qualifiers out of parentheses; and moves recording notes (source changes, cover credits,
+/// "sbd") into Notes. Other parentheses stay in the text, because some are part of the name
+/// ("Axilla (Part II)").
 ///
 /// Version is part of every claim's author_ref that depends on the parse.
 public static partial class TitleParser
 {
-    public const string Version = "title-parse/1";
+    public const string Version = "title-parse/2";
 
     private static readonly Dictionary<string, string> QualifierWords = new()
     {
@@ -107,6 +118,34 @@ public static partial class TitleParser
         "change",
     ];
 
+    // Words that describe the recording, not the song: "(aud -> sbd)", "Not Fade Away SBB".
+    private static readonly HashSet<string> RecordingWords =
+    [
+        "aud",
+        "sbd",
+        "sbb",
+        "matrix",
+        "mtx",
+        "fm",
+        "dat",
+        "source",
+        "patch",
+        "patched",
+        "soundboard",
+        "audience",
+        "cassette",
+        "master",
+    ];
+
+    // A trailing word that may be a qualifier rather than part of the name.
+    private static readonly Dictionary<string, string> TrailingQualifiers = new()
+    {
+        ["reprise"] = "reprise",
+        ["tease"] = "tease",
+        ["intro"] = "intro",
+        ["outro"] = "outro",
+    };
+
     private static readonly HashSet<string> SetWords =
     [
         "set",
@@ -125,12 +164,31 @@ public static partial class TitleParser
         text = StripIdentifier(text);
         text = StripTrackNumber(text, trackPosition, fromFileName);
         text = EncorePrefix().Replace(text, "");
+        // "(>)" is a segue marker in brackets; any other arrow in brackets is a note.
+        text = BracketedSegue().Replace(text, " > ");
 
         // Pieces with the separator that follows each: an arrow is a segue, a slash only says
-        // two songs share the track.
+        // two songs share the track. Separators inside brackets don't split: "(aud -> sbd)".
+        var depth = new int[text.Length + 1];
+        for (var i = 0; i < text.Length; i++)
+        {
+            depth[i + 1] =
+                depth[i]
+                + text[i] switch
+                {
+                    '(' or '[' => 1,
+                    ')' or ']' => depth[i] > 0 ? -1 : 0,
+                    _ => 0,
+                };
+        }
+
         var pieces = new List<(string Text, bool SegueAfter)>();
         var at = 0;
-        foreach (Match separator in SegueSplit().Matches(text))
+        foreach (
+            Match separator in SegueSplit()
+                .Matches(text)
+                .Where(m => depth[m.Index] == 0 && depth[m.Index + m.Length] == 0)
+        )
         {
             pieces.Add((text[at..separator.Index], !separator.Value.Contains('/')));
             at = separator.Index + separator.Length;
@@ -154,7 +212,7 @@ public static partial class TitleParser
                 continue;
             }
 
-            parts.Add(part with { SegueAfter = pieces[i].SegueAfter });
+            parts.Add(part with { SegueAfter = pieces[i].SegueAfter || part.SegueAfter });
         }
 
         // A soundcheck covers the whole track: "(Check) Jam > Leaves" is a soundcheck medley.
@@ -207,6 +265,9 @@ public static partial class TitleParser
 
     private static string StripTrackNumber(string text, int? trackPosition, bool fromFileName)
     {
+        // A time before the name ("05:12 - Nebraska", "4:43) Nebraska") is a duration or a
+        // cue; "5:15" alone is a name.
+        text = DurationPrefix().Replace(text, "");
         var punctuated = PunctuatedTrackNumber().Match(text);
         if (punctuated.Success)
         {
@@ -230,13 +291,15 @@ public static partial class TitleParser
     private static TitlePart? ParsePart(string piece, bool fromFileName)
     {
         var qualifiers = new List<string>();
+        var notes = new List<string>();
         var text = Parenthetical()
             .Replace(
                 piece,
                 m =>
                 {
-                    var inner = TitleNormalizer.Normalize(m.Groups["inner"].Value);
-                    if (Duration().IsMatch(m.Groups["inner"].Value.Trim()))
+                    var raw = m.Groups["inner"].Value.Trim();
+                    var inner = TitleNormalizer.Normalize(raw);
+                    if (Duration().IsMatch(raw))
                     {
                         return " ";
                     }
@@ -244,6 +307,26 @@ public static partial class TitleParser
                     if (QualifierWords.TryGetValue(inner, out var qualifier))
                     {
                         qualifiers.Add(qualifier);
+                        return " ";
+                    }
+
+                    // Notes about the recording, never the name: a source change, a cover
+                    // credit, a tease, a bare count ("Ol' Rickard (2)").
+                    // A bracket that is the whole part is its text (below), not a note.
+                    var words = inner.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                    if (
+                        m.Value != piece.Trim()
+                        && (
+                            raw.Contains('>')
+                            || raw.Contains('→')
+                            || words.Any(RecordingWords.Contains)
+                            || words.Contains("cover")
+                            || words.Any(w => w is "tease" or "teases" or "quote")
+                            || words.Length > 0 && words.All(w => w.All(char.IsDigit))
+                        )
+                    )
+                    {
+                        notes.Add(raw);
                         return " ";
                     }
 
@@ -258,14 +341,30 @@ public static partial class TitleParser
             )
             .Trim();
 
-        // A part that is only a bracket ("[I didn't fuck up today]") is its own text.
+        // A part that is only a bracket ("[I didn't fuck up today]") is its own text, and may
+        // end in its own segue ("(Second Cousins? >)").
+        var segue = false;
         var whole = WholeBracket().Match(text);
         if (whole.Success)
         {
             text = whole.Groups["inner"].Value;
+            var trailing = TrailingSegue().Match(text);
+            if (trailing.Success)
+            {
+                segue = true;
+                text = text[..trailing.Index];
+            }
         }
 
-        text = Markers().Replace(text, "").Trim(' ', '-', '_', '.', ',', ':', ';');
+        text = Markers().Replace(text, "");
+        text = TrailingPlus().Replace(text, "").Trim(' ', '-', '_', '.', ',', ':', ';');
+        var recording = TrailingRecordingWords().Match(text);
+        if (recording.Success && recording.Index > 0)
+        {
+            notes.Add(recording.Value.Trim());
+            text = text[..recording.Index].Trim(' ', '-', '_', '.', ',', ':', ';');
+        }
+
         text = SetPrefix().Replace(text, "");
         text = TrailingFileCode().Replace(text, "").Trim(' ', '-', '_', '.', ',', ':', ';');
         var key = TitleNormalizer.Normalize(text);
@@ -274,7 +373,21 @@ public static partial class TitleParser
             return null;
         }
 
-        return new TitlePart(text, key, qualifiers.Distinct().ToList(), false, HintFor(key));
+        string? bare = null;
+        string? bareQualifier = null;
+        var lastSpace = key.LastIndexOf(' ');
+        if (lastSpace > 0 && TrailingQualifiers.TryGetValue(key[(lastSpace + 1)..], out var word))
+        {
+            bare = key[..lastSpace];
+            bareQualifier = word;
+        }
+
+        return new TitlePart(text, key, qualifiers.Distinct().ToList(), segue, HintFor(key))
+        {
+            Notes = notes,
+            Bare = bare,
+            BareQualifier = bareQualifier,
+        };
     }
 
     private static PartHint HintFor(string key)
@@ -289,13 +402,13 @@ public static partial class TitleParser
     }
 
     /// A single token mixing letters and digits left after stripping a file name ("tuckab11"
-    /// from tuckab11.mp3), or carrying a long digit run. Short ones are real names: "NO2",
-    /// "1x1", "LL3".
+    /// from tuckab11.mp3), or carrying a long digit run. Short ones are real names, file name
+    /// or not: "NO2", "1x1", "LL3" ("08 NO2.mp3").
     private static bool LooksLikeFileName(string text, bool fromFileName) =>
         !text.Contains(' ')
         && text.Any(char.IsDigit)
         && text.Any(char.IsLetter)
-        && (fromFileName || text.Count(char.IsDigit) >= 4);
+        && (fromFileName && text.Length >= 5 || text.Count(char.IsDigit) >= 4);
 
     [GeneratedRegex(@"\.(mp3|flac|shn|wav|ogg|m4a|aiff?)$", RegexOptions.IgnoreCase)]
     private static partial Regex FileExtension();
@@ -314,8 +427,11 @@ public static partial class TitleParser
     )]
     private static partial Regex Identifier();
 
-    [GeneratedRegex(@"^(?:d|cd|disc|s|set)?\s*\d{1,3}\s*(?:[.)\]:_-]|t\d+)\s*")]
+    [GeneratedRegex(@"^(?:d|cd|disc|s|set)?\s*\d{1,3}\s*(?:[.)\]_-]|:(?!\d)|t\d+)\s*")]
     private static partial Regex PunctuatedTrackNumber();
+
+    [GeneratedRegex(@"^\d{1,2}:\d{2}(?::\d{2})?\s*[-)\]]\s*")]
+    private static partial Regex DurationPrefix();
 
     [GeneratedRegex(@"^(\d{1,3})\s+(?=\S)")]
     private static partial Regex BareTrackNumber();
@@ -330,6 +446,18 @@ public static partial class TitleParser
 
     [GeneratedRegex(@"[\(\[](?<inner>[^\)\]]*)[\)\]]")]
     private static partial Regex Parenthetical();
+
+    [GeneratedRegex(@"[\(\[]\s*(?:-+>|>+|→)\s*[\)\]]")]
+    private static partial Regex BracketedSegue();
+
+    [GeneratedRegex(@"\s*(?:-+>|>+|→)\s*$")]
+    private static partial Regex TrailingSegue();
+
+    [GeneratedRegex(@"\s*\++\s*$")]
+    private static partial Regex TrailingPlus();
+
+    [GeneratedRegex(@"(?:\s+(?:sbd|aud|sbb|matrix|mtx|fm))+\s*$", RegexOptions.IgnoreCase)]
+    private static partial Regex TrailingRecordingWords();
 
     [GeneratedRegex(@"^[\(\[](?<inner>[^\)\]]*)[\)\]]$")]
     private static partial Regex WholeBracket();
