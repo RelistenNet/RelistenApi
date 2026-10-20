@@ -298,23 +298,21 @@
     <main>
       <header>
         <div>
-          <small>Relisten / retained results</small>
+          <small>Relisten / music discovery</small>
           <h1>Find the song.<br />Hear the performance.</h1>
         </div>
         <a href="/">Music discovery</a>
       </header>
       <nav id="domain-navigation" class="domain-navigation" aria-label="Browse Relisten"></nav>
       <p class="intro">
-        Find songs, explore possible composition versions across artists, and
-        hear the original recordings. Supported links and unconfirmed suggestions
-        keep their own labels.
+        Find songs, explore compositions across artists, and hear the original recordings.
       </p>
-      <div class="notice">
-        These are retained normalization results, not a replacement accepted
-        catalogue. Equal titles do not establish one song or work. Title-derived
-        identities, unresolved alternatives, and incomplete index coverage stay
-        visible.
-      </div>
+      <details class="notice">
+        <summary>How song and composition links work</summary>
+        <p>Matching titles can describe different songs or compositions. Labels distinguish
+        supported links, model suggestions, and reviewed decisions. Title-derived entries
+        and unresolved alternatives keep their original titles and recordings.</p>
+      </details>
       <form id="search" class="search">
         <input
           id="query"
@@ -336,7 +334,10 @@
         ><button data-tab="setlists">Setlists</button>
       </nav>
       <div id="content" aria-live="polite"></div>
-      <div id="coverage" class="coverage"></div>
+      <details>
+        <summary>Coverage and sources</summary>
+        <div id="coverage" class="coverage"></div>
+      </details>
     </main>
     <script>
       "use strict";
