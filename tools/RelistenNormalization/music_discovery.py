@@ -725,7 +725,7 @@ def main():
     project.add_argument("--output-manifest", required=True)
     project.add_argument("--normalization", required=True)
     project.add_argument("--minimum-free-bytes", type=int, default=int(4.5 * 1024**3))
-    project.add_argument("--maximum-bytes", type=int, default=1024**3)
+    project.add_argument("--maximum-bytes", type=int, default=2 * 1024**3)
     serve = commands.add_parser("serve", help="Serve the private music browser")
     serve.add_argument("--database", required=True)
     serve.add_argument("--composition-selections", help="Optional completed unconfirmed model selection projection")

@@ -348,7 +348,7 @@ class MusicConsolidationProjection:
     DISPOSITIONS = {"proposed", "review", "unresolved", "not_applicable"}
 
     def __init__(self, catalogue, input_manifest, output_manifest, database,
-                 minimum_free_bytes=int(4.5 * 1024**3), maximum_bytes=1024**3):
+                 minimum_free_bytes=int(4.5 * 1024**3), maximum_bytes=2 * 1024**3):
         self.catalogue = Path(catalogue).resolve(strict=True)
         self.input_manifest = Path(input_manifest).resolve(strict=True)
         self.output_manifest = Path(output_manifest).resolve(strict=True)

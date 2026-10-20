@@ -89,7 +89,10 @@ consolidation and projection, then switch the reader after verifying playback.
 The projection stores preferred groups, original-to-target relations and output
 chunk/line coordinates in a separate SQLite file. It does not copy the existing
 510 MB catalogue or the full file index. Complete typed evidence stays in the C#
-output chunks. The full projection uses 956,424,192 bytes (912 MiB).
+output chunks. Artist/title indexes keep exact review lookups selective, and saved
+reviews materialize only the affected artists' indexed rows. The complete indexed
+image uses 1,179,254,784 bytes. Projection defaults to a 2 GiB output cap and retains
+the 4.5 GiB free-space floor; operators can set stricter limits for each job.
 
 ```sh
 python3 tools/RelistenNormalization/music_discovery.py project-normalization \

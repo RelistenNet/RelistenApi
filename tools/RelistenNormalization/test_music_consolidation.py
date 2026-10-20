@@ -370,6 +370,16 @@ class TestMusicConsolidationExport(unittest.TestCase):
         rows = [self.correspondence(row, second if row["originalKey"] == second["entityKey"] else first)
                 for row in self.rows("descriptors.jsonl.gz")]
         self.project(self.outputs(rows))
+        # Other artists must not enter the cost of applying one artist's saved
+        # correspondence. Their full source rows remain in the pinned image.
+        with closing(sqlite3.connect(self.root / "normalization.sqlite3")) as db:
+            db.execute("""WITH RECURSIVE counter(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM counter WHERE n<30000)
+                INSERT INTO originals SELECT scope,'repertoire:other-'||n,'00000000-0000-0000-0000-000000000099',
+                    original_title,expected_hash,output_hash,disposition,reason,sequence_basis,chunk,line
+                FROM counter CROSS JOIN originals WHERE original_key='repertoire:one'""")
+            db.execute("""INSERT INTO groups SELECT scope,original_key,artist_uuid,original_title,'title_derived',NULL
+                FROM originals WHERE artist_uuid='00000000-0000-0000-0000-000000000099'""")
+            db.commit()
         discovery = MusicDiscovery(MusicCatalogue(self.catalogue), normalization=self.root / "normalization.sqlite3")
         group = discovery.groups
         before = sha256_file(group.normalization)
@@ -396,7 +406,18 @@ class TestMusicConsolidationExport(unittest.TestCase):
         result = group.songs(q="fragment")
         self.assertEqual([item["entity_key"] for item in result["items"]], [second["entityKey"]])
         self.assertEqual(group.original_groups("catalogue", ARTIST, variant["entityKey"])["items"][0]["entity_key"], second["entityKey"])
-        self.assertEqual(group.group("catalogue", ARTIST, second["entityKey"])["members_total"], 2)
+        apply_reviews = group._apply_reviews
+        def bounded_artist_projection(db, changes):
+            ticks = 0
+            def budget():
+                nonlocal ticks
+                ticks += 1
+                return ticks > 30
+            db.set_progress_handler(budget, 100)
+            apply_reviews(db, changes)
+            db.set_progress_handler(None, 0)
+        with patch.object(group, "_apply_reviews", side_effect=bounded_artist_projection):
+            self.assertEqual(group.group("catalogue", ARTIST, second["entityKey"])["members_total"], 2)
         self.assertEqual(group.correspondence("catalogue", ARTIST, variant["entityKey"])["proposal"]["targets"][0]["song"]["entityKey"], first["entityKey"])
         corrections.changes = []
         corrections.generation = "withdrawn"

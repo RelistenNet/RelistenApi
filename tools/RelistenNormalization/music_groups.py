@@ -91,9 +91,20 @@ class MusicGroups:
             return
         artists = sorted({change["artistUuid"] for change in changes})
         placeholders = ",".join("?" for _ in artists)
-        db.execute("CREATE TEMP TABLE originals AS SELECT * FROM main.originals WHERE artist_uuid IN (" + placeholders + ")", artists)
+        # Main indexes begin with scope. Start from the complete artist scopes
+        # before copying a reviewed artist; an artist-only predicate scans every
+        # other artist's retained original rows on a large catalog.
+        db.execute("CREATE TEMP TABLE reviewed_artists(scope TEXT,artist_uuid TEXT,PRIMARY KEY(scope,artist_uuid)) WITHOUT ROWID")
+        db.execute("INSERT INTO reviewed_artists SELECT scope,uuid FROM catalogue.artists WHERE uuid IN (" + placeholders + ")", artists)
+        db.executemany("INSERT OR IGNORE INTO reviewed_artists VALUES(?,?)",
+                       ((change["scope"], change["artistUuid"]) for change in changes))
+        literal_index = db.execute("SELECT 1 FROM main.sqlite_master WHERE type='index' AND name='originals_literal'").fetchone()
+        original_source = "main.originals o INDEXED BY originals_literal" if literal_index else "main.originals o"
+        db.execute("CREATE TEMP TABLE originals AS SELECT o.* FROM reviewed_artists a CROSS JOIN " + original_source
+                   + " ON o.scope=a.scope AND o.artist_uuid=a.artist_uuid")
         db.execute("CREATE UNIQUE INDEX original_key ON originals(scope,original_key)")
-        db.execute("CREATE TEMP TABLE groups AS SELECT * FROM main.groups WHERE artist_uuid IN (" + placeholders + ")", artists)
+        db.execute("CREATE TEMP TABLE groups AS SELECT g.* FROM reviewed_artists a CROSS JOIN main.groups g INDEXED BY groups_artist "
+                   "ON g.scope=a.scope AND g.artist_uuid=a.artist_uuid")
         db.execute("CREATE UNIQUE INDEX group_key ON groups(scope,entity_key)")
         db.execute("CREATE INDEX groups_artist ON groups(scope,artist_uuid)")
         db.execute("CREATE TEMP TABLE members AS SELECT m.* FROM originals o CROSS JOIN main.members m "
