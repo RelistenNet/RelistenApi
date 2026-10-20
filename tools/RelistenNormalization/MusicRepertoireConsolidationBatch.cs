@@ -23,6 +23,28 @@ public sealed class MusicRepertoireConsolidationBatch
     private const long MinimumFreeBytes = 11L * 1024 * 1024 * 1024 / 2;
     private const int CheckpointRows = 2000;
 
+    /// <summary>
+    /// Opens the same complete, authenticated title population used by the batch.
+    /// File replay and reviewed refreshes must not build a smaller dictionary from
+    /// whichever files happen to be selected for a request.
+    /// </summary>
+    public async Task<MusicRepertoireConsolidator> LoadResolverAsync(
+        string manifestPath,
+        string manifestSha256,
+        CancellationToken ct = default,
+        string? knowledgePath = null,
+        string? knowledgeSha256 = null
+    )
+    {
+        var input = await AuthenticateInputAsync(
+            Path.GetFullPath(manifestPath),
+            manifestSha256,
+            ct
+        );
+        var knowledge = await ReadKnowledgeAsync(knowledgePath, knowledgeSha256, ct);
+        return await ObserveCompletePopulationAsync(input, knowledge?.Snapshot, ct);
+    }
+
     public async Task<MusicConsolidationOutput> RunAsync(
         string manifestPath,
         string outputDirectory,
@@ -195,7 +217,7 @@ public sealed class MusicRepertoireConsolidationBatch
         return new(snapshot, new(path, length, sha256, 1));
     }
 
-    private static async Task<MusicConsolidationInput> AuthenticateInputAsync(
+    internal static async Task<MusicConsolidationInput> AuthenticateInputAsync(
         string manifestPath,
         string expectedSha,
         CancellationToken ct
@@ -367,7 +389,7 @@ public sealed class MusicRepertoireConsolidationBatch
         }
     }
 
-    private static async IAsyncEnumerable<T> RowsAsync<T>(
+    internal static async IAsyncEnumerable<T> RowsAsync<T>(
         string path,
         [EnumeratorCancellation] CancellationToken ct
     )
@@ -495,7 +517,7 @@ public sealed class MusicRepertoireConsolidationBatch
         }
     }
 
-    private static async Task RequireFileAsync(
+    internal static async Task RequireFileAsync(
         string path,
         long bytes,
         string sha,

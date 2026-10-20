@@ -453,6 +453,147 @@ public sealed class TestMusicRepertoireConsolidationBatch
             new DateTime(2026, 10, 20, 12, 0, 0, DateTimeKind.Utc)
         );
 
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task LiveSongCorrectionsReuseSharedPolicyAndWithdrawalRestoresPinnedBaseline(
+        bool reviewedBaseline
+    )
+    {
+        var fixture = await Export(2);
+        var rule = ReviewedRule(fixture);
+        var accepted = ExpertKnowledgeResolver.CreateSnapshot([rule]);
+        var withdrawn = ExpertKnowledgeResolver.CreateSnapshot([
+            rule with
+            {
+                State = "retracted",
+                Revision = 2,
+            },
+        ]);
+        var retained = await WriteKnowledge("live-baseline.json", accepted);
+        var output = Path.Combine(directory, "live-projection");
+        await new MusicRepertoireConsolidationBatch().RunAsync(
+            fixture.Manifest,
+            output,
+            fixture.ManifestSha,
+            knowledgePath: reviewedBaseline ? retained.Path : null,
+            knowledgeSha256: reviewedBaseline ? retained.Sha : null
+        );
+        var outputPath = Path.Combine(output, "manifest.json");
+        var projection = await ReviewedMusicProjection.OpenAsync(
+            fixture.Manifest,
+            fixture.ManifestSha,
+            outputPath,
+            Hash(await File.ReadAllBytesAsync(outputPath))
+        );
+        var first = await projection.ReadAsync(accepted);
+        var restored = await projection.ReadAsync(withdrawn);
+        if (reviewedBaseline)
+        {
+            first.Items.Should().BeEmpty();
+            restored
+                .Items.Should()
+                .ContainSingle()
+                .Which.Targets.Should()
+                .ContainSingle()
+                .Which.Song.EntityKey.Should()
+                .Be(fixture.Names[0].SongKey);
+        }
+        else
+        {
+            first
+                .Items.Should()
+                .ContainSingle()
+                .Which.Targets.Should()
+                .ContainSingle()
+                .Which.Song.EntityKey.Should()
+                .Be(fixture.Names[1].SongKey);
+            restored.Items.Should().BeEmpty();
+        }
+        first.KnowledgeSha256.Should().Be(accepted.Sha256);
+        restored.KnowledgeSha256.Should().Be(withdrawn.Sha256);
+        first
+            .Items.All(change =>
+                fixture.Descriptors.Any(value => value.OriginalKey == change.OriginalKey)
+            )
+            .Should()
+            .BeTrue();
+        await File.AppendAllTextAsync(fixture.Input.Descriptors.Path, "changed");
+        var changed = () => projection.ReadAsync(withdrawn);
+        await changed.Should().ThrowAsync<IOException>();
+    }
+
+    [Test]
+    public async Task LiveProjectionPagesKeepEveryLongTitleWithinTheReaderResponseBound()
+    {
+        var fixture = await Export(101, " " + new string('x', 100_000));
+        var original = ReviewedRule(fixture);
+        var template = original with
+        {
+            Definition = original.Definition with
+            {
+                Evidence =
+                [
+                    new(
+                        fixture.Manifest,
+                        new FileInfo(fixture.Manifest).Length,
+                        fixture.ManifestSha
+                    ),
+                ],
+            },
+        };
+        var snapshot = ExpertKnowledgeResolver.CreateSnapshot(
+            fixture
+                .Descriptors.Select(descriptor =>
+                    template with
+                    {
+                        RuleUuid = Guid.NewGuid(),
+                        Definition = template.Definition with
+                        {
+                            Selector = template.Definition.Selector with
+                            {
+                                AccountStableKey = ReviewedRepertoireCorrespondences.StableKey(
+                                    descriptor.Scope,
+                                    descriptor.OriginalKey
+                                ),
+                            },
+                        },
+                    }
+                )
+                .ToArray()
+        );
+        var output = Path.Combine(directory, "bounded-live-projection");
+        await new MusicRepertoireConsolidationBatch().RunAsync(
+            fixture.Manifest,
+            output,
+            fixture.ManifestSha
+        );
+        var outputPath = Path.Combine(output, "manifest.json");
+        var projection = await ReviewedMusicProjection.OpenAsync(
+            fixture.Manifest,
+            fixture.ManifestSha,
+            outputPath,
+            Hash(await File.ReadAllBytesAsync(outputPath))
+        );
+        var seen = new List<string>();
+        var page = await projection.ReadAsync(snapshot);
+        page.Items.Count.Should().BeLessThan(100).And.BeGreaterThan(0);
+        while (seen.Count < page.Total)
+        {
+            JsonSerializer
+                .SerializeToUtf8Bytes(page, Json)
+                .Length.Should()
+                .BeLessThanOrEqualTo(7 * 1024 * 1024);
+            seen.AddRange(page.Items.Select(change => change.OriginalKey));
+            if (seen.Count < page.Total)
+            {
+                page = await projection.ReadAsync(snapshot, seen.Count);
+            }
+        }
+        seen.Should().OnlyHaveUniqueItems();
+        seen.Should()
+            .BeEquivalentTo(fixture.Descriptors.Select(descriptor => descriptor.OriginalKey));
+    }
+
     private async Task<(string Path, string Sha)> WriteKnowledge(
         string name,
         ExpertKnowledgeSnapshot snapshot
@@ -464,7 +605,7 @@ public sealed class TestMusicRepertoireConsolidationBatch
         return (path, Hash(bytes));
     }
 
-    private async Task<ExportFixture> Export(int count)
+    private async Task<ExportFixture> Export(int count, string titleSuffix = "")
     {
         var root = Path.Combine(directory, "input-" + Guid.NewGuid().ToString("N"));
         var sourceRun = Path.Combine(root, "captured-source");
@@ -472,11 +613,13 @@ public sealed class TestMusicRepertoireConsolidationBatch
         Directory.CreateDirectory(Path.GetDirectoryName(sourceChunk)!);
         var sourceRows = Enumerable
             .Range(0, count)
-            .Select(index => SourceResult(index, "09.Song " + index, "file_sample"))
+            .Select(index => SourceResult(index, "09.Song " + index + titleSuffix, "file_sample"))
             .Concat(
                 Enumerable
                     .Range(0, count)
-                    .Select(index => SourceResult(index, "Song " + index, "repertoire_song"))
+                    .Select(index =>
+                        SourceResult(index, "Song " + index + titleSuffix, "repertoire_song")
+                    )
             );
         await Gzip(sourceChunk, sourceRows.Select(row => JsonSerializer.Serialize(row, Json)));
         var sourceSha = Hash(await File.ReadAllBytesAsync(sourceChunk));
@@ -485,8 +628,11 @@ public sealed class TestMusicRepertoireConsolidationBatch
             .Select(index => new MusicRepertoireDescriptor(
                 "fixture:catalogue",
                 Artist,
-                ShadowRepertoireAdapter.ProvisionalEntityKey(Artist, "09.Song " + index),
-                "09.Song " + index,
+                ShadowRepertoireAdapter.ProvisionalEntityKey(
+                    Artist,
+                    "09.Song " + index + titleSuffix
+                ),
+                "09.Song " + index + titleSuffix,
                 "title_derived",
                 "proposed",
                 null,
@@ -511,7 +657,7 @@ public sealed class TestMusicRepertoireConsolidationBatch
                     Artist,
                     ShadowRepertoireAdapter.KnownEntityKey(uuid),
                     uuid,
-                    "Song " + index,
+                    "Song " + index + titleSuffix,
                     "repertoire_song:" + uuid.ToString("D"),
                     [],
                     new(

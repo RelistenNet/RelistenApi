@@ -157,12 +157,20 @@ class TestCompositionCatalogue(unittest.TestCase):
             manifest_sha256=sha256_file(self.manifest), minimum_free_bytes=0, **options).build()
 
     def discovery(self, **options):
-        return MusicDiscovery(MusicCatalogue(self.catalogue), normalization=self.normalization, compositions=self.database, **options)
+        discovery = MusicDiscovery(MusicCatalogue(self.catalogue), normalization=self.normalization, compositions=self.database, **options)
+        if options.get("review_url"):
+            # The fixed review.test origin has no server. These composition tests
+            # supply a complete empty song-policy snapshot; review-specific tests
+            # replace its decisions at their public boundary below.
+            knowledge = patch.object(discovery.review_client, "snapshot", return_value=dict(sha256="empty-review-snapshot", rules=[]))
+            knowledge.start()
+            self.addCleanup(knowledge.stop)
+        return discovery
 
     def test_review_bridge_authenticates_scoped_songs_and_qualified_work_targets(self):
         self.build()
         discovery = self.discovery(review_url="https://reviews.test")
-        empty_knowledge = patch.object(discovery.review_client, "snapshot", return_value=dict(rules=[]))
+        empty_knowledge = patch.object(discovery.review_client, "snapshot", return_value=dict(sha256="empty-review-snapshot", rules=[]))
         empty_knowledge.start()
         self.addCleanup(empty_knowledge.stop)
         base = self.serve(handler_for(discovery))
@@ -323,12 +331,14 @@ const input=JSON.parse(process.argv[1]);
 const render=new Function('document','stats',input.source+';return appendReviewLink;');
 const row={scope:'native',entity_key:'repertoire:<literal&key>',artist_uuid:'artist-one'};
 const output=[];
+const document={createElement(){return {children:[],append(node){this.children.push(node)}}}};
+const collect=node=>node.href?output.push(node):node.children.forEach(collect);
 for(const stats of [{},{normalization_review:true,reviewUrl:'https://reviews.test/'}]){
- const container={append(node){output.push(node)}};
- render({createElement(){return {}}},stats)(container,row);
+ const container={append:collect};
+ render(document,stats)(container,row);
 }
-const songContainer={append(node){output.push(node)}};
-render({createElement(){return {}}},{normalization_review:true,song_identity_review:true,reviewUrl:'https://reviews.test/'})(songContainer,row,false);
+const songContainer={append:collect};
+render(document,{normalization_review:true,song_identity_review:true,reviewUrl:'https://reviews.test/'})(songContainer,row,false);
 (async()=>{
  let request;
  const work=new Function('api','query','stats','generation',input.workSource+';return compositionWork;')(
@@ -363,7 +373,7 @@ render({createElement(){return {}}},{normalization_review:true,song_identity_rev
         base = self.serve(handler_for(discovery))
         generation = discovery.stats()["generation"]
         with patch.object(discovery.review_client, "evaluate_one", return_value=decision), \
-                patch.object(discovery.review_client, "snapshot", return_value=dict(rules=[])):
+                patch.object(discovery.review_client, "snapshot", return_value=dict(sha256="empty-review-snapshot", rules=[])):
             song = self.get(base, "/api/song-composition-hypotheses", scope="catalogue", artist=ARTISTS[0],
                             key=self.songs[0]["entityKey"], generation=generation)
             original_work = self.get(base, "/api/composition-work", key=self.work_keys[0], scope="catalogue",

@@ -316,6 +316,50 @@ class TestMusicConsolidationExport(unittest.TestCase):
         raw = get("/api/song", scope="catalogue", key=variant["entityKey"])
         self.assertEqual(raw["title"], variant["name"])
 
+    def test_saved_song_projection_updates_search_memberships_and_withdrawal_without_rebuilding(self):
+        first = self.song("repertoire:one", "Scarlet", "legacy-one")
+        second = self.song("repertoire:two", "Fire", "legacy-two")
+        variant = self.song("repertoire:variant", "Scarlet fragment")
+        self.chunk("repertoire", first, second, kind="song_sample")
+        self.chunk("file_contents", {"titleInterpretation": {"segments": [{"song": variant}]}}, entities=[variant["entityKey"]])
+        self.build()
+        self.export()
+        rows = [self.correspondence(row, second if row["originalKey"] == second["entityKey"] else first)
+                for row in self.rows("descriptors.jsonl.gz")]
+        self.project(self.outputs(rows))
+        discovery = MusicDiscovery(MusicCatalogue(self.catalogue), normalization=self.root / "normalization.sqlite3")
+        group = discovery.groups
+        before = sha256_file(group.normalization)
+
+        class Corrections:
+            changes = []
+            generation = "before"
+            def snapshot(self):
+                return {"sha256": self.generation, "rules": [{"definition": {"domain": "songs"}}]}
+            def music_changes(self, metadata, snapshot):
+                return self.changes
+
+        corrections = Corrections()
+        group.review_client = corrections
+        initial_generation = discovery.stats()["generation"]
+        change = dict(scope="catalogue", artistUuid=ARTIST, originalKey=variant["entityKey"],
+                      disposition="proposed", reason="reviewed", sequenceBasis="single", targets=[dict(
+                          song=second, relation="identity_alias", disposition="proposed", reason="reviewed", qualifiers=[])])
+        corrections.changes = [change]
+        corrections.generation = "accepted"
+        self.assertNotEqual(initial_generation, discovery.stats()["generation"])
+        self.assertEqual(group.member_keys("catalogue", ARTIST, first["entityKey"]), [first["entityKey"]])
+        self.assertEqual(group.member_keys("catalogue", ARTIST, second["entityKey"]), [second["entityKey"], variant["entityKey"]])
+        result = group.songs(q="fragment")
+        self.assertEqual([item["entity_key"] for item in result["items"]], [second["entityKey"]])
+        self.assertEqual(group.original_groups("catalogue", ARTIST, variant["entityKey"])["items"][0]["entity_key"], second["entityKey"])
+        self.assertEqual(group.group("catalogue", ARTIST, second["entityKey"])["members_total"], 2)
+        self.assertEqual(group.correspondence("catalogue", ARTIST, variant["entityKey"])["proposal"]["targets"][0]["song"]["entityKey"], first["entityKey"])
+        corrections.changes = []
+        corrections.generation = "withdrawn"
+        self.assertEqual(group.member_keys("catalogue", ARTIST, first["entityKey"]), [first["entityKey"], variant["entityKey"]])
+        self.assertEqual(sha256_file(group.normalization), before)
+
     def test_new_normalization_generation_rejects_old_group_links_and_compounds_do_not_inherit_works(self):
         song = self.song("repertoire:known", "Scarlet", "legacy")
         compound = self.song("repertoire:compound", "Scarlet > Fire")

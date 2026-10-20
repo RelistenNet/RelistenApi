@@ -8,6 +8,7 @@ All identity and display decisions come from the pinned C# output.
 from contextlib import closing
 import gzip
 import hashlib
+import heapq
 import json
 from pathlib import Path
 import sqlite3
@@ -16,6 +17,7 @@ import uuid
 
 from music_catalogue import MAXIMUM_LINE_BYTES
 from music_consolidation import sha256_file
+from reviewed_knowledge import ReviewedKnowledgeUnavailable
 
 
 class MusicNormalizationChanged(ValueError):
@@ -24,6 +26,7 @@ class MusicNormalizationChanged(ValueError):
 
 class MusicGroups:
     def __init__(self, catalogue, normalization):
+        self.review_client = None
         self.catalogue = Path(catalogue).resolve(strict=True)
         self.normalization = Path(normalization).resolve(strict=True)
         catalogue_stamp = self._stat(self.catalogue)
@@ -44,7 +47,7 @@ class MusicGroups:
         value = path.stat()
         return value.st_ino, value.st_size, value.st_mtime_ns
 
-    def _connect(self):
+    def _connect(self, reviewed=True, artist=None):
         if self._stat(self.catalogue) != self._catalogue_stat or self._stat(self.normalization) != self._normalization_stat:
             raise MusicNormalizationChanged("The music images changed. Restart discovery with a matching completed projection")
         db = sqlite3.connect(self.normalization.as_uri() + "?mode=ro", uri=True)
@@ -65,10 +68,51 @@ class MusicGroups:
                     or self._stat(self.catalogue) != self._catalogue_stat
                     or self._stat(self.normalization) != self._normalization_stat):
                 raise MusicNormalizationChanged("The music images changed while opening the normalized catalogue")
+            if reviewed and self.review_client is not None:
+                snapshot = self.review_client.snapshot()
+                if any(rule["definition"]["domain"] == "songs" for rule in snapshot["rules"]):
+                    changes = self.review_client.music_changes(self.metadata, snapshot)
+                    selected = [change for change in changes if artist is None or change["artistUuid"] == artist]
+                    self._apply_reviews(db, selected)
             return db
         except BaseException:
             db.close()
             raise
+
+    @staticmethod
+    def _apply_reviews(db, changes):
+        """Materialize only changed artists so every browse join keeps real indexes."""
+        if not changes:
+            return
+        artists = sorted({change["artistUuid"] for change in changes})
+        placeholders = ",".join("?" for _ in artists)
+        db.execute("CREATE TEMP TABLE originals AS SELECT * FROM main.originals WHERE artist_uuid IN (" + placeholders + ")", artists)
+        db.execute("CREATE UNIQUE INDEX original_key ON originals(scope,original_key)")
+        db.execute("CREATE TEMP TABLE groups AS SELECT * FROM main.groups WHERE artist_uuid IN (" + placeholders + ")", artists)
+        db.execute("CREATE UNIQUE INDEX group_key ON groups(scope,entity_key)")
+        db.execute("CREATE INDEX groups_artist ON groups(scope,artist_uuid)")
+        db.execute("CREATE TEMP TABLE members AS SELECT m.* FROM originals o CROSS JOIN main.members m "
+                   "ON m.scope=o.scope AND m.original_key=o.original_key")
+        db.execute("CREATE UNIQUE INDEX member_key ON members(scope,original_key,target_ordinal)")
+        db.execute("CREATE INDEX members_target ON members(scope,target_key,original_key)")
+        for change in changes:
+            scope, artist, key = MusicGroups._coordinates(change["scope"], change["artistUuid"], change["originalKey"])
+            original = db.execute("SELECT * FROM originals WHERE scope=? AND original_key=? AND artist_uuid=?",
+                                  (scope, key, artist)).fetchone()
+            if original is None:
+                raise ReviewedKnowledgeUnavailable("A reviewed song account is absent from the pinned music image")
+            db.execute("UPDATE originals SET disposition=?,reason=?,sequence_basis=? WHERE scope=? AND original_key=?",
+                       (change["disposition"], change["reason"], change["sequenceBasis"], scope, key))
+            db.execute("DELETE FROM members WHERE scope=? AND original_key=?", (scope, key))
+            for ordinal, target in enumerate(change["targets"]):
+                song = target["song"]
+                if song["artistUuid"] != artist:
+                    raise ReviewedKnowledgeUnavailable("A reviewed song projection crosses artists")
+                values = (scope, song["entityKey"], artist, song["name"], song["basis"], song.get("legacySongUuid"))
+                db.execute("INSERT OR REPLACE INTO groups VALUES(?,?,?,?,?,?)", values)
+                db.execute("INSERT INTO members VALUES(?,?,?,?,?,?,?,?)", (scope, key, song["entityKey"],
+                           target["relation"], ordinal, json.dumps(target["qualifiers"], separators=(",", ":")),
+                           target["disposition"], target["reason"]))
 
     @staticmethod
     def _coordinates(scope, artist, key):
@@ -85,14 +129,30 @@ class MusicGroups:
         return limit, offset
 
     def stats(self):
-        with closing(self._connect()):
-            return {**self.metadata, "outcomes": self.outcomes}
+        with closing(self._connect(reviewed=False)):
+            result = {**self.metadata, "outcomes": self.outcomes}
+            if self.review_client is not None:
+                result["knowledgeSha256"] = self.review_client.snapshot()["sha256"]
+            return result
 
-    def songs(self, q="", artist="", scope="", limit=40, offset=0, review_order=False):
+    def songs(self, q="", artist="", scope="", limit=40, offset=0, review_order=False, _excluded_artists=None, reviewed=True):
         limit, offset = self._page(limit, offset)
         artist = str(uuid.UUID(artist)) if artist else ""
+        if reviewed and not artist and self.review_client is not None and _excluded_artists is None:
+            snapshot = self.review_client.snapshot()
+            if any(rule["definition"]["domain"] == "songs" for rule in snapshot["rules"]):
+                changes = self.review_client.music_changes(self.metadata, snapshot)
+                affected = sorted({change["artistUuid"] for change in changes})
+                if affected:
+                    return self._merged_songs(q, scope, limit, offset, review_order, affected, snapshot["sha256"])
         group_where, group_args = self._search_filter("g", "title", q, artist, scope)
         original_where, original_args = self._search_filter("o", "original_title", q, artist, scope)
+        if _excluded_artists:
+            placeholders = ",".join("?" for _ in _excluded_artists)
+            group_where += " AND g.artist_uuid NOT IN (" + placeholders + ")"
+            original_where += " AND o.artist_uuid NOT IN (" + placeholders + ")"
+            group_args.extend(_excluded_artists)
+            original_args.extend(_excluded_artists)
         # Resolve literal title/alias hits first. Correlated alias checks across
         # every group otherwise exhaust the deadline even for a small artist.
         # CROSS JOIN keeps literal candidates ahead of membership/body lookups;
@@ -138,7 +198,7 @@ class MusicGroups:
             # before numbered file titles. This is retrieval order, not a match.
             order = "(casefold(v.title)=?) DESC,(v.legacy_uuid IS NOT NULL) DESC," + order
             order_args = [q.casefold()]
-        with closing(self._connect()) as db:
+        with closing(self._connect(reviewed=reviewed and (bool(artist) or _excluded_artists is None), artist=artist)) as db:
             # Count and page the same stream once. A second full count repeats
             # all correspondence lookups before the first unfiltered page.
             rows = db.execute(visible + ", selected AS (SELECT v.*,count(*) OVER() total_rows FROM visible v "
@@ -157,6 +217,40 @@ class MusicGroups:
                     item.update(self._review_title_forms(db, row))
                 items.append(item)
         return {"items": items, "total": total, "limit": limit, "offset": offset}
+
+    def _merged_songs(self, q, scope, limit, offset, review_order, artists, knowledge_sha):
+        # Each artist stream keeps its own indexed correspondence graph. Merge
+        # ordered pages with the unchanged catalog instead of joining million-row
+        # UNION views, which SQLite materializes before applying artist filters.
+        total = 0
+        def stream(artist, excluded):
+            nonlocal total
+            first = self.songs(q=q, scope=scope, artist=artist, limit=100, offset=0,
+                               review_order=review_order, _excluded_artists=excluded)
+            total += first["total"]
+            yield from first["items"]
+            consumed = len(first["items"])
+            while consumed < first["total"]:
+                page = self.songs(q=q, scope=scope, artist=artist, limit=100, offset=consumed,
+                                  review_order=review_order, _excluded_artists=excluded)
+                if not page["items"]:
+                    raise ReviewedKnowledgeUnavailable("The reviewed song search changed during pagination")
+                consumed += len(page["items"])
+                yield from page["items"]
+        def order(row):
+            prefix = (int((row["title"] or "").casefold() != q.casefold()), int(row["legacy_uuid"] is None)) if review_order and q else ()
+            return (*prefix, (row["title"] or "").casefold(), row["scope"], row["entity_key"], -row["normalized_group"])
+        streams = [stream("", artists), *(stream(artist, []) for artist in artists)]
+        merged = heapq.merge(*streams, key=order)
+        items = []
+        for ordinal, item in enumerate(merged):
+            if ordinal >= offset:
+                items.append(item)
+            if len(items) == limit:
+                break
+        if self.review_client.snapshot()["sha256"] != knowledge_sha:
+            raise ReviewedKnowledgeUnavailable("Reviewed knowledge changed; reload the song results")
+        return dict(items=items, total=total, limit=limit, offset=offset)
 
     @staticmethod
     def _search_filter(alias, title_field, q, artist, scope):
@@ -181,7 +275,7 @@ class MusicGroups:
     def review_identity(self, scope, artist, key):
         """Authenticate a review account without loading its work or file graph."""
         scope, artist, key = self._coordinates(scope, artist, key)
-        with closing(self._connect()) as db:
+        with closing(self._connect(reviewed=False)) as db:
             row = db.execute("SELECT g.*,1 normalized_group,a.name artist_name FROM groups g "
                 "LEFT JOIN catalogue.artists a ON a.scope=g.scope AND a.uuid=g.artist_uuid "
                 "WHERE g.scope=? AND g.artist_uuid=? AND g.entity_key=?", (scope, artist, key)).fetchone()
@@ -202,7 +296,7 @@ class MusicGroups:
     def group(self, scope, artist, key, limit=40, offset=0):
         scope, artist, key = self._coordinates(scope, artist, key)
         limit, offset = self._page(limit, offset)
-        with closing(self._connect()) as db:
+        with closing(self._connect(artist=artist)) as db:
             row = db.execute("SELECT g.*,a.name artist_name FROM groups g LEFT JOIN catalogue.artists a "
                 "ON a.scope=g.scope AND a.uuid=g.artist_uuid WHERE g.scope=? AND g.artist_uuid=? AND g.entity_key=?",
                 (scope, artist, key)).fetchone()
@@ -228,7 +322,7 @@ class MusicGroups:
 
     def member_keys(self, scope, artist, key):
         scope, artist, key = self._coordinates(scope, artist, key)
-        with closing(self._connect()) as db:
+        with closing(self._connect(artist=artist)) as db:
             group = db.execute("SELECT 1 FROM groups WHERE scope=? AND artist_uuid=? AND entity_key=?", (scope, artist, key)).fetchone()
             if not group:
                 raise KeyError("This normalized song group is not in the current image")
@@ -238,7 +332,7 @@ class MusicGroups:
 
     def original_groups(self, scope, artist, key):
         scope, artist, key = self._coordinates(scope, artist, key)
-        with closing(self._connect()) as db:
+        with closing(self._connect(artist=artist)) as db:
             rows = db.execute("SELECT DISTINCT g.* FROM groups g JOIN members m "
                 "ON m.scope=g.scope AND m.target_key=g.entity_key "
                 "WHERE m.scope=? AND g.artist_uuid=? AND m.original_key=? AND m.disposition='proposed' "
@@ -247,7 +341,7 @@ class MusicGroups:
 
     def member_relations(self, scope, artist, key):
         scope, artist, key = self._coordinates(scope, artist, key)
-        with closing(self._connect()) as db:
+        with closing(self._connect(artist=artist)) as db:
             rows = db.execute("""SELECT m.original_key,m.relation,m.qualifiers,o.disposition FROM members m
                 JOIN originals o ON o.scope=m.scope AND o.original_key=m.original_key
                 WHERE m.scope=? AND o.artist_uuid=? AND m.target_key=? AND m.disposition='proposed'
@@ -261,7 +355,7 @@ class MusicGroups:
 
     def correspondence(self, scope, artist, key):
         scope, artist, key = self._coordinates(scope, artist, key)
-        with closing(self._connect()) as db:
+        with closing(self._connect(reviewed=False)) as db:
             row = db.execute("SELECT chunk,line,output_hash FROM originals WHERE scope=? AND artist_uuid=? AND original_key=?",
                              (scope, artist, key)).fetchone()
         if row is None:

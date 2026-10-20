@@ -176,7 +176,8 @@ public sealed partial class NormalizationReviewHost
         string PeopleReader,
         string? QueuePath = null,
         string? AssetsDirectory = null,
-        string? PublicUrl = null
+        string? PublicUrl = null,
+        ReviewMusicConfiguration? MusicProjection = null
     )
     {
         internal static async Task<ReviewHostConfiguration> ReadAsync(
@@ -279,6 +280,7 @@ public sealed partial class NormalizationReviewHost
             {
                 EvidenceRoot = root,
                 AssetsDirectory = assets,
+                MusicProjection = value.MusicProjection?.Resolve(Path.GetDirectoryName(fullPath)!),
                 QueuePath =
                     value.QueuePath == null
                         ? null

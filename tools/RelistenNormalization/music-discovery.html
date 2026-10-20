@@ -109,6 +109,11 @@
       a.button {
         cursor: pointer;
       }
+      .review-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
       button:hover,
       a.button:hover {
         border-color: var(--accent);
@@ -374,12 +379,14 @@
         if (!["http:", "https:"].includes(target.protocol) || target.username || target.password) return;
         target.search = new URLSearchParams({domain: "compositions", namespace: "repertoire",
           stableKey: JSON.stringify([row.scope, row.entity_key]), artistUuid: row.artist_uuid});
+        const actions = document.createElement("div");
+        actions.className = "review-actions";
         if (allowComposition) {
           const action = document.createElement("a");
           action.href = target.href;
           action.textContent = "Choose composition";
           action.className = "button";
-          container.append(action);
+          actions.append(action);
         }
         if (stats.song_identity_review) {
           const songTarget = new URL(target.href);
@@ -388,8 +395,9 @@
           songAction.href = songTarget.href;
           songAction.textContent = "Resolve song";
           songAction.className = "button";
-          container.append(songAction);
+          actions.append(songAction);
         }
+        container.append(actions);
       }
       async function api(path) {
         const r = await fetch(path);

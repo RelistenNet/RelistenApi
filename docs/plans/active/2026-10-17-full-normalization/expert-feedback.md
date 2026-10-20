@@ -41,9 +41,10 @@ projections so a saved correction cannot rewrite the evidence that justified it.
 3. Preview current affected accounts and record the reason.
 4. Save. The service pins the original evidence, checks the current revision and
    records an attributed operation. Retrying the same operation is idempotent.
-5. Reload venue or composition results to see the correction. Song groups use the
-   saved correspondence on the next normalization run. Individual recording
-   credits stay unchanged. History retains earlier decisions; withdrawal creates
+5. Reload venue, song or composition results to see the correction. Song groups
+   reprocess the affected artist through the shared C# resolver; they do not need
+   a manual catalog rebuild. Individual recording credits stay unchanged.
+   History retains earlier decisions; withdrawal creates
    a new revision and removes the withdrawn decision’s matching authority.
 
 The host rechecks evidence between preview and save. Changed source evidence or
@@ -82,8 +83,30 @@ are not inferred. Rejected candidates do not invent another identity.
 Export `/api/knowledge` to a retained JSON file and pass its file SHA256 with
 `music-consolidate ... --knowledge <snapshot.json> <snapshot-sha256> [--resume]`.
 The batch records both the resolver snapshot hash and retained file hash. A changed
-snapshot cannot resume or relabel a completed run. Saving a song decision records
-knowledge immediately; the next normalization pass applies it to song grouping.
+snapshot cannot resume or relabel a completed run.
+
+For live song corrections, configure the review host's optional `musicProjection`
+with the completed input and output manifest paths and their SHA256 values. The
+host authenticates those artifacts once, then reuses the artist's retained
+dictionary and descriptors. `/api/music/review-projection` returns paged changes
+bound to those manifests and the current knowledge snapshot. The reader applies
+them to search, group membership and performance lookup. The original artifacts
+stay immutable; original evidence and review target retrieval bypass this view.
+
+The request supplies `inputManifestSha256`, `outputManifestSha256`,
+`knowledgeSha256` and a nonnegative `offset`. A response repeats the three pins
+and returns `total`, `offset` and `items`. Each item identifies the original
+scoped account, its disposition and its complete target list. Pages contain up
+to 100 items within a seven MiB response limit; advance by the actual item count.
+The endpoint authenticates the Tailscale caller on every request. Its targets are
+reader projections, not newly accepted canonical identities.
+
+The reader generation includes the knowledge revision. Saving, revising or
+withdrawing a decision refreshes the affected view on the next request, including
+decisions already present when the completed batch was built. Withdrawal restores
+the interpretation without that decision. A pin mismatch or failed refresh
+returns a retryable error. The saved decision remains durable, so retrying does
+not require another save.
 
 The public normalized API and production publication remain separate consumers.
 A reviewed local correspondence does not itself merge canonical entities, move

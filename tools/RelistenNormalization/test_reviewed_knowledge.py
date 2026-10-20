@@ -118,5 +118,56 @@ class TestReviewedReaderProjection(unittest.TestCase):
         self.assertEqual(changed["candidates"], original["candidates"])
 
 
+
+
+class TestMusicReviewProjectionClient(unittest.TestCase):
+    def test_paged_changes_are_pinned_cached_and_refreshed_after_a_saved_decision(self):
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        import threading
+        from urllib.parse import parse_qs, urlsplit
+        from reviewed_knowledge import ReviewedKnowledgeClient
+
+        state = {"sha": "before", "requests": [], "mismatch": False}
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                route = urlsplit(self.path)
+                if route.path == "/api/knowledge":
+                    result = {"sha256": state["sha"], "rules": []}
+                else:
+                    query = {key: values[0] for key, values in parse_qs(route.query).items()}
+                    state["requests"].append(query)
+                    offset = int(query["offset"])
+                    total = 101 if state["sha"] == "before" else 1
+                    result = dict(inputManifestSha256=query["inputManifestSha256"],
+                                  outputManifestSha256=query["outputManifestSha256"],
+                                  knowledgeSha256="wrong" if state["mismatch"] else state["sha"],
+                                  total=total, offset=offset,
+                                  items=[dict(originalKey=str(index)) for index in range(offset, min(total, offset + 100))])
+                body = json.dumps(result).encode()
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            def log_message(self, *args):
+                pass
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        client = ReviewedKnowledgeClient(f"http://127.0.0.1:{server.server_port}")
+        metadata = dict(inputManifestSha256="input", outputManifestSha256="output")
+        self.assertEqual(len(client.music_changes(metadata, client.snapshot())), 101)
+        self.assertEqual([query["offset"] for query in state["requests"]], ["0", "100"])
+        self.assertEqual(len(client.music_changes(metadata, client.snapshot())), 101)
+        self.assertEqual(len(state["requests"]), 2)
+        state["sha"] = "saved"
+        self.assertEqual(client.music_changes(metadata, client.snapshot()), [dict(originalKey="0")])
+        state["sha"] = "withdrawn"
+        state["mismatch"] = True
+        from reviewed_knowledge import ReviewedKnowledgeUnavailable
+        with self.assertRaises(ReviewedKnowledgeUnavailable):
+            client.music_changes(metadata, client.snapshot())
+
+
 if __name__ == "__main__":
     unittest.main()

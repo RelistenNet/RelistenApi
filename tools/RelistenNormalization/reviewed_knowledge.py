@@ -10,7 +10,7 @@ import hashlib
 import json
 import threading
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 from urllib.request import Request, urlopen
 
 
@@ -39,7 +39,7 @@ class ReviewedKnowledgeClient:
         self.current = None
         self.results = {}
 
-    def _request(self, path, value=None):
+    def _request(self, path, value=None, timeout=20):
         headers = {"Accept": "application/json"}
         body = None
         if value is not None:
@@ -47,7 +47,7 @@ class ReviewedKnowledgeClient:
                             "X-CSRF-Token": self._request("/api/session")["csrfToken"]})
             body = json.dumps(value, separators=(",", ":")).encode()
         try:
-            with urlopen(Request(self.origin + path, data=body, headers=headers), timeout=20) as response:
+            with urlopen(Request(self.origin + path, data=body, headers=headers), timeout=timeout) as response:
                 raw = response.read(8 * 1024**2 + 1)
             if len(raw) > 8 * 1024**2:
                 raise ReviewedKnowledgeUnavailable("Reviewed knowledge response exceeds its limit")
@@ -83,6 +83,32 @@ class ReviewedKnowledgeClient:
                         raise ReviewedKnowledgeUnavailable("Reviewed knowledge returned another observation")
                     self.results[(snapshot["sha256"], key)] = returned["evaluation"]
             return [copy.deepcopy(self.results[(snapshot["sha256"], key)]) for key in keys]
+
+    def music_changes(self, metadata, snapshot):
+        """Read complete sparse C# changes, pinned across every response page."""
+        key = ("music", snapshot["sha256"], metadata["inputManifestSha256"], metadata["outputManifestSha256"])
+        with self.lock:
+            if key in self.results:
+                return self.results[key]
+            items, total = [], None
+            while total is None or len(items) < total:
+                query = dict(inputManifestSha256=key[2], outputManifestSha256=key[3],
+                             knowledgeSha256=key[1], offset=len(items))
+                page = self._request("/api/music/review-projection?" + urlencode(query), timeout=60)
+                if (page.get("inputManifestSha256") != key[2] or page.get("outputManifestSha256") != key[3]
+                        or page.get("knowledgeSha256") != key[1] or page.get("offset") != len(items)
+                        or not isinstance(page.get("items"), list) or not isinstance(page.get("total"), int)
+                        or not 0 <= page["total"] <= 200000 or len(page["items"]) > 100
+                        or (total is not None and total != page["total"])):
+                    raise ReviewedKnowledgeUnavailable("The song correction projection changed; reload this page")
+                total = page["total"]
+                if not page["items"] and len(items) < total:
+                    raise ReviewedKnowledgeUnavailable("The song correction projection is incomplete")
+                items.extend(page["items"])
+                if len(items) > total:
+                    raise ReviewedKnowledgeUnavailable("The song correction projection exceeded its declared population")
+            self.results[key] = items
+            return items
 
     def evaluate_one(self, reference):
         snapshot = self.snapshot()

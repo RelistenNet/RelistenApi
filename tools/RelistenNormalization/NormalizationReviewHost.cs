@@ -21,6 +21,7 @@ public sealed partial class NormalizationReviewHost
     private readonly NormalizationExpertKnowledgeService knowledge;
     private readonly ReviewReaderBridge readers;
     private readonly ReviewTailnetAuthentication authentication;
+    private ReviewedMusicProjection? musicProjection;
 
     private NormalizationReviewHost(
         ReviewHostConfiguration configuration,
@@ -64,6 +65,16 @@ public sealed partial class NormalizationReviewHost
             new(db, new NormalizationWorkService(db), configuration.EvidenceRoot),
             http
         );
+        if (configuration.MusicProjection is { } music)
+        {
+            host.musicProjection = await ReviewedMusicProjection.OpenAsync(
+                music.InputManifest,
+                music.InputManifestSha256,
+                music.OutputManifest,
+                music.OutputManifestSha256,
+                ct
+            );
+        }
         await using var app = builder.Build();
         host.MapMiddleware(app);
         host.MapRoutes(app);
@@ -150,6 +161,10 @@ public sealed partial class NormalizationReviewHost
             )
         );
         app.MapPost("/api/evaluate", (Func<HttpContext, Task<IResult>>)EvaluateAsync);
+        app.MapGet(
+            "/api/music/review-projection",
+            (Func<HttpContext, Task<IResult>>)MusicProjectionAsync
+        );
         app.MapGet(
             "/",
             (HttpContext context) =>

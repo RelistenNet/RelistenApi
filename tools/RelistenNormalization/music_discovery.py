@@ -81,6 +81,9 @@ class MusicDiscovery:
             if url.query or url.fragment or url.path not in {"", "/"}:
                 raise ValueError("A configured reader URL must be an origin.")
 
+        if self.groups:
+            self.groups.review_client = self.review_client
+
     def stats(self):
         stat = self.catalogue.database.stat()
         marker = (stat.st_ino, stat.st_size, stat.st_mtime_ns)
@@ -115,7 +118,8 @@ class MusicDiscovery:
         generation = [result["built_at"], [(s["id"], s["scope"], s["run"], s["reader_url"]) for s in sources],
                       (result.get("normalization") or {}).get("outputManifestSha256"),
                       (result.get("compositionSuggestions") or {}).get("manifestSha256"),
-                      (result.get("compositionSelections") or {}).get("manifestSha256")]
+                      (result.get("compositionSelections") or {}).get("manifestSha256"),
+                      (result.get("normalization") or {}).get("knowledgeSha256")]
         result["generation"] = hashlib.sha256(json.dumps(generation, separators=(",", ":")).encode()).hexdigest()[:24]
         return result
 
@@ -181,7 +185,7 @@ class MusicDiscovery:
             if len(parameters.get("q", "")) > 256:
                 raise ValueError("Use at most 256 characters in a song search")
             result = self.groups.songs(q=parameters.get("q", ""), artist=parameters["artist"], scope=parameters["scope"],
-                                       review_order=True, **page(parameters))
+                                       review_order=True, reviewed=False, **page(parameters))
             return dict(items=[self._review_song_ref(row, domain="songs") for row in result["items"]], total=result["total"],
                         complete=result["offset"] == 0 and len(result["items"]) == result["total"],
                         offset=result["offset"], limit=result["limit"])
@@ -224,7 +228,7 @@ class MusicDiscovery:
                           "WHERE o.original_title=? AND NOT EXISTS(SELECT 1 FROM groups g "
                           "WHERE g.scope=o.scope AND g.entity_key=o.original_key)" + (" AND s.artist_uuid=?" if artist else ""))
             values.extend([literal] + ([artist] if artist else []))
-        with closing(self.groups._connect()) as db:
+        with closing(self.groups._connect(reviewed=False)) as db:
             total = db.execute("SELECT count(*) FROM (" + selection + ")", values).fetchone()[0]
             rows = db.execute("SELECT * FROM (" + selection + ") ORDER BY scope,entity_key LIMIT ? OFFSET ?",
                               [*values, bounds["limit"], bounds["offset"]]).fetchall()
