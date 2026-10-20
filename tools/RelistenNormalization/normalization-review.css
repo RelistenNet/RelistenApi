@@ -1,0 +1,61 @@
+:root { color-scheme: light; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #1e3439; background: #f6f5ef; --muted: #607377; --line: #d7dfd9; --accent: #176957; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+.shell { max-width: 820px; margin: auto; padding: 0 22px; }
+.topbar { background: #1e3439; color: #f4f5ef; }
+.topbar .shell { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; padding-block: 20px; }
+.brand { font-weight: 750; }
+#reviewer { font-size: .85rem; }
+main { padding-bottom: 45px !important; }
+h1 { font-size: clamp(1.8rem, 6vw, 2.5rem); letter-spacing: -.035em; margin: 8px 0 15px; }
+h2 { font-size: 1.25rem; margin: 0 0 18px; }
+p { line-height: 1.5; }
+.panel { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 24px; margin: 20px 0; overflow-wrap: anywhere; }
+.eyebrow { text-transform: uppercase; font-size: .72rem; font-weight: 750; letter-spacing: .1em; color: var(--accent); margin: 0; }
+.muted, details { color: var(--muted); font-size: .9rem; }
+.status { margin: 25px 0 15px; min-height: 24px; }
+.error { color: #9d352b; }
+label { display: grid; gap: 7px; font-size: .92rem; font-weight: 600; margin-bottom: 14px; }
+button, input, textarea, select { font: inherit; }
+button { min-height: 44px; padding: 10px 15px; border: 1px solid #b7c8bf; border-radius: 7px; background: #fff; color: #1e3439; cursor: pointer; margin: 4px 5px 4px 0; }
+button:hover { background: #edf3ee; }
+button:disabled { opacity: .45; cursor: default; }
+.primary { background: var(--accent); color: white; border-color: var(--accent); }
+.primary:hover { background: #105344; }
+input:not([type="radio"]), textarea, select { width: 100%; min-width: 0; padding: 11px 12px; color: inherit; background: #fcfdfb; border: 1px solid #becbc5; border-radius: 7px; }
+textarea { resize: vertical; }
+:focus-visible { outline: 3px solid #cc9447; outline-offset: 3px; }
+.search-row { display: flex; gap: 9px; align-items: center; }
+.search-row input { flex: 1; }
+fieldset { border: 0; border-top: 1px solid var(--line); margin: 24px 0 18px; padding: 18px 0 0; }
+legend { font-weight: 700; padding: 0 8px 0 0; }
+.choice { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; margin: 0; font-weight: 500; }
+.choice input { margin-top: 4px; flex: none; }
+.choices { display: grid; gap: 8px; }
+.candidate { display: block; width: 100%; text-align: left; margin: 0; padding: 13px; }
+.candidate span { display: block; font-size: .85rem; color: var(--muted); margin-top: 5px; }
+.candidate[aria-pressed="true"], .selected { border-color: var(--accent); background: #edf5f0; }
+.selected { padding: 14px; border: 1px solid var(--accent); border-radius: 7px; margin-top: 12px; }
+.inset { background: #f6f8f4; padding: 18px; border-radius: 8px; margin-block: 15px; }
+.scope-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+.record-list { list-style: none; padding: 0; }
+.record-list li, .history-item { padding: 13px 0; border-bottom: 1px solid var(--line); }
+.record-list span, .history-item p { display: block; margin: 6px 0 0; color: var(--muted); font-size: .86rem; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .78rem; }
+summary { cursor: pointer; }
+[hidden] { display: none !important; }
+@media (max-width: 520px) { .shell { padding-inline: 15px; } .panel { padding: 19px; } .scope-grid { grid-template-columns: 1fr; } .search-row { align-items: stretch; } }
+
+.queue-intro { margin: 30px 0 20px; }
+.queue-filters { display: flex; flex-wrap: wrap; align-items: end; gap: 14px; }
+.queue-filters label { flex: 1; min-width: 190px; margin: 0; }
+.queue-filters button { margin-bottom: 0; }
+.queue-counts { display: flex; flex-wrap: wrap; gap: 9px; font-size: .85rem; }
+.queue-counts span { background: #e8eee7; border-radius: 6px; padding: 8px 11px; }
+.queue-record h2 { margin-bottom: 8px; }
+.queue-record h3 { font-size: .95rem; margin: 19px 0 7px; }
+.queue-record ul { padding-left: 22px; line-height: 1.6; }
+.queue-record a { color: var(--accent); display: inline-block; margin: 12px 0 4px; }
+.queue-paging { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+
+#queue-snapshot { overflow-wrap: anywhere; }

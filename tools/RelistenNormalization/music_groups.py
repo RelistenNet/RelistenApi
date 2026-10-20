@@ -88,7 +88,7 @@ class MusicGroups:
         with closing(self._connect()):
             return {**self.metadata, "outcomes": self.outcomes}
 
-    def songs(self, q="", artist="", scope="", limit=40, offset=0):
+    def songs(self, q="", artist="", scope="", limit=40, offset=0, review_order=False):
         limit, offset = self._page(limit, offset)
         artist = str(uuid.UUID(artist)) if artist else ""
         group_where, group_args = self._search_filter("g", "title", q, artist, scope)
@@ -131,14 +131,21 @@ class MusicGroups:
             + "UNION ALL SELECT o.scope,o.original_key,o.artist_uuid,o.original_title,s.basis,s.legacy_uuid,o.disposition,0 "
             + "FROM raw o CROSS JOIN catalogue.songs s ON s.scope=o.scope AND s.entity_key=o.original_key) ")
         arguments = [*arguments, *original_args] if q else [*original_args, *group_args]
+        order = "casefold(v.title),v.scope,v.entity_key,v.normalized_group DESC"
+        order_args = []
+        if review_order and q:
+            # A reviewer choosing an existing song needs exact imported entries
+            # before numbered file titles. This is retrieval order, not a match.
+            order = "(casefold(v.title)=?) DESC,(v.legacy_uuid IS NOT NULL) DESC," + order
+            order_args = [q.casefold()]
         with closing(self._connect()) as db:
             # Count and page the same stream once. A second full count repeats
             # all correspondence lookups before the first unfiltered page.
             rows = db.execute(visible + ", selected AS (SELECT v.*,count(*) OVER() total_rows FROM visible v "
-                "ORDER BY casefold(v.title),v.scope,v.entity_key,v.normalized_group DESC LIMIT ? OFFSET ?) "
+                "ORDER BY " + order + " LIMIT ? OFFSET ?) "
                 "SELECT v.*,a.name artist_name FROM selected v LEFT JOIN catalogue.artists a "
                 "ON a.scope=v.scope AND a.uuid=v.artist_uuid",
-                (*arguments, limit, offset)).fetchall()
+                (*arguments, *order_args, limit, offset)).fetchall()
             total = rows[0]["total_rows"] if rows else db.execute(visible + "SELECT count(*) FROM visible", arguments).fetchone()[0]
             items = []
             for row in rows:
@@ -146,6 +153,8 @@ class MusicGroups:
                 item.pop("total_rows")
                 item["member_count"] = db.execute("SELECT count(DISTINCT original_key) FROM members INDEXED BY members_target "
                     "WHERE scope=? AND target_key=? AND disposition='proposed'", (row["scope"], row["entity_key"])).fetchone()[0] if row["normalized_group"] else 1
+                if review_order:
+                    item.update(self._review_title_forms(db, row))
                 items.append(item)
         return {"items": items, "total": total, "limit": limit, "offset": offset}
 
@@ -160,6 +169,35 @@ class MusicGroups:
             conditions.append("instr(casefold(" + alias + "." + title_field + "),?)>0")
             arguments.append(q.casefold())
         return " AND ".join(conditions) or "1", arguments
+
+    @staticmethod
+    def _review_title_forms(db, row):
+        forms = [value[0] for value in db.execute("SELECT DISTINCT o.original_title FROM members m INDEXED BY members_target "
+            "JOIN originals o ON o.scope=m.scope AND o.original_key=m.original_key "
+            "WHERE m.scope=? AND m.target_key=? AND m.disposition='proposed' AND o.original_title IS NOT NULL "
+            "ORDER BY o.original_title LIMIT 4", (row["scope"], row["entity_key"]))] if row["normalized_group"] else []
+        return dict(title_forms=forms[:3], title_forms_truncated=len(forms) > 3)
+
+    def review_identity(self, scope, artist, key):
+        """Authenticate a review account without loading its work or file graph."""
+        scope, artist, key = self._coordinates(scope, artist, key)
+        with closing(self._connect()) as db:
+            row = db.execute("SELECT g.*,1 normalized_group,a.name artist_name FROM groups g "
+                "LEFT JOIN catalogue.artists a ON a.scope=g.scope AND a.uuid=g.artist_uuid "
+                "WHERE g.scope=? AND g.artist_uuid=? AND g.entity_key=?", (scope, artist, key)).fetchone()
+            if row is None:
+                # An unresolved original is still a real imported account. It
+                # remains separate from any proposed group and keeps its raw link.
+                row = db.execute("SELECT s.*,0 normalized_group,a.name artist_name FROM originals o "
+                    "JOIN catalogue.songs s ON s.scope=o.scope AND s.entity_key=o.original_key "
+                    "LEFT JOIN catalogue.artists a ON a.scope=s.scope AND a.uuid=s.artist_uuid "
+                    "WHERE o.scope=? AND o.artist_uuid=? AND o.original_key=? AND s.artist_uuid=o.artist_uuid",
+                    (scope, artist, key)).fetchone()
+            if row is None:
+                return None
+            result = dict(row)
+            result.update(self._review_title_forms(db, row))
+            return result
 
     def group(self, scope, artist, key, limit=40, offset=0):
         scope, artist, key = self._coordinates(scope, artist, key)

@@ -39,7 +39,7 @@ and played “Sugar Magnolia” inline. Original source evidence remains availab
 an unavailable upstream audio URL produces a visible error rather than a new
 recording assignment.
 
-Directly supported person pages now cover 18,120 captured recordings across 1,536 artists. Artist-song pages consolidate the full captured title population through the shared C# interpretation. Composition pages now connect 2,656 retained works to 8,389 candidate song groups and their existing playback journeys. Preferred model choices are temporarily withheld: source audits found guesses that lacked distinguishing target evidence. Retained candidate works, writer facts and playback remain available. Provider cover credits, explicit source indices and attribution-to-recording checks are now implemented. The next bounded model trial must confirm their behavior before restoring preferred choices; it is waiting for local disk capacity. Neither title matching nor a browsable proposal establishes an accepted identity.
+Directly supported person pages now cover 18,120 captured recordings across 1,536 artists. Artist-song pages consolidate the full captured title population through the shared C# interpretation. Composition pages now connect 2,656 retained works to 8,389 candidate song groups and their existing playback journeys. A retained 100-song composition run now supplies 35 preferred model choices using writer, provider-cover and recording context; 60 cases lack distinguishing evidence and five failed the response contract. All candidate works and playback remain available. These are model proposals, with their original evidence and alternatives retained. Expert decisions have separate authority and do not overwrite the recorded model result.
 
 The broader listener audit found venue gaps beyond MSG. A retained locality
 supplement now resolves Morrison, Colorado, and shared whole-token spelling
@@ -60,6 +60,15 @@ need direct premises evidence; standard spelling equivalence does not establish
 either relationship.
 
 Complete the remaining domain coverage, then qualify production acceptance, rehearse backfill and prepare rollout. Production writes and deployment retain their existing approval requirements.
+
+## Expert feedback and reference comparisons
+
+The [expert feedback contract](expert-feedback.md) connects catalog corrections to
+durable, attributed decisions and shared C# matching policy. The
+[whole-artist benchmark](reference-benchmark.md) compares retained Phish and
+Grateful Dead song memberships with actual automatic results. Its disagreements
+are concrete review leads. They distinguish missing recordings, dictionary
+identity problems and title matching errors before a rule is changed.
 
 ## How to iterate
 

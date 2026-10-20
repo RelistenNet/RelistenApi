@@ -159,6 +159,272 @@ class TestCompositionCatalogue(unittest.TestCase):
     def discovery(self, **options):
         return MusicDiscovery(MusicCatalogue(self.catalogue), normalization=self.normalization, compositions=self.database, **options)
 
+    def test_review_bridge_authenticates_scoped_songs_and_qualified_work_targets(self):
+        self.build()
+        discovery = self.discovery(review_url="https://reviews.test")
+        empty_knowledge = patch.object(discovery.review_client, "snapshot", return_value=dict(rules=[]))
+        empty_knowledge.start()
+        self.addCleanup(empty_knowledge.stop)
+        base = self.serve(handler_for(discovery))
+        source_key = json.dumps(["catalogue", self.songs[0]["entityKey"]], separators=(",", ":"))
+        # Review authentication must not load relationships. Those remain on the
+        # cited song page, and a large work graph must not block queue actions.
+        with patch.object(discovery.groups, "group", side_effect=AssertionError("Full song graph requested")), \
+                patch.object(discovery.catalogue, "song", side_effect=AssertionError("Full original graph requested")):
+            source = self.get(base, "/api/review-source", key=source_key, artist=ARTISTS[0])["items"][0]
+        self.assertEqual((source["domain"], source["namespace"], source["stableKey"], source["artistUuid"]),
+                         ("compositions", "repertoire", source_key, ARTISTS[0]))
+        self.assertEqual(self.get(base, "/api/review-source", key=source_key, artist=ARTISTS[1])["items"], [])
+        choices = self.get(base, "/api/review-candidates", q=MBIDS[0])
+        self.assertEqual(choices["total"], 1)
+        target = choices["items"][0]
+        self.assertEqual((target["namespace"], target["stableKey"]), ("composition_work", self.work_keys[0]))
+        self.assertIsNone(target["artistUuid"])
+        self.assertEqual(self.get(base, "/api/review-source", key=target["stableKey"])["items"], [target])
+        with urlopen(base + target["evidenceUrl"]) as response:
+            self.assertEqual(json.load(response)["work_key"], self.work_keys[0])
+        observations = self.get(base, "/api/review-observations", literal="Shared title", limit=1)
+        self.assertEqual(observations["total"], 2)
+        self.assertFalse(observations["complete"])
+        remaining = self.get(base, "/api/review-observations", literal="Shared title", limit=1, offset=1)
+        self.assertNotEqual(observations["items"][0]["stableKey"], remaining["items"][0]["stableKey"])
+        exact_artist = self.get(base, "/api/review-observations", literal="Shared title", artist=ARTISTS[1])
+        self.assertEqual([row["artistUuid"] for row in exact_artist["items"]], [ARTISTS[1]])
+        self.assertEqual(self.get(base, "/api/review-observations", literal="shared title")["total"], 0)
+        self.assertEqual(self.get(base, "/api/stats")["reviewUrl"], "https://reviews.test/")
+
+    def test_song_review_bridge_preserves_real_artist_scope_and_existing_repertoire_keys(self):
+        self.build()
+        discovery = self.discovery(review_url="https://reviews.test")
+        base = self.serve(handler_for(discovery))
+        key = json.dumps(["catalogue", self.songs[0]["entityKey"]], separators=(",", ":"))
+        source = self.get(base, "/api/review-source", domain="songs", key=key, artist=ARTISTS[0])["items"][0]
+        self.assertEqual((source["domain"], source["namespace"], source["stableKey"], source["artistUuid"]),
+                         ("songs", "repertoire", key, ARTISTS[0]))
+        candidates = self.get(base, "/api/review-candidates", domain="songs", q="Shared", artist=ARTISTS[0], scope="catalogue")
+        self.assertEqual(candidates["total"], 1)
+        self.assertEqual(candidates["items"][0]["artistUuid"], ARTISTS[0])
+        self.assertEqual(json.loads(candidates["items"][0]["stableKey"])[0], "catalogue")
+        self.assertEqual(self.get(base, "/api/review-source", domain="songs", key=key, artist=ARTISTS[1])["items"], [])
+        self.assertEqual(self.get(base, "/api/review-candidates", domain="songs", q="Shared", artist=ARTISTS[0], scope="native")["items"], [])
+        for parameters in (dict(domain="songs", q="Shared"), dict(domain="songs", q="Shared", artist=ARTISTS[0])):
+            with self.assertRaises(HTTPError) as error:
+                self.get(base, "/api/review-candidates", **parameters)
+            self.assertEqual(error.exception.code, 400)
+            error.exception.close()
+        with self.assertRaises(HTTPError) as error:
+            self.get(base, "/api/review-source", domain="songs", key=self.work_keys[0], artist=ARTISTS[0])
+        self.assertEqual(error.exception.code, 400)
+        error.exception.close()
+        with patch.object(discovery.groups, "group", side_effect=AssertionError("Full song graph requested")), \
+                patch.object(discovery.catalogue, "song", side_effect=AssertionError("Full original graph requested")):
+            original = self.get(base, "/api/review-source", domain="songs", key=key, artist=ARTISTS[0])["items"][0]
+        self.assertEqual(original["stableKey"], key)
+        with urlopen(base + original["evidenceUrl"]) as response:
+            evidence = json.load(response)
+        self.assertEqual((evidence["scope"], evidence["artist_uuid"], evidence["entity_key"]),
+                         ("catalogue", ARTISTS[0], self.songs[0]["entityKey"]))
+
+    def test_song_review_prioritizes_exact_imported_entries_before_numbered_file_titles(self):
+        run = self.root / "review-order-source"
+        run.mkdir()
+        (run / "manifest.json").write_text('{"state":"completed"}')
+        songs = [dict(entityKey="repertoire:" + key, name=title, artistUuid=ARTISTS[0],
+                      legacySongUuid=legacy, basis="captured_artist_dictionary" if legacy else "title_derived")
+                 for key, title, legacy in (("known-z", "Saint Stephen", SHOWS[0]),
+                                            ("known-y", "Saint Stephen", SHOWS[1]),
+                                            ("prefix-a", "01 Saint Stephen", None),
+                                            ("exact-a", "Saint Stephen", None))]
+        self.chunk(run, "repertoire", [self.record("repertoire", "song_sample:" + str(index), song,
+            [song["entityKey"]], ARTISTS[0]) for index, song in enumerate(songs)])
+        index = ShadowIndex(run)
+        index.scan_once()
+        catalogue = self.root / "review-order-catalogue.sqlite3"
+        MusicCatalogueBuilder([Source("catalogue", run, self.serve(reader_handler(index)))], catalogue, minimum_free_bytes=0).build()
+        bundle = self.root / "review-order-input"
+        MusicConsolidationExporter(catalogue, bundle, minimum_free_bytes=0).export()
+        with gzip.open(bundle / "descriptors.jsonl.gz", "rt") as stream:
+            descriptors = [json.loads(line) for line in stream]
+        output = self.root / "review-order-output"
+        output.mkdir()
+        records = []
+        for descriptor in descriptors:
+            song = next(song for song in songs if song["entityKey"] == descriptor["originalKey"])
+            records.append(dict(domain="repertoire_correspondences", inputKind="repertoire_descriptor", artistUuid=ARTISTS[0],
+                proposal=dict(scope="catalogue", artistUuid=ARTISTS[0], originalKey=song["entityKey"], originalTitle=song["name"],
+                    sourceWitness=descriptor["witness"], disposition="proposed", reason="fixture", sequenceBasis="title_text_only",
+                    targets=[dict(song=song, relation="identity_alias", disposition="proposed", reason="fixture", qualifiers=[])])))
+        chunk = self.chunk(output, "repertoire_correspondences", records)
+        progress = output / "progress.json"
+        progress.write_text('{"state":"completed"}')
+        manifest = output / "manifest.json"
+        manifest.write_text(json.dumps(dict(complete=True, inputManifestSha256=sha256_file(bundle / "manifest.json"),
+            logicalRows=len(records), extractorVersion="fixture", resolverVersion="fixture", chunks=[chunk], progress=self.artifact(progress, 0))))
+        normalization = self.root / "review-order.sqlite3"
+        MusicConsolidationProjection(catalogue, bundle / "manifest.json", manifest, normalization, minimum_free_bytes=0).build()
+        base = self.serve(handler_for(MusicDiscovery(MusicCatalogue(catalogue), normalization=normalization)))
+        candidates = self.get(base, "/api/review-candidates", domain="songs", q="Saint Stephen", artist=ARTISTS[0], scope="catalogue", limit=2)
+        self.assertEqual(candidates["total"], 4)
+        self.assertEqual({json.loads(item["stableKey"])[1] for item in candidates["items"]}, {"repertoire:known-z", "repertoire:known-y"})
+        for item in candidates["items"]:
+            self.assertEqual(item["displayName"], "Saint Stephen")
+            self.assertIn("Imported song", item["description"])
+            self.assertIn("Artist 1", item["description"])
+            self.assertIn("Titles: Saint Stephen", item["description"])
+        self.assertNotEqual(candidates["items"][0]["description"], candidates["items"][1]["description"])
+        next_page = self.get(base, "/api/review-candidates", domain="songs", q="Saint Stephen", artist=ARTISTS[0], scope="catalogue", offset=2)
+        self.assertEqual(next_page["items"][0]["displayName"], "Saint Stephen")
+        self.assertIn("Title-derived", next_page["items"][0]["description"])
+        browse = self.get(base, "/api/normalized-songs", q="Saint Stephen", artist=ARTISTS[0], scope="catalogue")
+        self.assertEqual(browse["items"][0]["title"], "01 Saint Stephen")
+
+    def test_song_queue_can_address_an_unresolved_original_without_a_proposed_group(self):
+        original_run = self.root / "music-output"
+        manifest = json.loads((original_run / "manifest.json").read_text())
+        with gzip.open(original_run / manifest["chunks"][0]["path"], "rt") as stream:
+            records = [json.loads(line) for line in stream]
+        proposal = next(row["proposal"] for row in records if row["proposal"]["originalKey"] == self.songs[0]["entityKey"])
+        proposal.update(disposition="unresolved", reason="needs_review", targets=[])
+        run = self.root / "unresolved-song-output"
+        run.mkdir()
+        manifest["chunks"] = [self.chunk(run, "repertoire_correspondences", records)]
+        progress = run / "progress.json"
+        progress.write_text('{"state":"completed"}')
+        manifest["progress"] = self.artifact(progress, 0)
+        output = run / "manifest.json"
+        output.write_text(json.dumps(manifest))
+        normalization = self.root / "unresolved-songs.sqlite3"
+        MusicConsolidationProjection(self.catalogue, self.root / "music-input/manifest.json", output, normalization,
+                                    minimum_free_bytes=0).build()
+        discovery = MusicDiscovery(MusicCatalogue(self.catalogue), normalization=normalization)
+        base = self.serve(handler_for(discovery))
+        result = self.get(base, "/api/review-observations", domain="songs", literal="Shared title", artist=ARTISTS[0])
+        self.assertEqual(result["total"], 1)
+        original = result["items"][0]
+        self.assertEqual(json.loads(original["stableKey"]), ["catalogue", self.songs[0]["entityKey"]])
+        self.assertEqual(original["domain"], "songs")
+        self.assertIn("/api/song?", original["evidenceUrl"])
+        with patch.object(discovery.groups, "group", side_effect=AssertionError("Full song graph requested")), \
+                patch.object(discovery.catalogue, "song", side_effect=AssertionError("Full original graph requested")):
+            source = self.get(base, "/api/review-source", domain="songs", key=original["stableKey"], artist=ARTISTS[0])
+        self.assertEqual(source["items"], [original])
+        candidates = self.get(base, "/api/review-candidates", domain="songs", q="Shared", artist=ARTISTS[0], scope="catalogue")
+        self.assertEqual(candidates["items"], [original])
+
+    def test_review_link_keeps_scope_and_artist_and_is_disabled_without_host(self):
+        node = shutil.which("node")
+        if node is None:
+            self.skipTest("The UI behavior check requires Node.js")
+        html = Path(__file__).with_name("music-discovery.html").read_text()
+        source = html[html.index("function appendReviewLink("):html.index("async function api(")]
+        work_source = html[html.index("async function compositionWork("):html.index("async function relationships(")]
+        script = r"""
+const input=JSON.parse(process.argv[1]);
+const render=new Function('document','stats',input.source+';return appendReviewLink;');
+const row={scope:'native',entity_key:'repertoire:<literal&key>',artist_uuid:'artist-one'};
+const output=[];
+for(const stats of [{},{normalization_review:true,reviewUrl:'https://reviews.test/'}]){
+ const container={append(node){output.push(node)}};
+ render({createElement(){return {}}},stats)(container,row);
+}
+const songContainer={append(node){output.push(node)}};
+render({createElement(){return {}}},{normalization_review:true,song_identity_review:true,reviewUrl:'https://reviews.test/'})(songContainer,row,false);
+(async()=>{
+ let request;
+ const work=new Function('api','query','stats','generation',input.workSource+';return compositionWork;')(
+   async(path)=>{request=path;return {}},(values)=>new URLSearchParams(values).toString(),{generation:'image',composition_queries:true},0);
+ await work(new URLSearchParams({offset:'40',reviewedOffset:'100'}),1);
+ process.stdout.write(JSON.stringify({links:output,request}));
+})().catch(error=>{console.error(error);process.exitCode=1});
+"""
+        result = subprocess.run([node, "-e", script, json.dumps(dict(source=source, workSource=work_source))], text=True, capture_output=True, check=True)
+        rendered = json.loads(result.stdout)
+        links = rendered["links"]
+        self.assertEqual(len(links), 2)
+        from urllib.parse import parse_qs, urlsplit
+        query = parse_qs(urlsplit(links[0]["href"]).query)
+        self.assertEqual(json.loads(query["stableKey"][0]), ["native", "repertoire:<literal&key>"])
+        self.assertEqual(query["artistUuid"], ["artist-one"])
+        self.assertEqual(links[0]["textContent"], "Choose composition")
+        song_query = parse_qs(urlsplit(links[1]["href"]).query)
+        self.assertEqual(song_query["domain"], ["songs"])
+        self.assertEqual(json.loads(song_query["stableKey"][0]), ["native", "repertoire:<literal&key>"])
+        self.assertEqual(links[1]["textContent"], "Resolve song")
+        request = parse_qs(urlsplit(rendered["request"]).query)
+        self.assertEqual(request["offset"], ["40"])
+        self.assertEqual(request["reviewedOffset"], ["100"])
+
+    def test_reviewed_composition_http_keeps_raw_model_choice_alternatives_and_audio_home(self):
+        self.build()
+        self.build_selections(self.write_selections())
+        discovery = self.discovery(composition_selections=self.selection_database, review_url="https://reviews.test")
+        decision = dict(outcome="reviewed_correspondence", target=dict(domain="compositions", namespace="composition_work",
+            stableKey=self.work_keys[1]), excludedTargets=[], appliedRules=[])
+        base = self.serve(handler_for(discovery))
+        generation = discovery.stats()["generation"]
+        with patch.object(discovery.review_client, "evaluate_one", return_value=decision), \
+                patch.object(discovery.review_client, "snapshot", return_value=dict(rules=[])):
+            song = self.get(base, "/api/song-composition-hypotheses", scope="catalogue", artist=ARTISTS[0],
+                            key=self.songs[0]["entityKey"], generation=generation)
+            original_work = self.get(base, "/api/composition-work", key=self.work_keys[0], scope="catalogue",
+                                     artist=ARTISTS[0], generation=generation)
+        self.assertEqual(song["preferredWorkKey"], self.work_keys[1])
+        self.assertEqual(song["preferredBasis"], "reviewed")
+        self.assertEqual(song["modelSelection"]["selectedWorkKey"], self.work_keys[0])
+        self.assertEqual({candidate["work_key"] for candidate in song["candidates"]}, set(self.work_keys[:2]))
+        self.assertEqual(original_work["songs"][0]["preferredWorkKey"], self.work_keys[1])
+        self.assertEqual(original_work["songs"][0]["modelSelection"]["selectedWorkKey"], self.work_keys[0])
+        self.assertFalse(original_work["songs"][0]["modelSelection"]["preferencePermitted"])
+        homes = self.get(base, "/api/song-performances", scope="catalogue", artist=ARTISTS[0],
+                         key=self.songs[0]["entityKey"], generation=generation)
+        self.assertEqual(homes["items"][0]["showUuid"], SHOWS[0])
+
+    def test_reviewed_destination_adds_a_song_outside_the_retained_pool_and_withdrawal_removes_it(self):
+        self.build()
+        discovery = self.discovery()
+        source_key = json.dumps(["catalogue", self.songs[0]["entityKey"]], separators=(",", ":"))
+        target = dict(domain="compositions", namespace="composition_work", stableKey=self.work_keys[2])
+        decision = dict(outcome="reviewed_correspondence", target=target, excludedTargets=[], appliedRules=[])
+        definition = dict(domain="compositions", target=target, selector=dict(namespace="repertoire",
+            accountStableKey=source_key, artistUuid=ARTISTS[0]))
+        class CoreReview:
+            state = "accepted"
+            def snapshot(self):
+                return dict(sha256="review-snapshot", rules=[dict(state=self.state, definition=definition)])
+            def evaluate(self, references, snapshot):
+                return [decision for _ in references]
+            def evaluate_one(self, reference):
+                return decision
+        discovery.review_client = CoreReview()
+        base = self.serve(handler_for(discovery))
+        generation = discovery.stats()["generation"]
+        destination = self.get(base, "/api/composition-work", key=self.work_keys[2], generation=generation)
+        self.assertEqual(destination["songs_total"], 0)
+        self.assertEqual(destination["reviewedSongsTotal"], 1)
+        reviewed = destination["reviewedSongs"][0]
+        self.assertEqual((reviewed["scope"], reviewed["artist_uuid"], reviewed["entity_key"]),
+                         ("catalogue", ARTISTS[0], self.songs[0]["entityKey"]))
+        self.assertEqual(reviewed["preferredBasis"], "reviewed")
+        self.assertEqual(destination["reviewedArtists"][0]["artist_uuid"], ARTISTS[0])
+        filtered = self.get(base, "/api/composition-work", key=self.work_keys[2], artist=ARTISTS[1], generation=generation)
+        self.assertEqual(filtered["reviewedSongsTotal"], 0)
+        homes = self.get(base, "/api/song-performances", scope=reviewed["scope"], artist=reviewed["artist_uuid"],
+                         key=reviewed["entity_key"], generation=generation)
+        self.assertEqual(homes["items"][0]["showUuid"], SHOWS[0])
+        files = self.get(base, "/api/performance-files", scope=reviewed["scope"], artist=reviewed["artist_uuid"],
+                         key=reviewed["entity_key"], homeKey=homes["items"][0]["homeKey"], generation=generation)
+        self.assertEqual(files["total"], 1)
+        discovery.review_client.state = "retracted"
+        withdrawn = self.get(base, "/api/composition-work", key=self.work_keys[2], generation=generation)
+        self.assertEqual((withdrawn["songs_total"], withdrawn["reviewedSongsTotal"]), (0, 0))
+        discovery.review_client.state = "accepted"
+        definition["selector"].update(accountStableKey=None, literal="Shared title")
+        with patch.object(discovery, "review_observations", return_value=dict(total=1001, items=[])):
+            with self.assertRaises(HTTPError) as error:
+                self.get(base, "/api/composition-work", key=self.work_keys[2], generation=generation)
+        self.assertEqual(error.exception.code, 503)
+        error.exception.close()
+
     def serve(self, handler):
         server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
         threading.Thread(target=server.serve_forever, daemon=True).start()

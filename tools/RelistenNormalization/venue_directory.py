@@ -20,6 +20,7 @@ import unicodedata
 from urllib.parse import parse_qs, urlencode, urlsplit
 
 from recording_playback import RecordingPlayback, reader_navigation
+from reviewed_knowledge import ReviewedKnowledgeClient, ReviewedKnowledgeUnavailable, apply_venue_reviews, apply_venue_review_counts, venue_review_decision
 
 VERSION = "retained-venue-directory-v2"
 NATIVE_VERSION = "native-venue-overlay-v2"
@@ -634,12 +635,20 @@ def retained_outcome(run, chunk, line):
 
 class VenueDirectory:
     def __init__(self, database, files_url, core_url, native_database=None, native_url=None, music_url=None, people_url=None,
-                 corrections_database=None):
+                 corrections_database=None, review_url=None):
         self.database = Path(database).resolve()
         self.files_url = files_url.rstrip("/") + "/"
         self.core_url = core_url.rstrip("/") + "/"
         self.playback = RecordingPlayback(files_url)
         self.navigation = reader_navigation(music_url=music_url, people_url=people_url, own="venues")
+        self.review_url = None
+        if review_url:
+            origin = urlsplit(review_url)
+            if (origin.scheme not in {"http", "https"} or not origin.hostname or origin.username or origin.password
+                    or origin.query or origin.fragment or origin.path not in {"", "/"}):
+                raise ValueError("Review URL must be an HTTP(S) origin without credentials")
+            self.review_url = review_url.rstrip("/") + "/"
+        self.review_client = ReviewedKnowledgeClient(self.review_url) if self.review_url else None
         self.native_database = Path(native_database).resolve() if native_database else None
         self.native_url = native_url.rstrip("/") + "/" if native_url else None
         self.corrections_database = Path(corrections_database).resolve() if corrections_database else None
@@ -666,7 +675,7 @@ class VenueDirectory:
         return tuple((path.stat().st_size, path.stat().st_mtime_ns, path.stat().st_ino)
                      for path in (self.database, self.corrections_database))
 
-    def connect(self):
+    def connect(self, apply_reviews=True):
         db = sqlite3.connect(self.database.as_uri() + "?mode=ro", uri=True, timeout=5)
         db.row_factory = sqlite3.Row
         db.create_function("folded", 1, folded, deterministic=True)
@@ -697,6 +706,10 @@ class VenueDirectory:
             catalog = ("SELECT " + ",".join(projected) + " FROM venues v LEFT JOIN corrections.corrections c ON c.uuid=v.uuid "
                        "LEFT JOIN corrections.groups g ON g.place_key=CASE WHEN c.uuid IS NOT NULL "
                        "THEN json_extract(c.summary,'$.normalization_key') ELSE v.normalization_key END")
+        # The bridge authenticates original source accounts independently of the
+        # reviewed browse overlay. Saving a rule must not rewrite its own evidence.
+        if apply_reviews:
+            catalog = apply_venue_reviews(db, catalog, self.review_client, self._review_ref)
         db.execute("CREATE TEMP VIEW catalog_venues AS " + catalog)
         counts = "SELECT * FROM normalization_counts" if db.execute(
             "SELECT 1 FROM sqlite_master WHERE name='normalization_counts'").fetchone() else (
@@ -704,6 +717,8 @@ class VenueDirectory:
         if self.corrections_database:
             counts = ("SELECT * FROM corrections.normalization_counts UNION ALL SELECT b.* FROM normalization_counts b "
                       "WHERE NOT EXISTS(SELECT 1 FROM corrections.affected a WHERE a.place_key=b.place_key)")
+        if apply_reviews:
+            counts = apply_venue_review_counts(db, counts)
         db.execute("CREATE TEMP VIEW hypothesis_counts AS " + counts)
         selection = "SELECT v.*, 'legacy_catalog' record_kind, NULL provider FROM catalog_venues v"
         columns += missing
@@ -719,7 +734,7 @@ class VenueDirectory:
         return max(0, int(parameters.get("offset", 0))), max(1, min(100, int(parameters.get("limit", 30))))
 
     def stats(self):
-        with closing(self.connect()) as db:
+        with closing(self.connect(False)) as db:
             result = {row["key"]: json.loads(row["value"]) for row in db.execute("SELECT * FROM metadata")}
             native = {row["key"]: json.loads(row["value"]) for row in db.execute("SELECT * FROM native.metadata")} if self.native_database else {}
         coverage = result.pop("coverage", {})
@@ -732,6 +747,8 @@ class VenueDirectory:
                       filesUrl=self.files_url, coreUrl=self.core_url)
         result["navigation"] = self.navigation
         result["capabilities"] = dict(recordingPlayback=bool(self.playback.files_url))
+        result["reviewUrl"] = self.review_url
+        result["capabilities"]["normalizationReview"] = bool(self.review_url)
         if self.correction_metadata:
             result["baselineCoverage"] = coverage
             result["corrections"] = self.correction_metadata
@@ -740,7 +757,52 @@ class VenueDirectory:
         result["directoryRecords"] = result.get("venueRecords", 0) + result["nativeCoverage"]["observations"]
         return result
 
-    def search(self, parameters):
+    @staticmethod
+    def _review_ref(row):
+        """Expose a retained account, never promote a hypothesis key to canonical identity."""
+        return dict(domain="venues", namespace="legacy_venue", stableKey=row["uuid"],
+                    literal=row["original_name"] or row["name"], artistUuid=row["artist_uuid"],
+                    provider=None, locality=row["location"], date=None, displayName=row["name"],
+                    description=" · ".join(value for value in
+                        (row["normalized_location"] or row["location"], row["artist_name"]) if value),
+                    evidenceUrl="/api/evidence?" + urlencode({"id": row["uuid"]}))
+
+    def review_source(self, parameters):
+        with closing(self.connect(False)) as db:
+            row = db.execute("SELECT * FROM catalog_venues WHERE uuid=?", (parameters.get("key", ""),)).fetchone()
+            if row is not None and parameters.get("artist") and row["artist_uuid"] != parameters["artist"]:
+                row = None
+            items = [self._review_ref(row)] if row is not None else []
+        return dict(items=items, total=len(items), complete=True)
+
+    def review_candidates(self, parameters):
+        query = parameters.get("q", "")
+        if len(query) > 256:
+            raise ValueError("Use at most 256 characters in a venue search")
+        result = self.search({**parameters, "kind": "legacy_catalog"}, apply_reviews=False)
+        return dict(items=[self._review_ref(row) for row in result["rows"]], total=result["total"],
+                    complete=result["offset"] == 0 and len(result["rows"]) == result["total"],
+                    offset=result["offset"], limit=result["limit"])
+
+    def review_observations(self, parameters):
+        """List exact raw spellings, including every artist's separate account."""
+        literal = parameters.get("literal", "")
+        if not literal or len(literal) > 4096:
+            raise ValueError("Choose an original venue spelling of 1–4096 characters")
+        offset, limit = self.page(parameters)
+        conditions, values = ["coalesce(original_name,name)=?"], [literal]
+        if parameters.get("artist"):
+            conditions.append("artist_uuid=?")
+            values.append(parameters["artist"])
+        where = " AND ".join(conditions)
+        with closing(self.connect(False)) as db:
+            total = db.execute("SELECT count(*) FROM catalog_venues WHERE " + where, values).fetchone()[0]
+            rows = db.execute("SELECT * FROM catalog_venues WHERE " + where + " ORDER BY uuid LIMIT ? OFFSET ?",
+                              [*values, limit, offset]).fetchall()
+            items = [self._review_ref(row) for row in rows]
+        return dict(items=items, total=total, complete=offset == 0 and len(items) == total, offset=offset, limit=limit)
+
+    def search(self, parameters, apply_reviews=True):
         offset, limit = self.page(parameters)
         conditions = []
         values = []
@@ -790,7 +852,7 @@ class VenueDirectory:
         # The total survives an empty/out-of-range page; the shared matched image is evaluated once.
         query = selection + " SELECT page.*,totals.total FROM (SELECT count(*) total FROM selected) totals LEFT JOIN page ON 1 "
         query += "ORDER BY coalesce(page.group_source_count,page.source_count) DESC,page.name,page.uuid"
-        with closing(self.connect()) as db:
+        with closing(self.connect(apply_reviews)) as db:
             result = db.execute(query, member_values + values + [limit, offset]).fetchall()
             total = result[0]["total"]
             page = [row for row in result if row["uuid"] is not None]
@@ -823,7 +885,7 @@ class VenueDirectory:
         return row is not None and json.loads(row[0]) == "completed"
 
     def evidence(self, identifier):
-        with closing(self.connect()) as db:
+        with closing(self.connect(False)) as db:
             if identifier.startswith("native:"):
                 return self._native_evidence(db, identifier)[0] if self.native_database else None
             venue = db.execute("SELECT chunk,line FROM venues WHERE uuid=?", (identifier,)).fetchone()
@@ -853,7 +915,7 @@ class VenueDirectory:
     def correction(self, identifier):
         if not self.corrections_database or identifier.startswith("native:"):
             return None
-        with closing(self.connect()) as db:
+        with closing(self.connect(False)) as db:
             row = db.execute("SELECT body,line FROM corrections.corrections WHERE uuid=?", (identifier,)).fetchone()
         if row is None:
             return None
@@ -884,6 +946,7 @@ class VenueDirectory:
             if selected is None:
                 return None
             venue = dict(selected)
+            venue["reviewedDecision"] = venue_review_decision(db, identifier)
             venue["record_kind"] = "legacy_catalog"
             ready = self._complete(db)
             source_run = json.loads(db.execute("SELECT value FROM metadata WHERE key='sourceRun'").fetchone()[0])
@@ -894,9 +957,9 @@ class VenueDirectory:
             members = {row["legacy_id"]: row["uuid"] for row in db.execute(
                 "SELECT legacy_id,uuid FROM catalog_venues WHERE place_key=?", (venue["place_key"],))}
             if group_recordings:
-                conditions = ["(r.source_venue_id IN (SELECT legacy_id FROM catalog_venues WHERE normalization_key=?) "
-                              "OR r.show_venue_id IN (SELECT legacy_id FROM catalog_venues WHERE normalization_key=?))"]
-                values = [venue["normalization_key"], venue["normalization_key"]]
+                conditions = ["(r.source_venue_id IN (SELECT legacy_id FROM catalog_venues WHERE place_key=?) "
+                              "OR r.show_venue_id IN (SELECT legacy_id FROM catalog_venues WHERE place_key=?))"]
+                values = [venue["place_key"], venue["place_key"]]
             else:
                 conditions = ["(r.source_venue_id=? OR r.show_venue_id=?)"]
                 values = [venue["legacy_id"], venue["legacy_id"]]
@@ -1033,6 +1096,12 @@ def handler_for(directory):
                     result = directory.stats()
                 elif url.path == "/api/venues":
                     result = directory.search(params)
+                elif url.path == "/api/review-source":
+                    result = directory.review_source(params)
+                elif url.path == "/api/review-candidates":
+                    result = directory.review_candidates(params)
+                elif url.path == "/api/review-observations":
+                    result = directory.review_observations(params)
                 elif url.path == "/api/venue":
                     result = directory.detail(params.get("id", ""), params)
                 elif url.path == "/api/evidence":
@@ -1047,6 +1116,8 @@ def handler_for(directory):
                     self.respond(404, b'{"error":"Unknown venue"}')
                     return
                 self.respond(200, encoded(result).encode())
+            except ReviewedKnowledgeUnavailable as error:
+                self.respond(503, encoded({"error": str(error)}).encode())
             except (ValueError, sqlite3.Error, OSError) as error:
                 self.respond(400, encoded({"error": str(error)}).encode())
 
@@ -1088,6 +1159,7 @@ def main():
     serve.add_argument("--music-url", help="Optional music discovery reader root")
     serve.add_argument("--people-url", help="Optional taper/transferrer discovery reader root")
     serve.add_argument("--corrections-database", help="Optional completed C# venue correction projection")
+    serve.add_argument("--review-url", help="Optional authenticated normalization review HTTP(S) origin")
     serve.add_argument("--bind", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=18770)
     args = parser.parse_args()
@@ -1102,7 +1174,7 @@ def main():
                                              args.minimum_free_bytes, args.maximum_bytes).build()), flush=True)
     else:
         directory = VenueDirectory(args.database, args.files_url, args.core_url, args.native_database, args.native_url,
-                                   args.music_url, args.people_url, args.corrections_database)
+                                   args.music_url, args.people_url, args.corrections_database, args.review_url)
         print(encoded({"listening": f"http://{args.bind}:{args.port}", "stats": directory.stats()}), flush=True)
         ThreadingHTTPServer((args.bind, args.port), handler_for(directory)).serve_forever()
 

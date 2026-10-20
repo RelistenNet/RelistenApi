@@ -22,6 +22,7 @@ from music_catalogue import MusicCatalogue, MusicCatalogueBuilder, Source
 from music_consolidation import MusicConsolidationExporter, MusicConsolidationProjection
 from music_groups import MusicGroups, MusicNormalizationChanged
 from shadow_music import MAXIMUM_KEYS, MAXIMUM_REQUEST_BYTES
+from reviewed_knowledge import ReviewedKnowledgeClient, ReviewedKnowledgeUnavailable, apply_composition_review
 
 MAXIMUM_RESPONSE_BYTES = 8 * 1024 * 1024
 RELATION_DOMAINS = {"file_contents", "setlists", "compositions", "repertoire"}
@@ -38,7 +39,7 @@ class MusicQueryUnavailable(ValueError):
 class MusicDiscovery:
     """Read the compact catalogue and proxy bounded, selective source lookups."""
 
-    def __init__(self, catalogue, readers=(), normalization=None, compositions=None, people_url=None, venue_url=None, composition_selections=None):
+    def __init__(self, catalogue, readers=(), normalization=None, compositions=None, people_url=None, venue_url=None, composition_selections=None, review_url=None):
         self.catalogue = catalogue
         self._catalogue_marker = None
         self._catalogue_stats = None
@@ -49,6 +50,14 @@ class MusicDiscovery:
             raise ValueError("Model selections require the matching composition projection")
         self.compositions = CompositionCatalogue(self.groups, compositions, composition_selections) if compositions else None
         self.navigation = {"songs": "#songs", "compositions": "#compositions"}
+        self.review_url = None
+        if review_url:
+            origin = urlsplit(review_url)
+            if (origin.scheme not in {"http", "https"} or not origin.hostname or origin.username or origin.password
+                    or origin.query or origin.fragment or origin.path not in {"", "/"}):
+                raise ValueError("Review URL must be an HTTP(S) origin without credentials")
+            self.review_url = review_url.rstrip("/") + "/"
+        self.review_client = ReviewedKnowledgeClient(self.review_url) if self.review_url else None
         for name, url in (("tapers", people_url), ("venues", venue_url)):
             if url:
                 origin = urlsplit(url)
@@ -85,6 +94,9 @@ class MusicDiscovery:
         # independently of projection metadata during a controlled cutover.
         result["native_file_queries"] = True
         result["navigation"] = dict(self.navigation)
+        result["reviewUrl"] = self.review_url
+        result["normalization_review"] = bool(self.review_url)
+        result["song_identity_review"] = bool(self.review_url and self.groups)
         if self.groups:
             result["normalization"] = self.groups.stats()
             result["normalized_song_queries"] = True
@@ -106,6 +118,191 @@ class MusicDiscovery:
                       (result.get("compositionSelections") or {}).get("manifestSha256")]
         result["generation"] = hashlib.sha256(json.dumps(generation, separators=(",", ":")).encode()).hexdigest()[:24]
         return result
+
+    def _review_song_ref(self, row, literal=None, domain="compositions"):
+        coordinates = dict(scope=row["scope"], artist=row["artist_uuid"], key=row["entity_key"])
+        route = "/api/song" if row.get("normalized_group") == 0 or row.get("witness_record") is not None else "/api/song-group"
+        description = row.get("artist_name") or row["scope"]
+        if domain == "songs":
+            if row.get("legacy_uuid"):
+                description += " · Imported song · ID …" + row["legacy_uuid"][-8:]
+            elif row.get("basis") == "title_derived":
+                description += " · Title-derived"
+            else:
+                description += " · Captured song entry"
+            forms = row.get("title_forms")
+            if forms:
+                description += " · Titles: " + " / ".join(value[:100] + ("…" if len(value) > 100 else "") for value in forms)
+                if row.get("title_forms_truncated"):
+                    description += " / …"
+        return dict(domain=domain, namespace="repertoire",
+                    stableKey=json.dumps([row["scope"], row["entity_key"]], separators=(",", ":")),
+                    literal=row["title"] if literal is None else literal, artistUuid=row["artist_uuid"],
+                    provider=None, locality=None, date=None, displayName=row["title"],
+                    description=description,
+                    evidenceUrl=route + "?" + urlencode(coordinates))
+
+    def _review_work_ref(self, row):
+        return dict(domain="compositions", namespace="composition_work", stableKey=row["work_key"],
+                    literal=row["title"], artistUuid=None, provider="musicbrainz", locality=None, date=None,
+                    displayName=row["title"], description=", ".join(row.get("writer_names") or []),
+                    evidenceUrl="/api/composition-work?" + urlencode({"key": row["work_key"], "generation": self.stats()["generation"]}))
+
+    def review_source(self, parameters):
+        key, artist = parameters.get("key", ""), parameters.get("artist", "")
+        domain = parameters.get("domain", "compositions")
+        if domain not in {"compositions", "songs"}:
+            raise ValueError("Choose a song or composition review")
+        if key.startswith("composition:musicbrainz:"):
+            if domain == "songs":
+                raise ValueError("Song correspondence targets must be existing songs by this artist")
+            row = self.compositions.work(key, limit=1) if self.compositions else None
+            items = [self._review_work_ref(row)] if row else []
+        else:
+            try:
+                coordinates = json.loads(key)
+                if not isinstance(coordinates, list) or len(coordinates) != 2 or not all(isinstance(value, str) for value in coordinates):
+                    raise ValueError()
+                scope, song_key = coordinates
+            except (ValueError, TypeError):
+                raise ValueError("Choose an exact scoped song key") from None
+            row = self.groups.review_identity(scope, artist, song_key) if self.groups else None
+            if row is not None and domain == "compositions" and not row["normalized_group"]:
+                row = None
+            items = [self._review_song_ref(row, domain=domain)] if row else []
+        return dict(items=items, total=len(items), complete=True)
+
+    def review_candidates(self, parameters):
+        if parameters.get("domain", "compositions") not in {"compositions", "songs"}:
+            raise ValueError("Choose a song or composition review")
+        if parameters.get("domain") == "songs":
+            if not self.groups or not parameters.get("artist") or not parameters.get("scope"):
+                raise ValueError("Song correspondence needs this artist and source scope")
+            if len(parameters.get("q", "")) > 256:
+                raise ValueError("Use at most 256 characters in a song search")
+            result = self.groups.songs(q=parameters.get("q", ""), artist=parameters["artist"], scope=parameters["scope"],
+                                       review_order=True, **page(parameters))
+            return dict(items=[self._review_song_ref(row, domain="songs") for row in result["items"]], total=result["total"],
+                        complete=result["offset"] == 0 and len(result["items"]) == result["total"],
+                        offset=result["offset"], limit=result["limit"])
+        if not self.compositions:
+            raise ValueError("No completed composition suggestions are configured")
+        result = self.compositions.works(q=parameters.get("q", ""), **page(parameters))
+        return dict(items=[self._review_work_ref(row) for row in result["items"]], total=result["total"],
+                    complete=result["offset"] == 0 and len(result["items"]) == result["total"],
+                    offset=result["offset"], limit=result["limit"])
+
+    def review_observations(self, parameters):
+        """Retrieve literal memberships; the operator host alone decides reusable scope."""
+        if not self.groups:
+            raise ValueError("No completed music normalization is configured")
+        domain = parameters.get("domain", "compositions")
+        if domain not in {"compositions", "songs"}:
+            raise ValueError("Choose a song or composition review")
+        literal = parameters.get("literal", "")
+        if not literal or len(literal) > 4096:
+            raise ValueError("Choose an original song spelling of 1–4096 characters")
+        bounds = page(parameters)
+        artist = parameters.get("artist", "")
+        artist_filter = " AND g.artist_uuid=?" if artist else ""
+        values = [literal, literal] + ([artist] if artist else [])
+        # The shared C# correspondence owns the original-to-group relationship.
+        # Text equality retrieves observations and never creates a new identity link.
+        selection = ("WITH matched AS (SELECT scope,entity_key FROM groups WHERE title=? UNION "
+                     "SELECT m.scope,m.target_key FROM originals o JOIN members m "
+                     "ON m.scope=o.scope AND m.original_key=o.original_key "
+                     "WHERE o.original_title=? AND m.disposition='proposed') "
+                     "SELECT g.scope,g.entity_key,g.artist_uuid,g.title,g.basis,g.legacy_uuid,1 normalized_group,a.name artist_name FROM matched k JOIN groups g "
+                     "ON g.scope=k.scope AND g.entity_key=k.entity_key LEFT JOIN catalogue.artists a "
+                     "ON a.scope=g.scope AND a.uuid=g.artist_uuid WHERE 1" + artist_filter)
+        if domain == "songs":
+            # Benchmark IDs may name an original descriptor that has no proposed
+            # group. Keep that original account addressable without inventing a link.
+            selection += (" UNION ALL SELECT s.scope,s.entity_key,s.artist_uuid,s.title,s.basis,s.legacy_uuid,0 normalized_group,a.name artist_name "
+                          "FROM originals o JOIN catalogue.songs s ON s.scope=o.scope AND s.entity_key=o.original_key "
+                          "LEFT JOIN catalogue.artists a ON a.scope=s.scope AND a.uuid=s.artist_uuid "
+                          "WHERE o.original_title=? AND NOT EXISTS(SELECT 1 FROM groups g "
+                          "WHERE g.scope=o.scope AND g.entity_key=o.original_key)" + (" AND s.artist_uuid=?" if artist else ""))
+            values.extend([literal] + ([artist] if artist else []))
+        with closing(self.groups._connect()) as db:
+            total = db.execute("SELECT count(*) FROM (" + selection + ")", values).fetchone()[0]
+            rows = db.execute("SELECT * FROM (" + selection + ") ORDER BY scope,entity_key LIMIT ? OFFSET ?",
+                              [*values, bounds["limit"], bounds["offset"]]).fetchall()
+            items = [self._review_song_ref(dict(row), literal, domain) for row in rows]
+        return dict(items=items, total=total, complete=bounds["offset"] == 0 and len(items) == total, **bounds)
+
+    def _reviewed_work_references(self, work_key, snapshot):
+        """Retrieve exact rule subjects; C# still decides which rules actually apply."""
+        references, missing = {}, 0
+        for rule in snapshot["rules"]:
+            definition = rule["definition"]
+            target = definition["target"]
+            if (rule["state"] != "accepted" or definition["domain"] != "compositions"
+                    or target["namespace"] != "composition_work" or target["stableKey"] != work_key):
+                continue
+            selector = definition["selector"]
+            if selector["namespace"] != "repertoire":
+                continue
+            parameters = dict(artist=selector.get("artistUuid") or "")
+            if selector.get("accountStableKey") is not None:
+                page_result = self.review_source({**parameters, "key": selector["accountStableKey"]})
+                missing += not page_result["items"]
+                pages = [page_result]
+            else:
+                pages, offset = [], 0
+                while True:
+                    result = self.review_observations({**parameters, "literal": selector["literal"], "offset": offset, "limit": 100})
+                    if result["total"] > 1000 or (not result["items"] and offset < result["total"]):
+                        raise MusicQueryUnavailable("The complete reviewed composition exceeds its 1,000-observation lookup bound")
+                    pages.append(result)
+                    offset += len(result["items"])
+                    if offset >= result["total"]:
+                        break
+            for result in pages:
+                for reference in result["items"]:
+                    references[json.dumps(reference, sort_keys=True)] = reference
+                    if len(references) > 1000:
+                        raise MusicQueryUnavailable("The complete reviewed composition exceeds its 1,000-observation lookup bound")
+        return list(references.values()), int(missing)
+
+    def reviewed_work_songs(self, work_key, parameters):
+        """Add reviewed membership without rewriting the frozen source candidate pool."""
+        result = dict(reviewedSongs=[], reviewedSongsTotal=0, reviewedSongsOffset=0, reviewedSongsLimit=100,
+                      reviewedSongsComplete=True, reviewedArtists=[], reviewedMissingSources=0)
+        if self.review_client is None:
+            return result
+        snapshot = self.review_client.snapshot()
+        references, missing = self._reviewed_work_references(work_key, snapshot)
+        decisions = self.review_client.evaluate(references, snapshot) if references else []
+        groups = {}
+        for reference, decision in zip(references, decisions):
+            target = decision.get("target")
+            if not target or target["namespace"] != "composition_work" or target["stableKey"] != work_key:
+                continue
+            scope, key = json.loads(reference["stableKey"])
+            identity = (scope, reference["artistUuid"], key)
+            if identity not in groups:
+                row = self.groups.group(*identity, limit=1)
+                if row is None:
+                    raise CatalogueChanged("A reviewed song changed during lookup. Reload this composition")
+                row.update(member_count=row.pop("members_total"), normalized_group=True,
+                           reviewedDecision=decision, preferredWorkKey=work_key, preferredBasis="reviewed", reviewedContexts=[])
+                row.pop("members", None)
+                groups[identity] = row
+            groups[identity]["reviewedContexts"].append(dict(sourceRef=reference, decision=decision))
+        artists = {}
+        for row in groups.values():
+            artist = artists.setdefault((row["scope"], row["artist_uuid"]), dict(scope=row["scope"], artist_uuid=row["artist_uuid"],
+                artist_name=row.get("artist_name"), song_count=0))
+            artist["song_count"] += 1
+        rows = [row for row in groups.values() if (not parameters.get("scope") or row["scope"] == parameters["scope"])
+                and (not parameters.get("artist") or row["artist_uuid"] == parameters["artist"])]
+        rows.sort(key=lambda row: ((row.get("artist_name") or "").casefold(), row["scope"], row["entity_key"]))
+        offset = max(0, int(parameters.get("reviewedOffset", 0)))
+        return dict(reviewedSongs=rows[offset:offset + 100], reviewedSongsTotal=len(rows), reviewedSongsOffset=offset,
+                    reviewedSongsLimit=100, reviewedSongsComplete=offset == 0 and len(rows) <= 100,
+                    reviewedArtists=sorted(artists.values(), key=lambda row: ((row["artist_name"] or "").casefold(), row["scope"], row["artist_uuid"])),
+                    reviewedMissingSources=missing)
 
     def _group_query(self, query):
         metadata = self.stats()
@@ -296,6 +493,12 @@ def handler_for(discovery):
                     result = discovery.stats()
                 elif route.path == "/api/artists":
                     result = catalogue.artists(q=query.get("q", ""), scope=query.get("scope", ""), **page(query))
+                elif route.path == "/api/review-source":
+                    result = discovery.review_source(query)
+                elif route.path == "/api/review-candidates":
+                    result = discovery.review_candidates(query)
+                elif route.path == "/api/review-observations":
+                    result = discovery.review_observations(query)
                 elif route.path == "/api/songs":
                     result = catalogue.songs(q=query.get("q", ""), artist=query.get("artist", ""), scope=query.get("scope", ""), **page(query))
                 elif route.path == "/api/normalized-songs":
@@ -324,8 +527,17 @@ def handler_for(discovery):
                     result = discovery.compositions.works(q=query.get("q", ""), scope=query.get("scope", ""), artist=query.get("artist", ""), **page(query))
                 elif route.path == "/api/composition-work":
                     result = discovery.compositions.work(query.get("key", ""), scope=query.get("scope", ""), artist=query.get("artist", ""), **page(query))
+                    if result is not None and discovery.review_client is not None:
+                        result["songs"] = [apply_composition_review(song, discovery.review_client, discovery._review_song_ref(song))
+                                           for song in result["songs"]]
+                        result.update(discovery.reviewed_work_songs(result["work_key"], query))
                 elif route.path == "/api/song-composition-hypotheses":
                     result = discovery.compositions.song(query.get("scope", ""), query.get("artist", ""), query.get("key", ""))
+                    if result is not None and discovery.review_client is not None:
+                        source = discovery.review_source(dict(key=json.dumps([query.get("scope", ""), query.get("key", "")], separators=(",", ":")),
+                                                             artist=query.get("artist", "")))
+                        if source["items"]:
+                            result = apply_composition_review(result, discovery.review_client, source["items"][0])
                 elif route.path == "/api/composition-evidence":
                     result = discovery.compositions.evidence(query.get("kind", ""), query.get("key", ""), query.get("scope", ""), query.get("artist", ""))
                 elif route.path == "/api/composition-selection-evidence":
@@ -358,6 +570,8 @@ def handler_for(discovery):
             except (CatalogueChanged, MusicNormalizationChanged) as error:
                 return self.send_json(409, {"error": str(error)})
             except MusicQueryUnavailable as error:
+                return self.send_json(503, {"error": str(error)})
+            except ReviewedKnowledgeUnavailable as error:
                 return self.send_json(503, {"error": str(error)})
             except KeyError:
                 return self.send_json(404, {"error": "This music identity is not in the catalogue snapshot."})
@@ -416,6 +630,7 @@ def main():
     serve.add_argument("--compositions", help="Completed composition suggestion projection for this exact music image")
     serve.add_argument("--people-url", help="Optional taper directory HTTP(S) origin")
     serve.add_argument("--venue-url", help="Optional venue directory HTTP(S) origin")
+    serve.add_argument("--review-url", help="Optional authenticated normalization review HTTP(S) origin")
     serve.add_argument("--normalization", help="Completed C# correspondence sidecar for this exact catalogue")
     serve.add_argument("--reader", nargs=3, action="append", metavar=("SCOPE", "RUN", "READER"), default=[], help="Additional relationship-only reader; does not claim title discovery coverage")
     serve.add_argument("--host", default="127.0.0.1")
@@ -437,7 +652,7 @@ def main():
         print(json.dumps(result, ensure_ascii=False), flush=True)
     else:
         readers = [Source(scope, Path(run), reader) for scope, run, reader in args.reader]
-        discovery = MusicDiscovery(MusicCatalogue(args.database), readers, args.normalization, args.compositions, args.people_url, args.venue_url, args.composition_selections)
+        discovery = MusicDiscovery(MusicCatalogue(args.database), readers, args.normalization, args.compositions, args.people_url, args.venue_url, args.composition_selections, args.review_url)
         server = ThreadingHTTPServer((args.host, args.port), handler_for(discovery))
         print(json.dumps({"url": f"http://{args.host}:{args.port}/", "database": str(Path(args.database).resolve())}), flush=True)
         server.serve_forever()

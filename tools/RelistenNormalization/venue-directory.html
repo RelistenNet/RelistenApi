@@ -539,8 +539,20 @@
         heading.append(node("h1", venue.name || "Unnamed catalog venue", "detail-title"));
         heading.append(node("p", (venue.normalized_location || venue.location || "Location not established") + " · " +
           (venue.normalization_key ? count(data.recordingsTotal) + " recordings" : venue.artist_name || "Artist not recorded"), "subtle"));
-        heading.append(badge(venue.normalization_key ? "Proposed venue group" : "Venue proposal", true));
+        const reviewed = venue.reviewedDecision;
+        const reviewedPositive = reviewed?.outcome === "reviewed_correspondence";
+        heading.append(badge(reviewedPositive ? "Reviewed venue correction" : reviewed?.outcome === "conflict"
+          ? "Review decisions conflict" : venue.normalization_key ? "Proposed venue group" : "Venue proposal", !reviewedPositive));
         const actions = node("div", undefined, "actions");
+        if (stats.capabilities?.normalizationReview && stats.reviewUrl && venue.record_kind === "legacy_catalog") {
+          const review = safeUrl(stats.reviewUrl);
+          if (review) {
+            const target = new URL(review);
+            target.search = new URLSearchParams({domain: "venues", namespace: "legacy_venue",
+              stableKey: venue.uuid, artistUuid: venue.artist_uuid || ""});
+            heading.append(link("Correct venue", target.href, "button"));
+          }
+        }
         const core = venue.normalization ? data.evidenceUrl : readerUrl(data.coreUrl || stats.coreUrl, "venues", venue.place_key);
         if (core) { actions.append(link("View place proposal ↗", core, "button")); }
         if (venue.correctionEvidenceUrl) { actions.append(link("View normalization correction ↗", venue.correctionEvidenceUrl, "button")); }
@@ -566,17 +578,20 @@
           const normalization = venue.normalization;
           const hypothesis = normalization.hypothesis;
           const account = node("div");
-          account.append(node("p", "The preferred name and shared membership come from the retained normalization proposal. This is an inferred group; physical identity has not been accepted."),
+          account.append(node("p", reviewedPositive
+            ? "This is the original automated proposal. The reviewed correction controls the venue name and recordings shown above."
+            : "The preferred name and shared membership come from the retained normalization proposal. This is an inferred group; physical identity has not been accepted."),
             definition({ preferred_name: hypothesis.preferredName, normalized_locality: hypothesis.displayLocation,
               membership_basis: normalization.membershipBasis, status: normalization.status,
               original_accounts: hypothesis.memberCount, catalog_artists: hypothesis.artistCount,
               observed_source_associations: hypothesis.sourceObservationCount }));
-          primary.append(panel("Shared venue interpretation", account));
+          primary.append(panel(reviewedPositive ? "Original automated venue interpretation" : "Shared venue interpretation", account));
           aside.append(panel("Selected original catalog account", definition({
             name: venue.original_name, location: venue.location, venue_uuid: venue.uuid, artist: venue.artist_name,
           })));
         }
-        primary.append(panel("Current interpretation", definition({ scope: venue.scope, outcome: venue.outcome, reason: venue.reason, grouping_basis: venue.grouping_basis })));
+        if (reviewed) { primary.append(panel("Reviewed decision", richValue(reviewed))); }
+        primary.append(panel(reviewed ? "Original automated status" : "Current interpretation", definition({ scope: venue.scope, outcome: venue.outcome, reason: venue.reason, grouping_basis: venue.grouping_basis })));
         if (venue.record_kind === "native_observation") { primary.append(panel("Original venue scope", richValue({ origin: venue.original_origin, setlist_links: venue.setlist_links }))); }
         const history = node("div");
         history.append(node("p", venue.record_kind === "native_observation" ? "Original venue names and prose remain cited. Prose does not establish dated name history or relocation intervals." : "Historical names and date bounds are retained as reported. Missing dates do not mean a name applied forever."), richValue(venue.record_kind === "native_observation" ? { names: venue.names, original_venue_prose: venue.history_prose } : venue.history || []));

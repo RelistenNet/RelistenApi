@@ -887,6 +887,7 @@
             " catalog artists. Shared wording retrieves observations; this name group may contain different people.",
         ),
       );
+      if (d.reviewUrl) header.append(link("Resolve person", d.reviewUrl));
       header.append(
         node(
           "p",

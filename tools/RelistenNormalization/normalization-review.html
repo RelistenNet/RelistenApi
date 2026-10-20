@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Review a match · Relisten</title>
+    <link rel="stylesheet" href="normalization-review.css" />
+    <script src="normalization-review.js" defer></script>
+  </head>
+  <body>
+    <header class="topbar"><div class="shell"><span class="brand">Relisten · Review a match</span><span id="reviewer"></span></div></header>
+    <main class="shell">
+      <p id="status" class="status" role="status" aria-live="polite">Loading review data…</p>
+      <button id="reload" type="button" hidden>Reload current data</button>
+      <section id="queue-panel" hidden>
+        <header class="queue-intro">
+          <h1>Review benchmark disagreements</h1>
+          <p class="muted">Compare recorded titles with the reference setlist.</p>
+        </header>
+        <form id="queue-filters" class="panel queue-filters">
+          <label>Artist<select id="queue-artist"><option value="">All artists</option></select></label>
+          <label>Category<select id="queue-category"><option value="">All categories</option></select></label>
+          <button id="queue-filter" type="submit">Show disagreements</button>
+        </form>
+        <p id="queue-totals" class="muted"></p>
+        <div id="queue-counts" class="queue-counts"></div>
+        <details class="muted"><summary>Benchmark details</summary><p id="queue-snapshot"></p><ul id="queue-limitations"></ul></details>
+        <div id="queue-items"></div>
+        <nav class="queue-paging" aria-label="Disagreement pages">
+          <button id="queue-previous" type="button">Previous</button>
+          <span id="queue-page" class="muted"></span>
+          <button id="queue-next" type="button">Next</button>
+        </nav>
+      </section>
+      <section id="source-panel" class="panel" hidden>
+        <p id="source-kind" class="eyebrow">Original account</p>
+        <h1 id="source-label"></h1>
+        <p id="source-detail" class="muted"></p>
+        <details><summary>Original reference</summary><pre id="source-reference"></pre></details>
+      </section>
+      <section id="decision-context-panel" class="panel" hidden>
+        <h2>Applicable decisions</h2>
+        <div id="decision-warnings"></div>
+        <div id="applicable-decisions" class="choices"></div>
+      </section>
+      <section id="current-panel" class="panel" hidden>
+        <h2 id="decision-heading">Current decision</h2>
+        <div id="current-decision"></div>
+        <button id="revise" type="button">Revise this decision</button>
+        <form id="retract-form" class="inset" hidden>
+          <label>Why withdraw this decision?<textarea id="retract-reason" rows="2" required></textarea></label>
+          <p id="retract-help" class="muted">The decision stays in history. Future matching will no longer use it.</p>
+          <button id="retract" type="submit">Withdraw decision</button>
+        </form>
+      </section>
+      <form id="review-form" class="panel" hidden>
+        <h2 id="target-heading">Choose the correct identity</h2>
+        <label id="candidate-label" for="candidate-query">Find a venue, person or composition</label>
+        <div class="search-row"><input id="candidate-query" type="search" autocomplete="off" /><button id="search" type="button">Search</button></div>
+        <p id="candidate-status" class="muted" role="status"></p>
+        <div id="candidates" class="choices"></div>
+        <div id="selected-target" class="selected" hidden></div>
+        <fieldset>
+          <legend>Decision</legend>
+          <label class="choice"><input type="radio" name="action" value="accept" checked /> <span id="accept-label">Use this identity</span></label>
+          <label class="choice"><input type="radio" name="action" value="reject" /> <span id="reject-label">Reject this identity</span></label>
+        </fieldset>
+        <fieldset>
+          <legend>Where should this apply?</legend>
+          <label class="choice"><input type="radio" id="scope-account" name="scope" value="account" checked /> <span id="account-label">Only this account</span></label>
+          <label id="alias-choice" class="choice"><input id="scope-alias" type="radio" name="scope" value="alias" /> Reuse an exact name within a scope</label>
+          <p id="scope-help" class="muted">A reusable decision also guides future matching. The preview shows which current accounts it affects.</p>
+        </fieldset>
+        <div id="alias-fields" class="inset" hidden>
+          <label>Exact original name<input id="literal" autocomplete="off" /></label>
+          <p class="muted">Spelling and punctuation are part of the match. Add other spellings as separate decisions.</p>
+          <p id="alias-scope-summary" class="muted"></p>
+          <details>
+            <summary>Advanced scope constraints</summary>
+            <p id="artist-scope-hint" class="muted">Clear Artist UUID to match across artists.</p>
+            <div class="scope-grid">
+              <label>Artist UUID (optional)<input id="artist-uuid" autocomplete="off" /></label>
+              <label>Provider (optional)<input id="provider" autocomplete="off" /></label>
+              <label>Locality (optional)<input id="locality" autocomplete="off" /></label>
+              <label>From date (optional)<input id="from" type="date" /></label>
+              <label>Through date (optional)<input id="through" type="date" /></label>
+            </div>
+            <p class="muted">An empty scope field adds no restriction. Check the affected accounts before saving.</p>
+          </details>
+        </div>
+        <label>Reason<textarea id="reason" rows="3" required placeholder="Explain the identity or correction for the next reviewer."></textarea></label>
+        <button id="prepare" type="submit" class="primary" disabled>Preview decision</button>
+      </form>
+      <section id="preview-panel" class="panel" hidden aria-labelledby="preview-title">
+        <h2 id="preview-title">Review the affected accounts</h2>
+        <div id="preview-summary"></div>
+        <p id="preview-coverage" class="muted"></p>
+        <ul id="affected-list" class="record-list"></ul>
+        <div id="preview-warnings"></div>
+        <button id="apply" type="button" class="primary">Save decision</button>
+        <button id="edit" type="button">Change decision</button>
+      </section>
+      <section id="history-panel" class="panel" hidden>
+        <h2>Decision history</h2>
+        <div id="history"></div>
+      </section>
+    </main>
+  </body>
+</html>

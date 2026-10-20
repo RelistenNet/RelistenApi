@@ -4,6 +4,12 @@ using Relisten.Data;
 using Relisten.Normalization;
 using Relisten.Normalization.Batch;
 
+if (args.Length == 2 && args[0] == "review-serve")
+{
+    await NormalizationReviewHost.RunAsync(args[1]);
+    return 0;
+}
+
 if (
     !(
         (
@@ -13,6 +19,7 @@ if (
                     or "extract-source-actors"
                     or "venue-pair-baseline"
                     or "people-shared"
+                    or "phish-file-reference"
         )
         || (args.Length == 5 && args[0] == "luna-credits")
         || (
@@ -44,6 +51,12 @@ if (
                     or "composition-hypotheses"
                     or "composition-work-searches"
             && (args.Length == 4 || args[4] == "--resume")
+        )
+        || (
+            args.Length is 7 or 8
+            && args[0] == "music-consolidate"
+            && args[4] == "--knowledge"
+            && (args.Length == 7 || args[7] == "--resume")
         )
         || (
             args.Length is 4 or 5
@@ -86,11 +99,12 @@ if (
             + "       RelistenNormalization go-set-composition-sources <request.json> <new-output-directory> <frozen-request-sha256>\n"
             + "       RelistenNormalization venue-normalization-refresh <request.json> <new-output-directory> <frozen-request-sha256>\n"
             + "       RelistenNormalization shadow-source-observations <snapshot.jsonl[.gz] OR capture-manifest.json> <output-directory> [--resume]\n"
-            + "       RelistenNormalization music-consolidate <input-manifest.json> <output-directory> <frozen-manifest-sha256> [--resume]\n"
+            + "       RelistenNormalization music-consolidate <input-manifest.json> <output-directory> <frozen-manifest-sha256> [--knowledge <snapshot.json> <snapshot-sha256>] [--resume]\n"
             + "       RelistenNormalization composition-hypotheses <request.json> <output-directory> <frozen-request-sha256> [--resume]\n"
             + "       RelistenNormalization composition-work-searches <request.json> <output-directory> <frozen-request-sha256> [--resume]\n"
             + "       RelistenNormalization composition-select <plan.json> <output-directory> <frozen-plan-sha256> [--resume|--preflight]\n"
             + "       RelistenNormalization people-shared <completed-source-observations-run> <new-output-directory>\n"
+            + "       RelistenNormalization phish-file-reference <request.json> <new-output-directory>\n"
             + "       RelistenNormalization shadow-rows <catalog-rows.jsonl[.gz]> <output-directory> [--resume]\n"
             + "       RelistenNormalization shadow-native <catalog-rows.jsonl[.gz]> <output-directory> [--resume]\n"
             + "       RelistenNormalization extract-source-actors <snapshot.jsonl> <new-output-directory>\n"
@@ -232,8 +246,23 @@ try
             args[1],
             args[2],
             args[3],
-            args.Length == 5,
-            cancellation.Token
+            args[^1] == "--resume",
+            cancellation.Token,
+            args.Length >= 7 ? args[5] : null,
+            args.Length >= 7 ? args[6] : null
+        );
+        return 0;
+    }
+
+    if (args[0] == "phish-file-reference")
+    {
+        var request =
+            JsonSerializer.Deserialize<PhishFileReferenceBenchmarkRequest>(
+                await File.ReadAllTextAsync(args[1], cancellation.Token),
+                new JsonSerializerOptions(JsonSerializerDefaults.Web)
+            ) ?? throw new InvalidDataException("A Phish file reference request is required.");
+        Console.WriteLine(
+            await new PhishFileReferenceBenchmark().RunAsync(request, args[2], cancellation.Token)
         );
         return 0;
     }

@@ -27,6 +27,7 @@ import unicodedata
 from urllib.parse import parse_qs, urlencode, urlsplit
 
 from recording_playback import RecordingPlayback, reader_navigation
+from reviewed_knowledge import ReviewedKnowledgeClient
 from person_hypotheses import PersonHypotheses
 from shared_people_directory import CombinedPeopleHypotheses, SharedPeopleOverlay
 
@@ -40,6 +41,20 @@ def name_key(name):
 
 def group_id(key):
     return "draft-name:" + hashlib.sha256(key.encode()).hexdigest()[:24]
+
+
+def review_origin(value):
+    """Accept an operator host, without URL credentials or hidden routing state."""
+    if value is None:
+        return None
+    url = urlsplit(value)
+    if (url.scheme not in ("http", "https") or not url.hostname
+            or url.username is not None or url.password is not None
+            or url.path not in ("", "/") or "?" in value or "#" in value
+            or "\\" in value or any(character.isspace() or ord(character) < 32 or ord(character) == 127 for character in value)):
+        raise ValueError("Review URL must be an HTTP(S) origin without credentials, path, query or fragment")
+    url.port  # Reject malformed ports before publishing the configuration.
+    return url.scheme + "://" + url.netloc
 
 
 def encoded(value):
@@ -1388,12 +1403,14 @@ class DirectoryReadConnection(sqlite3.Connection):
 class PeopleDirectory:
     """Read-only search and recording pages; each request uses its own connection."""
 
-    def __init__(self, database, files_url, core_url, shared_people_database=None, music_url=None, venue_url=None):
+    def __init__(self, database, files_url, core_url, shared_people_database=None, music_url=None, venue_url=None, review_url=None):
         self.database = Path(database).resolve()
         self.files_url = files_url.rstrip("/") + "/"
         self.core_url = core_url.rstrip("/") + "/"
         self.playback = RecordingPlayback(files_url)
         self.navigation = reader_navigation(music_url=music_url, venue_url=venue_url, own="tapers")
+        self.review_url = review_origin(review_url)
+        self.review_client = ReviewedKnowledgeClient(self.review_url) if self.review_url else None
         self._people_lock = threading.Lock()
         self._people_stamp = None
         self._people_index = None
@@ -1461,6 +1478,8 @@ class PeopleDirectory:
             result["capabilities"] = dict(sourceActors=db.execute("SELECT 1 FROM sqlite_master WHERE name='source_actors'").fetchone() is not None)
             result['capabilities']['sharedPeople'] = True
             result['capabilities']['recordingPlayback'] = bool(self.playback.files_url)
+            result['capabilities']['normalizationReview'] = self.review_url is not None
+            result['reviewUrl'] = self.review_url
             result['navigation'] = self.navigation
             shared = self._shared_people(db)
             result['personHypotheses'] = len(shared.visible)
@@ -1530,6 +1549,8 @@ class PeopleDirectory:
             if row is None:
                 return None
             result = dict(row)
+            result['reviewUrl'] = (self.review_url + '/?' + urlencode(dict(
+                domain='people', namespace='person_group', stableKey=identifier))) if self.review_url else None
             result["basis"] = "inferred_name_group"
             result["names"] = [
                 dict(row)
@@ -1618,6 +1639,75 @@ class PeopleDirectory:
             result.update(self._source_observations(db, identifier, parameters))
             result['personHypotheses'] = self._shared_people(db).for_group(identifier)
             return result
+
+    @staticmethod
+    def _review_population_sql(db):
+        """Read the existing name index without loading contextual person hypotheses."""
+        native = db.execute("SELECT 1 FROM sqlite_master WHERE name='native_groups'").fetchone()
+        groups = "SELECT id,display_name,credit_count,artist_count FROM groups"
+        names = "SELECT group_id,wording,lookup FROM names"
+        if native:
+            groups += " UNION ALL SELECT id,display_name,0,0 FROM native_groups n WHERE NOT EXISTS(SELECT 1 FROM groups g WHERE g.id=n.id)"
+            names += " UNION ALL SELECT group_id,wording,lookup FROM native_names"
+        return "WITH review_groups AS (" + groups + "), review_names AS (" + names + ") "
+
+    @staticmethod
+    def _review_artist_condition(db, artist, literal=None):
+        if not artist:
+            return "", []
+        queries, values = [], []
+        for table, string_aliases in (("credits", False), ("source_actors", False), ("native_actors", True)):
+            if not db.execute("SELECT 1 FROM sqlite_master WHERE name=?", (table,)).fetchone():
+                continue
+            condition = "a.group_id=g.id AND a.artist_uuid=?"
+            values.append(artist)
+            if literal is not None:
+                alias = "alias.value" if string_aliases else "json_extract(alias.value,'$.wording')"
+                condition += " AND (a.name=? OR EXISTS(SELECT 1 FROM json_each(a.aliases) alias WHERE " + alias + "=?))"
+                values.extend((literal, literal))
+            queries.append("EXISTS(SELECT 1 FROM " + table + " a WHERE " + condition + ")")
+        return " AND (" + " OR ".join(queries) + ")", values
+
+    @staticmethod
+    def _review_reference(row, literal=None, artist=None):
+        result = dict(domain='people', namespace='person_group', stableKey=row['id'],
+            literal=literal if literal is not None else row['display_name'], displayName=row['display_name'],
+            description=f"{row['credit_count']} catalog credit mentions across {row['artist_count']} catalog artists. "
+                'Native and role-free observations remain separate. Shared wording does not establish one person.',
+            evidenceUrl='/api/person?' + urlencode(dict(id=row['id'])))
+        if artist:
+            result['artistUuid'] = artist
+        return result
+
+    def review_source(self, parameters):
+        """Resolve one exact retrieval-group key; never substitute a canonical identity."""
+        artist = parameters.get('artist', '')
+        with closing(self.connect()) as db:
+            condition, values = self._review_artist_condition(db, artist)
+            row = db.execute(self._review_population_sql(db) +
+                "SELECT g.* FROM review_groups g WHERE g.id=?" + condition,
+                [parameters.get('key', '')] + values).fetchone()
+            items = [self._review_reference(row, artist=artist)] if row else []
+            return dict(items=items, total=len(items), complete=True)
+
+    def review_matches(self, parameters, exact=False):
+        """Page distinct name groups, retaining exact original alias spelling for bulk review."""
+        offset, limit = self.page(parameters)
+        artist = parameters.get('artist', '')
+        literal = parameters.get('literal', '') if exact else None
+        query = literal if exact else name_key(parameters.get('q', ''))
+        with closing(self.connect()) as db:
+            condition = 'WHERE EXISTS(SELECT 1 FROM review_names n WHERE n.group_id=g.id AND ' + (
+                'n.wording=?' if exact else 'instr(n.lookup,?)>0') + ')'
+            artist_condition, artist_values = self._review_artist_condition(db, artist, literal)
+            values = [query] + artist_values
+            prefix = self._review_population_sql(db)
+            total = db.execute(prefix + 'SELECT count(*) FROM review_groups g ' + condition + artist_condition, values).fetchone()[0]
+            rows = db.execute(prefix + 'SELECT g.* FROM review_groups g ' + condition + artist_condition +
+                ' ORDER BY g.display_name,g.id LIMIT ? OFFSET ?', values + [limit, offset]).fetchall()
+            items = [self._review_reference(row, literal, artist) for row in rows]
+            return dict(items=items, total=total, offset=offset, limit=limit,
+                complete=offset == 0 and len(items) == total)
 
     def shared_person(self, identifier, parameters):
         """Combine exact supported occurrences without expanding their name buckets."""
@@ -1978,6 +2068,12 @@ def handler_for(directory):
                     result = directory.stats()
                 elif url.path == "/api/people":
                     result = directory.search(parameters)
+                elif url.path == '/api/review-source':
+                    result = directory.review_source(parameters)
+                elif url.path == '/api/review-candidates':
+                    result = directory.review_matches(parameters)
+                elif url.path == '/api/review-observations':
+                    result = directory.review_matches(parameters, exact=True)
                 elif url.path == "/api/person":
                     result = directory.detail(parameters.get("id", ""), parameters)
                     if result is None:
@@ -2076,6 +2172,7 @@ def main():
     serve.add_argument("--core-url", required=True)
     serve.add_argument("--music-url", help="Optional music discovery reader root")
     serve.add_argument("--venue-url", help="Optional venue discovery reader root")
+    serve.add_argument("--review-url", help="Optional HTTP(S) operator review origin; disabled by default")
     serve.add_argument("--bind", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=18768)
     args = parser.parse_args()
@@ -2099,7 +2196,7 @@ def main():
     elif args.command == "overlay-native":
         print(encoded(NativePeopleOverlay(args.run, args.database, args.native_url).apply()), flush=True)
     else:
-        directory = PeopleDirectory(args.database, args.files_url, args.core_url, args.shared_people_database, args.music_url, args.venue_url)
+        directory = PeopleDirectory(args.database, args.files_url, args.core_url, args.shared_people_database, args.music_url, args.venue_url, args.review_url)
         print(
             encoded(
                 {

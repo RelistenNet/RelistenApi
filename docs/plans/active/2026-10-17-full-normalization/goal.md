@@ -12,6 +12,25 @@ Verification serves integrated delivery: run focused behavioral checks for relev
 
 Continue beyond shadow delivery to independently qualified acceptance/routing, incremental refresh, correction/recovery verification, restored-catalog backfill rehearsal and rollout preparation. Production writes and deployment require approval. Do not mark the overall normalization goal complete on delivery of a report or shadow preview.
 
+## Expert feedback and reference-led improvement
+
+Give Alec a working review UI within the catalog pages he uses. He must be able
+to select the correct identity, reject a namesake, supply a correction and apply
+an alias to an explicit scope. Store these as durable, attributed decisions with
+revision history. Apply corrections to the displayed catalog and reuse accepted
+knowledge on later inputs. Preserve original imports and playback references.
+
+Compare automatic results against the retained Phish and Grateful Dead reference
+data at artist scale. State what each reference can score: song membership,
+per-file identity and ordered occurrences are different tasks. Show correct
+matches, errors and missing matches with denominators, and send disagreements
+into the same review UI. User corrections become development examples and
+regressions; retain separate untouched data for independent evaluation.
+
+Use expert input to resolve concrete ties and improve shared rules. Do not leave
+Alec with static reports or repeated uncertainty labels when he can supply the
+answer. Judge this work by corrected, searchable and playable catalog data.
+
 ## Experimental development policy
 
 Judge progress by what a listener can do in the app. Searching `MSG` should open

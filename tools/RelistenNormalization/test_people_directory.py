@@ -12,7 +12,7 @@ import threading
 import unittest
 from unittest.mock import patch
 from urllib.error import HTTPError
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, urlencode, urlsplit
 
 from shadow_reader import ShadowIndex
 from urllib.request import urlopen
@@ -107,6 +107,91 @@ class TestPeopleDirectory(unittest.TestCase):
                 stream.write(json.dumps(row) + "\n")
         DirectoryBuilder(self.root, self.database, minimum_free=0).build()
         return PeopleDirectory(self.database, "http://files.test/", "http://core.test/")
+
+    def serve(self, directory):
+        server = ThreadingHTTPServer(('127.0.0.1', 0), handler_for(directory))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(thread.join)
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        base = 'http://127.0.0.1:' + str(server.server_port)
+
+        def get(path, **parameters):
+            with urlopen(base + path + '?' + urlencode(parameters)) as response:
+                return json.load(response)
+        return get
+
+    def test_review_source_disabled_configuration_and_safe_operator_link(self):
+        directory = self.build([('one', 'artist-a', [self.credit('one', 'artist-a', 'A & B', 'taper')]),
+                                ('two', 'artist-b', [self.credit('two', 'artist-b', 'A & B', 'transfer')])])
+        identifier = group_id(name_key('A & B'))
+        get = self.serve(directory)
+        stats = get('/api/stats')
+        self.assertFalse(stats['capabilities']['normalizationReview'])
+        self.assertIsNone(stats['reviewUrl'])
+        self.assertIsNone(get('/api/person', id=identifier)['reviewUrl'])
+        source = get('/api/review-source', key=identifier)
+        self.assertEqual((source['total'], source['complete']), (1, True))
+        self.assertNotIn('artistUuid', source['items'][0])
+        self.assertEqual(source['items'][0]['evidenceUrl'], '/api/person?' + urlencode(dict(id=identifier)))
+        self.assertEqual(get('/api/review-source', key='missing')['items'], [])
+        self.assertEqual(get('/api/review-source', key=identifier, artist='absent')['total'], 0)
+        filtered = get('/api/review-source', key=identifier, artist='artist-a')['items'][0]
+        self.assertEqual(filtered['artistUuid'], 'artist-a')
+        self.assertNotIn('role', filtered)
+
+        enabled = self.serve(PeopleDirectory(self.database, 'http://files.test', 'http://core.test',
+                                            review_url='https://operator.test:8443/'))
+        self.assertTrue(enabled('/api/stats')['capabilities']['normalizationReview'])
+        target = urlsplit(enabled('/api/person', id=identifier)['reviewUrl'])
+        self.assertEqual((target.scheme, target.netloc, target.path), ('https', 'operator.test:8443', '/'))
+        self.assertEqual(parse_qs(target.query), dict(domain=['people'], namespace=['person_group'], stableKey=[identifier]))
+
+    def test_review_configuration_rejects_routed_or_credentialed_urls(self):
+        directory = self.build([])
+        for value in ('javascript:alert(1)', 'https://user:secret@operator.test', 'https://operator.test/reviews',
+                      'https://operator.test/?x=1', 'https://operator.test/#x', '//operator.test',
+                      'https://operator.test\\@elsewhere.test', 'https://operator.test:bad', 'https://operator.test/\n',
+                      'https://operator.test\x00'):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                PeopleDirectory(directory.database, 'http://files.test', 'http://core.test', review_url=value)
+
+    def test_review_exact_alias_pages_do_not_leak_between_artists_or_infer_roles(self):
+        directory = self.build([
+            ('one', 'artist-a', [self.credit('one', 'artist-a', 'Alex', 'taper', 'Raven')]),
+            ('two', 'artist-b', [self.credit('two', 'artist-b', 'Alex', 'transfer', 'Other')]),
+            ('three', 'artist-a', [self.credit('three', 'artist-a', 'Sam', 'taper', 'Raven')]),
+            ('four', 'artist-c', [self.credit('four', 'artist-c', 'Lower', 'taper', 'raven')]),
+        ])
+        run = self.native_run([self.native_actor('native:role-free', 'Native Pat', aliases=['Raven'], role_free=True)])
+        NativePeopleOverlay(run, self.database, 'http://native.test', minimum_free=0).apply()
+        # Review lookup depends on projected names, not rescanning retained outcome bodies.
+        (run / 'people' / '1.jsonl.gz').unlink()
+        get = self.serve(directory)
+        page = get('/api/review-observations', literal='Raven', limit=1)
+        self.assertEqual((page['total'], len(page['items']), page['complete']), (3, 1, False))
+        second = get('/api/review-observations', literal='Raven', limit=1, offset=1)
+        self.assertNotEqual(page['items'][0]['stableKey'], second['items'][0]['stableKey'])
+        all_rows = get('/api/review-observations', literal='Raven')
+        self.assertTrue(all_rows['complete'])
+        self.assertTrue(all(item['literal'] == 'Raven' for item in all_rows['items']))
+        self.assertTrue(all('role' not in item and 'kind' not in item for item in all_rows['items']))
+        self.assertEqual(get('/api/review-observations', literal='Raven', artist='artist-b')['total'], 0)
+        self.assertEqual(get('/api/review-observations', literal='raven')['total'], 1)
+        self.assertEqual(get('/api/review-observations', literal=' Raven')['total'], 0)
+        native = get('/api/review-source', key=group_id(name_key('Native Pat')), artist='artist-a')
+        self.assertEqual(native['items'][0]['artistUuid'], 'artist-a')
+
+    def test_review_candidate_pages_report_full_population_and_cap_page_size(self):
+        directory = self.build([('source-' + str(i), 'artist', [self.credit('source-' + str(i), 'artist',
+            'Recorder ' + str(i), 'taper')]) for i in range(103)])
+        get = self.serve(directory)
+        first = get('/api/review-candidates', q='recorder', limit=1000)
+        self.assertEqual((first['total'], len(first['items']), first['limit'], first['complete']), (103, 100, 100, False))
+        rest = get('/api/review-candidates', q='recorder', offset=100)
+        self.assertEqual((rest['total'], len(rest['items']), rest['complete']), (103, 3, False))
+        self.assertFalse(set(item['stableKey'] for item in first['items']) & set(item['stableKey'] for item in rest['items']))
 
     def native_actor(self, key, name="Native Pat", aliases=None, role_free=False, file_origin=None):
         origin = {"item": {"provider": "local", "resourceType": "directory_metadata", "providerKey": "[\"catalog\",\"one\"]"},
@@ -861,6 +946,12 @@ class TestSourceDirectoryRefresh(unittest.TestCase):
         self.assertNotIn('sourceRefreshProgress', stats)
         group = get('/api/people?q=Raven')['groups'][0]
         self.assertEqual((group['credit_count'], group['source_actor_count']), (0, 2))
+        review = get('/api/review-observations?' + urlencode(dict(literal='Raven', artist='artist-a')))
+        self.assertEqual((review['total'], review['complete']), (1, True))
+        self.assertEqual(review['items'][0]['stableKey'], group['id'])
+        self.assertEqual(review['items'][0]['artistUuid'], 'artist-a')
+        self.assertNotIn('role', review['items'][0])
+        self.assertEqual(get('/api/review-observations?' + urlencode(dict(literal='raven')))['total'], 0)
         detail = get('/api/person?id=' + group['id'] + '&limit=1')
         self.assertEqual((detail['total'], detail['sourceTotal']), (0, 2))
         self.assertEqual(detail['roles'], [])

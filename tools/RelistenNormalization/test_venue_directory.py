@@ -105,6 +105,95 @@ class TestVenueDirectory(unittest.TestCase):
         self.assertEqual(detail["venue"]["alternative_count"], 97)
         self.assertTrue(detail["venue"]["alternatives_truncated"])
 
+    def test_review_http_uses_original_accounts_and_exact_aliases_across_artists(self):
+        self.normalized_fixture()
+        self.build()
+        directory = VenueDirectory(self.database, "http://files/", "http://core/", review_url="https://reviews.test")
+        server = ThreadingHTTPServer(("127.0.0.1", 0), handler_for(directory))
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        def get(route, **parameters):
+            from urllib.parse import urlencode
+            separator = "&" if "?" in route else "?"
+            with urlopen(f"http://127.0.0.1:{server.server_port}" + route + separator + urlencode(parameters)) as response:
+                return json.load(response)
+
+        source = get("/api/review-source", key=uid(1))["items"][0]
+        self.assertEqual((source["stableKey"], source["literal"], source["displayName"]),
+                         (uid(1), "MSG", "Madison Square Garden"))
+        self.assertEqual(source["artistUuid"], uid(10))
+        self.assertEqual(get(source["evidenceUrl"])["evidence"]["nativeVenue"]["name"], "MSG")
+        self.assertEqual(get("/api/review-source", key=uid(1), artist=uid(20))["items"], [])
+        self.assertEqual(get("/api/review-source", key=uid(999))["total"], 0)
+        candidates = get("/api/review-candidates", q="MSG")
+        self.assertEqual(candidates["total"], 1)
+        self.assertEqual(candidates["items"][0]["displayName"], "Madison Square Garden")
+        exact = get("/api/review-observations", literal="Greek Theatre", limit=1)
+        self.assertEqual(exact["total"], 1)
+        self.assertTrue(exact["complete"])
+        self.assertEqual(get("/api/review-observations", literal="msg")["total"], 0)
+        self.assertEqual(get("/api/review-observations", literal="MSG", artist=uid(20))["total"], 0)
+        self.assertEqual(get("/api/stats")["reviewUrl"], "https://reviews.test/")
+
+    def test_review_exact_accounts_do_not_collapse_a_shared_spelling_or_hide_paging(self):
+        directory = self.build()
+        first = directory.review_observations(dict(literal="Greek Theatre", limit=1))
+        self.assertEqual(first["total"], 3)
+        self.assertFalse(first["complete"])
+        second = directory.review_observations(dict(literal="Greek Theatre", limit=1, offset=1))
+        self.assertNotEqual(first["items"][0]["stableKey"], second["items"][0]["stableKey"])
+        self.assertFalse(directory.stats()["capabilities"]["normalizationReview"])
+        for url in ("javascript:alert(1)", "https://name:password@reviews.test", "https://reviews.test/path", "https://reviews.test/?q=other"):
+            with self.subTest(url=url), self.assertRaises(ValueError):
+                VenueDirectory(self.database, "http://files/", "http://core/", review_url=url)
+
+    def test_reviewed_venue_http_changes_group_recordings_without_rewriting_source_references(self):
+        source_path = self.raw / "sources.jsonl.gz"
+        with gzip.open(source_path, "rt") as stream:
+            raw = [json.loads(line) for line in stream]
+        write_gzip(source_path, raw + [self.source(104, 20, 2, 2, "2000-01-01")])
+        manifest_path = self.raw / "core-inputs-manifest-v1.json"
+        manifest = json.loads(manifest_path.read_text())
+        manifest["completedShards"][0].update(actualRows=4, compressed=dict(sha256=file_hash(source_path)))
+        write_json(manifest_path, manifest)
+        directory = self.build()
+        target = dict(domain="venues", namespace="legacy_venue", stableKey=uid(2))
+        decision = dict(outcome="reviewed_correspondence", target=target, excludedTargets=[], appliedRules=[])
+        class CoreReview:
+            def snapshot(self):
+                return dict(rules=[dict(state="accepted", definition=dict(domain="venues",
+                    selector=dict(namespace="legacy_venue", accountStableKey=uid(1))))])
+
+            def evaluate(self, references, snapshot):
+                return [decision for _ in references]
+        directory.review_client = CoreReview()
+        server = ThreadingHTTPServer(("127.0.0.1", 0), handler_for(directory))
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        def get(route):
+            with urlopen(f"http://127.0.0.1:{server.server_port}" + route) as response:
+                return json.load(response)
+        detail = get("/api/venue?id=" + uid(1))
+        self.assertEqual(detail["venue"]["location"], "Berkeley, CA")
+        self.assertEqual(detail["venue"]["normalized_location"], "Los Angeles, CA")
+        self.assertEqual(detail["venue"]["place_key"], "venue:two")
+        self.assertEqual(detail["venue"]["reviewedDecision"]["target"]["stableKey"], uid(2))
+        self.assertEqual({row["source_uuid"] for row in detail["recordings"]}, {uid(101), uid(102), uid(104)})
+        for recording in detail["recordings"]:
+            self.assertEqual(parse_qs(urlsplit(recording["filesUrl"]).query)["entityKey"], ["source:" + recording["source_uuid"]])
+        original = get("/api/review-source?key=" + uid(1))["items"][0]
+        self.assertEqual((original["literal"], original["locality"]), ("Greek Theatre", "Berkeley, CA"))
+        selected = get("/api/venue?id=" + uid(1) + "&recordings=selected")
+        self.assertEqual({row["source_uuid"] for row in selected["recordings"]}, {uid(101), uid(102)})
+        target_detail = get("/api/venue?id=" + uid(2))
+        self.assertEqual(target_detail["recordingsScope"], "shared_normalization_hypothesis")
+        self.assertEqual(target_detail["recordingsTotal"], 3)
+        self.assertEqual({row["source_uuid"] for row in target_detail["recordings"]}, {uid(101), uid(102), uid(104)})
+        grouped = next(row for row in get("/api/venues?q=Greek")["rows"] if row["place_key"] == "venue:two")
+        self.assertEqual(grouped["source_count"], target_detail["recordingsTotal"])
+
     def normalized_fixture(self):
         """Supply C# decisions, not a Python implementation of its matching policy."""
         key = "venue_hypothesis:msg-new-york"

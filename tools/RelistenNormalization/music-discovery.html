@@ -367,6 +367,29 @@
         const basis = row.basis || row.status || "";
         return `<span class="tag ${basis === "title_derived" ? "warning" : "supported"}">${esc(basis.replaceAll("_", " "))}</span>`;
       }
+      function appendReviewLink(container, row, allowComposition = true) {
+        if (!stats.normalization_review || !stats.reviewUrl) return;
+        const target = new URL(stats.reviewUrl);
+        if (!["http:", "https:"].includes(target.protocol) || target.username || target.password) return;
+        target.search = new URLSearchParams({domain: "compositions", namespace: "repertoire",
+          stableKey: JSON.stringify([row.scope, row.entity_key]), artistUuid: row.artist_uuid});
+        if (allowComposition) {
+          const action = document.createElement("a");
+          action.href = target.href;
+          action.textContent = "Choose composition";
+          action.className = "button";
+          container.append(action);
+        }
+        if (stats.song_identity_review) {
+          const songTarget = new URL(target.href);
+          songTarget.searchParams.set("domain", "songs");
+          const songAction = document.createElement("a");
+          songAction.href = songTarget.href;
+          songAction.textContent = "Resolve song";
+          songAction.className = "button";
+          container.append(songAction);
+        }
+      }
       async function api(path) {
         const r = await fetch(path);
         const body = await r.json();
@@ -439,7 +462,7 @@
           .map(([category, label]) => `<p><a href="${link(category, {q: filters.q, scope: filters.scope})}">Search ${label} for “${esc(filters.q)}” →</a></p>`).join("");
       }
       function compositionCard(work) {
-        return `<article class="card"><a class="title-link" href="${link("possible-version", {key: work.work_key})}">${esc(work.title)}</a><p class="muted">${esc((work.writer_names || []).join(" · "))}</p><span class="tag warning">Unconfirmed composition</span><p>${work.song_count ?? 0} proposed song groups</p></article>`;
+        return `<article class="card"><a class="title-link" href="${link("possible-version", {key: work.work_key})}">${esc(work.title)}</a><p class="muted">${esc((work.writer_names || []).join(" · "))}</p><span class="tag warning">${esc(work.reviewedStatus || "Unconfirmed composition")}</span><p>${work.song_count ?? 0} proposed song groups</p></article>`;
       }
       async function compositionList(params, token) {
         const filters = {q: params.get("q") || "", scope: params.get("scope") || "", offset: params.get("offset") || 0, limit: 40};
@@ -473,6 +496,29 @@
           }
         };
         container.append(button);
+      }
+      function reviewedComposition(container, result) {
+        const decision = result.reviewedDecision;
+        if (!decision) return;
+        const box = document.createElement("section");
+        box.className = "section";
+        box.innerHTML = '<h4>Reviewed composition decision</h4>';
+        if (result.preferredBasis === "reviewed" && result.preferredWorkKey) {
+          box.insertAdjacentHTML("beforeend", `<p><a href="${link("possible-version", {key: result.preferredWorkKey})}">Open the reviewed composition and its other artists →</a></p>`);
+        } else {
+          const message = decision.outcome === "conflict" ? "Review decisions conflict. Choose a composition to resolve them."
+            : "Rejected choices remain below with their original source evidence.";
+          const paragraph = document.createElement("p");
+          paragraph.textContent = message;
+          box.append(paragraph);
+        }
+        const details = document.createElement("details");
+        details.innerHTML = '<summary>Applied review references</summary>';
+        const evidence = document.createElement("pre");
+        evidence.textContent = JSON.stringify(decision, null, 2);
+        details.append(evidence);
+        box.append(details);
+        container.append(box);
       }
       function modelSelection(container, selection, coordinates, token, currentWork = null) {
         if (!selection) {
@@ -511,13 +557,17 @@
           const result = await api("/api/song-composition-hypotheses?" + query(coordinates));
           if (token !== generation) return;
           container.innerHTML = '<h3>Possible versions</h3>';
+          reviewedComposition(container, result);
           modelSelection(container, result.modelSelection, coordinates, token);
           if (!result.candidates.length) {
             container.insertAdjacentHTML("beforeend", '<p class="muted">No composition candidates in the retained source pool. Other versions may exist.</p>');
             return;
           }
+          const excluded = new Set((result.reviewedDecision?.excludedTargets || []).map((target) => target.stableKey));
           container.insertAdjacentHTML("beforeend", '<p class="muted">Unconfirmed title or alias matches. Source matches remain separate from any model suggestion.</p><div class="grid">'
-            + result.candidates.map((work) => compositionCard(work)).join("") + '</div>');
+            + result.candidates.map((work) => compositionCard({...work, reviewedStatus: excluded.has(work.work_key)
+              ? "Rejected for this song" : result.preferredBasis === "reviewed" && result.preferredWorkKey === work.work_key
+                ? "Reviewed choice for this song" : null})).join("") + '</div>');
           evidenceButton(container, {kind: "song", ...coordinates}, "Why these possible versions?", token);
         } catch (error) {
           if (token === generation) container.innerHTML = `<h3>Possible versions</h3><p class="error">${esc(error.message)}</p>`;
@@ -526,7 +576,8 @@
       async function compositionWork(params, token) {
         if (!stats.composition_queries) throw Error("This reader has no composition suggestions configured.");
         const result = await api("/api/composition-work?" + query({key: params.get("key") || "", scope: params.get("scope") || "",
-          artist: params.get("artist") || "", offset: params.get("offset") || 0, generation: stats.generation}));
+          artist: params.get("artist") || "", offset: params.get("offset") || 0,
+          reviewedOffset: params.get("reviewedOffset") || 0, generation: stats.generation}));
         if (token !== generation) return;
         $("content").innerHTML = `<a class="back" href="${link("compositions", {})}">← Compositions</a><h2>${esc(result.title)}</h2><span class="tag warning">Suggested composition · unconfirmed</span>`
           + `<p class="muted">${esc(result.writer_names.join(" · "))}</p><p>Explore performances by different artists below. A matching title or alias does not confirm this composition.</p>`
@@ -542,10 +593,16 @@
         filter.setAttribute("aria-label", "Filter composition by artist");
         const all = document.createElement("option");
         all.value = ""; all.textContent = "All artists and scopes"; filter.append(all);
-        for (const artist of result.artists) {
+        const artists = new Map(result.artists.map((artist) => [JSON.stringify([artist.scope, artist.artist_uuid]), {...artist, reviewed_count: 0}]));
+        for (const artist of result.reviewedArtists || []) {
+          const key = JSON.stringify([artist.scope, artist.artist_uuid]);
+          if (!artists.has(key)) artists.set(key, {...artist, song_count: 0, reviewed_count: 0});
+          artists.get(key).reviewed_count = artist.song_count;
+        }
+        for (const artist of artists.values()) {
           const option = document.createElement("option");
           option.value = JSON.stringify([artist.scope, artist.artist_uuid]);
-          option.textContent = `${artist.artist_name || "Unknown artist"} · ${scopeLabel(artist.scope)} (${artist.song_count})`;
+          option.textContent = `${artist.artist_name || "Unknown artist"} · ${scopeLabel(artist.scope)} (${artist.song_count} source matches${artist.reviewed_count ? `, ${artist.reviewed_count} reviewed` : ""})`;
           option.selected = artist.artist_uuid === params.get("artist") && artist.scope === params.get("scope");
           filter.append(option);
         }
@@ -554,6 +611,20 @@
           navigate("possible-version", {key: result.work_key, scope, artist});
         };
         $("content").append(filter);
+        if (result.reviewedSongsTotal) {
+          const reviewed = document.createElement("section");
+          reviewed.className = "section";
+          reviewed.innerHTML = `<h3>Reviewed versions</h3><p>${result.reviewedSongsTotal.toLocaleString()} artist song groups linked by expert review. Open a song to hear its original performances and files.</p>`;
+          for (const song of result.reviewedSongs) {
+            const entry = document.createElement("section");
+            entry.innerHTML = card(song, "songs");
+            reviewedComposition(entry.firstElementChild, song);
+            reviewed.append(entry);
+          }
+          reviewed.append(pagination({total: result.reviewedSongsTotal, limit: result.reviewedSongsLimit, offset: result.reviewedSongsOffset},
+            (offset) => navigate("possible-version", {...Object.fromEntries(params), reviewedOffset: offset})));
+          $("content").append(reviewed);
+        }
         const songs = document.createElement("section");
         songs.className = "section";
         songs.innerHTML = `<h3>Artist performances</h3><p class="muted">${result.songs_total.toLocaleString()} proposed song groups. Open a song to hear its retained performances.</p>`;
@@ -563,6 +634,7 @@
           entry.innerHTML = card(song, "songs");
           const body = entry.firstElementChild;
           body.insertAdjacentHTML("beforeend", `<p class="muted">Unconfirmed ${song.retrieval_basis === "retained_explicit_work_alias" ? "alias" : "title"} match${song.candidate_count > 1 ? ` · ${song.candidate_count - 1} other possible ${song.candidate_count === 2 ? "version" : "versions"}` : ""}</p>`);
+          reviewedComposition(body, song);
           modelSelection(body, song.modelSelection, {scope: song.scope, artist: song.artist_uuid, key: song.entity_key}, token, result.work_key);
           const alternatives = document.createElement("details");
           alternatives.innerHTML = '<summary>Possible versions and matching basis</summary>';
@@ -863,6 +935,7 @@
           $("content").append(witness);
         }
         if (kind === "song") {
+          if (stats.song_identity_review) appendReviewLink($("content"), row, false);
           if (normalizedGroups.length > 1) {
             $("content").insertAdjacentHTML("beforeend", '<section class="section"><h3>Songs within this title</h3><p class="muted">These are distinct textual memberships. The title does not establish audio order or a segue.</p>'
               + normalizedGroups.map((group) => `<p><a href="${link("song-group", {scope: group.scope, artist: group.artist_uuid, key: group.entity_key})}">${esc(group.title)}</a></p>`).join("") + '</section>');
@@ -1009,6 +1082,7 @@
         const row = await api("/api/song-group?" + query({...coordinates, offset: params.get("offset") || 0}));
         if (token !== generation) return;
         $("content").innerHTML = `<a class="back" href="${link("songs", {scope: row.scope, artist: row.artist_uuid})}">← Back to this artist’s songs</a><h2>${esc(row.title)}</h2><p class="muted">${esc(row.artist_name || "")} · ${esc(scopeLabel(row.scope))}</p>${badge(row)}<p class="muted">A proposed song group. Each recording and file keeps its original home.</p>`;
+        appendReviewLink($("content"), row);
         const performances = document.createElement("section");
         performances.className = "section";
         performances.innerHTML = '<h3>Performances and files</h3><p class="loading">Finding this song’s retained performances…</p>';
