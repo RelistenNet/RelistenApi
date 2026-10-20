@@ -22,6 +22,12 @@ and local v3 API, preserving old IDs and playback. Compare the full refreshed
 Phish/GD results against their references. The [milestone and completion criteria](goal.md#next-milestone-automatic-music-identity-across-the-full-catalog)
 keep this work under the full normalization objective.
 
+[Recording music delivery](recording-music-delivery.md) now connects an enrolled
+recording to repertoire resolution and accepted file contents. Its saved phases
+recover after extraction acknowledgement, and concurrent recordings reuse the
+same artist dictionary capture. Automatic enrollment of new imports remains the
+next integration step; registering these services does not start processing.
+
 ## After music: venues, then people
 
 Next, complete shared venue normalization and discovery across artists, including

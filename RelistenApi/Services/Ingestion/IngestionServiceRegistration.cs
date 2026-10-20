@@ -68,6 +68,8 @@ public static class IngestionServiceRegistration
         services.AddScoped<NormalizationRecordingLookupStore>();
         services.AddScoped<NormalizationRecordingLookupService>();
         services.AddScoped<NormalizationRecordingLookupDispatcher>();
+        services.AddScoped<RecordingMusicDeliveryStore>();
+        services.AddScoped<RecordingMusicDeliveryService>();
         services.AddScoped<NormalizationRecordingPageStore>();
         services.AddScoped<NormalizationRecordingPageService>();
         services.AddScoped<NormalizationProviderInputService>();
