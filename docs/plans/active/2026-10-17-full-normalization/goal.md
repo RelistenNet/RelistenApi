@@ -4,7 +4,7 @@ This standing objective defines the outcome and execution standards for the norm
 
 Deliver a working normalization system across every current and future Relisten artist and importer: shared physical venues and locations/history, artist repertoire, cross-artist compositions, people and taper/transferrer credits, performances, ordered setlist occurrences and recording-file contents. Preserve original evidence, stable playback references and reviewed corrections. Full audio lineage and audio analysis remain outside scope.
 
-The retained catalog is now browsable, with scoped correction UI and Phish/Grateful Dead reference comparisons. The next milestone is automatic song and composition normalization across the full catalog, described below. Keep implementing the remaining venue, people and taper/transferrer work under the standing objective. Shadow outputs stay separate from accepted production data. Every applicable input needs an outcome; missing adapters, blanket abstention and error-only domain output remain unfinished work.
+The retained catalog is now browsable, with scoped correction UI and Phish/Grateful Dead reference comparisons. The next milestone is automatic song and composition normalization across the full catalog, described below. Proceed from music to venues, then people and taper/transferrer credits, under the standing objective. Shadow outputs stay separate from accepted production data. Every applicable input needs an outcome; missing adapters, blanket abstention and error-only domain output remain unfinished work.
 
 Use powerful model assistance in throughput-sized bounded jobs within existing spending authorization. Reuse measured rules/model results and caches. When the evaluation phase is reached, train and compare the small identity matchers and credit extractors required by the [evaluation strategy](evaluation-strategy.md). Measured benefit determines deployment; it does not determine whether those alternatives are tried. Independently audit stratified outputs and fix broad failure classes rather than serially preparing small labeled packets. Preserve trustworthy held-out evaluation for production qualification without making it a prerequisite for shadow computation.
 
@@ -30,6 +30,20 @@ regressions; retain separate untouched data for independent evaluation.
 Use expert input to resolve concrete ties and improve shared rules. Do not leave
 Alec with static reports or repeated uncertainty labels when he can supply the
 answer. Judge this work by corrected, searchable and playable catalog data.
+
+## Delivery order
+
+Complete these full-catalog milestones in order:
+
+1. Songs and cross-artist compositions.
+2. Shared venues, locations and venue history.
+3. Global people identities and taper/transferrer credits.
+
+Each milestone must deliver a usable reader and local v3 API journey, automatic
+handling of routine cases, durable corrections and reuse on later imports. Move
+to the next domain when that complete journey works across the retained catalog;
+isolated unresolved records remain visible for review and do not require an
+indefinite tuning project before the next domain can proceed.
 
 ## Next milestone: automatic music identity across the full catalog
 
@@ -68,6 +82,43 @@ improve future matching. A new test total, another report, or a handful of manua
 corrections does not complete this milestone. The broader normalization goal
 continues through venues, people/credits, incremental operation and production
 qualification; this milestone does not authorize production writes or deployment.
+
+## Following milestone: shared venues across artists
+
+Make recordings at the same physical venue discoverable together across artists,
+using a consistent name and location. Resolve routine aliases and address
+spellings automatically. Preserve meaningful distinctions between rooms, larger
+sites, different buildings, relocations and historical names.
+
+Apply venue corrections to the recording or performance when a legacy venue row
+contains conflicting assignments. A single conflated row must not force all its
+recordings into one venue or exclude its valid recordings from discovery. Keep
+original venue references and playback ownership intact.
+
+Completion means full-catalog venue grouping and search through the reader and
+local v3 API, working cross-artist recording and playback pages, and a correction
+loop that refreshes affected results and handles later imports. Use MSG, Red
+Rocks and Warfield as concrete user journeys alongside broader artist/provider
+coverage. Review remaining premises conflicts with their source evidence.
+
+## Following milestone: people and taper/transferrer credits
+
+Make one person's supported names and handles lead to their recordings across
+artists. Keep the person identity separate from each role-bearing recording
+credit: taper and transferrer remain distinct roles, and a matching name alone
+does not establish that two credits describe the same person.
+
+Complete the path from reviewed identity decisions to individual recording
+credits. Saving a name-group correspondence alone is insufficient. Let the
+reviewer scope a correction to the relevant credits, apply unambiguous decisions,
+refresh affected results and reuse those decisions on future imports.
+
+Completion means full-catalog extraction and resolution across applicable
+providers, cross-artist person and alias search in the reader and local v3 API,
+role filters, and playback from the matched recordings. Evaluate both identity
+links and credit extraction with representative and untouched data as required
+by the evaluation strategy. Preserve each original credit and its evidence.
+Full recording ancestry and audio analysis stay outside this milestone.
 
 ## Experimental development policy
 
@@ -120,6 +171,19 @@ Apply Zinsser, McPhee, Strunk and White, ASD-STE100, Virginia Tufte and Forsyth 
 
 ## When Alec's input is needed
 
+For a concrete normalization review, provide a direct review link, the original
+entries or evidence, the precise decision needed, the recommended answer and
+what that answer will change. Keep the review item durable and easy to find.
+Alec can supply the answer in the review UI and resume the native Goal afterward.
+Do not keep polishing around a decision that requires his domain knowledge.
+
+When that pending feedback prevents further meaningful progress, use the blocked
+state under the goal tool's required conditions below. Report which review items
+need action and the exact condition for resuming work. On resume, read the saved
+decisions first, apply them through shared matching policy, reprocess the affected
+results and verify the reader and API behavior. Do not ask Alec to repeat feedback
+that is already saved.
+
 Ask promptly when a concrete product decision, missing fact, access, storage or spending decision requires Alec's judgment. Give the relevant evidence, your recommended option and the practical consequence of waiting. Use the available user-input interface and make the pending question visible in the status update. Do not bury it in a report or keep researching around a decision that only Alec can make. Keep routine implementation choices and large labeling jobs with the agent.
 
 Stop work that depends on the answer; continue genuinely independent useful work. Silence is not an answer or approval. Do not repeat the same question, invent assumptions to bypass it, or create extra verification work to keep the goal busy.
@@ -128,6 +192,6 @@ Use the goal tool's actual blocked-state contract: when the same blocker has per
 
 ## Goal tracking
 
-The implementation thread is `01a14720-eb42-71c1-8b3d-84c8eff0c3cd`. It owns the active execution goal. This file is the persistent objective amendment and must be linked from that goal when its interface supports objective edits. If the interface only supports goal status changes, retain the unfinished active goal and apply this amendment to its execution; do not mark an unfinished goal complete just to replace its text. Report the interface limitation accurately.
+The implementation thread is `01a14720-eb42-71c1-8b3d-84c8eff0c3cd`. It owns the active execution goal. This file is the persistent objective amendment and must be linked from that goal when its interface supports objective edits. If the interface only supports goal status changes, retain the unfinished goal and apply this amendment to its execution; do not mark an unfinished goal complete just to replace its text. Editing this document does not resume a blocked native Goal. Resuming requires the user or system control; report the limitation and verify the actual status before claiming that the Goal is active.
 
 See [shadow delivery](shadow-delivery.md) for observable milestones and proof. A new status update should identify actual processing/output progress, working provider/domain coverage, the largest blocking implementation gap and the next integration result.

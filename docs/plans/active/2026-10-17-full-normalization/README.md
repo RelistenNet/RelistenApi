@@ -22,9 +22,19 @@ and local v3 API, preserving old IDs and playback. Compare the full refreshed
 Phish/GD results against their references. The [milestone and completion criteria](goal.md#next-milestone-automatic-music-identity-across-the-full-catalog)
 keep this work under the full normalization objective.
 
+## After music: venues, then people
+
+Next, complete shared venue normalization and discovery across artists, including
+aliases, locations, history and recording-specific corrections. Then complete
+global people identities and taper/transferrer credits, including reviewed
+corrections that update individual recording credits and later imports. Each
+stage must work through the reader and local v3 API, with original references
+and playback preserved. The [ordered milestones](goal.md#delivery-order) define
+completion; isolated unresolved cases do not hold the next domain indefinitely.
+
 ## Full-catalog delivery approach
 
-Deliver a browsable normalization result across the complete captured catalog and every applicable importer and domain. Run the existing methods now, add the missing domain adapters in parallel, and use sampled source audits to improve actual outputs. Labels, classifier experiments and publication-scale repairs no longer precede the first shadow pass. The [delivery plan](shadow-delivery.md) defines the result and execution sequence; the [standing goal amendment](goal.md) preserves Alec's instruction across turns.
+Deliver a browsable normalization result across the complete captured catalog and every applicable importer and domain. Use the existing methods and sampled source audits to improve actual outputs, completing music, venues and people in the order above. Labels, classifier experiments and publication-scale repairs no longer precede the first shadow pass. The [delivery plan](shadow-delivery.md) defines the result and execution sequence; the [standing goal amendment](goal.md) preserves Alec's instruction across turns.
 
 A shadow result is a proposed interpretation in separate local artifacts or a disposable local database. It does not activate a production policy or change accepted production data. Expose proposed identities and relations, original evidence, alternatives and explicit unresolved/error outcomes. Preserve recordings and playback references. Unsupported facts remain unknown.
 
