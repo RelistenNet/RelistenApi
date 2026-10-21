@@ -601,6 +601,64 @@ public class TestCatalogueLlm
     }
 
     [Test]
+    public async Task AMatchAnswersAQuestionARulingSettled()
+    {
+        await new CatalogueLlm(db, new ScriptedModel()).RunChunkAsync(
+            artist,
+            [],
+            CancellationToken.None
+        );
+        await db.WithWriteConnection(async c =>
+        {
+            var connection = (Npgsql.NpgsqlConnection)c;
+            await using var tx = await connection.BeginTransactionAsync();
+            var bot = await KbStore.BeginAsync(connection, tx, AuthorTypes.Llm, "catalogue-llm@5");
+            await bot.WriteReviewItemsAsync([
+                new ReviewRecord(artist, "Mystery Jam", "mystery jam", Shows: 3),
+            ]);
+            await tx.CommitAsync();
+            return 0;
+        });
+
+        // The chunk ruled "Mystery Jam" not a song: the question is answered.
+        await new CatalogueMatch(db).RunAsync(artist, CancellationToken.None);
+
+        (
+            await Strings(
+                "SELECT (resolved_at IS NOT NULL)::text FROM kb.review_items WHERE artist_uuid = @artist"
+            )
+        )
+            .Should()
+            .Equal("true");
+    }
+
+    [Test]
+    public async Task ARulingOnAMergedSongFollowsTheSurvivor()
+    {
+        await new CatalogueLlm(db, new ScriptedModel()).RunChunkAsync(
+            artist,
+            [],
+            CancellationToken.None
+        );
+        var uncle = await SongNamed("Me And My Uncle");
+        var survivor = Guid.CreateVersion7();
+        await AsModerator(async s =>
+        {
+            await s.WriteSongsAsync([
+                new SongRecord(survivor, artist, "Me and My Uncle (Phillips)"),
+            ]);
+            await s.MergeSongAsync(uncle, survivor);
+        });
+
+        await new CatalogueMatch(db).RunAsync(artist, CancellationToken.None);
+
+        // "Mee and My Uncle" was the LLM's one-off ruling on Me And My Uncle.
+        (await Placed("t2"))
+            .Should()
+            .Equal("Me and My Uncle (Phillips) (ruling)");
+    }
+
+    [Test]
     public async Task AnExpertsAliasFixReachesEveryTrackButNoRuling()
     {
         await new CatalogueLlm(db, new ScriptedModel()).RunChunkAsync(
@@ -726,6 +784,12 @@ public class TestCatalogueAnswers
     [TestCase(
         """{"new_songs": [], "keys": [{"id": "k1", "key_text": "Tuning", "songs": ["s1"], "song_names": ["Sugaree"], "not_a_song": null, "confidence": 0.99, "rationale": ""}]}"""
     )]
+    [TestCase(
+        """{"new_songs": [], "keys": [{"id": "k1", "key_text": "Sugare", "songs": ["s1"], "song_names": ["Sugaree"], "not_a_song": null, "confidence": 0.99, "rationale": ""}]}"""
+    )]
+    [TestCase(
+        """{"new_songs": [], "keys": [{"id": "k1", "key_text": "Sugaree", "songs": ["s1"], "song_names": ["Shugaree"], "not_a_song": null, "confidence": 0.99, "rationale": ""}]}"""
+    )]
     public void AKeyWhoseAnswerBreaksTheRulesStaysUnresolved(string json)
     {
         var answer = CatalogueRequest.Parse(json, Request());
@@ -739,6 +803,31 @@ public class TestCatalogueAnswers
     [TestCase("Dark Star", "not fade away", "not fade away")] // not in the title: the key
     public void ASongTextMustBeWordsOfItsTitle(string songText, string key, string expected) =>
         CatalogueLlm.SpelledName(songText, key).Should().Be(expected);
+
+    [Test]
+    public void ARejectedAnswerStillLeavesItsRecurringTitlesForReview()
+    {
+        var keys = new Dictionary<string, CatalogueLlm.KeyInfo>
+        {
+            ["sugaree"] = new(
+                new Relisten.Kb.Titles.KeyUsage("sugaree", 5, 5, []),
+                "Sugaree",
+                [],
+                []
+            ),
+            ["tuning"] = new(new Relisten.Kb.Titles.KeyUsage("tuning", 1, 1, []), "Tuning", [], []),
+        };
+
+        CatalogueLlm
+            .Review(
+                new CatalogueAnswer([], new Dictionary<string, KeyAnswer>(), 2),
+                Request(),
+                keys
+            )
+            .Select(r => r.Key)
+            .Should()
+            .Equal("sugaree");
+    }
 
     [TestCase("not json")]
     [TestCase("""{"keys": []}""")]

@@ -104,8 +104,20 @@ public static class TrackMatcher
 
         var records = new List<TrackPartRecord>();
         var cleared = new List<Guid>();
-        foreach (var track in state.Tracks.Where(t => t.Title.HasText && !t.Locked))
+        foreach (var track in state.Tracks.Where(t => !t.Locked))
         {
+            // Retitled to a bare file name or label: whatever was written for the old title
+            // no longer follows from it.
+            if (!track.Title.HasText)
+            {
+                if (track.Existing.Count > 0)
+                {
+                    cleared.Add(track.Uuid);
+                }
+
+                continue;
+            }
+
             var (rulings, byPosition) = Rulings(track);
             // When the parse has as many parts as the written rows (the text moved under a newer
             // parser), a ruling no text matches is kept at its position.

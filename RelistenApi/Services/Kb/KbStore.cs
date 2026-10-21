@@ -281,6 +281,12 @@ public sealed class KbStore
             tx
         );
 
+        // Restored rows keep the provenance they had (kb.guard_people would otherwise make
+        // every row a person touches theirs).
+        await connection.ExecuteAsync(
+            "SELECT set_config('kb.restoring', 'on', true)",
+            transaction: tx
+        );
         var (reverted, skipped) = (0, 0);
         foreach (var change in changes)
         {
@@ -315,8 +321,9 @@ public sealed class KbStore
                 tx
             );
             var list = string.Join(", ", columns);
-            // A row later work depends on (a song an alias or track now names) can't go: that
-            // change is skipped and reported, and the rest of the revert goes ahead.
+            // A row later work depends on (a song an alias or track now names), or whose slug
+            // or key another row has taken since, can't come back: that change is skipped and
+            // reported, and the rest of the revert goes ahead.
             await tx.SaveAsync("revert_change");
             try
             {
@@ -335,7 +342,11 @@ public sealed class KbStore
                 );
                 await tx.ReleaseAsync("revert_change");
             }
-            catch (PostgresException e) when (e.SqlState == PostgresErrorCodes.ForeignKeyViolation)
+            catch (PostgresException e)
+                when (e.SqlState
+                        is PostgresErrorCodes.ForeignKeyViolation
+                            or PostgresErrorCodes.UniqueViolation
+                )
             {
                 await tx.RollbackAsync("revert_change");
                 skipped++;
@@ -345,6 +356,10 @@ public sealed class KbStore
             reverted++;
         }
 
+        await connection.ExecuteAsync(
+            "SELECT set_config('kb.restoring', 'off', true)",
+            transaction: tx
+        );
         return (reverted, skipped);
     }
 

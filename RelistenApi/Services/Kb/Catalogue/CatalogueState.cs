@@ -133,14 +133,25 @@ public sealed class CatalogueState
                 bool SegueAfter
             )>(
                 """
-                SELECT ts.track_uuid, ts.text, ts.song_uuid, ts.resolved, ts.confidence, ts.basis, ts.author_type, ts.segue_after
+                -- A part naming a merged song names its survivor (readers follow merged_into).
+                WITH RECURSIVE survivor AS (
+                    SELECT uuid AS song, uuid, merged_into, 0 AS depth FROM kb.songs WHERE artist_uuid = @artistUuid
+                    UNION ALL
+                    SELECT s.song, m.uuid, m.merged_into, s.depth + 1
+                    FROM survivor s JOIN kb.songs m ON m.uuid = s.merged_into
+                    WHERE s.depth < 20
+                )
+                SELECT ts.track_uuid, ts.text, coalesce(v.uuid, ts.song_uuid), ts.resolved, ts.confidence, ts.basis,
+                       ts.author_type, ts.segue_after
                 FROM kb.track_songs ts JOIN source_tracks t ON t.uuid = ts.track_uuid
+                LEFT JOIN survivor v ON v.song = ts.song_uuid AND v.merged_into IS NULL
                 WHERE CASE WHEN @allTracks THEN t.artist_id = @Id ELSE ts.track_uuid = ANY(@open) END
                 ORDER BY ts.track_uuid, ts.part
                 """,
                 new
                 {
                     artist.Id,
+                    artistUuid,
                     allTracks,
                     open = allTracks ? [] : tracks.Select(t => t.Uuid).ToArray(),
                 },

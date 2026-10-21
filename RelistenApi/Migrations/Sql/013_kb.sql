@@ -137,7 +137,7 @@ CREATE TABLE kb.track_songs (
     PRIMARY KEY (track_uuid, part),
     CHECK (author_type NOT IN ('algorithm', 'llm') OR confidence IS NOT NULL),
     CHECK (author_type NOT IN ('user', 'moderator') OR basis = 'ruling'),  -- a person's row is a decision
-    CHECK (basis <> 'open' OR NOT resolved),                                 -- an open part is unplaced
+    CHECK (basis <> 'open' OR (NOT resolved AND song_uuid IS NULL)),        -- an open part is unplaced
     FOREIGN KEY (run_uuid, author_type, author_ref) REFERENCES kb.runs (uuid, author_type, author_ref)
 );
 CREATE INDEX ON kb.track_songs (song_uuid) WHERE song_uuid IS NOT NULL;
@@ -210,6 +210,11 @@ BEGIN
         RETURN NULL;
     END IF;
     SELECT jsonb_object_agg(k, coalesce(new_row, old_row) -> k) INTO key FROM unnest(TG_ARGV) AS k;
+    -- A row keeps its key, so its history stays under one row_key: a new key is a delete
+    -- and an insert.
+    IF TG_OP = 'UPDATE' AND key IS DISTINCT FROM (SELECT jsonb_object_agg(k, old_row -> k) FROM unnest(TG_ARGV) AS k) THEN
+        RAISE EXCEPTION '% keeps its primary key; delete and insert instead', TG_TABLE_NAME;
+    END IF;
     INSERT INTO kb.changes (table_name, row_key, op, before, after, author_type, author_ref, run_uuid)
     VALUES (TG_TABLE_NAME, key, lower(TG_OP), old_row, new_row,
             coalesce(nullif(current_setting('kb.author_type', true), ''), new_row ->> 'author_type'),
@@ -238,6 +243,21 @@ BEGIN
        AND actor IS DISTINCT FROM 'moderator' THEN
         RAISE EXCEPTION 'a % row was set by a person; % may not change it', TG_TABLE_NAME, coalesce(actor, 'an unnamed writer');
     END IF;
+    -- A person's edit makes the row theirs, so no machine overwrites it later, whatever
+    -- provenance the statement wrote. A revert (kb.restoring = on) restores the old
+    -- provenance instead.
+    IF TG_OP = 'UPDATE' AND actor IN ('user', 'moderator')
+       AND coalesce(current_setting('kb.restoring', true), '') <> 'on' THEN
+        NEW.author_type := actor;
+        NEW.author_ref := current_setting('kb.author_ref', true);
+        NEW.run_uuid := current_setting('kb.run_uuid', true)::uuid;
+        IF TG_TABLE_NAME <> 'review_items' THEN  -- there it's the proposal's, not the author's
+            NEW.confidence := NULL;
+        END IF;
+        IF TG_TABLE_NAME = 'track_songs' THEN
+            NEW.basis := 'ruling';
+        END IF;
+    END IF;
     RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
 END $$;
 
@@ -263,6 +283,35 @@ BEGIN
     END IF;
     RETURN NEW;
 END $$;
+
+-- A song keeps its artist: its aliases, evidence and tracks were checked against it.
+CREATE FUNCTION kb.songs_keep_artist() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.artist_uuid IS DISTINCT FROM OLD.artist_uuid THEN
+        RAISE EXCEPTION 'a song keeps its artist; merge it into a song of the other artist''s catalogue instead';
+    END IF;
+    RETURN NEW;
+END $$;
+CREATE TRIGGER songs_keep_artist BEFORE UPDATE ON kb.songs
+    FOR EACH ROW EXECUTE FUNCTION kb.songs_keep_artist();
+
+-- A review item's song or track belongs to the item's artist.
+CREATE FUNCTION kb.review_item_artist() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.song_uuid IS NOT NULL AND NOT EXISTS (
+           SELECT 1 FROM kb.songs s WHERE s.uuid = NEW.song_uuid AND s.artist_uuid = NEW.artist_uuid) THEN
+        RAISE EXCEPTION 'review item names another artist''s song %', NEW.song_uuid;
+    END IF;
+    IF NEW.track_uuid IS NOT NULL THEN
+        IF EXISTS (SELECT 1 FROM public.source_tracks t JOIN public.artists a ON a.id = t.artist_id
+                   WHERE t.uuid = NEW.track_uuid AND a.uuid <> NEW.artist_uuid) THEN
+            RAISE EXCEPTION 'review item names another artist''s track %', NEW.track_uuid;
+        END IF;
+    END IF;
+    RETURN NEW;
+END $$;
+CREATE TRIGGER review_items_artist BEFORE INSERT OR UPDATE ON kb.review_items
+    FOR EACH ROW EXECUTE FUNCTION kb.review_item_artist();
 
 CREATE TRIGGER song_evidence_same_artist BEFORE INSERT OR UPDATE ON kb.song_evidence
     FOR EACH ROW EXECUTE FUNCTION kb.same_artist();

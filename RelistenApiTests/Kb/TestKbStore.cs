@@ -261,6 +261,27 @@ public class TestKbStore
     }
 
     [Test]
+    public async Task ARevertSkipsARowWhoseSlugIsTakenSince()
+    {
+        var (song, later) = (Guid.CreateVersion7(), Guid.CreateVersion7());
+        await (await As(AuthorTypes.Llm, "catalogue-llm@4")).WriteSongsAsync([
+            new SongRecord(song, artist, "Deal", Confidence: 0.95f),
+        ]);
+        var rename = await As(AuthorTypes.Llm, "catalogue-llm@5");
+        await rename.WriteSongsAsync([new SongRecord(song, artist, "Sugaree", Confidence: 0.95f)]);
+        // A later song takes the slug the rename freed.
+        await (await As(AuthorTypes.Llm, "catalogue-llm@5")).WriteSongsAsync([
+            new SongRecord(later, artist, "Deal", Confidence: 0.95f),
+        ]);
+
+        var (reverted, skipped) = await (await As(AuthorTypes.Moderator, "m1")).RevertRunAsync(
+            rename.Run
+        );
+
+        (reverted, skipped).Should().Be((0, 1));
+    }
+
+    [Test]
     public async Task ARevertLeavesRowsChangedSince()
     {
         var song = Guid.CreateVersion7();

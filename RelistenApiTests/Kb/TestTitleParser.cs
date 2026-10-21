@@ -363,6 +363,37 @@ public class TestTrackMatcher
     }
 
     [Test]
+    public void ATrackRetitledToAFileNameIsCleared()
+    {
+        var state = OneTrack(
+            "wsp2007-07-13d2t02",
+            new ExistingPart("Foo", Guid.NewGuid(), true, 0.95f)
+        );
+
+        TrackMatcher.Match(state).Cleared.Should().Equal(state.Tracks[0].Uuid);
+    }
+
+    [Test]
+    public void AnOpenMedleysOtherOccurrenceIsStillAsked()
+    {
+        var state = OneTrack(
+            "Foo > Unknown Thing > Foo",
+            new ExistingPart("Foo", Guid.NewGuid(), true, 0.95f, SegueAfter: true),
+            new ExistingPart("Unknown Thing", null, false, 0.9f, "open")
+        );
+
+        CatalogueLlm.UnresolvedKeys(state).Keys.Should().BeEquivalentTo("foo", "unknown thing");
+    }
+
+    [Test]
+    public void AReaskOfANumberedSpellingAsksTheKeyItFoldsInto()
+    {
+        var keys = CatalogueLlm.UnresolvedKeys(OneTrack("Let Me Lie"));
+
+        CatalogueLlm.AskedKeys(["03 Let Me Lie"], keys).Should().Contain("let me lie");
+    }
+
+    [Test]
     public void ATitleAPersonIsHoldingIsNotAsked()
     {
         var one = OneTrack("Midnight Madness");

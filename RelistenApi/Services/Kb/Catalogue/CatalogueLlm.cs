@@ -66,7 +66,7 @@ public sealed class CatalogueLlm(DbService db, ICatalogueModel model)
 
         var state = await CatalogueState.LoadAsync(connection, tx, artistUuid);
         var keys = UnresolvedKeys(state);
-        var onlyKeys = only?.Select(TitleNormalizer.Normalize).ToHashSet();
+        var onlyKeys = only == null ? null : AskedKeys(only, keys);
         var skipped = skip.ToHashSet();
         var chunk = TitleGrouper.NextChunk(
             TitleGrouper.Group(
@@ -115,7 +115,9 @@ public sealed class CatalogueLlm(DbService db, ICatalogueModel model)
         }
 
         var written = (Songs: 0, Tracks: 0);
-        if (answer.Keys.Count > 0)
+        var unsure = Review(answer, request, keys);
+        // A chunk whose answers were all rejected still leaves its recurring titles for review.
+        if (answer.Keys.Count > 0 || unsure.Count > 0)
         {
             var store = await KbStore.BeginAsync(
                 connection,
@@ -124,9 +126,13 @@ public sealed class CatalogueLlm(DbService db, ICatalogueModel model)
                 Author,
                 $"{(review ? "review: " : "")}{chunk.Count} groups"
             );
-            written = await Write(store, state, answer, request, keys);
+            if (answer.Keys.Count > 0)
+            {
+                written = await Write(store, state, answer, request, keys);
+            }
+
             await store.WriteReviewItemsAsync(
-                Review(answer, request, keys)
+                unsure
                     .Select(r => new ReviewRecord(
                         artistUuid,
                         r.Title,
@@ -152,7 +158,7 @@ public sealed class CatalogueLlm(DbService db, ICatalogueModel model)
             resolved.Count,
             request.KeyIds.Values.Where(k => !resolved.Contains(k)).ToList(),
             request.KeyIds.Values.ToList(),
-            Review(answer, request, keys),
+            unsure,
             written.Songs,
             written.Tracks,
             reply.InputTokens,
@@ -160,9 +166,19 @@ public sealed class CatalogueLlm(DbService db, ICatalogueModel model)
         );
     }
 
+    /// The keys a targeted re-ask asks about. A re-asked spelling folds like the unresolved
+    /// keys do ("03 let me lie" asks about "let me lie" when its tracks group under that).
+    internal static HashSet<string> AskedKeys(
+        IEnumerable<string> only,
+        IReadOnlyDictionary<string, KeyInfo> keys
+    ) =>
+        only.Select(TitleNormalizer.Normalize)
+            .SelectMany(k => new[] { k, TrackNumberFold.Fold(k, keys.ContainsKey) })
+            .ToHashSet();
+
     /// The recurring titles (seen at ReviewMinShows or more) a chunk asked about and didn't
     /// resolve, with what the model would have said: for the review pass and kb.review_items.
-    private static List<ReviewItem> Review(
+    internal static List<ReviewItem> Review(
         CatalogueAnswer answer,
         CatalogueRequest request,
         IReadOnlyDictionary<string, KeyInfo> keys
@@ -267,12 +283,22 @@ public sealed class CatalogueLlm(DbService db, ICatalogueModel model)
         var parts = state
             .UnresolvedTracks.SelectMany(t =>
             {
+                // By occurrence: "Foo > X > Foo" with one Foo placed still asks about the other.
                 var placed = t
                     .Existing.Where(e => e.Resolved && e.Text != null)
-                    .Select(e => TrackMatcher.KeyOf(e.Text!))
-                    .ToHashSet();
+                    .GroupBy(e => TrackMatcher.KeyOf(e.Text!))
+                    .ToDictionary(g => g.Key, g => g.Count());
                 return t
-                    .Title.Parts.Where(p => !placed.Contains(p.Key))
+                    .Title.Parts.Where(p =>
+                    {
+                        if (placed.TryGetValue(p.Key, out var left) && left > 0)
+                        {
+                            placed[p.Key] = left - 1;
+                            return false;
+                        }
+
+                        return true;
+                    })
                     .Select(p => (Track: t, Part: p));
             })
             .Where(x => x.Part.Hint == PartHint.Song)
@@ -837,11 +863,10 @@ internal sealed class CatalogueRequest
         return new CatalogueAnswer(newSongs, keys, request.KeyIds.Count - keys.Count);
     }
 
-    private static bool NamesAgree(string song, string stated)
-    {
-        var (a, b) = (TitleNormalizer.Normalize(song), TitleNormalizer.Normalize(stated));
-        return a == b
-            || a.Replace(" ", "") == b.Replace(" ", "")
-            || TitleGrouper.BoundedLevenshtein(a, b, 2) <= 2;
-    }
+    /// Restated names must be the same name, spacing and punctuation aside: a typo tolerance
+    /// would let an answer slide onto a near-identical neighbour ("prch song" for "porch
+    /// song", the id of a similarly named song), which is what these checks are for.
+    private static bool NamesAgree(string song, string stated) =>
+        TitleNormalizer.Normalize(song).Replace(" ", "")
+        == TitleNormalizer.Normalize(stated).Replace(" ", "");
 }

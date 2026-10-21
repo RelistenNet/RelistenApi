@@ -44,11 +44,26 @@ public sealed class CatalogueMatch(DbService db)
         await store.ClearTracksAsync(match.Cleared);
         // Upsert: derived rows follow the songs and aliases; unchanged rows aren't written.
         await store.WriteTrackSongsAsync(match.Records);
-        // A machine's open question about a title that a name or alias now places is answered.
+        // A machine's open question about a title is answered once a name or alias places it,
+        // or every occurrence is placed (by a ruling, or as not a song).
+        var written = match.Records.Select(r => r.TrackUuid).ToHashSet();
+        var open = match
+            .Records.Where(r => !r.Resolved && r.Text != null)
+            .Select(r => TitleNormalizer.Normalize(r.Text!))
+            .Concat(
+                state
+                    .Tracks.Where(t => t.Existing.Count == 0 && !written.Contains(t.Uuid))
+                    .SelectMany(t => t.Title.Parts.Select(p => p.Key))
+            )
+            .ToHashSet();
+        var placed = match
+            .Records.Where(r => r.Resolved && r.Text != null)
+            .Select(r => TitleNormalizer.Normalize(r.Text!))
+            .Where(k => !open.Contains(k));
         await store.CloseReviewItemsAsync(
             artistUuid,
-            state.SongNames.Keys.Concat(state.Aliases.Keys).ToList(),
-            "placed by a song name or alias"
+            state.SongNames.Keys.Concat(state.Aliases.Keys).Concat(placed).Distinct().ToList(),
+            "placed"
         );
         await store.FinishAsync();
         await tx.CommitAsync(cancellationToken);
