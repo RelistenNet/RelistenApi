@@ -366,6 +366,39 @@ public class KbLab
         );
     }
 
+    /// What an LLM catalogue run would ask, before it runs (docs/llm.md rule 6): unresolved
+    /// keys, groups and chunks for the first pass, and the recurring keys a review pass would
+    /// see. No model call, no writes.
+    [Test, Explicit("Prints a cost estimate; run deliberately")]
+    public async Task Estimate()
+    {
+        var db = Db(labUrl);
+        await using var connection = await Open(db);
+        foreach (var (slug, uuid) in await Artists(connection))
+        {
+            var state = await CatalogueState.LoadAsync(connection, null, uuid);
+            var keys = CatalogueLlm.UnresolvedKeys(state);
+            var groups = TitleGrouper.Group(keys.Values.Select(k => k.Usage));
+            var (chunks, left) = (0, groups.ToList());
+            while (left.Count > 0)
+            {
+                var chunk = TitleGrouper.NextChunk(
+                    left,
+                    CatalogueLlm.ChunkGroups,
+                    CatalogueLlm.ChunkKeys
+                );
+                left = left.Skip(chunk.Count).ToList();
+                chunks++;
+            }
+
+            TestContext.Out.WriteLine(
+                $"{slug}: {state.UnresolvedTracks.Count()} unresolved tracks, {keys.Count} keys in {groups.Count} groups → {chunks} first-pass chunks; "
+                    + $"{keys.Values.Count(k => k.Usage.Shows >= CatalogueLlm.ReviewMinShows)} keys at ≥ {CatalogueLlm.ReviewMinShows} shows, "
+                    + $"{keys.Values.Count(k => k.Usage.Shows < 2)} one-show keys; {state.Songs.Count} known songs"
+            );
+        }
+    }
+
     /// One-off, for a lab built before 2026-10-20 ("song names, not titles"): removes the
     /// machine aliases the new rule wouldn't have stored (a song's own name, a title with a
     /// track number or notes around the name), then rebuilds every artist's track rows. A row

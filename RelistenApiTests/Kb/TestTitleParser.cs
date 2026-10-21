@@ -119,7 +119,7 @@ public class TestTitleParser
     [TestCase(
         "Hard To Handle * SBB -> Hey Bulldog Jam SBB -> Hard To Handle Reprise SBB *",
         7,
-        "hard to handle {SBB} > | hey bulldog jam {SBB} > | hard to handle reprise {SBB} ~hard to handle+reprise"
+        "hard to handle {SBB} > | hey bulldog jam {SBB} ~hey bulldog+jam > | hard to handle reprise {SBB} ~hard to handle+reprise"
     )]
     [TestCase("Plane Crash reprise", 3, "plane crash reprise ~plane crash+reprise")]
     [TestCase(
@@ -128,6 +128,8 @@ public class TestTitleParser
         "feel like a stranger reprise ~feel like a stranger+reprise"
     )]
     [TestCase("Nebraska (reprise)", 3, "nebraska [reprise]")]
+    [TestCase("Amazing Grace Jam", 3, "amazing grace jam ~amazing grace+jam")]
+    [TestCase("Dark Star (jam)", 3, "dark star [jam]")]
     [TestCase("Jam + @@ ->", 3, "jam >")]
     [TestCase("08 NO2.mp3", 8, "no2")]
     [TestCase("5:15", 3, "5 15")]
@@ -314,6 +316,35 @@ public class TestTrackMatcher
                 },
             ],
         };
+
+    [TestCase("Amazing Grace Jam", "Amazing Grace [jam]")]
+    [TestCase("Chalk Dust Torture Reprise >", "Chalk Dust Torture Reprise")]
+    [TestCase("Chalk Dust Torture Reprise", "Chalk Dust Torture Reprise")]
+    [TestCase("Chalkdust Torture reprise", "Chalk Dust Torture [reprise]")]
+    public void ATrailingQualifierIsLiftedUnlessTheWholeNameIsASong(string title, string expected)
+    {
+        var songs = new[] { "Amazing Grace", "Chalk Dust Torture", "Chalk Dust Torture Reprise" }
+            .Select(n => new CatalogueSong(Guid.NewGuid(), n, "song"))
+            .ToList();
+        var state = new CatalogueState
+        {
+            ArtistUuid = Guid.NewGuid(),
+            ArtistName = "Phish",
+            Songs = songs,
+            Aliases = new Dictionary<string, Guid> { ["chalkdust torture"] = songs[1].Uuid },
+            UnmappedSetlistSongs = [],
+            Tracks = [new CatalogueTrack(Guid.NewGuid(), 1, TitleParser.Parse(title, 1))],
+        };
+
+        TrackMatcher
+            .Match(state)
+            .Records.Select(r =>
+                songs.Single(s => s.Uuid == r.SongUuid).Name
+                + (r.Qualifiers is { Count: > 0 } q ? $" [{string.Join(",", q)}]" : "")
+            )
+            .Should()
+            .Equal(expected);
+    }
 
     [Test]
     public void ARetitledTrackDropsTheRulingItsOldTitleHad()

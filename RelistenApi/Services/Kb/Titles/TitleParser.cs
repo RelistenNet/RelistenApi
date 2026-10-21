@@ -77,6 +77,7 @@ public static partial class TitleParser
         ["acoustic"] = "acoustic",
         ["instrumental"] = "instrumental",
         ["unfinished"] = "unfinished",
+        ["jam"] = "jam",
         // "(Check)": played at soundcheck, the same day but not part of the show.
         ["check"] = "soundcheck",
         ["soundcheck"] = "soundcheck",
@@ -144,6 +145,9 @@ public static partial class TitleParser
         ["tease"] = "tease",
         ["intro"] = "intro",
         ["outro"] = "outro",
+        // A jam on the song ("Amazing Grace Jam"); a named jam that is its own song ("Mind
+        // Left Body Jam") matches by its exact name first.
+        ["jam"] = "jam",
     };
 
     private static readonly HashSet<string> SetWords =

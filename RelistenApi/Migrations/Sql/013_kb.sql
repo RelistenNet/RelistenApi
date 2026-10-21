@@ -126,7 +126,7 @@ CREATE TABLE kb.track_songs (
     qualifiers  text[] NOT NULL DEFAULT '{}'
                 CHECK (qualifiers <@ ARRAY['reprise', 'partial', 'unfinished', 'instrumental', 'acoustic',
                                            'with_guest', 'continued', 'tape_flip', 'soundcheck',
-                                           'tease', 'intro', 'outro']),
+                                           'tease', 'intro', 'outro', 'jam']),  -- jam: a jam on this song
     notes       text[] NOT NULL DEFAULT '{}',
     basis       text NOT NULL DEFAULT 'ruling' CHECK (basis IN ('song_name', 'alias', 'noise', 'open', 'ruling')),
     author_type text NOT NULL CHECK (author_type IN ('importer', 'algorithm', 'llm', 'user', 'moderator')),
