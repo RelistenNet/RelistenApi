@@ -20,7 +20,15 @@ public class TestKbMigrations
 
         tables
             .Should()
-            .Equal("changes", "runs", "song_aliases", "song_evidence", "songs", "track_songs");
+            .Equal(
+                "changes",
+                "review_items",
+                "runs",
+                "song_aliases",
+                "song_evidence",
+                "songs",
+                "track_songs"
+            );
     }
 
     [Test]

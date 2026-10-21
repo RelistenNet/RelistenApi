@@ -125,6 +125,19 @@ public sealed class CatalogueLlm(DbService db, ICatalogueModel model)
                 $"{(review ? "review: " : "")}{chunk.Count} groups"
             );
             written = await Write(store, state, answer, request, keys);
+            await store.WriteReviewItemsAsync(
+                Review(answer, request, keys)
+                    .Select(r => new ReviewRecord(
+                        artistUuid,
+                        r.Title,
+                        r.Key,
+                        r.Tapers is { } t ? $"{t} distinct tapers" : null,
+                        r.Proposal,
+                        r.Confidence,
+                        r.Shows
+                    ))
+                    .ToList()
+            );
             await store.FinishAsync();
         }
         await tx.CommitAsync(cancellationToken);
@@ -139,36 +152,46 @@ public sealed class CatalogueLlm(DbService db, ICatalogueModel model)
             resolved.Count,
             request.KeyIds.Values.Where(k => !resolved.Contains(k)).ToList(),
             request.KeyIds.Values.ToList(),
-            request
-                .KeyIds.Values.Where(k =>
-                    !resolved.Contains(k) && keys[k].Usage.Shows >= ReviewMinShows
-                )
-                .Select(k =>
-                    answer.Keys.TryGetValue(k, out var a)
-                        ? new ReviewItem(
-                            k,
-                            keys[k].Display,
-                            keys[k].Usage.Shows,
-                            Proposal(a, request, answer),
-                            a.Confidence,
-                            keys[k].Evidence?.Tapers
-                        )
-                        : new ReviewItem(
-                            k,
-                            keys[k].Display,
-                            keys[k].Usage.Shows,
-                            null,
-                            null,
-                            keys[k].Evidence?.Tapers
-                        )
-                )
-                .ToList(),
+            Review(answer, request, keys),
             written.Songs,
             written.Tracks,
             reply.InputTokens,
             reply.OutputTokens
         );
     }
+
+    /// The recurring titles (seen at ReviewMinShows or more) a chunk asked about and didn't
+    /// resolve, with what the model would have said: for the review pass and kb.review_items.
+    private static List<ReviewItem> Review(
+        CatalogueAnswer answer,
+        CatalogueRequest request,
+        IReadOnlyDictionary<string, KeyInfo> keys
+    ) =>
+        request
+            .KeyIds.Values.Where(k =>
+                !(answer.Keys.TryGetValue(k, out var a) && a.Confidence >= Threshold && !a.Unknown)
+                && keys[k].Usage.Shows >= ReviewMinShows
+            )
+            .Select(k =>
+                answer.Keys.TryGetValue(k, out var a)
+                    ? new ReviewItem(
+                        k,
+                        keys[k].Display,
+                        keys[k].Usage.Shows,
+                        Proposal(a, request, answer),
+                        a.Confidence,
+                        keys[k].Evidence?.Tapers
+                    )
+                    : new ReviewItem(
+                        k,
+                        keys[k].Display,
+                        keys[k].Usage.Shows,
+                        null,
+                        null,
+                        keys[k].Evidence?.Tapers
+                    )
+            )
+            .ToList();
 
     private static string Proposal(KeyAnswer answer, CatalogueRequest request, CatalogueAnswer all)
     {
@@ -264,9 +287,11 @@ public sealed class CatalogueLlm(DbService db, ICatalogueModel model)
                     Key: TrackNumberFold.Fold(x.Part.Key, k => Known(k) || spellings.Contains(k))
                 )
             )
-            .Where(x => !Known(x.Key))
+            .Where(x => !Known(x.Key) && !state.HeldKeys.Contains(x.Key))
             .GroupBy(x => x.Key);
-        var setlist = state.UnmappedSetlistSongs.Where(s => !Known(s.Key)).ToLookup(s => s.Key);
+        var setlist = state
+            .UnmappedSetlistSongs.Where(s => !Known(s.Key) && !state.HeldKeys.Contains(s.Key))
+            .ToLookup(s => s.Key);
 
         var keys = new Dictionary<string, KeyInfo>();
         foreach (var group in fromTracks)

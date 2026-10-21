@@ -1,4 +1,4 @@
--- RelistenNet/string-theory ddl/002_kb.sql (WS-5 revision, 2026-10-20), copied verbatim.
+-- RelistenNet/string-theory ddl/002_kb.sql (WS-5 revision, 2026-10-21), copied verbatim.
 
 -- The song catalogue (docs/catalogue.md). Revised 2026-10-19 (WS-5): plain tables are the
 -- source of truth, replacing the claims, predicate registry and projections ratified with
@@ -142,6 +142,34 @@ CREATE TABLE kb.track_songs (
 );
 CREATE INDEX ON kb.track_songs (song_uuid) WHERE song_uuid IS NOT NULL;
 
+-- Open questions for a person (decided 2026-10-21): a title, track or song an expert or a run
+-- couldn't settle. A run's still-unsure recurring titles land here with its proposal; an
+-- expert marks items too ("needs a listen"). A match closes a machine's item once the title
+-- resolves; a person's items stay until a person closes them. WS-7's review UI reads this.
+CREATE TABLE kb.review_items (
+    uuid        uuid PRIMARY KEY,               -- uuid v7, minted in the app
+    artist_uuid uuid NOT NULL,
+    key         text,                           -- the normalised title in question
+    track_uuid  uuid,                           -- or one track (public.source_tracks.uuid; no FK)
+    song_uuid   uuid REFERENCES kb.songs (uuid),  -- or one song
+    title       text NOT NULL,                  -- as people read it
+    note        text,                           -- why it's open: "maybe Throwing Stones, needs a listen"
+    proposal    text,                           -- a machine's answer below its bar ("→ Looks Like Rain")
+    shows       integer,                        -- how many shows use the title
+    resolved_at timestamptz,
+    resolved_by text,                           -- author_ref of whoever closed it
+    resolution  text,
+    author_type text NOT NULL CHECK (author_type IN ('importer', 'algorithm', 'llm', 'user', 'moderator')),
+    author_ref  text NOT NULL,
+    confidence  real CHECK (confidence BETWEEN 0 AND 1),  -- the proposal's
+    run_uuid    uuid NOT NULL,
+    updated_at  timestamptz NOT NULL DEFAULT now(),
+    CHECK (key IS NOT NULL OR track_uuid IS NOT NULL OR song_uuid IS NOT NULL),
+    CHECK ((resolved_at IS NULL) = (resolved_by IS NULL)),
+    FOREIGN KEY (run_uuid, author_type, author_ref) REFERENCES kb.runs (uuid, author_type, author_ref)
+);
+CREATE UNIQUE INDEX review_items_open_key ON kb.review_items (artist_uuid, key) WHERE resolved_at IS NULL AND key IS NOT NULL;
+
 -- Every insert, update and delete on a catalogue table, append-only. row_key is the row's
 -- primary key. The author is the transaction's (SET LOCAL kb.author_type / kb.author_ref /
 -- kb.run_uuid, which writers always set), else the new row's: a moderator reverting a run
@@ -257,3 +285,7 @@ CREATE TRIGGER track_songs_guard BEFORE UPDATE OR DELETE ON kb.track_songs
     FOR EACH ROW EXECUTE FUNCTION kb.guard_people();
 CREATE TRIGGER track_songs_log AFTER INSERT OR UPDATE OR DELETE ON kb.track_songs
     FOR EACH ROW EXECUTE FUNCTION kb.log_change('track_uuid', 'part');
+CREATE TRIGGER review_items_guard BEFORE UPDATE OR DELETE ON kb.review_items
+    FOR EACH ROW EXECUTE FUNCTION kb.guard_people();
+CREATE TRIGGER review_items_log AFTER INSERT OR UPDATE OR DELETE ON kb.review_items
+    FOR EACH ROW EXECUTE FUNCTION kb.log_change('uuid');

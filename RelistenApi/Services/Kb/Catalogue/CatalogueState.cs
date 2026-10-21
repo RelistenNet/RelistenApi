@@ -60,6 +60,9 @@ public sealed class CatalogueState
 
     public IEnumerable<CatalogueTrack> UnresolvedTracks => Tracks.Where(t => t.Unresolved);
 
+    /// Titles a person has an open review item about: theirs to settle, never the LLM's.
+    public IReadOnlySet<string> HeldKeys { get; init; } = new HashSet<string>();
+
     /// Song names are looked up directly, so a name needs no alias. A name two songs share
     /// matches neither.
     public IReadOnlyDictionary<string, Guid> SongNames =>
@@ -195,8 +198,19 @@ public sealed class CatalogueState
             tx
         );
 
+        var held = await connection.QueryAsync<string>(
+            """
+            SELECT key FROM kb.review_items
+            WHERE artist_uuid = @artistUuid AND resolved_at IS NULL AND key IS NOT NULL
+              AND author_type IN ('user', 'moderator')
+            """,
+            new { artistUuid },
+            tx
+        );
+
         return new CatalogueState
         {
+            HeldKeys = held.ToHashSet(),
             ArtistUuid = artistUuid,
             ArtistName = artist.Name,
             Tracks = tracks

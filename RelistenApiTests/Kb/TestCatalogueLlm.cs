@@ -510,6 +510,97 @@ public class TestCatalogueLlm
     }
 
     [Test]
+    public async Task AnExpertsMergeMovesEveryTrackToTheSurvivor()
+    {
+        await new CatalogueLlm(db, new ScriptedModel()).RunChunkAsync(
+            artist,
+            [],
+            CancellationToken.None
+        );
+        var sugaree = await SongNamed("Sugaree");
+        var (shorter, jam) = (Guid.CreateVersion7(), Guid.CreateVersion7());
+        await AsModerator(s =>
+            s.WriteSongsAsync([
+                new SongRecord(shorter, artist, "Sugar"),
+                new SongRecord(jam, artist, "Sugaree Jam"),
+            ])
+        );
+        await AddTrack("Sugar", "short");
+        await AddTrack("Sugaree Jam", "jam");
+        var match = new CatalogueMatch(db);
+        await match.RunAsync(artist, CancellationToken.None);
+        (await Placed("short")).Should().Equal("Sugar (song_name)");
+
+        // The longer name is the song; the jam is the song with the jam qualifier.
+        await AsModerator(async s =>
+        {
+            await s.MergeSongAsync(shorter, sugaree);
+            await s.MergeSongAsync(jam, sugaree, keepNameAsAlias: false);
+        });
+        await match.RunAsync(artist, CancellationToken.None);
+
+        (await Placed("short")).Should().Equal("Sugaree (alias)");
+        (await Placed("jam")).Should().Equal("Sugaree (song_name) [jam]");
+    }
+
+    [Test]
+    public async Task AMatchAnswersAMachinesQuestionButNotAPersons()
+    {
+        await new CatalogueLlm(db, new ScriptedModel()).RunChunkAsync(
+            artist,
+            [],
+            CancellationToken.None
+        );
+        var sugaree = await SongNamed("Sugaree");
+        await db.WithWriteConnection(async c =>
+        {
+            var connection = (Npgsql.NpgsqlConnection)c;
+            await using var tx = await connection.BeginTransactionAsync();
+            var bot = await KbStore.BeginAsync(connection, tx, AuthorTypes.Llm, "catalogue-llm@5");
+            await bot.WriteReviewItemsAsync([
+                new ReviewRecord(
+                    artist,
+                    "Big Sugar",
+                    "big sugar",
+                    Proposal: "→ Sugaree",
+                    Confidence: 0.8f,
+                    Shows: 4
+                ),
+                new ReviewRecord(artist, "Can't Pay The Price", "cant pay the price", Shows: 4),
+            ]);
+            await tx.CommitAsync();
+            return 0;
+        });
+        await AsModerator(async s =>
+        {
+            // The expert's note takes the open item over: it is theirs now.
+            await s.WriteReviewItemsAsync([
+                new ReviewRecord(
+                    artist,
+                    "Can't Pay The Price",
+                    "cant pay the price",
+                    "maybe Throwing Stones; needs a listen"
+                ),
+            ]);
+            await s.WriteAliasesAsync([new AliasRecord(artist, "Big Sugar", sugaree)]);
+            await s.WriteAliasesAsync([new AliasRecord(artist, "Can't Pay The Price", sugaree)]);
+        });
+
+        await new CatalogueMatch(db).RunAsync(artist, CancellationToken.None);
+
+        (
+            await Strings(
+                "SELECT key || ':' || (resolved_at IS NOT NULL) || ':' || coalesce(note, '') || ':' || coalesce(shows::text, '') FROM kb.review_items WHERE artist_uuid = @artist ORDER BY key"
+            )
+        )
+            .Should()
+            .Equal(
+                "big sugar:true::4",
+                "cant pay the price:false:maybe Throwing Stones; needs a listen:4"
+            );
+    }
+
+    [Test]
     public async Task AnExpertsAliasFixReachesEveryTrackButNoRuling()
     {
         await new CatalogueLlm(db, new ScriptedModel()).RunChunkAsync(

@@ -46,6 +46,19 @@ public sealed record AliasRecord(
 
 public sealed record EvidenceRecord(Guid SetlistSongUuid, Guid SongUuid, float? Confidence = null);
 
+/// An open question for a person: a title (by its normalised key), a track or a song.
+public sealed record ReviewRecord(
+    Guid ArtistUuid,
+    string Title,
+    string? Key = null,
+    string? Note = null,
+    string? Proposal = null,
+    float? Confidence = null,
+    int? Shows = null,
+    Guid? TrackUuid = null,
+    Guid? SongUuid = null
+);
+
 /// Whether a track row is a decision or follows from one (string-theory ddl/002_kb.sql).
 public static class TrackBasis
 {
@@ -378,6 +391,64 @@ public sealed class KbStore
         : Human ? $"({changed})"
         : $"({changed}) AND {table}.author_type NOT IN ('user', 'moderator')";
 
+    /// An expert's merge: song `from` is the same song as `into`. The old song keeps its row
+    /// and points at the survivor (readers follow merged_into), as do songs merged into it
+    /// before. Its name becomes an alias of the survivor unless keepNameAsAlias is false (a
+    /// jam merged into its song, "Supplication Jam": the jam qualifier then applies). Aliases
+    /// of the old song already resolve to the survivor; the next match moves every derived
+    /// track. Only a person merges (docs/llm.md: merges are never the LLM's).
+    public async Task MergeSongAsync(Guid from, Guid into, bool keepNameAsAlias = true)
+    {
+        if (!Human)
+        {
+            throw new InvalidOperationException("Only a person can merge songs");
+        }
+
+        var songs = (
+            await connection.QueryAsync<(Guid Uuid, Guid Artist, string Name, Guid? MergedInto)>(
+                "SELECT uuid, artist_uuid, name, merged_into FROM kb.songs WHERE uuid = ANY(@ids)",
+                new { ids = new[] { from, into } },
+                tx
+            )
+        ).ToDictionary(s => s.Uuid);
+        if (
+            from == into
+            || !songs.TryGetValue(from, out var old)
+            || !songs.TryGetValue(into, out var survivor)
+        )
+        {
+            throw new InvalidOperationException("A merge needs two different songs");
+        }
+
+        if (old.Artist != survivor.Artist || survivor.MergedInto != null)
+        {
+            throw new InvalidOperationException(
+                "A song merges into a song of the same artist that isn't merged itself"
+            );
+        }
+
+        await connection.ExecuteAsync(
+            """
+            UPDATE kb.songs SET merged_into = @into, author_type = @AuthorType, author_ref = @AuthorRef,
+                confidence = NULL, run_uuid = @Run, updated_at = now()
+            WHERE uuid = @from OR merged_into = @from
+            """,
+            new
+            {
+                from,
+                into,
+                AuthorType,
+                AuthorRef,
+                Run,
+            },
+            tx
+        );
+        if (keepNameAsAlias)
+        {
+            await WriteAliasesAsync([new AliasRecord(old.Artist, old.Name, into)]);
+        }
+    }
+
     /// Songs, with a slug unique per artist derived from the name.
     public async Task<int> WriteSongsAsync(
         IReadOnlyList<SongRecord> songs,
@@ -504,6 +575,83 @@ public sealed class KbStore
             tx
         );
     }
+
+    /// Opens review items. A title already open keeps its one item: what a write leaves empty
+    /// stays as it was, a machine refreshes only its own item, and a person writing to an item
+    /// (a note) takes it over.
+    public async Task<int> WriteReviewItemsAsync(IReadOnlyList<ReviewRecord> items)
+    {
+        if (items.Count == 0)
+        {
+            return 0;
+        }
+
+        var rows = items.DistinctBy(i => (i.ArtistUuid, i.Key ?? i.Title)).ToList();
+        return await connection.ExecuteAsync(
+            $"""
+            INSERT INTO kb.review_items (uuid, artist_uuid, key, track_uuid, song_uuid, title, note, proposal,
+                                         shows, author_type, author_ref, confidence, run_uuid)
+            SELECT x.uuid, x.artist, x.key, x.track, x.song, x.title, x.note, x.proposal, x.shows,
+                   @AuthorType, @AuthorRef, x.confidence, @Run
+            FROM unnest(@uuids, @artists, @keys, @tracks, @songs, @titles, @notes, @proposals, @shows, @confidences)
+                 AS x(uuid, artist, key, track, song, title, note, proposal, shows, confidence)
+            ON CONFLICT (artist_uuid, key) WHERE resolved_at IS NULL AND key IS NOT NULL DO UPDATE
+                SET proposal = coalesce(EXCLUDED.proposal, kb.review_items.proposal),
+                    confidence = coalesce(EXCLUDED.confidence, kb.review_items.confidence),
+                    shows = coalesce(EXCLUDED.shows, kb.review_items.shows),
+                    note = coalesce(EXCLUDED.note, kb.review_items.note), author_type = EXCLUDED.author_type,
+                    author_ref = EXCLUDED.author_ref, run_uuid = EXCLUDED.run_uuid, updated_at = now()
+                WHERE {UpdateWhen(
+                    KbWriteMode.Upsert,
+                    "kb.review_items",
+                    "(kb.review_items.proposal, kb.review_items.confidence, kb.review_items.shows, kb.review_items.note) IS DISTINCT FROM (coalesce(EXCLUDED.proposal, kb.review_items.proposal), coalesce(EXCLUDED.confidence, kb.review_items.confidence), coalesce(EXCLUDED.shows, kb.review_items.shows), coalesce(EXCLUDED.note, kb.review_items.note))"
+                )}
+            """,
+            new
+            {
+                AuthorType,
+                AuthorRef,
+                Run,
+                uuids = rows.Select(_ => Guid.CreateVersion7()).ToArray(),
+                artists = rows.Select(r => r.ArtistUuid).ToArray(),
+                keys = rows.Select(r => r.Key).ToArray(),
+                tracks = rows.Select(r => r.TrackUuid).ToArray(),
+                songs = rows.Select(r => r.SongUuid).ToArray(),
+                titles = rows.Select(r => r.Title).ToArray(),
+                notes = rows.Select(r => r.Note).ToArray(),
+                proposals = rows.Select(r => r.Proposal).ToArray(),
+                shows = rows.Select(r => r.Shows).ToArray(),
+                confidences = rows.Select(r => r.Confidence).ToArray(),
+            },
+            tx
+        );
+    }
+
+    /// Closes the open items about these titles. A machine closes only machines' items: a
+    /// person's question stays until a person answers it.
+    public Task<int> CloseReviewItemsAsync(
+        Guid artistUuid,
+        IReadOnlyCollection<string> keys,
+        string resolution
+    ) =>
+        connection.ExecuteAsync(
+            $"""
+            UPDATE kb.review_items SET resolved_at = now(), resolved_by = @AuthorRef, resolution = @resolution,
+                author_type = @AuthorType, author_ref = @AuthorRef, run_uuid = @Run, updated_at = now()
+            WHERE artist_uuid = @artistUuid AND resolved_at IS NULL AND key = ANY(@keys)
+              {(Human ? "" : "AND author_type NOT IN ('user', 'moderator')")}
+            """,
+            new
+            {
+                artistUuid,
+                keys = keys.ToArray(),
+                resolution,
+                AuthorType,
+                AuthorRef,
+                Run,
+            },
+            tx
+        );
 
     /// Removes one alias. A machine can't remove a person's (the trigger refuses it), so it
     /// skips them. The tracks that rested on it are cleared by the next match.

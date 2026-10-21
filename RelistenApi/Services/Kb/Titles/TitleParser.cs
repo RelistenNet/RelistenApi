@@ -351,6 +351,14 @@ public static partial class TitleParser
         var whole = WholeBracket().Match(text);
         if (whole.Success)
         {
+            // A bracket holding only a count or a qualifier ("Space > (2)", "(Fade In)")
+            // names no song.
+            var inner = TitleNormalizer.Normalize(whole.Groups["inner"].Value);
+            if (inner.All(c => char.IsDigit(c) || c == ' ') || QualifierWords.ContainsKey(inner))
+            {
+                return null;
+            }
+
             text = whole.Groups["inner"].Value;
             var trailing = TrailingSegue().Match(text);
             if (trailing.Success)
@@ -372,7 +380,7 @@ public static partial class TitleParser
         text = SetPrefix().Replace(text, "");
         text = TrailingFileCode().Replace(text, "").Trim(' ', '-', '_', '.', ',', ':', ';');
         var key = TitleNormalizer.Normalize(text);
-        if (key.Length == 0 || LooksLikeFileName(text, fromFileName))
+        if (key.Length == 0 || LooksLikeFileName(text, fromFileName) || GenericLabel().IsMatch(key))
         {
             return null;
         }
@@ -459,6 +467,10 @@ public static partial class TitleParser
 
     [GeneratedRegex(@"\s*\++\s*$")]
     private static partial Regex TrailingPlus();
+
+    // A recorder's or player's label, not a name: "Track 3", "Marker 8", "Chapter 2".
+    [GeneratedRegex(@"^(?:track|marker|chapter|index|cue|title)\s*\d+$")]
+    private static partial Regex GenericLabel();
 
     [GeneratedRegex(@"(?:\s+(?:sbd|aud|sbb|matrix|mtx|fm))+\s*$", RegexOptions.IgnoreCase)]
     private static partial Regex TrailingRecordingWords();

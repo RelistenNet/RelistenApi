@@ -133,6 +133,8 @@ public class TestTitleParser
     [TestCase("Jam + @@ ->", 3, "jam >")]
     [TestCase("08 NO2.mp3", 8, "no2")]
     [TestCase("5:15", 3, "5 15")]
+    [TestCase("Space > (2)", 3, "space >")]
+    [TestCase("Part 1 >", 3, "part 1 >")]
     [TestCase("05:12 - Nebraska", 3, "nebraska")]
     [TestCase("4:43) Nebraska", 3, "nebraska")]
     [TestCase("01:26 ] intro", 3, "intro")]
@@ -148,6 +150,9 @@ public class TestTitleParser
     [TestCase("Abear_2023-09-28_S202.mp3")]
     [TestCase("10. 2026-03-17dw.mp3")]
     [TestCase("tuckab11.mp3")]
+    [TestCase("Track 3")]
+    [TestCase("Marker 8")]
+    [TestCase("(Fade In)")]
     public void BareFileNamesCarryNoSongText(string raw) =>
         TitleParser.Parse(raw, 1).HasText.Should().BeFalse(raw);
 }
@@ -355,6 +360,24 @@ public class TestTrackMatcher
 
         match.Records.Should().BeEmpty();
         match.Cleared.Should().Equal(state.Tracks[0].Uuid);
+    }
+
+    [Test]
+    public void ATitleAPersonIsHoldingIsNotAsked()
+    {
+        var one = OneTrack("Midnight Madness");
+        var state = new CatalogueState
+        {
+            ArtistUuid = one.ArtistUuid,
+            ArtistName = one.ArtistName,
+            Songs = one.Songs,
+            Aliases = one.Aliases,
+            UnmappedSetlistSongs = one.UnmappedSetlistSongs,
+            Tracks = one.Tracks,
+            HeldKeys = new HashSet<string> { "midnight madness" },
+        };
+
+        CatalogueLlm.UnresolvedKeys(state).Should().BeEmpty();
     }
 
     [Test]

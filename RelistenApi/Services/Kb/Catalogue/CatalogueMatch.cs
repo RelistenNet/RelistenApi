@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
@@ -43,6 +44,12 @@ public sealed class CatalogueMatch(DbService db)
         await store.ClearTracksAsync(match.Cleared);
         // Upsert: derived rows follow the songs and aliases; unchanged rows aren't written.
         await store.WriteTrackSongsAsync(match.Records);
+        // A machine's open question about a title that a name or alias now places is answered.
+        await store.CloseReviewItemsAsync(
+            artistUuid,
+            state.SongNames.Keys.Concat(state.Aliases.Keys).ToList(),
+            "placed by a song name or alias"
+        );
         await store.FinishAsync();
         await tx.CommitAsync(cancellationToken);
 
