@@ -137,6 +137,7 @@ CREATE TABLE kb.track_songs (
     PRIMARY KEY (track_uuid, part),
     CHECK (author_type NOT IN ('algorithm', 'llm') OR confidence IS NOT NULL),
     CHECK (author_type NOT IN ('user', 'moderator') OR basis = 'ruling'),  -- a person's row is a decision
+    CHECK (basis <> 'open' OR NOT resolved),                                 -- an open part is unplaced
     FOREIGN KEY (run_uuid, author_type, author_ref) REFERENCES kb.runs (uuid, author_type, author_ref)
 );
 CREATE INDEX ON kb.track_songs (song_uuid) WHERE song_uuid IS NOT NULL;
@@ -190,21 +191,20 @@ BEGIN
 END $$;
 
 -- People's rows are theirs: a machine may not overwrite or delete them. The actor is the
--- transaction's kb.author_type (a moderator restoring a machine's value is still a person),
--- else for an update the new row's; a delete with no actor set is refused.
+-- transaction's kb.author_type (a moderator restoring a machine's value is still a person);
+-- an update or delete with no actor and run set is refused, never inferred from the row.
 CREATE FUNCTION kb.guard_people() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
-    actor text := coalesce(nullif(current_setting('kb.author_type', true), ''),
-                           CASE WHEN TG_OP = 'UPDATE' THEN NEW.author_type END);
+    actor text := nullif(current_setting('kb.author_type', true), '');
 BEGIN
-    -- Every delete names its actor and a run of that actor, so the change log attributes it
-    -- and a revert of the run finds it.
-    IF TG_OP = 'DELETE' AND NOT EXISTS (
+    -- Every update and delete names its actor and a run of that actor, so the change log
+    -- attributes it and a revert of the run finds it.
+    IF NOT EXISTS (
            SELECT 1 FROM kb.runs r
            WHERE r.uuid = nullif(current_setting('kb.run_uuid', true), '')::uuid
              AND r.author_type = actor
              AND r.author_ref = nullif(current_setting('kb.author_ref', true), '')) THEN
-        RAISE EXCEPTION 'deleting from % needs SET LOCAL kb.author_type, kb.author_ref and kb.run_uuid naming one run', TG_TABLE_NAME;
+        RAISE EXCEPTION 'changing % needs SET LOCAL kb.author_type, kb.author_ref and kb.run_uuid naming one run', TG_TABLE_NAME;
     END IF;
     IF OLD.author_type IN ('user', 'moderator') AND actor IS DISTINCT FROM 'user'
        AND actor IS DISTINCT FROM 'moderator' THEN
