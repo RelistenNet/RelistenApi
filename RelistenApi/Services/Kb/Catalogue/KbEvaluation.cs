@@ -10,7 +10,8 @@ namespace Relisten.Kb.Catalogue;
 /// One artist's catalogue against the legacy tables (string-theory docs/catalogue.md
 /// §Rollout, docs/matching.md §Evaluation).
 /// - Precision vs setlist: of the song parts on tracks of shows whose date has an upstream
-///   setlist, the share whose song's name is one that setlist played. Compared by name, never
+///   setlist, the share whose song's name is one that setlist played. Compared by name
+///   ("&" as "and", a leading "The" ignored: "Samson & Delilah", "The Promised Land"), never
 ///   through kb.song_evidence, which the same model writes.
 ///   Setlists are incomplete (encores, jams), so this is a lower bound; the disagreements
 ///   are listed for labelling.
@@ -89,8 +90,8 @@ public static class KbEvaluation
                            SELECT 1 FROM setlist_songs_plays p
                            JOIN setlist_songs sso ON sso.id = p.played_setlist_song_id
                            WHERE p.played_setlist_show_id = ss.id
-                             AND regexp_replace(lower(sso.name), '[^a-z0-9]', '', 'g')
-                               = regexp_replace(lower(k.name), '[^a-z0-9]', '', 'g')),
+                             AND regexp_replace(regexp_replace(replace(lower(sso.name), '&', ' and '), '^the ', ''), '[^a-z0-9]', '', 'g')
+                               = regexp_replace(regexp_replace(replace(lower(k.name), '&', ' and '), '^the ', ''), '[^a-z0-9]', '', 'g')),
                        sh.date::text, t.title, k.name
                 FROM kb.track_songs ts
                 JOIN source_tracks t ON t.uuid = ts.track_uuid
