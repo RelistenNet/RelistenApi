@@ -78,7 +78,8 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
     }
 
     /// The spellings the deterministic pass leaves, less those asked earlier in this run and
-    /// those a person holds for review.
+    /// those with an open question already (a person's, or an earlier run's below the bar):
+    /// they wait for an expert rather than being paid for again.
     private static async Task<List<Spelling>> OpenSpellings(
         Npgsql.NpgsqlConnection connection,
         Npgsql.NpgsqlTransaction tx,
@@ -91,7 +92,6 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
                 """
                 SELECT key FROM norm.review_items
                 WHERE subject = 'venue' AND resolved_at IS NULL AND key IS NOT NULL
-                  AND author_type IN ('user', 'moderator')
                 """,
                 transaction: tx
             )
@@ -592,7 +592,11 @@ internal sealed class VenueRequest
                 (string)n!["id"]!,
                 (string)n["locality"]!,
                 ((string?)n["name"] ?? "").Trim(),
-                (string?)n["kind"] == VenueKinds.Room ? VenueKinds.Room : VenueKinds.Site,
+                // A venue inside another is a room, whatever kind the answer gave it.
+                (string?)n["kind"] == VenueKinds.Room
+                || (string?)n["parent"] != null
+                    ? VenueKinds.Room
+                    : VenueKinds.Site,
                 (string?)n["parent"],
                 n["names"]!
                     .AsArray()

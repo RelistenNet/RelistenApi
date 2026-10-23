@@ -109,6 +109,23 @@ public class TestVenueAnswers
         answer.NewVenues.Should().BeEmpty();
     }
 
+    [Test]
+    public void AVenueInsideAnotherIsARoom()
+    {
+        var (request, _) = Request();
+        var answer = VenueRequest.Parse(
+            Answer(
+                "[]",
+                """
+                [{"id": "n1", "locality": "l1", "name": "Theater", "kind": "site", "parent": "v1", "names": []}]
+                """
+            ),
+            request
+        );
+
+        answer.NewVenues.Single().Kind.Should().Be("room");
+    }
+
     [TestCase("not json")]
     [TestCase("""{"spellings": []}""")]
     public void AnAnswerOfTheWrongShapeThrows(string json) =>
