@@ -425,6 +425,38 @@ public class TestTrackMatcher
     }
 
     [Test]
+    public void AdjacentRepeatsKeepOneRulingEach()
+    {
+        var song = Guid.NewGuid();
+        var state = OneTrack(
+            "Rebula > Rebula",
+            new ExistingPart("Rebula", song, true, 0.95f, SegueAfter: true),
+            new ExistingPart("Rebula", song, true, 0.95f)
+        );
+
+        TrackMatcher
+            .Match(state)
+            .Records.Select(r => r.SongUuid == song)
+            .Should()
+            .Equal(true, true);
+    }
+
+    [Test]
+    public void APartNamingTwoSongsIsOnePlacement()
+    {
+        // "Foo" was ruled to two songs; the title names Foo again after X, unplaced.
+        var state = OneTrack(
+            "Foo > X > Foo",
+            new ExistingPart("Foo", Guid.NewGuid(), true, 0.95f, SegueAfter: true),
+            new ExistingPart("Foo", Guid.NewGuid(), true, 0.95f, SegueAfter: true),
+            new ExistingPart("X", null, false, 0.9f, "open", SegueAfter: true),
+            new ExistingPart("Foo", null, false, 0.9f, "open")
+        );
+
+        CatalogueLlm.UnresolvedKeys(state).Keys.Should().BeEquivalentTo("foo", "x");
+    }
+
+    [Test]
     public void ASandwichKeepsOneRulingPerOccurrence()
     {
         var (rebubula, dragon, track) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());

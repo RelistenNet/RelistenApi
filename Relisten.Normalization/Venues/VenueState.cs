@@ -22,7 +22,7 @@ public sealed record LegacyVenue(
 )
 {
     public string? Key { get; } = VenueNormalizer.Key(Name);
-    public Locality? Locality { get; } = VenueNormalizer.ParseLocation(Location);
+    public Locality? Locality { get; init; } = VenueNormalizer.ParseLocation(Location);
     public (string Provider, string Key)? ExternalId { get; init; }
 }
 
@@ -138,21 +138,26 @@ public sealed partial class VenueState
             transaction: tx
         );
 
+        var legacy = rows.Select(r => new LegacyVenue(
+                r.Uuid,
+                r.Artist,
+                r.Name,
+                r.Location,
+                r.Uses,
+                r.First,
+                r.Last
+            )
+            {
+                ExternalId = ParseExternalId(r.Upstream),
+            })
+            .ToList();
+        var catalogue = venues
+            .Where(v => v.MergedInto == null && v.City != null)
+            .Select(v => new Locality(v.City!, v.Region, v.Country));
+
         return new VenueState
         {
-            Unmapped = rows.Select(r => new LegacyVenue(
-                    r.Uuid,
-                    r.Artist,
-                    r.Name,
-                    r.Location,
-                    r.Uses,
-                    r.First,
-                    r.Last
-                )
-                {
-                    ExternalId = ParseExternalId(r.Upstream),
-                })
-                .ToList(),
+            Unmapped = FillRegions(legacy, catalogue),
             Venues = venues
                 .Where(v => v.MergedInto == null)
                 .ToDictionary(
@@ -174,6 +179,35 @@ public sealed partial class VenueState
             ExternalIds = ids.GroupBy(i => (i.Provider, i.Key))
                 .ToDictionary(g => g.Key, g => Survivor(g.First().Venue)),
         };
+    }
+
+    /// A town written without its state ("New York City") takes the one state that town name
+    /// has everywhere else in the data; a name found in several states (Portland) stays as is.
+    internal static List<LegacyVenue> FillRegions(
+        IReadOnlyList<LegacyVenue> rows,
+        IEnumerable<Locality> catalogue
+    )
+    {
+        var regions = rows.Select(r => r.Locality)
+            .OfType<Locality>()
+            .Concat(catalogue)
+            .Where(l => l.Region != null || l.Country != null)
+            .GroupBy(l => TitleNormalizer.Normalize(l.City))
+            .ToDictionary(
+                g => g.Key,
+                g => g.Select(l => (l.Region, l.Country)).Distinct().ToList()
+            );
+        return rows.Select(r =>
+                r.Locality is { Region: null, Country: null } l
+                && regions.TryGetValue(TitleNormalizer.Normalize(l.City), out var only)
+                && only.Count == 1
+                    ? r with
+                    {
+                        Locality = l with { Region = only[0].Region, Country = only[0].Country },
+                    }
+                    : r
+            )
+            .ToList();
     }
 
     /// The provider ids legacy rows carry: "setlistfm:4bd6ca4a", "pt:12345". Other upstream

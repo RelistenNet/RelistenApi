@@ -93,7 +93,8 @@ public sealed class VenueMatch(INormalizationDatabase db)
                 )
                 SELECT sh.uuid, v.uuid, sv.basis, sv.venue_uuid
                 FROM shows sh JOIN artists a ON a.id = sh.artist_id
-                JOIN venues lv ON lv.id = sh.venue_id
+                -- A show whose legacy venue is gone keeps no derived venue (a ruling stays).
+                LEFT JOIN venues lv ON lv.id = sh.venue_id
                 LEFT JOIN norm.venue_evidence e ON e.legacy_venue_uuid = lv.uuid
                 LEFT JOIN survivor v ON v.venue = e.venue_uuid AND v.merged_into IS NULL
                 LEFT JOIN norm.show_venues sv ON sv.show_uuid = sh.uuid

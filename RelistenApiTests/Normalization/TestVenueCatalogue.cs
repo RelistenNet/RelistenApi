@@ -185,6 +185,29 @@ public class TestVenueCatalogue
         var match = new VenueMatch(database);
         var llm = new VenueLlm(database, new ScriptedVenueModel());
 
+        // An earlier run's open question about "MSG", answered by this run's chunk.
+        await db.WithWriteConnection(async c =>
+        {
+            var connection = (Npgsql.NpgsqlConnection)c;
+            await using var tx = await connection.BeginTransactionAsync();
+            var bot = await Relisten.Normalization.NormStore.BeginAsync(
+                connection,
+                tx,
+                "llm",
+                "venue-llm@1"
+            );
+            await bot.WriteReviewItemsAsync([
+                new Relisten.Normalization.ReviewRecord(
+                    null,
+                    "MSG — New York, NY, US",
+                    "msg@new york|ny|US",
+                    Subject: Relisten.Normalization.ReviewSubjects.Venue
+                ),
+            ]);
+            await tx.CommitAsync();
+            return 0;
+        });
+
         var first = await match.RunAsync(artists, CancellationToken.None);
         // Red Rocks has one spelling in Morrison; New York has three, for the model.
         first.VenuesCreated.Should().Be(1);
@@ -231,5 +254,28 @@ public class TestVenueCatalogue
                 "2004-06-25 Red Rocks Amphitheatre (evidence)"
             );
         last.RowsLeft.Should().Be(0);
+        (
+            await Strings(
+                "SELECT (resolved_at IS NOT NULL)::text FROM norm.review_items WHERE key = 'msg@new york|ny|US'"
+            )
+        )
+            .Should()
+            .Equal("true");
+
+        // A show whose legacy venue is cleared loses its derived venue.
+        await db.WithWriteConnection(c =>
+            c.ExecuteAsync(
+                "UPDATE shows SET venue_id = NULL WHERE display_date = '2004-06-25' AND artist_id IN (SELECT id FROM artists WHERE uuid = ANY(@artists))",
+                new { artists = artists.ToArray() }
+            )
+        );
+        await match.RunAsync(artists, CancellationToken.None);
+        (
+            await Strings(
+                "SELECT count(*)::text FROM norm.show_venues sv JOIN shows sh ON sh.uuid = sv.show_uuid WHERE sh.display_date = '2004-06-25'"
+            )
+        )
+            .Should()
+            .Equal("0");
     }
 }

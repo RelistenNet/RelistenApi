@@ -224,19 +224,35 @@ public static class TrackMatcher
         return new MatchResult(records, cleared);
     }
 
-    /// A machine's rulings on a track, by song name, in title order: the decision that
-    /// resolved a one-off spelling has no alias to rediscover. Consecutive rows with one text
-    /// joined by segues are one decision (a part naming several songs); a text that recurs (a
-    /// sandwich, "Rebula > Jam > Rebula") is one decision per occurrence.
-    /// Also returns the written parts in order, as rulings or null (derived), for a parse
-    /// whose text moved.
-    private static (
-        Dictionary<string, Queue<PartDecision>> ByKey,
-        List<PartDecision?> ByPosition
-    ) Rulings(CatalogueTrack track)
+    /// A track's written rows as decisions, in title order. Consecutive rows of one kind
+    /// (ruling, derived, open) with one text, joined by segues, are one decision: a part naming
+    /// several songs. Unless the current title names that part as many times in a row ("Rebula
+    /// > Rebula"): then each occurrence is its own decision.
+    internal static List<(string Key, IReadOnlyList<ExistingPart> Rows)> Written(
+        CatalogueTrack track
+    )
     {
-        var rulings = new Dictionary<string, Queue<PartDecision>>();
-        var byPosition = new List<PartDecision?>();
+        // How many times in a row the title names each part, run by run.
+        var parsedRuns = new Dictionary<string, Queue<int>>();
+        var parts = track.Title.Parts;
+        for (var i = 0; i < parts.Count; )
+        {
+            var j = i;
+            while (j < parts.Count && parts[j].Key == parts[i].Key)
+            {
+                j++;
+            }
+
+            if (!parsedRuns.TryGetValue(parts[i].Key, out var runs))
+            {
+                parsedRuns[parts[i].Key] = runs = new Queue<int>();
+            }
+
+            runs.Enqueue(j - i);
+            i = j;
+        }
+
+        var written = new List<(string Key, IReadOnlyList<ExistingPart> Rows)>();
         var run = new List<ExistingPart>();
 
         void Close()
@@ -246,47 +262,73 @@ public static class TrackMatcher
                 return;
             }
 
-            var key = KeyOf(run[0].Text!);
+            var key = run[0].Text == null ? "" : KeyOf(run[0].Text!);
+            var times =
+                parsedRuns.TryGetValue(key, out var runs) && runs.Count > 0 ? runs.Dequeue() : 1;
+            var size = times > 1 && run.Count % times == 0 ? run.Count / times : run.Count;
+            for (var k = 0; k < run.Count; k += size)
+            {
+                written.Add((key, run.Skip(k).Take(size).ToList()));
+            }
+
+            run.Clear();
+        }
+
+        static string Kind(ExistingPart p) =>
+            p.Basis == TrackBasis.Ruling && p.Resolved ? "ruling"
+            : p.Resolved ? "derived"
+            : "open";
+        foreach (var part in track.Existing)
+        {
+            if (
+                run.Count > 0
+                && (part.Text != run[0].Text || Kind(part) != Kind(run[0]) || !run[^1].SegueAfter)
+            )
+            {
+                Close();
+            }
+
+            run.Add(part);
+        }
+
+        Close();
+        return written;
+    }
+
+    /// A machine's rulings on a track, by song name, in title order: the decision that
+    /// resolved a one-off spelling has no alias to rediscover. A text that recurs (a sandwich,
+    /// "Rebula > Jam > Rebula") is one decision per occurrence. Also returns the written parts
+    /// in order, as rulings or null (derived), for a parse whose text moved.
+    private static (
+        Dictionary<string, Queue<PartDecision>> ByKey,
+        List<PartDecision?> ByPosition
+    ) Rulings(CatalogueTrack track)
+    {
+        var rulings = new Dictionary<string, Queue<PartDecision>>();
+        var byPosition = new List<PartDecision?>();
+        foreach (var (key, rows) in Written(track))
+        {
+            if (!(rows[0].Basis == TrackBasis.Ruling && rows[0].Resolved && rows[0].Text != null))
+            {
+                byPosition.Add(null);
+                continue;
+            }
+
             if (!rulings.TryGetValue(key, out var queue))
             {
                 rulings[key] = queue = new Queue<PartDecision>();
             }
 
             // A part never names one song twice in a row: repeats are a duplicated ruling.
-            var songs = run.Select(e => e.SongUuid).OfType<Guid>().ToList();
-            queue.Enqueue(
-                new PartDecision(
-                    songs.Where((s, i) => i == 0 || s != songs[i - 1]).ToList(),
-                    run.Min(e => e.Confidence) ?? Threshold
-                )
+            var songs = rows.Select(e => e.SongUuid).OfType<Guid>().ToList();
+            var decision = new PartDecision(
+                songs.Where((s, i) => i == 0 || s != songs[i - 1]).ToList(),
+                rows.Min(e => e.Confidence) ?? Threshold
             );
-            byPosition.Add(queue.Last() with { Text = TitleNormalizer.Normalize(run[0].Text!) });
-            run.Clear();
+            queue.Enqueue(decision);
+            byPosition.Add(decision with { Text = TitleNormalizer.Normalize(rows[0].Text!) });
         }
 
-        string? previous = null;
-        foreach (var part in track.Existing)
-        {
-            var ruling = part.Basis == TrackBasis.Ruling && part.Resolved && part.Text != null;
-            if (run.Count > 0 && (!ruling || part.Text != run[0].Text || !run[^1].SegueAfter))
-            {
-                Close();
-            }
-
-            if (ruling)
-            {
-                run.Add(part);
-            }
-            // Derived rows of one part naming several songs share a text, joined by segues.
-            else if (!(part.Text == previous && byPosition.Count > 0 && byPosition[^1] == null))
-            {
-                byPosition.Add(null);
-            }
-
-            previous = part.Text;
-        }
-
-        Close();
         return (rulings, byPosition);
     }
 

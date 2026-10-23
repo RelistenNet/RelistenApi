@@ -264,7 +264,7 @@ public sealed partial class NormStore
         ["track_songs"] = ["track_uuid", "part"],
         ["review_items"] = ["uuid"],
         ["venues"] = ["uuid"],
-        ["venue_names"] = ["venue_uuid", "normalized"],
+        ["venue_names"] = ["venue_uuid", "normalized", "valid_from"],
         ["venue_external_ids"] = ["provider", "key"],
         ["venue_evidence"] = ["legacy_venue_uuid"],
         ["show_venues"] = ["show_uuid"],

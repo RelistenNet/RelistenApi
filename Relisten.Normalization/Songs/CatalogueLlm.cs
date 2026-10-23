@@ -57,6 +57,7 @@ public sealed class CatalogueLlm(INormalizationDatabase db, ICatalogueModel mode
         await using var connection = db.CreateWriteConnection();
         await connection.OpenAsync(cancellationToken);
         await using var tx = await connection.BeginTransactionAsync(cancellationToken);
+        // One catalogue step per artist at a time: a step reads the artist's whole state.
         await connection.ExecuteAsync(
             "SELECT pg_advisory_xact_lock(hashtext('norm-catalogue'), hashtext(@artist))",
             new { artist = artistUuid.ToString() },
@@ -65,9 +66,43 @@ public sealed class CatalogueLlm(INormalizationDatabase db, ICatalogueModel mode
 
         var state = await CatalogueState.LoadAsync(connection, tx, artistUuid);
         var keys = UnresolvedKeys(state);
+        var chunk = SelectChunk(keys, skip, review, only);
+        if (chunk.Count == 0)
+        {
+            return new CatalogueChunkResult(true, 0, 0, [], [], [], 0, 0, 0, 0);
+        }
+
+        var request = await BuildRequest(connection, tx, state, chunk, keys, review);
+        var (answer, reply) = await AskAsync(request, cancellationToken);
+        var unsure = Review(answer, request, keys);
+        var written = await PersistAsync(
+            connection,
+            tx,
+            state,
+            request,
+            answer,
+            keys,
+            unsure,
+            review
+        );
+        await tx.CommitAsync(cancellationToken);
+
+        return Result(request, answer, unsure, written, reply);
+    }
+
+    /// The next groups to ask about: unresolved keys not yet asked in this run (in a review,
+    /// only recurring ones; in a targeted re-ask, only the re-asked spellings), most-played
+    /// first, about ChunkGroups groups.
+    private static IReadOnlyList<TitleGroup> SelectChunk(
+        IReadOnlyDictionary<string, KeyInfo> keys,
+        IReadOnlyCollection<string> skip,
+        bool review,
+        IReadOnlyCollection<string>? only
+    )
+    {
         var onlyKeys = only == null ? null : AskedKeys(only, keys);
         var skipped = skip.ToHashSet();
-        var chunk = TitleGrouper.NextChunk(
+        return TitleGrouper.NextChunk(
             TitleGrouper.Group(
                 keys.Values.Select(k => k.Usage)
                     .Where(u => !skipped.Contains(u.Key))
@@ -77,11 +112,18 @@ public sealed class CatalogueLlm(INormalizationDatabase db, ICatalogueModel mode
             ChunkGroups,
             ChunkKeys
         );
-        if (chunk.Count == 0)
-        {
-            return new CatalogueChunkResult(true, 0, 0, [], [], [], 0, 0, 0, 0);
-        }
+    }
 
+    /// The request; a review carries the titles around each key on a few shows.
+    private static async Task<CatalogueRequest> BuildRequest(
+        Npgsql.NpgsqlConnection connection,
+        Npgsql.NpgsqlTransaction tx,
+        CatalogueState state,
+        IReadOnlyList<TitleGroup> chunk,
+        IReadOnlyDictionary<string, KeyInfo> keys,
+        bool review
+    )
+    {
         var context = review
             ? await Neighbours(
                 connection,
@@ -89,7 +131,17 @@ public sealed class CatalogueLlm(INormalizationDatabase db, ICatalogueModel mode
                 chunk.SelectMany(g => g.Keys).ToDictionary(k => k.Key, k => keys[k.Key].Tracks)
             )
             : null;
-        var request = CatalogueRequest.Build(state, chunk, keys, context);
+        return CatalogueRequest.Build(state, chunk, keys, context);
+    }
+
+    /// One model call. An answer that isn't the schema's shape at all is an empty answer: the
+    /// chunk is spent with nothing written, not retried, because a retry would be a model
+    /// call the run's cap doesn't count.
+    private async Task<(CatalogueAnswer Answer, ModelReply Reply)> AskAsync(
+        CatalogueRequest request,
+        CancellationToken cancellationToken
+    )
+    {
         var reply = await model.CompleteAsync(
             CatalogueRequest.Instructions,
             request.Data,
@@ -97,63 +149,81 @@ public sealed class CatalogueLlm(INormalizationDatabase db, ICatalogueModel mode
             CatalogueRequest.Schema,
             cancellationToken
         );
-        // An answer that isn't the schema's shape at all is a spent chunk with nothing
-        // written, not a retry: a retry would be a model call the run's cap doesn't count.
-        CatalogueAnswer answer;
         try
         {
-            answer = CatalogueRequest.Parse(reply.Json, request);
+            return (CatalogueRequest.Parse(reply.Json, request), reply);
         }
         catch (CatalogueAnswerException)
         {
-            answer = new CatalogueAnswer(
-                [],
-                new Dictionary<string, KeyAnswer>(),
-                request.KeyIds.Count
+            return (
+                new CatalogueAnswer([], new Dictionary<string, KeyAnswer>(), request.KeyIds.Count),
+                reply
             );
         }
+    }
 
-        var written = (Songs: 0, Tracks: 0);
-        var unsure = Review(answer, request, keys);
-        // A chunk whose answers were all rejected still leaves its recurring titles for review.
-        if (answer.Keys.Count > 0 || unsure.Count > 0)
+    /// Writes what the model is sure of, and its recurring titles below the bar as review
+    /// items, as one run. A chunk whose answers were all rejected still leaves its review
+    /// items; a chunk with neither writes no run at all.
+    private async Task<(int Songs, int Tracks)> PersistAsync(
+        Npgsql.NpgsqlConnection connection,
+        Npgsql.NpgsqlTransaction tx,
+        CatalogueState state,
+        CatalogueRequest request,
+        CatalogueAnswer answer,
+        IReadOnlyDictionary<string, KeyInfo> keys,
+        IReadOnlyList<ReviewItem> unsure,
+        bool review
+    )
+    {
+        if (answer.Keys.Count == 0 && unsure.Count == 0)
         {
-            var store = await NormStore.BeginAsync(
-                connection,
-                tx,
-                AuthorTypes.Llm,
-                Author,
-                $"{(review ? "review: " : "")}{chunk.Count} groups"
-            );
-            if (answer.Keys.Count > 0)
-            {
-                written = await Write(store, state, answer, request, keys);
-            }
-
-            await store.WriteReviewItemsAsync(
-                unsure
-                    .Select(r => new ReviewRecord(
-                        artistUuid,
-                        r.Title,
-                        r.Key,
-                        r.Tapers is { } t ? $"{t} distinct tapers" : null,
-                        r.Proposal,
-                        r.Confidence,
-                        r.Shows
-                    ))
-                    .ToList()
-            );
-            await store.FinishAsync();
+            return (0, 0);
         }
-        await tx.CommitAsync(cancellationToken);
 
+        var store = await NormStore.BeginAsync(
+            connection,
+            tx,
+            AuthorTypes.Llm,
+            Author,
+            $"{(review ? "review: " : "")}{request.KeyIds.Count} keys"
+        );
+        var written =
+            answer.Keys.Count > 0 ? await Write(store, state, answer, request, keys) : (0, 0);
+        await store.WriteReviewItemsAsync(
+            unsure
+                .Select(r => new ReviewRecord(
+                    state.ArtistUuid,
+                    r.Title,
+                    r.Key,
+                    r.Tapers is { } t ? $"{t} distinct tapers" : null,
+                    r.Proposal,
+                    r.Confidence,
+                    r.Shows
+                ))
+                .ToList()
+        );
+        await store.FinishAsync();
+        return written;
+    }
+
+    /// Every key the chunk asked comes back as Asked, sure or not, so the run doesn't ask it
+    /// again; Unresolved are those below the bar.
+    private static CatalogueChunkResult Result(
+        CatalogueRequest request,
+        CatalogueAnswer answer,
+        IReadOnlyList<ReviewItem> unsure,
+        (int Songs, int Tracks) written,
+        ModelReply reply
+    )
+    {
         var resolved = answer
             .Keys.Where(k => k.Value.Confidence >= Threshold && !k.Value.Unknown)
             .Select(k => k.Key)
             .ToHashSet();
         return new CatalogueChunkResult(
             false,
-            chunk.Count,
+            request.Groups,
             resolved.Count,
             request.KeyIds.Values.Where(k => !resolved.Contains(k)).ToList(),
             request.KeyIds.Values.ToList(),
@@ -283,9 +353,11 @@ public sealed class CatalogueLlm(INormalizationDatabase db, ICatalogueModel mode
             .UnresolvedTracks.SelectMany(t =>
             {
                 // By occurrence: "Foo > X > Foo" with one Foo placed still asks about the other.
-                var placed = t
-                    .Existing.Where(e => e.Resolved && e.Text != null)
-                    .GroupBy(e => TrackMatcher.KeyOf(e.Text!))
+                // Placed decisions, not rows: one part naming two songs is one placement.
+                var placed = TrackMatcher
+                    .Written(t)
+                    .Where(w => w.Rows[0].Resolved && w.Rows[0].Text != null)
+                    .GroupBy(w => w.Key)
                     .ToDictionary(g => g.Key, g => g.Count());
                 return t
                     .Title.Parts.Where(p =>
@@ -616,6 +688,9 @@ internal sealed class CatalogueRequest
         new Dictionary<string, string>();
     public required IReadOnlyDictionary<string, string> KeyIds { get; init; }
 
+    /// How many title groups the request holds.
+    public int Groups { get; init; }
+
     /// The text shown for each key id, which an answer must restate.
     public IReadOnlyDictionary<string, string> KeyTexts { get; init; } =
         new Dictionary<string, string>();
@@ -768,6 +843,7 @@ internal sealed class CatalogueRequest
             SongNames = songIds.ToDictionary(s => s.Id, s => s.s.Name),
             KeyIds = keyIds,
             KeyTexts = keyTexts,
+            Groups = chunk.Count,
         };
     }
 

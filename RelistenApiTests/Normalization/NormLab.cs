@@ -435,6 +435,100 @@ public class NormLab
         );
     }
 
+    /// The venue catalogue over the lab's artists, as the workflow runs it (match, LLM chunks
+    /// up to NORM_LAB_MAX_CHUNKS, match), then the fixture places.
+    [Test, Explicit("Calls OpenAI; run deliberately")]
+    public async Task VenueCatalogue()
+    {
+        var model = Environment.GetEnvironmentVariable("NORM_LAB_MODEL");
+        var key = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+        if (string.IsNullOrEmpty(model) || string.IsNullOrEmpty(key))
+        {
+            Assert.Ignore("NORM_LAB_MODEL and OPENAI_API_KEY are needed");
+        }
+
+        var maxChunks = int.TryParse(
+            Environment.GetEnvironmentVariable("NORM_LAB_MAX_CHUNKS"),
+            out var m
+        )
+            ? m
+            : 3;
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["OpenAI:Model"] = model,
+                    ["OpenAI:ApiKey"] = key,
+                }
+            )
+            .Build();
+        var db = Db(labUrl);
+        var database = new Relisten.Services.Normalization.DbServiceNormalizationDatabase(db);
+        var match = new Relisten.Normalization.Venues.VenueMatch(database);
+        var llm = new Relisten.Normalization.Venues.VenueLlm(
+            database,
+            new OpenAiCatalogueModel(configuration)
+        );
+        await using var connection = await Open(db);
+        var artists = (await Artists(connection)).Select(a => a.Uuid).ToList();
+        var watch = Stopwatch.StartNew();
+
+        TestContext.Out.WriteLine(
+            "first match: " + await match.RunAsync(artists, CancellationToken.None)
+        );
+        var skip = new List<string>();
+        var (chunks, input, output) = (0, 0, 0);
+        while (chunks < maxChunks)
+        {
+            var chunk = await llm.RunChunkAsync(artists, skip, CancellationToken.None);
+            if (chunk.Done)
+            {
+                break;
+            }
+
+            chunks++;
+            skip.AddRange(chunk.Asked);
+            (input, output) = (input + chunk.InputTokens, output + chunk.OutputTokens);
+            TestContext.Out.WriteLine(
+                $"  chunk {chunks}: {chunk.Resolved} placed, {chunk.Unsure} unsure, {chunk.VenuesCreated} new venues, {chunk.RowsMapped} rows ({watch.Elapsed.TotalSeconds:F0}s)"
+            );
+        }
+
+        TestContext.Out.WriteLine(
+            "last match: " + await match.RunAsync(artists, CancellationToken.None)
+        );
+        TestContext.Out.WriteLine(
+            $"{model}: {chunks} chunks, {input} in / {output} out tokens, {watch.Elapsed.TotalSeconds:F0}s"
+        );
+        TestContext.Out.WriteLine(
+            await connection.ExecuteScalarAsync<string>(
+                """
+                SELECT format('venues %s (%s rooms), legacy rows mapped %s of %s, shows with a venue %s of %s, open venue questions %s',
+                    (SELECT count(*) FROM norm.venues WHERE merged_into IS NULL),
+                    (SELECT count(*) FROM norm.venues WHERE merged_into IS NULL AND kind = 'room'),
+                    (SELECT count(*) FROM norm.venue_evidence), (SELECT count(*) FROM venues),
+                    (SELECT count(*) FROM norm.show_venues), (SELECT count(*) FROM shows WHERE venue_id IS NOT NULL),
+                    (SELECT count(*) FROM norm.review_items WHERE subject = 'venue' AND resolved_at IS NULL))
+                """
+            )
+        );
+        foreach (
+            var line in await connection.QueryAsync<string>(
+                """
+                SELECT v.name || ' [' || v.kind || coalesce(' in ' || p.name, '') || '] ' || coalesce(v.city, '?') || ', ' || coalesce(v.region, v.country, '')
+                       || ' — ' || (SELECT string_agg(n.name || coalesce(' ' || n.valid_from || '…' || coalesce(n.valid_to::text, ''), '') || ' (' || n.kind || ')', '; ' ORDER BY n.kind, n.valid_from) FROM norm.venue_names n WHERE n.venue_uuid = v.uuid)
+                       || ' — ' || (SELECT count(*) FROM norm.show_venues sv WHERE sv.venue_uuid = v.uuid) || ' shows'
+                FROM norm.venues v LEFT JOIN norm.venues p ON p.uuid = v.parent_uuid
+                WHERE v.merged_into IS NULL AND (v.name ~* '(madison square|spectrum|wells fargo|wachovia|first union|corestates|fox thea|red rocks|fillmore|winterland|warfield)')
+                ORDER BY v.city, v.name
+                """
+            )
+        )
+        {
+            TestContext.Out.WriteLine("  " + line);
+        }
+    }
+
     /// What the venue LLM step would be asked: the rows the deterministic pass leaves, as
     /// distinct spellings per locality.
     [Test, Explicit("Prints the venue workload; run deliberately")]

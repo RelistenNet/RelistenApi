@@ -123,4 +123,73 @@ public class TestVenueMatcher
             .Unplaced.Should()
             .HaveCount(1);
     }
+
+    [Test]
+    public void ATownWithoutItsStateTakesTheOnlyStateItHas()
+    {
+        var rows = VenueState.FillRegions(
+            [
+                Row("The Theatre at MSG", "New York City"),
+                Row("Madison Square Garden", "New York, NY"),
+                Row("Crystal Ballroom", "Portland"),
+            ],
+            [new Locality("Portland", "OR", "US"), new Locality("Portland", "ME", "US")]
+        );
+
+        rows.Select(r => r.Locality!.Key)
+            .Should()
+            .Equal("new york|ny|US", "new york|ny|US", "portland||");
+    }
+
+    [Test]
+    public void ARowWithoutATownJoinsOnlyAVenueWhoseNameIsUnique()
+    {
+        var garden = new CatalogueVenue(
+            Guid.NewGuid(),
+            "Madison Square Garden",
+            "site",
+            null,
+            "New York",
+            "NY",
+            "US"
+        );
+        var capitolA = new CatalogueVenue(
+            Guid.NewGuid(),
+            "Capitol Theatre",
+            "site",
+            null,
+            "Port Chester",
+            "NY",
+            "US"
+        );
+        var capitolB = new CatalogueVenue(
+            Guid.NewGuid(),
+            "Capitol Theatre",
+            "site",
+            null,
+            "Passaic",
+            "NJ",
+            "US"
+        );
+        var rows = new[]
+        {
+            Row("Madison Square Garden", "Unknown Location"),
+            Row("Capitol Theatre", "Unknown Location"),
+        };
+
+        var plan = VenueMatcher.Match(
+            State(
+                rows,
+                [garden, capitolA, capitolB],
+                [
+                    ("Madison Square Garden", garden.Uuid),
+                    ("Capitol Theatre", capitolA.Uuid),
+                    ("Capitol Theatre", capitolB.Uuid),
+                ]
+            )
+        );
+
+        plan.Evidence.Should().ContainSingle().Which.VenueUuid.Should().Be(garden.Uuid);
+        plan.Unplaced.Select(r => r.Name).Should().Equal("Capitol Theatre");
+    }
 }

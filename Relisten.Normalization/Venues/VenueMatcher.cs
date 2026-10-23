@@ -70,9 +70,30 @@ public static class VenueMatcher
                 continue;
             }
 
-            if (row.Key == null || row.Locality == null)
+            if (row.Key == null)
             {
                 unplaced.Add(row);
+                continue;
+            }
+
+            // No town ("Unknown Location"): only a name that belongs to exactly one venue anywhere
+            // places the row ("Capitol Theatre" stands in several towns and stays unplaced).
+            if (row.Locality == null)
+            {
+                var anywhere = state
+                    .Names[row.Key]
+                    .Distinct()
+                    .Where(state.Venues.ContainsKey)
+                    .ToList();
+                if (anywhere.Count == 1)
+                {
+                    Place(row, anywhere[0], Initials);
+                }
+                else
+                {
+                    unplaced.Add(row);
+                }
+
                 continue;
             }
 

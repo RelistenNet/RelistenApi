@@ -196,7 +196,7 @@ public sealed partial class NormStore
         var rows = names
             .Select(n => (n, Normalized: VenueNormalizer.Key(n.Name)))
             .Where(n => n.Normalized != null)
-            .DistinctBy(n => (n.n.VenueUuid, n.Normalized))
+            .DistinctBy(n => (n.n.VenueUuid, n.Normalized, n.n.ValidFrom))
             .ToList();
         if (rows.Count == 0)
         {
@@ -207,15 +207,16 @@ public sealed partial class NormStore
             $"""
             INSERT INTO norm.venue_names (venue_uuid, normalized, name, kind, valid_from, valid_to,
                                         author_type, author_ref, confidence, run_uuid)
-            SELECT x.venue, x.normalized, x.name, x.kind, x.valid_from, x.valid_to, @AuthorType, @AuthorRef, x.confidence, @Run
+            SELECT x.venue, x.normalized, x.name, x.kind, coalesce(x.valid_from, '-infinity'::date), x.valid_to,
+                   @AuthorType, @AuthorRef, x.confidence, @Run
             FROM unnest(@venues, @normalized, @names, @kinds, @froms, @tos, @confidences)
                  AS x(venue, normalized, name, kind, valid_from, valid_to, confidence)
-            ON CONFLICT (venue_uuid, normalized) DO {(mode == NormWriteMode.FillOnly ? "NOTHING" : $"""
-                UPDATE SET name = EXCLUDED.name, kind = EXCLUDED.kind, valid_from = EXCLUDED.valid_from,
+            ON CONFLICT (venue_uuid, normalized, valid_from) DO {(mode == NormWriteMode.FillOnly ? "NOTHING" : $"""
+                UPDATE SET name = EXCLUDED.name, kind = EXCLUDED.kind,
                     valid_to = EXCLUDED.valid_to, author_type = EXCLUDED.author_type,
                     author_ref = EXCLUDED.author_ref, confidence = EXCLUDED.confidence,
                     run_uuid = EXCLUDED.run_uuid, updated_at = now()
-                WHERE {UpdateWhen(mode, "norm.venue_names", "(norm.venue_names.name, norm.venue_names.kind, norm.venue_names.valid_from, norm.venue_names.valid_to) IS DISTINCT FROM (EXCLUDED.name, EXCLUDED.kind, EXCLUDED.valid_from, EXCLUDED.valid_to)")}
+                WHERE {UpdateWhen(mode, "norm.venue_names", "(norm.venue_names.name, norm.venue_names.kind, norm.venue_names.valid_to) IS DISTINCT FROM (EXCLUDED.name, EXCLUDED.kind, EXCLUDED.valid_to)")}
                 """)}
             """,
             new

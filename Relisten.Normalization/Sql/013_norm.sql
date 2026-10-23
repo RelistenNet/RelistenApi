@@ -172,25 +172,26 @@ CREATE TABLE norm.venues (
     FOREIGN KEY (run_uuid, author_type, author_ref) REFERENCES norm.runs (uuid, author_type, author_ref)
 );
 
--- A venue's names: official names over time (end exclusive, NULL bound = open: "Wachovia
--- Center" to 2010-08-01, "Wells Fargo Center" from it), short names ("MSG") and spellings seen
--- in sources. Matching looks a name up by its normalised form within the venue's locality, so
+-- A venue's names: official names over time (end exclusive: "Wachovia Center" to 2010-08-01,
+-- "Wells Fargo Center" from it), short names ("MSG") and spellings seen in sources. A period
+-- is one row, so a venue that returns to an earlier name has two rows of it (A → B → A); an
+-- open start is '-infinity' (it is part of the key), an open end NULL. Matching looks a name up by its normalised form within the venue's locality, so
 -- "Fox Theatre" in Oakland and in Boulder stay two venues.
 CREATE TABLE norm.venue_names (
     venue_uuid  uuid NOT NULL REFERENCES norm.venues (uuid),
     normalized  text NOT NULL,                  -- VenueNormalizer.Key
     name        text NOT NULL,                  -- as written
     kind        text NOT NULL CHECK (kind IN ('official', 'short', 'spelling')),
-    valid_from  date,
+    valid_from  date NOT NULL DEFAULT '-infinity',
     valid_to    date,
     author_type text NOT NULL CHECK (author_type IN ('importer', 'algorithm', 'llm', 'user', 'moderator')),
     author_ref  text NOT NULL,
     confidence  real CHECK (confidence BETWEEN 0 AND 1),
     run_uuid    uuid NOT NULL,
     updated_at  timestamptz NOT NULL DEFAULT now(),
-    PRIMARY KEY (venue_uuid, normalized),
-    CHECK (kind = 'official' OR (valid_from IS NULL AND valid_to IS NULL)),  -- only official names have dates
-    CHECK (valid_from IS NULL OR valid_to IS NULL OR valid_from < valid_to),
+    PRIMARY KEY (venue_uuid, normalized, valid_from),
+    CHECK (kind = 'official' OR (valid_from = '-infinity' AND valid_to IS NULL)),  -- only official names have dates
+    CHECK (valid_to IS NULL OR valid_from < valid_to),
     CHECK (author_type NOT IN ('algorithm', 'llm') OR confidence IS NOT NULL),
     FOREIGN KEY (run_uuid, author_type, author_ref) REFERENCES norm.runs (uuid, author_type, author_ref)
 );
@@ -253,9 +254,9 @@ CREATE FUNCTION norm.venue_name_on(venue uuid, on_date date) RETURNS text LANGUA
     SELECT coalesce(
         (SELECT n.name FROM norm.venue_names n
          WHERE n.venue_uuid = venue AND n.kind = 'official'
-           AND (n.valid_from IS NULL OR n.valid_from <= on_date)
+           AND n.valid_from <= on_date
            AND (n.valid_to IS NULL OR on_date < n.valid_to)
-         ORDER BY n.valid_from DESC NULLS LAST LIMIT 1),
+         ORDER BY n.valid_from DESC LIMIT 1),
         (SELECT v.name FROM norm.venues v WHERE v.uuid = venue))
 $$;
 
@@ -462,7 +463,7 @@ CREATE TRIGGER venues_log AFTER INSERT OR UPDATE OR DELETE ON norm.venues
 CREATE TRIGGER venue_names_guard BEFORE UPDATE OR DELETE ON norm.venue_names
     FOR EACH ROW EXECUTE FUNCTION norm.guard_people();
 CREATE TRIGGER venue_names_log AFTER INSERT OR UPDATE OR DELETE ON norm.venue_names
-    FOR EACH ROW EXECUTE FUNCTION norm.log_change('venue_uuid', 'normalized');
+    FOR EACH ROW EXECUTE FUNCTION norm.log_change('venue_uuid', 'normalized', 'valid_from');
 CREATE TRIGGER venue_external_ids_guard BEFORE UPDATE OR DELETE ON norm.venue_external_ids
     FOR EACH ROW EXECUTE FUNCTION norm.guard_people();
 CREATE TRIGGER venue_external_ids_log AFTER INSERT OR UPDATE OR DELETE ON norm.venue_external_ids
