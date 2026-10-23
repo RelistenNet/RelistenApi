@@ -411,6 +411,62 @@ public class NormLab
         }
     }
 
+    /// The deterministic venue pass over the lab's artists, then where the venues stand:
+    /// legacy rows mapped, venues created, rows left for the LLM, shows with a venue in norm.
+    [Test, Explicit("Writes venues to the lab; run deliberately")]
+    public async Task VenueMatch()
+    {
+        var db = Db(labUrl);
+        await using var connection = await Open(db);
+        var artists = (await Artists(connection)).Select(a => a.Uuid).ToList();
+        var result = await new Relisten.Normalization.Venues.VenueMatch(
+            new Relisten.Services.Normalization.DbServiceNormalizationDatabase(db)
+        ).RunAsync(artists, CancellationToken.None);
+        TestContext.Out.WriteLine(result.ToString());
+        TestContext.Out.WriteLine(
+            await connection.ExecuteScalarAsync<string>(
+                """
+                SELECT format('venues %s, legacy rows mapped %s of %s, shows with a venue %s of %s',
+                    (SELECT count(*) FROM norm.venues WHERE merged_into IS NULL),
+                    (SELECT count(*) FROM norm.venue_evidence), (SELECT count(*) FROM venues),
+                    (SELECT count(*) FROM norm.show_venues), (SELECT count(*) FROM shows WHERE venue_id IS NOT NULL))
+                """
+            )
+        );
+    }
+
+    /// What the venue LLM step would be asked: the rows the deterministic pass leaves, as
+    /// distinct spellings per locality.
+    [Test, Explicit("Prints the venue workload; run deliberately")]
+    public async Task VenueEstimate()
+    {
+        var db = Db(labUrl);
+        await using var connection = await Open(db);
+        var artists = (await Artists(connection)).Select(a => a.Uuid).ToList();
+        var state = await Relisten.Normalization.Venues.VenueState.LoadAsync(
+            connection,
+            null,
+            artists
+        );
+        var plan = Relisten.Normalization.Venues.VenueMatcher.Match(state);
+        var spellings = plan.Left.GroupBy(r => (r.Key, r.Locality!.Key)).ToList();
+        var localities = plan.Left.GroupBy(r => r.Locality!.Key).ToList();
+        TestContext.Out.WriteLine(
+            $"left {plan.Left.Count} rows = {spellings.Count} spellings in {localities.Count} localities; "
+                + $"localities by spellings: {string.Join(", ", localities.GroupBy(l => Math.Min(l.Select(r => r.Key).Distinct().Count(), 10)).OrderBy(g => g.Key).Select(g => $"{g.Key}{(g.Key == 10 ? "+" : "")}:{g.Count()}"))}"
+        );
+        foreach (
+            var l in localities
+                .OrderByDescending(l => l.Select(r => r.Key).Distinct().Count())
+                .Take(3)
+        )
+        {
+            TestContext.Out.WriteLine(
+                $"  {l.Key}: {string.Join(" | ", l.GroupBy(r => r.Key).OrderByDescending(g => g.Sum(r => r.Uses)).Take(12).Select(g => g.First().Name))}"
+            );
+        }
+    }
+
     /// One-off, for a lab built before 2026-10-20 ("song names, not titles"): removes the
     /// machine aliases the new rule wouldn't have stored (a song's own name, a title with a
     /// track number or notes around the name), then rebuilds every artist's track rows. A row

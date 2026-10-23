@@ -1,0 +1,235 @@
+using System.Text.Json.Nodes;
+using Dapper;
+using FluentAssertions;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging.Abstractions;
+using Relisten;
+using Relisten.Normalization.Songs;
+using Relisten.Normalization.Venues;
+using Relisten.Services.Normalization;
+
+namespace RelistenApiTests.Normalization;
+
+/// A venue model that answers New York from the request alone: Madison Square Garden (short
+/// name MSG) is a new site, its Theater a room inside it.
+internal sealed class ScriptedVenueModel : ICatalogueModel
+{
+    public string ModelId => "scripted-venues-1";
+
+    public Task<ModelReply> CompleteAsync(
+        string instructions,
+        string data,
+        string schemaName,
+        string schemaJson,
+        CancellationToken cancellationToken
+    )
+    {
+        var newVenues = new JsonArray();
+        var spellings = new JsonArray();
+        foreach (var locality in JsonNode.Parse(data)!["localities"]!.AsArray())
+        {
+            var l = (string)locality!["id"]!;
+            newVenues.Add(Venue("n1", l, "Madison Square Garden", "site", null, ("MSG", "short")));
+            newVenues.Add(
+                Venue(
+                    "n2",
+                    l,
+                    "Hulu Theater",
+                    "room",
+                    "n1",
+                    ("The Theater at Madison Square Garden", "official")
+                )
+            );
+            foreach (var s in locality["spellings"]!.AsArray())
+            {
+                var text = (string)s!["text"]!;
+                spellings.Add(
+                    new JsonObject
+                    {
+                        ["id"] = (string)s["id"]!,
+                        ["spelling_text"] = text,
+                        ["venue"] = text.Contains("Theater") ? "n2" : "n1",
+                        ["not_a_venue"] = false,
+                        ["confidence"] = 0.95,
+                        ["rationale"] = "scripted",
+                    }
+                );
+            }
+        }
+
+        var reply = new JsonObject
+        {
+            ["new_venues"] = newVenues,
+            ["spellings"] = spellings,
+            ["known_names"] = new JsonArray(),
+        };
+        return Task.FromResult(new ModelReply(reply.ToJsonString(), 100, 50));
+    }
+
+    private static JsonObject Venue(
+        string id,
+        string locality,
+        string name,
+        string kind,
+        string? parent,
+        (string Name, string Kind) other
+    ) =>
+        new()
+        {
+            ["id"] = id,
+            ["locality"] = locality,
+            ["name"] = name,
+            ["kind"] = kind,
+            ["parent"] = parent,
+            ["names"] = new JsonArray(
+                new JsonObject
+                {
+                    ["name"] = other.Name,
+                    ["kind"] = other.Kind,
+                    ["from"] = other.Kind == "official" ? "1991" : null,
+                    ["to"] = other.Kind == "official" ? "2018-09" : null,
+                }
+            ),
+        };
+}
+
+[TestFixture, NonParallelizable, Category("LocalIngestion")]
+public class TestVenueCatalogue
+{
+    private DbService db = null!;
+    private readonly List<Guid> artists = [];
+
+    [OneTimeSetUp]
+    public async Task Start()
+    {
+        MigratedTestDatabase.RequireLocalDatabase();
+        await (await MigratedTestDatabase.OpenAsync()).DisposeAsync();
+        db = new DbService(
+            LocalTestDatabase.DatabaseUrl,
+            null,
+            null,
+            Host.CreateApplicationBuilder().Environment,
+            NullLogger<DbService>.Instance
+        );
+    }
+
+    /// Two artists, each with its own legacy rows for the same places.
+    [SetUp]
+    public async Task Seed()
+    {
+        artists.Clear();
+        var rows = new[]
+        {
+            (0, "Madison Square Garden", "New York, NY", "1994-12-31"),
+            (0, "MSG", "NY, NY", "1995-12-31"),
+            (1, "Madison Square Garden", "New York City, NY", "1997-12-31"),
+            (1, "The Theater at Madison Square Garden", "New York, NY", "2003-02-24"),
+            (0, "Red Rocks Amphitheatre", "Morrison, CO", "1996-08-11"),
+            (1, "Red Rocks Amphitheatre", "Morrison, CO", "2001-08-04"),
+            (1, "Red Rocks Amphitheater", "Morrison, Colorado", "2004-06-25"),
+        };
+        foreach (var _ in new[] { 0, 1 })
+        {
+            var uuid = Guid.NewGuid();
+            artists.Add(uuid);
+        }
+
+        await db.WithWriteConnection(async c =>
+        {
+            var ids = new List<int>();
+            foreach (var uuid in artists)
+            {
+                ids.Add(
+                    await c.QuerySingleAsync<int>(
+                        "INSERT INTO artists(name, slug, uuid, updated_at) VALUES ('Venue Band', @slug, @uuid, now()) RETURNING id",
+                        new { slug = "venues-" + uuid, uuid }
+                    )
+                );
+            }
+
+            foreach (var (artist, name, location, date) in rows)
+            {
+                var venue = await c.QuerySingleAsync<long>(
+                    "INSERT INTO venues(artist_id, name, location, uuid, updated_at) VALUES (@artist, @name, @location, @uuid, now()) RETURNING id",
+                    new
+                    {
+                        artist = ids[artist],
+                        name,
+                        location,
+                        uuid = Guid.NewGuid(),
+                    }
+                );
+                await c.ExecuteAsync(
+                    "INSERT INTO shows(artist_id, venue_id, date, display_date, uuid, updated_at) VALUES (@artist, @venue, @date::date, @date, @uuid, now())",
+                    new
+                    {
+                        artist = ids[artist],
+                        venue,
+                        date,
+                        uuid = Guid.NewGuid(),
+                    }
+                );
+            }
+
+            return 0;
+        });
+    }
+
+    private Task<IEnumerable<string>> Strings(string sql) =>
+        db.WithWriteConnection(c => c.QueryAsync<string>(sql, new { artists = artists.ToArray() }));
+
+    [Test]
+    public async Task OnePlacePerVenueAcrossArtistsWithItsRoomsAndNames()
+    {
+        var database = new DbServiceNormalizationDatabase(db);
+        var match = new VenueMatch(database);
+        var llm = new VenueLlm(database, new ScriptedVenueModel());
+
+        var first = await match.RunAsync(artists, CancellationToken.None);
+        // Red Rocks has one spelling in Morrison; New York has three, for the model.
+        first.VenuesCreated.Should().Be(1);
+        first.RowsLeft.Should().Be(4);
+        var chunk = await llm.RunChunkAsync(artists, [], CancellationToken.None);
+        chunk.VenuesCreated.Should().Be(2);
+        (await llm.RunChunkAsync(artists, chunk.Asked, CancellationToken.None))
+            .Done.Should()
+            .BeTrue();
+        var last = await match.RunAsync(artists, CancellationToken.None);
+
+        (
+            await Strings(
+                """
+                SELECT v.name || ' (' || v.kind || coalesce(', in ' || p.name, '') || ') ' || v.city
+                FROM norm.venues v LEFT JOIN norm.venues p ON p.uuid = v.parent_uuid
+                WHERE v.uuid IN (SELECT e.venue_uuid FROM norm.venue_evidence e JOIN venues lv ON lv.uuid = e.legacy_venue_uuid
+                                 JOIN artists a ON a.id = lv.artist_id WHERE a.uuid = ANY(@artists))
+                   OR v.uuid IN (SELECT parent_uuid FROM norm.venues)
+                ORDER BY 1
+                """
+            )
+        ).Should().Equal("Hulu Theater (room, in Madison Square Garden) New York", "Madison Square Garden (site) New York", "Red Rocks Amphitheatre (site) Morrison");
+
+        // Every show has its venue in norm, and the Theater's shows read the name of their date.
+        (
+            await Strings(
+                """
+                SELECT sh.display_date || ' ' || norm.venue_name_on(sv.venue_uuid, sh.date) || ' (' || sv.basis || ')'
+                FROM shows sh JOIN artists a ON a.id = sh.artist_id
+                LEFT JOIN norm.show_venues sv ON sv.show_uuid = sh.uuid
+                WHERE a.uuid = ANY(@artists) ORDER BY sh.date
+                """
+            )
+        )
+            .Should()
+            .Equal(
+                "1994-12-31 Madison Square Garden (evidence)",
+                "1995-12-31 Madison Square Garden (evidence)",
+                "1996-08-11 Red Rocks Amphitheatre (evidence)",
+                "1997-12-31 Madison Square Garden (evidence)",
+                "2001-08-04 Red Rocks Amphitheatre (evidence)",
+                "2003-02-24 The Theater at Madison Square Garden (evidence)",
+                "2004-06-25 Red Rocks Amphitheatre (evidence)"
+            );
+        last.RowsLeft.Should().Be(0);
+    }
+}

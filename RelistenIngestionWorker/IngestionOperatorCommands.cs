@@ -31,6 +31,16 @@ internal sealed class IngestionOperatorCommands(
             return await StartBatchAsync(configuration[operation]!);
         }
 
+        // Venues are cross-artist: --norm-venues=all, or one artist's rows.
+        if (operation == "norm-venues")
+        {
+            var scope = configuration[operation]!;
+            var artists = scope == "all" ? null : new[] { (await ResolveArtistAsync(scope)).Value };
+            return await normalization.BuildVenueCatalogueAsync(
+                new BuildVenueCatalogue(artists, MaxChunks())
+            );
+        }
+
         var artistId = await ResolveArtistAsync(configuration[operation]!);
 
         return operation switch

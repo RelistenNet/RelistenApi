@@ -45,7 +45,19 @@ public sealed record VenueEvidenceRecord(
     float? Confidence = null
 );
 
-public sealed record ShowVenueRecord(Guid ShowUuid, Guid VenueUuid, float? Confidence = null);
+/// A show's venue: derived from its legacy row's mapping (basis evidence) or a ruling.
+public sealed record ShowVenueRecord(
+    Guid ShowUuid,
+    Guid VenueUuid,
+    float? Confidence = null,
+    string Basis = ShowVenueBasis.Ruling
+);
+
+public static class ShowVenueBasis
+{
+    public const string Evidence = "evidence";
+    public const string Ruling = "ruling";
+}
 
 public static class VenueKinds
 {
@@ -296,8 +308,8 @@ public sealed partial class NormStore
         );
     }
 
-    /// A show's venue where its legacy row is wrong: a person's correction, or a machine's
-    /// when a show's own sources agree on another place.
+    /// Shows' venues. A machine never replaces a ruling with a derived row: callers leave
+    /// ruled shows out (the people guard refuses a machine over a person's ruling anyway).
     public async Task<int> WriteShowVenuesAsync(
         IReadOnlyList<ShowVenueRecord> shows,
         NormWriteMode mode = NormWriteMode.Upsert
@@ -311,14 +323,14 @@ public sealed partial class NormStore
 
         return await connection.ExecuteAsync(
             $"""
-            INSERT INTO norm.show_venues (show_uuid, venue_uuid, author_type, author_ref, confidence, run_uuid)
-            SELECT x.show, x.venue, @AuthorType, @AuthorRef, x.confidence, @Run
-            FROM unnest(@shows, @venues, @confidences) AS x(show, venue, confidence)
+            INSERT INTO norm.show_venues (show_uuid, venue_uuid, basis, author_type, author_ref, confidence, run_uuid)
+            SELECT x.show, x.venue, x.basis, @AuthorType, @AuthorRef, x.confidence, @Run
+            FROM unnest(@shows, @venues, @bases, @confidences) AS x(show, venue, basis, confidence)
             ON CONFLICT (show_uuid) DO {(mode == NormWriteMode.FillOnly ? "NOTHING" : $"""
-                UPDATE SET venue_uuid = EXCLUDED.venue_uuid, author_type = EXCLUDED.author_type,
+                UPDATE SET venue_uuid = EXCLUDED.venue_uuid, basis = EXCLUDED.basis, author_type = EXCLUDED.author_type,
                     author_ref = EXCLUDED.author_ref, confidence = EXCLUDED.confidence,
                     run_uuid = EXCLUDED.run_uuid, updated_at = now()
-                WHERE {UpdateWhen(mode, "norm.show_venues", "norm.show_venues.venue_uuid IS DISTINCT FROM EXCLUDED.venue_uuid")}
+                WHERE {UpdateWhen(mode, "norm.show_venues", "(norm.show_venues.venue_uuid, norm.show_venues.basis) IS DISTINCT FROM (EXCLUDED.venue_uuid, EXCLUDED.basis)")}
                 """)}
             """,
             new
@@ -328,11 +340,43 @@ public sealed partial class NormStore
                 Run,
                 shows = rows.Select(r => r.ShowUuid).ToArray(),
                 venues = rows.Select(r => r.VenueUuid).ToArray(),
+                bases = rows.Select(r => r.Basis).ToArray(),
                 confidences = rows.Select(r => r.Confidence).ToArray(),
             },
             tx
         );
     }
+
+    /// Removes derived show venues whose mapping is gone (a ruling stays).
+    public Task<int> ClearDerivedShowVenuesAsync(IReadOnlyCollection<Guid> shows) =>
+        connection.ExecuteAsync(
+            "DELETE FROM norm.show_venues WHERE show_uuid = ANY(@shows) AND basis = 'evidence'",
+            new { shows = shows.ToArray() },
+            tx
+        );
+
+    /// Closes open venue questions about these spellings. A machine closes only machines'.
+    public Task<int> CloseVenueReviewItemsAsync(
+        IReadOnlyCollection<string> keys,
+        string resolution
+    ) =>
+        connection.ExecuteAsync(
+            $"""
+            UPDATE norm.review_items SET resolved_at = now(), resolved_by = @AuthorRef, resolution = @resolution,
+                author_type = @AuthorType, author_ref = @AuthorRef, run_uuid = @Run, updated_at = now()
+            WHERE subject = 'venue' AND resolved_at IS NULL AND key = ANY(@keys)
+              {(Human ? "" : "AND author_type NOT IN ('user', 'moderator')")}
+            """,
+            new
+            {
+                keys = keys.ToArray(),
+                resolution,
+                AuthorType,
+                AuthorRef,
+                Run,
+            },
+            tx
+        );
 
     /// An expert's merge: venue `from` is the same place as `into`. Like songs: the old venue
     /// points at the survivor (as do venues merged into it before), and its names, external

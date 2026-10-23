@@ -227,20 +227,26 @@ CREATE TABLE norm.venue_evidence (
 );
 CREATE INDEX ON norm.venue_evidence (venue_uuid);
 
--- A show's venue where its legacy row is wrong (a row that conflates two places, a source
--- filed under the wrong hall). Every other show's venue follows norm.venue_evidence for the
--- show's public.venues row.
+-- Every show's venue: the new tables hold the whole picture, and a reader needs no legacy
+-- table (decided 2026-10-23). basis says where it comes from:
+-- - evidence: derived from norm.venue_evidence for the show's public.venues row; rebuilt by
+--   the venue matcher on every run, not logged per row (like derived track rows).
+-- - ruling: a decision about this show alone, where its legacy row is wrong or conflates two
+--   places. Logged; fill-only for machines; a person's row is theirs.
 CREATE TABLE norm.show_venues (
     show_uuid   uuid PRIMARY KEY,               -- public.shows.uuid; no FK
     venue_uuid  uuid NOT NULL REFERENCES norm.venues (uuid),
+    basis       text NOT NULL DEFAULT 'ruling' CHECK (basis IN ('evidence', 'ruling')),
     author_type text NOT NULL CHECK (author_type IN ('importer', 'algorithm', 'llm', 'user', 'moderator')),
     author_ref  text NOT NULL,
     confidence  real CHECK (confidence BETWEEN 0 AND 1),
     run_uuid    uuid NOT NULL,
     updated_at  timestamptz NOT NULL DEFAULT now(),
     CHECK (author_type NOT IN ('algorithm', 'llm') OR confidence IS NOT NULL),
+    CHECK (author_type NOT IN ('user', 'moderator') OR basis = 'ruling'),  -- a person's row is a decision
     FOREIGN KEY (run_uuid, author_type, author_ref) REFERENCES norm.runs (uuid, author_type, author_ref)
 );
+CREATE INDEX ON norm.show_venues (venue_uuid);
 
 -- The name a venue had on a date: its official name whose period covers the date, else today's.
 CREATE FUNCTION norm.venue_name_on(venue uuid, on_date date) RETURNS text LANGUAGE sql STABLE AS $$
@@ -369,7 +375,7 @@ BEGIN
         IF TG_TABLE_NAME <> 'review_items' THEN  -- there it's the proposal's, not the author's
             NEW.confidence := NULL;
         END IF;
-        IF TG_TABLE_NAME = 'track_songs' THEN
+        IF TG_TABLE_NAME IN ('track_songs', 'show_venues') THEN
             NEW.basis := 'ruling';
         END IF;
     END IF;

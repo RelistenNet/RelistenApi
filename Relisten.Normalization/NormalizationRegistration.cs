@@ -13,6 +13,8 @@ public static class NormalizationRegistration
         services.AddSingleton<ICatalogueModel, OpenAiCatalogueModel>();
         services.AddScoped<CatalogueLlm>();
         services.AddScoped<CatalogueMatch>();
+        services.AddScoped<Venues.VenueMatch>();
+        services.AddScoped<Venues.VenueLlm>();
         services.AddSingleton<NormalizationClient>();
         return services;
     }
@@ -20,10 +22,10 @@ public static class NormalizationRegistration
     /// Normalization's workflows, on the host's workflow worker.
     public static ITemporalWorkerServiceOptionsBuilder AddNormalizationWorkflows(
         this ITemporalWorkerServiceOptionsBuilder workflows
-    ) => workflows.AddWorkflow<SongCatalogueWorkflow>();
+    ) => workflows.AddWorkflow<SongCatalogueWorkflow>().AddWorkflow<VenueCatalogueWorkflow>();
 
     /// Normalization's database steps, on the host's database worker.
     public static ITemporalWorkerServiceOptionsBuilder AddNormalizationActivities(
         this ITemporalWorkerServiceOptionsBuilder database
-    ) => database.AddScopedActivities<SongActivities>();
+    ) => database.AddScopedActivities<SongActivities>().AddScopedActivities<VenueActivities>();
 }
