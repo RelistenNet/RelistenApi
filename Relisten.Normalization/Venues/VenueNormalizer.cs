@@ -141,9 +141,14 @@ public static partial class VenueNormalizer
             return null;
         }
 
-        // A last field that is neither a known region nor a country stays as written, so two
-        // towns of one name are never folded together on a guess.
-        return new Locality(city, region?.Code ?? (country == null ? fields[^1] : null), country);
+        // A region this table doesn't know stays as written, so two towns of one name are never
+        // folded together on a guess: the last field when it isn't a country ("Tokyo, Kanto"),
+        // the middle one when it is ("Richmond, NSW, Australia").
+        var written =
+            country == null ? fields[^1]
+            : fields.Count > 2 ? fields[^2]
+            : null;
+        return new Locality(city, region?.Code ?? written, country);
     }
 
     private sealed record RegionInfo(string Code, string Name, string Country);

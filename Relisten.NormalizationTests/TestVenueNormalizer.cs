@@ -30,6 +30,8 @@ public class TestVenueNormalizer
     [TestCase("Portland, ME", "portland|me|US")]
     [TestCase("Portland, OR", "portland|or|US")]
     [TestCase("Tokyo, Kanto", "tokyo|kanto|")]
+    [TestCase("Richmond, NSW, Australia", "richmond|nsw|AU")]
+    [TestCase("Richmond, VIC, Australia", "richmond|vic|AU")]
     public void LocationsParseToALocality(string location, string expected) =>
         VenueNormalizer.ParseLocation(location)!.Key.Should().Be(expected);
 
