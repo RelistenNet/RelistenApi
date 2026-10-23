@@ -144,16 +144,21 @@ public class TestVenueAnswers
     }
 
     [Test]
-    public void AChunkKeepsALocalityWhole()
+    public void AChunkKeepsAFamilyWhole()
     {
         var busy = Enumerable
             .Range(0, 100)
             .Select(i => Row($"Hall {i}", "Chicago, IL", 5))
             .ToList();
         var quiet = Enumerable.Range(0, 40).Select(i => Row($"Club {i}", "Peoria, IL", 1)).ToList();
+        // Each town's spellings are one family here.
         var spellings = busy.Concat(quiet)
             .GroupBy(VenueKeys.Of)
-            .Select(g => new Spelling(g.Key!, g.ToList()))
+            .Select(g => new Spelling(
+                g.Key!,
+                g.ToList(),
+                g.First().Location!.StartsWith("Chicago") ? 0 : 1
+            ))
             .ToList();
 
         var chunk = VenueLlm.NextChunk(spellings);

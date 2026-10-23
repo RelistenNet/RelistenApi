@@ -157,7 +157,7 @@ public sealed partial class VenueState
 
         return new VenueState
         {
-            Unmapped = FillRegions(legacy, catalogue),
+            Unmapped = FoldCities(FillRegions(legacy, catalogue)),
             Venues = venues
                 .Where(v => v.MergedInto == null)
                 .ToDictionary(
@@ -204,6 +204,52 @@ public sealed partial class VenueState
                     ? r with
                     {
                         Locality = l with { Region = only[0].Region, Country = only[0].Country },
+                    }
+                    : r
+            )
+            .ToList();
+    }
+
+    /// A rarely used spelling of a town folds into a far more used one a typo away in the same
+    /// state ("brommfield" → Broomfield, "Chilcothe" → Chillicothe): three times the uses, and
+    /// one edit (two for long names) apart.
+    internal static List<LegacyVenue> FoldCities(IReadOnlyList<LegacyVenue> rows)
+    {
+        var uses = rows.Where(r => r.Locality is { Trusted: true })
+            .GroupBy(r =>
+                (Region: r.Locality!.RegionKey!, City: TitleNormalizer.Normalize(r.Locality.City))
+            )
+            .ToDictionary(
+                g => g.Key,
+                g => (Uses: g.Sum(r => Math.Max(r.Uses, 1)), City: g.First().Locality!.City)
+            );
+        var byRegion = uses
+            .Keys.GroupBy(k => k.Region)
+            .ToDictionary(g => g.Key, g => g.Select(k => k.City).ToList());
+        var folded = new Dictionary<(string, string), string>();
+        foreach (var (key, value) in uses)
+        {
+            var limit = key.City.Length >= 7 ? 2 : 1;
+            var target = byRegion[key.Region]
+                .Where(c => c != key.City && uses[(key.Region, c)].Uses >= 3 * value.Uses)
+                .Where(c => Titles.TitleGrouper.BoundedLevenshtein(c, key.City, limit) <= limit)
+                .OrderByDescending(c => uses[(key.Region, c)].Uses)
+                .FirstOrDefault();
+            if (target != null)
+            {
+                folded[key] = uses[(key.Region, target)].City;
+            }
+        }
+
+        return rows.Select(r =>
+                r.Locality is { Trusted: true } l
+                && folded.TryGetValue(
+                    (l.RegionKey!, TitleNormalizer.Normalize(l.City)),
+                    out var city
+                )
+                    ? r with
+                    {
+                        Locality = l with { City = city },
                     }
                     : r
             )

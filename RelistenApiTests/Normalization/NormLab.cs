@@ -529,8 +529,9 @@ public class NormLab
         }
     }
 
-    /// What the venue LLM step would be asked: the rows the deterministic pass leaves, as
-    /// distinct spellings per locality.
+    /// What the venue pass would do before any model call: venues the deterministic step
+    /// creates, families left for the LLM, and duplicate names (one name in two or more venues
+    /// of one state, among existing and new venues), the number to drive down first.
     [Test, Explicit("Prints the venue workload; run deliberately")]
     public async Task VenueEstimate()
     {
@@ -543,20 +544,56 @@ public class NormLab
             artists
         );
         var plan = Relisten.Normalization.Venues.VenueMatcher.Match(state);
-        var spellings = plan.Left.GroupBy(r => (r.Key, r.Locality!.Key)).ToList();
-        var localities = plan.Left.GroupBy(r => r.Locality!.Key).ToList();
+        var rows = plan.Left.Sum(f => f.Count);
         TestContext.Out.WriteLine(
-            $"left {plan.Left.Count} rows = {spellings.Count} spellings in {localities.Count} localities; "
-                + $"localities by spellings: {string.Join(", ", localities.GroupBy(l => Math.Min(l.Select(r => r.Key).Distinct().Count(), 10)).OrderBy(g => g.Key).Select(g => $"{g.Key}{(g.Key == 10 ? "+" : "")}:{g.Count()}"))}"
+            $"rows {state.Unmapped.Count}: placed {plan.Evidence.Count}, new venues {plan.NewVenues.Count}, "
+                + $"left {rows} rows in {plan.Left.Count} families ({plan.Left.Sum(f => f.Select(r => (r.Key, r.Locality?.Key)).Distinct().Count())} spellings), unplaced {plan.Unplaced.Count}"
         );
-        foreach (
-            var l in localities
-                .OrderByDescending(l => l.Select(r => r.Key).Distinct().Count())
-                .Take(3)
-        )
+        var venues = state
+            .Venues.Values.Select(v =>
+                (
+                    v.Name,
+                    v.City,
+                    Region: v.LocalityKey == null
+                        ? null
+                        : new Relisten.Normalization.Venues.Locality(
+                            v.City!,
+                            v.Region,
+                            v.Country
+                        ).RegionKey
+                )
+            )
+            .Concat(
+                plan.NewVenues.Select(v =>
+                    (
+                        v.Name,
+                        v.City,
+                        Region: new Relisten.Normalization.Venues.Locality(
+                            v.City!,
+                            v.Region,
+                            v.Country
+                        ).RegionKey
+                    )
+                )
+            )
+            .ToList();
+        var duplicates = venues
+            .GroupBy(v => (Relisten.Normalization.Venues.VenueNormalizer.Key(v.Name), v.Region))
+            .Where(g => g.Count() > 1)
+            .ToList();
+        TestContext.Out.WriteLine(
+            $"duplicate names within a state: {duplicates.Count} ({duplicates.Sum(g => g.Count())} venues): "
+                + string.Join(
+                    " | ",
+                    duplicates
+                        .Take(12)
+                        .Select(g => string.Join(", ", g.Select(v => $"{v.Name} ({v.City})")))
+                )
+        );
+        foreach (var family in plan.Left.OrderByDescending(f => f.Count).Take(5))
         {
             TestContext.Out.WriteLine(
-                $"  {l.Key}: {string.Join(" | ", l.GroupBy(r => r.Key).OrderByDescending(g => g.Sum(r => r.Uses)).Take(12).Select(g => g.First().Name))}"
+                $"  family of {family.Count}: {string.Join(" | ", family.GroupBy(r => (r.Key, r.Locality?.Key)).OrderByDescending(g => g.Sum(r => r.Uses)).Take(8).Select(g => $"{g.First().Name} — {g.First().Location}"))}"
             );
         }
     }

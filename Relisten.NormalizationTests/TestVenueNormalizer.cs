@@ -31,10 +31,18 @@ public class TestVenueNormalizer
     [TestCase("Portland, OR", "portland|or|US")]
     [TestCase("Tokyo, Kanto", "tokyo|kanto|")]
     [TestCase("Richmond, NSW, Australia", "richmond|nsw|AU")]
+    [TestCase("Phoenix AZ", "phoenix|az|US")]
+    [TestCase("Huber Heights Ohio", "huber heights|oh|US")]
+    [TestCase("Broomfield. CO", "broomfield|co|US")]
+    [TestCase("Dayton Ohio/Huber Heights Ohio", "dayton|oh|US")]
     [TestCase("Richmond, VIC, Australia", "richmond|vic|AU")]
     public void LocationsParseToALocality(string location, string expected) =>
         VenueNormalizer.ParseLocation(location)!.Key.Should().Be(expected);
 
+    [TestCase("Stand, Seat 2")]
+    [TestCase("Row R, On Aisle)")]
+    [TestCase("2022-02-06")]
+    [TestCase("CO")]
     [TestCase("Unknown Location")]
     [TestCase("")]
     [TestCase(null)]

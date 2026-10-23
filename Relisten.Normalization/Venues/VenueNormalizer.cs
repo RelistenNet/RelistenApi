@@ -11,6 +11,13 @@ public sealed record Locality(string City, string? Region, string? Country)
 {
     public string Key =>
         $"{TitleNormalizer.Normalize(City)}|{Region?.ToLowerInvariant()}|{Country}";
+
+    /// The state or country part: two towns in different regions are different places.
+    public string? RegionKey =>
+        Region != null && Country != null ? $"{Region.ToLowerInvariant()}|{Country}" : Country;
+
+    /// A recognised state or country: the town is a town, not a seat or a typed note.
+    public bool Trusted => Country != null;
 }
 
 /// Normalises venue names and locations the same way for every artist (string-theory
@@ -96,8 +103,26 @@ public static partial class VenueNormalizer
             return null;
         }
 
+        // "Dayton Ohio/Huber Heights Ohio": the first place named.
+        location = location.Split('/')[0];
         var fields = location.Split(',').Select(f => f.Trim()).Where(f => f.Length > 0).ToList();
         if (fields.Count == 0)
+        {
+            return null;
+        }
+
+        // No comma before the state: "Phoenix AZ", "Huber Heights Ohio", "Broomfield. CO".
+        if (fields.Count == 1 && TrailingRegion(fields[0]) is { } split)
+        {
+            fields = [split.City, split.Region];
+        }
+
+        // A seat, a date or a typed note is not a town ("Stand, Seat 2", "Row R, On Aisle)"),
+        // and neither is a state alone ("CO").
+        if (
+            NotATown(fields[0])
+            || (fields.Count == 1 && Region(TitleNormalizer.Normalize(fields[0])) != null)
+        )
         {
             return null;
         }
@@ -149,6 +174,56 @@ public static partial class VenueNormalizer
             : fields.Count > 2 ? fields[^2]
             : null;
         return new Locality(city, region?.Code ?? written, country);
+    }
+
+    private static readonly HashSet<string> SeatWords =
+    [
+        "row",
+        "seat",
+        "seats",
+        "section",
+        "sec",
+        "aisle",
+        "stand",
+        "balcony",
+        "floor",
+        "orchestra",
+        "loge",
+        "fob",
+        "sbd",
+        "aud",
+        "taper",
+        "tapers",
+        "venue",
+        "show",
+        "early",
+        "late",
+    ];
+
+    private static bool NotATown(string field)
+    {
+        var key = TitleNormalizer.Normalize(field);
+        return key.Length == 0
+            || key.Any(char.IsDigit)
+            || key.Split(' ').Any(SeatWords.Contains)
+            || Placeholders.Contains(key);
+    }
+
+    /// "Phoenix AZ" → (Phoenix, AZ); "Huber Heights Ohio" → (Huber Heights, Ohio); "Broomfield.
+    /// CO" → (Broomfield, CO). Null when the last words name no known state or province.
+    private static (string City, string Region)? TrailingRegion(string field)
+    {
+        var words = field.Replace('.', ' ').Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        for (var take = Math.Min(3, words.Length - 1); take >= 1; take--)
+        {
+            var region = string.Join(' ', words[^take..]);
+            if (Region(TitleNormalizer.Normalize(region)) != null)
+            {
+                return (string.Join(' ', words[..^take]), region);
+            }
+        }
+
+        return null;
     }
 
     private sealed record RegionInfo(string Code, string Name, string Country);
@@ -277,6 +352,10 @@ public static partial class VenueNormalizer
         ["netherlands"] = "NL",
         ["the netherlands"] = "NL",
         ["holland"] = "NL",
+        ["neth"] = "NL",
+        ["nl"] = "NL",
+        ["deutschland"] = "DE",
+        ["gb"] = "GB",
         ["belgium"] = "BE",
         ["denmark"] = "DK",
         ["sweden"] = "SE",

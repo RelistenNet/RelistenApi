@@ -29,7 +29,7 @@ public sealed record VenueChunkResult(
 /// asks twice.
 public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
 {
-    public const string PromptVersion = "venue-llm@2";
+    public const string PromptVersion = "venue-llm@3";
     public const float Threshold = 0.9f;
 
     /// About this many spellings per request; a locality is never split below it.
@@ -99,9 +99,15 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
         var skipped = skip.ToHashSet();
         return VenueMatcher
             .Match(state)
-            .Left.GroupBy(VenueKeys.Of)
-            .Where(g => g.Key != null && !skipped.Contains(g.Key) && !held.Contains(g.Key))
-            .Select(g => new Spelling(g.Key!, g.ToList()))
+            .Left.SelectMany(
+                (family, index) =>
+                    family
+                        .GroupBy(VenueKeys.Of)
+                        .Where(g =>
+                            g.Key != null && !skipped.Contains(g.Key) && !held.Contains(g.Key)
+                        )
+                        .Select(g => new Spelling(g.Key!, g.ToList(), index))
+            )
             .ToList();
     }
 
@@ -174,22 +180,22 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
         return written;
     }
 
-    /// The busiest localities first, whole; a request holds about ChunkSpellings spellings.
+    /// The busiest families first, whole; a request holds about ChunkSpellings spellings.
     internal static List<Spelling> NextChunk(IReadOnlyList<Spelling> spellings)
     {
         var chunk = new List<Spelling>();
         foreach (
-            var locality in spellings
-                .GroupBy(s => s.Locality)
+            var family in spellings
+                .GroupBy(s => s.Family)
                 .OrderByDescending(g => g.Sum(s => s.Uses))
         )
         {
-            if (chunk.Count > 0 && chunk.Count + locality.Count() > ChunkSpellings)
+            if (chunk.Count > 0 && chunk.Count + family.Count() > ChunkSpellings)
             {
                 continue;
             }
 
-            chunk.AddRange(locality.OrderByDescending(s => s.Uses).Take(ChunkSpellings * 2));
+            chunk.AddRange(family.OrderByDescending(s => s.Uses).Take(ChunkSpellings * 2));
             if (chunk.Count >= ChunkSpellings)
             {
                 break;
@@ -315,9 +321,13 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
 }
 
 /// The rows of one spelling in one locality: what the model is asked about.
-internal sealed record Spelling(string Key, IReadOnlyList<LegacyVenue> Rows)
+/// The rows of one spelling in one locality ("?" for no usable town), and the family of names
+/// it was grouped with: what the model is asked about.
+internal sealed record Spelling(string Key, IReadOnlyList<LegacyVenue> Rows, int Family = 0)
 {
-    public string Locality => Rows[0].Locality!.Key;
+    public const string Unknown = "?";
+    public string Locality => Rows[0].Locality?.Key ?? Unknown;
+    public string? Region => Rows[0].Locality?.RegionKey;
     public int Uses => Rows.Sum(r => r.Uses);
     public string Display =>
         Rows.GroupBy(r => r.Name.Trim())
@@ -329,7 +339,11 @@ internal sealed record Spelling(string Key, IReadOnlyList<LegacyVenue> Rows)
     {
         get
         {
-            var l = Rows[0].Locality!;
+            if (Rows[0].Locality is not { } l)
+            {
+                return "unknown location";
+            }
+
             return string.Join(
                 ", ",
                 new[] { l.City, l.Region, l.Country }.Where(p => !string.IsNullOrEmpty(p))
@@ -380,11 +394,19 @@ internal sealed class VenueRequest
 
     public const string Instructions = """
         You normalise the venues of live concert recordings: one physical place, whatever the
-        recordings call it, shared by every band that played there. You get localities (l1,
-        l2, ...), each with the venues already known there (v1, v2, ...) and the spellings
-        recordings used (s1, s2, ...), with how many artists and recordings use each, the years,
-        and a few raw examples. Spellings can be misspelled, abbreviated, carry the city, or name
+        recordings call it, shared by every band that played there. You get a few families of
+        names that may be one place, as localities (l1, l2, ...) with the venues already known
+        there (v1, v2, ...) and the spellings recordings used (s1, s2, ...), with how many
+        artists and recordings use each, the years, and a few raw examples. Locations are typed
+        by uploaders: towns are misspelled, a club is filed under a neighbouring town or suburb
+        (Williamsburg for Brooklyn, South Burlington for Burlington), and l0 holds spellings with
+        no usable town at all. Spellings can be misspelled, abbreviated, carry the city, or name
         a room inside a place.
+
+        One name in several towns is either a chain or namesakes (House of Blues in Cleveland
+        and in Dallas: separate venues) or one place filed under nearby towns (one venue).
+        Decide from the towns, the artists and the years. A spelling may be placed on a venue in
+        another town of the same state; an l0 spelling on any venue.
 
         For every spelling answer with:
         - spelling_text: the spelling's text exactly as given.
@@ -394,7 +416,7 @@ internal sealed class VenueRequest
         - confidence: 0 to 1; 0.9 or more only when you are sure. Lower is not recorded.
         - rationale: one short sentence.
 
-        A new venue: its locality (the l-id of its spellings; a venue never spans localities),
+        A new venue: its locality (the l-id of the town it really is in, never l0),
         its current official name, kind "site" (a building or grounds) or "room" (a hall,
         theater, stage or tent inside a site; give the site as parent, a v-id or n-id in the
         same locality), and its names: official names it had, with the date each started and
@@ -496,11 +518,23 @@ internal sealed class VenueRequest
         var localities = new List<object>();
         foreach (var group in chunk.GroupBy(s => s.Locality))
         {
-            var lid = $"l{places.Count + 1}";
-            places[lid] = group.First().Rows[0].Locality!;
-            var venues = state
-                .ByLocality[group.Key]
-                .Select(v =>
+            // Spellings with no usable town share "l0"; the venues listed there are those that
+            // already carry one of their names, anywhere.
+            var unknown = group.Key == Spelling.Unknown;
+            var lid = unknown ? "l0" : $"l{places.Count + 1}";
+            if (!unknown)
+            {
+                places[lid] = group.First().Rows[0].Locality!;
+            }
+
+            var here = unknown
+                ? group
+                    .SelectMany(s => state.Names[s.Key.Split('@')[0]])
+                    .Distinct()
+                    .Where(state.Venues.ContainsKey)
+                    .Select(v => state.Venues[v])
+                : state.ByLocality[group.Key];
+            var venues = here.Select(v =>
                 {
                     var id = $"v{venueIds.Count + 1}";
                     venueIds[id] = v.Uuid;
@@ -641,17 +675,23 @@ internal sealed class VenueRequest
             var node = group.Single().Node;
             var key = request.SpellingIds[group.Key];
             var venue = (string?)node["venue"];
-            // The restated text must be the spelling; the venue must be of its locality.
+            // The restated text must be the spelling; the venue must be in its state (a club filed
+            // under a neighbouring town), or anywhere for a spelling with no usable town.
             if (VenueNormalizer.Key((string?)node["spelling_text"]) != key.Split('@')[0])
             {
                 continue;
             }
 
+            var from = request.SpellingLocality[group.Key];
             if (
                 venue != null
                 && !(
                     localityOf.TryGetValue(venue, out var l)
-                    && l == request.SpellingLocality[group.Key]
+                    && (
+                        from == "l0"
+                        || l == from
+                        || (Region(request, l) is { } r && r == Region(request, from))
+                    )
                 )
             )
             {
@@ -673,6 +713,9 @@ internal sealed class VenueRequest
             .ToList();
         return new VenueAnswer(newVenues, spellings, known);
     }
+
+    private static string? Region(VenueRequest request, string locality) =>
+        request.Places.TryGetValue(locality, out var place) ? place.RegionKey : null;
 
     /// A name with its kind and dates; null when the name is empty or its dates don't parse.
     private static VenueNameRecord? Name(Guid venue, JsonNode node)

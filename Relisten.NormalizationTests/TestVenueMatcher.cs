@@ -70,7 +70,7 @@ public class TestVenueMatcher
         var plan = VenueMatcher.Match(State(rows));
 
         plan.NewVenues.Should().BeEmpty();
-        plan.Left.Should().HaveCount(3);
+        plan.Left.Should().ContainSingle().Which.Should().HaveCount(3);
     }
 
     [Test]
@@ -190,6 +190,43 @@ public class TestVenueMatcher
         );
 
         plan.Evidence.Should().ContainSingle().Which.VenueUuid.Should().Be(garden.Uuid);
-        plan.Unplaced.Select(r => r.Name).Should().Equal("Capitol Theatre");
+        // Two Capitol Theatres: the model decides with both candidates in front of it.
+        plan.Left.Single().Select(r => r.Name).Should().Equal("Capitol Theatre");
+    }
+
+    [Test]
+    public void ARareTownSpellingFoldsIntoTheCommonOne()
+    {
+        var rows = VenueState.FoldCities([
+            Row("1st Bank Center", "Broomfield, CO", 30),
+            Row("1st Bank Center", "brommfield, CO", 2),
+            Row("Fox Theatre", "Boulder, CO", 30),
+        ]);
+
+        rows.Select(r => r.Locality!.City).Should().Equal("Broomfield", "Broomfield", "Boulder");
+    }
+
+    [TestCase("msg", "madison square garden", true)]
+    [TestCase("tweeter center", "tweeter center at the waterfront", true)]
+    [TestCase("hammerstien ballroom", "hammerstein ballroom", true)]
+    [TestCase("fillmore east", "fillmore west", false)]
+    [TestCase("fox theater", "orpheum theater", false)]
+    public void NamesThatCouldBeOnePlace(string a, string b, bool expected) =>
+        VenueMatcher.Alike(a, b).Should().Be(expected);
+
+    [Test]
+    public void SeatsInTheLocationDontMakeAnotherGarden()
+    {
+        var rows = new[]
+        {
+            Row("Madison Square Garden", "New York, NY", 50),
+            Row("Madison Square Garden", "Stand, Seat 2", 1),
+            Row("Madison Square Garden", "Row R, On Aisle)", 1),
+        };
+
+        var plan = VenueMatcher.Match(State(rows));
+
+        plan.NewVenues.Should().ContainSingle();
+        plan.Evidence.Select(e => e.VenueUuid).Distinct().Should().ContainSingle();
     }
 }

@@ -65,7 +65,7 @@ public sealed class VenueMatch(INormalizationDatabase db)
         return new VenueMatchResult(
             plan.Evidence.Count,
             plan.NewVenues.Count,
-            plan.Left.Count,
+            plan.Left.Sum(f => f.Count),
             plan.Unplaced.Count,
             shows
         );
@@ -125,5 +125,5 @@ public sealed class VenueMatch(INormalizationDatabase db)
 public static class VenueKeys
 {
     public static string? Of(LegacyVenue row) =>
-        row.Key == null || row.Locality == null ? null : $"{row.Key}@{row.Locality.Key}";
+        row.Key == null ? null : $"{row.Key}@{row.Locality?.Key ?? "?"}";
 }
