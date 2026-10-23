@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- Normalization tests that need no database: title parsing, matching, model answers and
-       the Temporal workflows. Tests against a migrated database live in RelistenApiTests/Kb,
+       the Temporal workflows. Tests against a migrated database live in RelistenApiTests/Norm,
        which owns that infrastructure. -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>

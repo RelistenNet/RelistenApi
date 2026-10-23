@@ -58,7 +58,7 @@ public sealed class CatalogueLlm(INormalizationDatabase db, ICatalogueModel mode
         await connection.OpenAsync(cancellationToken);
         await using var tx = await connection.BeginTransactionAsync(cancellationToken);
         await connection.ExecuteAsync(
-            "SELECT pg_advisory_xact_lock(hashtext('kb-catalogue'), hashtext(@artist))",
+            "SELECT pg_advisory_xact_lock(hashtext('norm-catalogue'), hashtext(@artist))",
             new { artist = artistUuid.ToString() },
             tx
         );
@@ -118,7 +118,7 @@ public sealed class CatalogueLlm(INormalizationDatabase db, ICatalogueModel mode
         // A chunk whose answers were all rejected still leaves its recurring titles for review.
         if (answer.Keys.Count > 0 || unsure.Count > 0)
         {
-            var store = await KbStore.BeginAsync(
+            var store = await NormStore.BeginAsync(
                 connection,
                 tx,
                 AuthorTypes.Llm,
@@ -176,7 +176,7 @@ public sealed class CatalogueLlm(INormalizationDatabase db, ICatalogueModel mode
             .ToHashSet();
 
     /// The recurring titles (seen at ReviewMinShows or more) a chunk asked about and didn't
-    /// resolve, with what the model would have said: for the review pass and kb.review_items.
+    /// resolve, with what the model would have said: for the review pass and norm.review_items.
     internal static List<ReviewItem> Review(
         CatalogueAnswer answer,
         CatalogueRequest request,
@@ -238,12 +238,12 @@ public sealed class CatalogueLlm(INormalizationDatabase db, ICatalogueModel mode
         await connection.OpenAsync(cancellationToken);
         await using var tx = await connection.BeginTransactionAsync(cancellationToken);
         await connection.ExecuteAsync(
-            "SELECT pg_advisory_xact_lock(hashtext('kb-catalogue'), hashtext(@artist))",
+            "SELECT pg_advisory_xact_lock(hashtext('norm-catalogue'), hashtext(@artist))",
             new { artist = artistUuid.ToString() },
             tx
         );
 
-        var store = await KbStore.BeginAsync(
+        var store = await NormStore.BeginAsync(
             connection,
             tx,
             AuthorTypes.Llm,
@@ -430,7 +430,7 @@ public sealed class CatalogueLlm(INormalizationDatabase db, ICatalogueModel mode
     }
 
     private async Task<(int Songs, int Tracks)> Write(
-        KbStore store,
+        NormStore store,
         CatalogueState state,
         CatalogueAnswer answer,
         CatalogueRequest request,
@@ -477,7 +477,7 @@ public sealed class CatalogueLlm(INormalizationDatabase db, ICatalogueModel mode
                     sure.Where(k => k.Value.SongRefs.Contains(s.n.Ref)).Max(k => k.Value.Confidence)
                 ))
                 .ToList(),
-            KbWriteMode.FillOnly
+            NormWriteMode.FillOnly
         );
 
         // Song names, not titles (docs/llm.md §3). The answer's song_text is the span of the
@@ -533,7 +533,7 @@ public sealed class CatalogueLlm(INormalizationDatabase db, ICatalogueModel mode
             }
         }
 
-        await store.WriteAliasesAsync(aliasRecords, KbWriteMode.FillOnly);
+        await store.WriteAliasesAsync(aliasRecords, NormWriteMode.FillOnly);
 
         var updated = new CatalogueState
         {
@@ -550,11 +550,11 @@ public sealed class CatalogueLlm(INormalizationDatabase db, ICatalogueModel mode
         };
         await store.WriteEvidenceAsync(
             TrackMatcher.Evidence(updated, Threshold),
-            KbWriteMode.FillOnly
+            NormWriteMode.FillOnly
         );
         await store.WriteTrackSongsAsync(
             TrackMatcher.Match(updated, extra).Records,
-            KbWriteMode.FillOnly
+            NormWriteMode.FillOnly
         );
 
         // Tracks this run changed: an open medley re-matched to the same parts is not one.

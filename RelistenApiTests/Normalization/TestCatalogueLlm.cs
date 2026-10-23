@@ -15,7 +15,7 @@ using Temporalio.Exceptions;
 using Temporalio.Testing;
 using Temporalio.Worker;
 
-namespace RelistenApiTests.Kb;
+namespace RelistenApiTests.Normalization;
 
 /// A model that answers from the request alone: every group becomes one song named after its
 /// first spelling, except "mystery jam" (an unnamed jam) and "unknown thing" (unsure).
@@ -225,19 +225,19 @@ public class TestCatalogueLlm
         first.Done.Should().BeFalse();
         first.SongsCreated.Should().Be(2);
         first.Unresolved.Should().Equal("unknown thing");
-        (await Strings("SELECT name FROM kb.songs WHERE artist_uuid = @artist ORDER BY name"))
+        (await Strings("SELECT name FROM norm.songs WHERE artist_uuid = @artist ORDER BY name"))
             .Should()
             .Equal("Me And My Uncle", "Sugaree");
         (
             await Strings(
-                "SELECT normalized FROM kb.song_aliases WHERE artist_uuid = @artist ORDER BY 1"
+                "SELECT normalized FROM norm.song_aliases WHERE artist_uuid = @artist ORDER BY 1"
             )
         )
             .Should()
             .BeEmpty(); // song names match directly; the one-show typo is a ruling on its track
         (
             await Strings(
-                "SELECT s.name FROM kb.song_evidence e JOIN kb.songs s ON s.uuid = e.song_uuid JOIN setlist_songs ss ON ss.uuid = e.setlist_song_uuid WHERE ss.artist_id = @artistId"
+                "SELECT s.name FROM norm.song_evidence e JOIN norm.songs s ON s.uuid = e.song_uuid JOIN setlist_songs ss ON ss.uuid = e.setlist_song_uuid WHERE ss.artist_id = @artistId"
             )
         )
             .Should()
@@ -247,7 +247,7 @@ public class TestCatalogueLlm
                 """
                 SELECT t.title || ' = ' || coalesce(s.name, CASE WHEN ts.resolved THEN '-' ELSE '?' END) || ' (' || ts.basis || ')'
                 FROM source_tracks t
-                JOIN kb.track_songs ts ON ts.track_uuid = t.uuid LEFT JOIN kb.songs s ON s.uuid = ts.song_uuid
+                JOIN norm.track_songs ts ON ts.track_uuid = t.uuid LEFT JOIN norm.songs s ON s.uuid = ts.song_uuid
                 WHERE t.artist_id = @artistId ORDER BY t.track_position, ts.part
                 """
             )
@@ -264,7 +264,7 @@ public class TestCatalogueLlm
                 "Sugaree > Unknown Thing = Sugaree (song_name)",
                 "Sugaree > Unknown Thing = ? (open)"
             );
-        (await Strings("SELECT DISTINCT author_type FROM kb.songs WHERE artist_uuid = @artist"))
+        (await Strings("SELECT DISTINCT author_type FROM norm.songs WHERE artist_uuid = @artist"))
             .Should()
             .Equal("llm");
 
@@ -300,7 +300,7 @@ public class TestCatalogueLlm
         matched.TracksWritten.Should().Be(1);
         (
             await Strings(
-                "SELECT ts.author_type FROM kb.track_songs ts JOIN source_tracks t ON t.uuid = ts.track_uuid WHERE t.slug = 'new' AND t.artist_id = @artistId"
+                "SELECT ts.author_type FROM norm.track_songs ts JOIN source_tracks t ON t.uuid = ts.track_uuid WHERE t.slug = 'new' AND t.artist_id = @artistId"
             )
         )
             .Should()
@@ -328,12 +328,12 @@ public class TestCatalogueLlm
 
         await llm.RunChunkAsync(artist, [], CancellationToken.None);
 
-        (await Strings("SELECT name FROM kb.songs WHERE artist_uuid = @artist ORDER BY name"))
+        (await Strings("SELECT name FROM norm.songs WHERE artist_uuid = @artist ORDER BY name"))
             .Should()
             .Equal("Me And My Uncle", "Sugaree");
         (
             await Strings(
-                "SELECT s.name FROM kb.track_songs ts JOIN source_tracks t ON t.uuid = ts.track_uuid JOIN kb.songs s ON s.uuid = ts.song_uuid WHERE t.slug = 'uncle' AND t.artist_id = @artistId"
+                "SELECT s.name FROM norm.track_songs ts JOIN source_tracks t ON t.uuid = ts.track_uuid JOIN norm.songs s ON s.uuid = ts.song_uuid WHERE t.slug = 'uncle' AND t.artist_id = @artistId"
             )
         )
             .Should()
@@ -353,7 +353,7 @@ public class TestCatalogueLlm
         {
             var connection = (Npgsql.NpgsqlConnection)c;
             await using var tx = await connection.BeginTransactionAsync();
-            var store = await KbStore.BeginAsync(connection, tx, AuthorTypes.Moderator, "m1");
+            var store = await NormStore.BeginAsync(connection, tx, AuthorTypes.Moderator, "m1");
             var song = Guid.CreateVersion7();
             await store.WriteSongsAsync([new SongRecord(song, artist, "Unknown Thing")]);
             await store.WriteAliasesAsync([new AliasRecord(artist, "Unknown Thing", song)]);
@@ -367,7 +367,7 @@ public class TestCatalogueLlm
             await Strings(
                 """
                 SELECT coalesce(s.name, '?') || ':' || ts.resolved FROM source_tracks t
-                JOIN kb.track_songs ts ON ts.track_uuid = t.uuid LEFT JOIN kb.songs s ON s.uuid = ts.song_uuid
+                JOIN norm.track_songs ts ON ts.track_uuid = t.uuid LEFT JOIN norm.songs s ON s.uuid = ts.song_uuid
                 WHERE t.artist_id = @artistId AND t.title = 'Sugaree > Unknown Thing' ORDER BY ts.part
                 """
             )
@@ -387,7 +387,9 @@ public class TestCatalogueLlm
         chunk.Asked.Should().Contain("sugaree");
         chunk.Unresolved.Should().BeEquivalentTo(chunk.Asked);
         chunk.InputTokens.Should().Be(100);
-        (await Strings("SELECT name FROM kb.songs WHERE artist_uuid = @artist")).Should().BeEmpty();
+        (await Strings("SELECT name FROM norm.songs WHERE artist_uuid = @artist"))
+            .Should()
+            .BeEmpty();
     }
 
     [Test]
@@ -415,7 +417,7 @@ public class TestCatalogueLlm
         {
             var connection = (Npgsql.NpgsqlConnection)c;
             await using var tx = await connection.BeginTransactionAsync();
-            var store = await KbStore.BeginAsync(connection, tx, AuthorTypes.Moderator, "m1");
+            var store = await NormStore.BeginAsync(connection, tx, AuthorTypes.Moderator, "m1");
             var song = Guid.CreateVersion7();
             await store.WriteSongsAsync([new SongRecord(song, artist, "Unknown Thing")]);
             await store.WriteAliasesAsync([new AliasRecord(artist, "Unknown Thing", song)]);
@@ -429,19 +431,19 @@ public class TestCatalogueLlm
             await Strings(
                 """
                 SELECT coalesce(s.name, '?') || ':' || ts.resolved FROM source_tracks t
-                JOIN kb.track_songs ts ON ts.track_uuid = t.uuid LEFT JOIN kb.songs s ON s.uuid = ts.song_uuid
+                JOIN norm.track_songs ts ON ts.track_uuid = t.uuid LEFT JOIN norm.songs s ON s.uuid = ts.song_uuid
                 WHERE t.artist_id = @artistId AND t.slug = 'uncle' ORDER BY ts.part
                 """
             )
         ).Should().Equal("Me And My Uncle:true", "Unknown Thing:true");
     }
 
-    private Task AsModerator(Func<KbStore, Task> write) =>
+    private Task AsModerator(Func<NormStore, Task> write) =>
         db.WithWriteConnection(async c =>
         {
             var connection = (Npgsql.NpgsqlConnection)c;
             await using var tx = await connection.BeginTransactionAsync();
-            var store = await KbStore.BeginAsync(connection, tx, AuthorTypes.Moderator, "m1");
+            var store = await NormStore.BeginAsync(connection, tx, AuthorTypes.Moderator, "m1");
             await write(store);
             await store.FinishAsync();
             await tx.CommitAsync();
@@ -472,7 +474,7 @@ public class TestCatalogueLlm
             c.QueryAsync<string>(
                 """
                 SELECT coalesce(s.name, '-') || ' (' || ts.basis || ')' || coalesce(' [' || array_to_string(nullif(ts.qualifiers, '{}'), ',') || ']', '')
-                FROM source_tracks t JOIN kb.track_songs ts ON ts.track_uuid = t.uuid LEFT JOIN kb.songs s ON s.uuid = ts.song_uuid
+                FROM source_tracks t JOIN norm.track_songs ts ON ts.track_uuid = t.uuid LEFT JOIN norm.songs s ON s.uuid = ts.song_uuid
                 WHERE t.artist_id = @artistId AND t.slug = @slug ORDER BY ts.part
                 """,
                 new { artistId, slug }
@@ -482,7 +484,7 @@ public class TestCatalogueLlm
     private Task<Guid> SongNamed(string name) =>
         db.WithWriteConnection(c =>
             c.QuerySingleAsync<Guid>(
-                "SELECT uuid FROM kb.songs WHERE artist_uuid = @artist AND name = @name",
+                "SELECT uuid FROM norm.songs WHERE artist_uuid = @artist AND name = @name",
                 new { artist, name }
             )
         );
@@ -505,9 +507,9 @@ public class TestCatalogueLlm
         {
             var connection = (Npgsql.NpgsqlConnection)c;
             await using var tx = await connection.BeginTransactionAsync();
-            await KbStore.BeginAsync(connection, tx, AuthorTypes.Moderator, "m1", "merge");
+            await NormStore.BeginAsync(connection, tx, AuthorTypes.Moderator, "m1", "merge");
             await connection.ExecuteAsync(
-                "UPDATE kb.songs SET merged_into = @sugaree WHERE uuid = @duplicate",
+                "UPDATE norm.songs SET merged_into = @sugaree WHERE uuid = @duplicate",
                 new { sugaree, duplicate },
                 tx
             );
@@ -570,7 +572,12 @@ public class TestCatalogueLlm
         {
             var connection = (Npgsql.NpgsqlConnection)c;
             await using var tx = await connection.BeginTransactionAsync();
-            var bot = await KbStore.BeginAsync(connection, tx, AuthorTypes.Llm, "catalogue-llm@5");
+            var bot = await NormStore.BeginAsync(
+                connection,
+                tx,
+                AuthorTypes.Llm,
+                "catalogue-llm@5"
+            );
             await bot.WriteReviewItemsAsync([
                 new ReviewRecord(
                     artist,
@@ -606,7 +613,7 @@ public class TestCatalogueLlm
 
         (
             await Strings(
-                "SELECT key || ':' || (resolved_at IS NOT NULL) || ':' || coalesce(note, '') || ':' || coalesce(shows::text, '') FROM kb.review_items WHERE artist_uuid = @artist ORDER BY key"
+                "SELECT key || ':' || (resolved_at IS NOT NULL) || ':' || coalesce(note, '') || ':' || coalesce(shows::text, '') FROM norm.review_items WHERE artist_uuid = @artist ORDER BY key"
             )
         )
             .Should()
@@ -627,7 +634,12 @@ public class TestCatalogueLlm
         {
             var connection = (Npgsql.NpgsqlConnection)c;
             await using var tx = await connection.BeginTransactionAsync();
-            var bot = await KbStore.BeginAsync(connection, tx, AuthorTypes.Llm, "catalogue-llm@5");
+            var bot = await NormStore.BeginAsync(
+                connection,
+                tx,
+                AuthorTypes.Llm,
+                "catalogue-llm@5"
+            );
             await bot.WriteReviewItemsAsync([
                 new ReviewRecord(artist, "Mystery Jam", "mystery jam", Shows: 3),
             ]);
@@ -642,7 +654,7 @@ public class TestCatalogueLlm
 
         (
             await Strings(
-                "SELECT (resolved_at IS NOT NULL)::text FROM kb.review_items WHERE artist_uuid = @artist"
+                "SELECT (resolved_at IS NOT NULL)::text FROM norm.review_items WHERE artist_uuid = @artist"
             )
         )
             .Should()
@@ -710,14 +722,14 @@ public class TestCatalogueLlm
         // Derived rows aren't logged; the run counts them.
         (
             await Strings(
-                "SELECT DISTINCT c.after ->> 'basis' FROM kb.changes c JOIN source_tracks t ON t.uuid = (c.row_key ->> 'track_uuid')::uuid WHERE c.table_name = 'track_songs' AND c.after IS NOT NULL AND t.artist_id = @artistId"
+                "SELECT DISTINCT c.after ->> 'basis' FROM norm.changes c JOIN source_tracks t ON t.uuid = (c.row_key ->> 'track_uuid')::uuid WHERE c.table_name = 'track_songs' AND c.after IS NOT NULL AND t.artist_id = @artistId"
             )
         )
             .Should()
             .Equal("ruling");
         (
             await Strings(
-                "SELECT r.tracks_rebuilt::text FROM kb.runs r WHERE r.author_ref = 'title-matcher@2.0.0' ORDER BY r.started_at DESC LIMIT 1"
+                "SELECT r.tracks_rebuilt::text FROM norm.runs r WHERE r.author_ref = 'title-matcher@2.0.0' ORDER BY r.started_at DESC LIMIT 1"
             )
         )
             .Should()

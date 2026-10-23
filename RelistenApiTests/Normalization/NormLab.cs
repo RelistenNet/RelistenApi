@@ -10,17 +10,17 @@ using Relisten.Normalization;
 using Relisten.Normalization.Songs;
 using Relisten.Normalization.Titles;
 
-namespace RelistenApiTests.Kb;
+namespace RelistenApiTests.Normalization;
 
-/// The kb catalogue on real data: the lab database that local-dev/kb-lab.sh loads from the
+/// The norm catalogue on real data: the lab database that local-dev/norm-lab.sh loads from the
 /// production replica (a slice of artists across 1959–2026). Skipped unless
-/// KB_LAB_DATABASE_URL is set, e.g.
-///   KB_LAB_DATABASE_URL=postgresql://relisten:local_dev_password@127.0.0.1:15432/relisten_kb_lab
-///   KB_LAB_ARTISTS=phish,grateful-dead            (default: every artist in the lab)
-/// The LLM run also needs OPENAI_API_KEY and KB_LAB_MODEL (KB_LAB_MAX_CHUNKS caps the calls
+/// NORM_LAB_DATABASE_URL is set, e.g.
+///   NORM_LAB_DATABASE_URL=postgresql://relisten:local_dev_password@127.0.0.1:15432/relisten_norm_lab
+///   NORM_LAB_ARTISTS=phish,grateful-dead            (default: every artist in the lab)
+/// The LLM run also needs OPENAI_API_KEY and NORM_LAB_MODEL (NORM_LAB_MAX_CHUNKS caps the calls
 /// per artist, default 3); it writes to the lab itself so the results can be inspected.
-[TestFixture, NonParallelizable, Category("KbLab")]
-public class KbLab
+[TestFixture, NonParallelizable, Category("NormLab")]
+public class NormLab
 {
     private string labUrl = null!;
     private string? previousWrite;
@@ -29,10 +29,10 @@ public class KbLab
     [OneTimeSetUp]
     public void Start()
     {
-        labUrl = Environment.GetEnvironmentVariable("KB_LAB_DATABASE_URL") ?? "";
+        labUrl = Environment.GetEnvironmentVariable("NORM_LAB_DATABASE_URL") ?? "";
         if (labUrl.Length == 0)
         {
-            Assert.Ignore("KB_LAB_DATABASE_URL not set; load the lab with local-dev/kb-lab.sh");
+            Assert.Ignore("NORM_LAB_DATABASE_URL not set; load the lab with local-dev/norm-lab.sh");
         }
 
         previousWrite = DbService.ConnStr;
@@ -67,7 +67,7 @@ public class KbLab
 
     private async Task<List<(string Slug, Guid Uuid)>> Artists(NpgsqlConnection connection)
     {
-        var wanted = (Environment.GetEnvironmentVariable("KB_LAB_ARTISTS") ?? "").Split(
+        var wanted = (Environment.GetEnvironmentVariable("NORM_LAB_ARTISTS") ?? "").Split(
             ',',
             StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
         );
@@ -110,7 +110,7 @@ public class KbLab
     [Test]
     public async Task TheModelHoldsOnRealTitles()
     {
-        var scratch = "relisten_kb_lab_" + Guid.NewGuid().ToString("N")[..12];
+        var scratch = "relisten_norm_lab_" + Guid.NewGuid().ToString("N")[..12];
         await using (var admin = new NpgsqlConnection(Admin()))
         {
             await admin.OpenAsync();
@@ -121,7 +121,7 @@ public class KbLab
 
         try
         {
-            var db = Db(labUrl.Replace("/relisten_kb_lab", "/" + scratch));
+            var db = Db(labUrl.Replace("/relisten_norm_lab", "/" + scratch));
             await using var connection = await Open(db);
             foreach (var (slug, uuid) in await Artists(connection))
             {
@@ -143,7 +143,7 @@ public class KbLab
                 var first = await match.RunAsync(uuid, CancellationToken.None);
                 var elapsed = watch.Elapsed;
 
-                var evaluation = await KbEvaluation.EvaluateAsync(connection, slug);
+                var evaluation = await SongEvaluation.EvaluateAsync(connection, slug);
                 TestContext.Out.WriteLine($"{evaluation} [match {elapsed.TotalSeconds:F1}s]");
                 foreach (var d in evaluation.SampleDisagreements.Take(8))
                 {
@@ -157,17 +157,22 @@ public class KbLab
 
                 // The match run reverts exactly.
                 var run = await connection.ExecuteScalarAsync<Guid>(
-                    "SELECT r.uuid FROM kb.runs r WHERE r.author_ref = @Author AND EXISTS (SELECT 1 FROM kb.changes c WHERE c.run_uuid = r.uuid) ORDER BY r.started_at DESC LIMIT 1",
+                    "SELECT r.uuid FROM norm.runs r WHERE r.author_ref = @Author AND EXISTS (SELECT 1 FROM norm.changes c WHERE c.run_uuid = r.uuid) ORDER BY r.started_at DESC LIMIT 1",
                     new { TrackMatcher.Author }
                 );
                 await using var tx = await connection.BeginTransactionAsync();
-                var store = await KbStore.BeginAsync(connection, tx, AuthorTypes.Moderator, "lab");
+                var store = await NormStore.BeginAsync(
+                    connection,
+                    tx,
+                    AuthorTypes.Moderator,
+                    "lab"
+                );
                 var (reverted, skipped) = await store.RevertRunAsync(run);
                 skipped.Should().Be(0);
                 reverted.Should().BeGreaterThan(0);
                 (
                     await connection.ExecuteScalarAsync<long>(
-                        "SELECT count(*) FROM kb.track_songs WHERE run_uuid = @run",
+                        "SELECT count(*) FROM norm.track_songs WHERE run_uuid = @run",
                         new { run },
                         tx
                     )
@@ -194,15 +199,15 @@ public class KbLab
     [Test, Explicit("Calls OpenAI; run deliberately")]
     public async Task LlmCatalogue()
     {
-        var model = Environment.GetEnvironmentVariable("KB_LAB_MODEL");
+        var model = Environment.GetEnvironmentVariable("NORM_LAB_MODEL");
         var key = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
         if (string.IsNullOrEmpty(model) || string.IsNullOrEmpty(key))
         {
-            Assert.Ignore("KB_LAB_MODEL and OPENAI_API_KEY are needed");
+            Assert.Ignore("NORM_LAB_MODEL and OPENAI_API_KEY are needed");
         }
 
         var maxChunks = int.TryParse(
-            Environment.GetEnvironmentVariable("KB_LAB_MAX_CHUNKS"),
+            Environment.GetEnvironmentVariable("NORM_LAB_MAX_CHUNKS"),
             out var m
         )
             ? m
@@ -229,11 +234,11 @@ public class KbLab
             var curve = new List<int>();
             var unsure = new List<ReviewItem>();
             var watch = Stopwatch.StartNew();
-            var reviewOnly = Environment.GetEnvironmentVariable("KB_LAB_REVIEW_ONLY") == "1";
-            // KB_LAB_MATCH_ONLY=1: no LLM, only the deterministic match (after an expert's edits).
-            var matchOnly = Environment.GetEnvironmentVariable("KB_LAB_MATCH_ONLY") == "1";
-            // KB_LAB_ONLY_KEYS_FILE: lines of "artist<TAB>key"; ask only about those keys.
-            var onlyFile = Environment.GetEnvironmentVariable("KB_LAB_ONLY_KEYS_FILE");
+            var reviewOnly = Environment.GetEnvironmentVariable("NORM_LAB_REVIEW_ONLY") == "1";
+            // NORM_LAB_MATCH_ONLY=1: no LLM, only the deterministic match (after an expert's edits).
+            var matchOnly = Environment.GetEnvironmentVariable("NORM_LAB_MATCH_ONLY") == "1";
+            // NORM_LAB_ONLY_KEYS_FILE: lines of "artist<TAB>key"; ask only about those keys.
+            var onlyFile = Environment.GetEnvironmentVariable("NORM_LAB_ONLY_KEYS_FILE");
             var only = string.IsNullOrEmpty(onlyFile)
                 ? null
                 : File.ReadLines(onlyFile)
@@ -262,7 +267,7 @@ public class KbLab
             )
             {
                 var skip = new List<string>();
-                // KB_LAB_MAX_CHUNKS is the artist's whole budget, as in the workflow: the review
+                // NORM_LAB_MAX_CHUNKS is the artist's whole budget, as in the workflow: the review
                 // pass gets what the first pass left.
                 for (var passChunks = 0; chunks < maxChunks; passChunks++)
                 {
@@ -316,7 +321,7 @@ public class KbLab
             await new CatalogueMatch(
                 new Relisten.Services.Normalization.DbServiceNormalizationDatabase(db)
             ).RunAsync(uuid, CancellationToken.None);
-            var evaluation = await KbEvaluation.EvaluateAsync(connection, slug);
+            var evaluation = await SongEvaluation.EvaluateAsync(connection, slug);
             TestContext.Out.WriteLine(
                 $"{evaluation} [{model}: {chunks} chunks, {input} in / {output} out tokens, {songs} songs created, {watch.Elapsed.TotalSeconds:F0}s]"
             );
@@ -348,7 +353,7 @@ public class KbLab
         {
             if (
                 await connection.ExecuteScalarAsync<long>(
-                    "SELECT count(*) FROM kb.songs WHERE artist_uuid = @uuid",
+                    "SELECT count(*) FROM norm.songs WHERE artist_uuid = @uuid",
                     new { uuid }
                 ) == 0
             )
@@ -357,18 +362,18 @@ public class KbLab
             }
 
             var aliases = await connection.ExecuteScalarAsync<long>(
-                "SELECT count(*) FROM kb.song_aliases WHERE artist_uuid = @uuid",
+                "SELECT count(*) FROM norm.song_aliases WHERE artist_uuid = @uuid",
                 new { uuid }
             );
             TestContext.Out.WriteLine(
-                $"{await KbEvaluation.EvaluateAsync(connection, slug)}, {aliases} aliases"
+                $"{await SongEvaluation.EvaluateAsync(connection, slug)}, {aliases} aliases"
             );
         }
 
         TestContext.Out.WriteLine(
-            "kb.changes: "
+            "norm.changes: "
                 + await connection.ExecuteScalarAsync<string>(
-                    "SELECT count(*) || ' rows, ' || pg_size_pretty(pg_total_relation_size('kb.changes')) FROM kb.changes"
+                    "SELECT count(*) || ' rows, ' || pg_size_pretty(pg_total_relation_size('norm.changes')) FROM norm.changes"
                 )
         );
     }
@@ -419,7 +424,7 @@ public class KbLab
         {
             var names = (
                 await connection.QueryAsync<(Guid Uuid, string Name)>(
-                    "SELECT uuid, name FROM kb.songs WHERE artist_uuid = @uuid AND merged_into IS NULL",
+                    "SELECT uuid, name FROM norm.songs WHERE artist_uuid = @uuid AND merged_into IS NULL",
                     new { uuid }
                 )
             ).ToDictionary(s => s.Uuid, s => TitleNormalizer.Normalize(s.Name));
@@ -436,14 +441,14 @@ public class KbLab
                     string AuthorType,
                     float? Confidence
                 )>(
-                    "SELECT normalized, alias, song_uuid, author_type, confidence FROM kb.song_aliases WHERE artist_uuid = @uuid",
+                    "SELECT normalized, alias, song_uuid, author_type, confidence FROM norm.song_aliases WHERE artist_uuid = @uuid",
                     new { uuid }
                 )
             ).ToList();
             var known = names.Values.Concat(aliases.Select(a => a.Normalized)).ToHashSet();
 
             await using var tx = await connection.BeginTransactionAsync();
-            var store = await KbStore.BeginAsync(
+            var store = await NormStore.BeginAsync(
                 connection,
                 tx,
                 AuthorTypes.Algorithm,
@@ -491,7 +496,7 @@ public class KbLab
         IReadOnlyList<ReviewItem>? unsure = null
     )
     {
-        var dir = Environment.GetEnvironmentVariable("KB_LAB_REPORT_DIR");
+        var dir = Environment.GetEnvironmentVariable("NORM_LAB_REPORT_DIR");
         if (string.IsNullOrEmpty(dir))
         {
             return;
@@ -504,8 +509,8 @@ public class KbLab
             long Tracks
         )>(
             """
-            SELECT s.name, s.kind, s.original_artist, (SELECT count(DISTINCT ts.track_uuid) FROM kb.track_songs ts WHERE ts.song_uuid = s.uuid)
-            FROM kb.songs s WHERE s.artist_uuid = @artist ORDER BY 4 DESC, 1
+            SELECT s.name, s.kind, s.original_artist, (SELECT count(DISTINCT ts.track_uuid) FROM norm.track_songs ts WHERE ts.song_uuid = s.uuid)
+            FROM norm.songs s WHERE s.artist_uuid = @artist ORDER BY 4 DESC, 1
             """,
             new { artist }
         );
@@ -518,8 +523,8 @@ public class KbLab
         )>(
             """
             SELECT t.title, s.name, ts.text, ts.confidence, ts.author_ref
-            FROM kb.track_songs ts JOIN source_tracks t ON t.uuid = ts.track_uuid
-            LEFT JOIN kb.songs s ON s.uuid = ts.song_uuid
+            FROM norm.track_songs ts JOIN source_tracks t ON t.uuid = ts.track_uuid
+            LEFT JOIN norm.songs s ON s.uuid = ts.song_uuid
             WHERE t.artist_id = (SELECT id FROM artists WHERE uuid = @artist)
             ORDER BY md5(ts.track_uuid::text || ts.part) LIMIT 40
             """,
@@ -600,7 +605,7 @@ public class KbLab
             .ToList();
 
         await using var tx = await connection.BeginTransactionAsync();
-        var store = await KbStore.BeginAsync(
+        var store = await NormStore.BeginAsync(
             connection,
             tx,
             AuthorTypes.Importer,
@@ -633,15 +638,15 @@ public class KbLab
         )>(
             """
             SELECT
-                (SELECT count(*) FROM kb.track_songs ts JOIN source_tracks t ON t.uuid = ts.track_uuid
-                 JOIN artists a ON a.id = t.artist_id JOIN kb.songs s ON s.uuid = ts.song_uuid
+                (SELECT count(*) FROM norm.track_songs ts JOIN source_tracks t ON t.uuid = ts.track_uuid
+                 JOIN artists a ON a.id = t.artist_id JOIN norm.songs s ON s.uuid = ts.song_uuid
                  WHERE s.artist_uuid <> a.uuid),
-                (SELECT count(*) FROM kb.song_aliases al JOIN kb.songs s ON s.uuid = al.song_uuid WHERE s.artist_uuid <> al.artist_uuid),
-                (SELECT count(*) FROM kb.song_evidence e JOIN setlist_songs ss ON ss.uuid = e.setlist_song_uuid
-                 JOIN artists a ON a.id = ss.artist_id JOIN kb.songs s ON s.uuid = e.song_uuid WHERE s.artist_uuid <> a.uuid),
-                (SELECT count(*) FROM kb.songs s WHERE NOT EXISTS (
-                    SELECT 1 FROM kb.changes c WHERE c.table_name = 'songs' AND c.row_key = jsonb_build_object('uuid', s.uuid))),
-                (SELECT count(*) FROM kb.track_songs ts WHERE NOT EXISTS (SELECT 1 FROM kb.runs r WHERE r.uuid = ts.run_uuid))
+                (SELECT count(*) FROM norm.song_aliases al JOIN norm.songs s ON s.uuid = al.song_uuid WHERE s.artist_uuid <> al.artist_uuid),
+                (SELECT count(*) FROM norm.song_evidence e JOIN setlist_songs ss ON ss.uuid = e.setlist_song_uuid
+                 JOIN artists a ON a.id = ss.artist_id JOIN norm.songs s ON s.uuid = e.song_uuid WHERE s.artist_uuid <> a.uuid),
+                (SELECT count(*) FROM norm.songs s WHERE NOT EXISTS (
+                    SELECT 1 FROM norm.changes c WHERE c.table_name = 'songs' AND c.row_key = jsonb_build_object('uuid', s.uuid))),
+                (SELECT count(*) FROM norm.track_songs ts WHERE NOT EXISTS (SELECT 1 FROM norm.runs r WHERE r.uuid = ts.run_uuid))
             """
         );
         violations

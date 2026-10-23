@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- Catalogue normalization (string-theory ddl/002_kb.sql): the kb store, title and venue
+  <!-- Catalogue normalization (string-theory ddl/002_norm.sql): the norm store, title and venue
        matching, the LLM catalogue and their Temporal workflows. RelistenApi keeps only what is
        API-specific (the migration runner's thin classes, and read queries after cutover). -->
   <PropertyGroup>

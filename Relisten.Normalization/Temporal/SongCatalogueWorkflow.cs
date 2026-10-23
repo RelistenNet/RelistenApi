@@ -12,7 +12,7 @@ namespace Relisten.Normalization.Temporal;
 /// MaxChunks caps the LLM calls of one run (null: until nothing is left to ask). Reask lists
 /// titles to ask about again (a targeted re-ask): their machine decisions are forgotten first
 /// and the run asks about nothing else.
-public sealed record BuildKbCatalogue(
+public sealed record BuildSongCatalogue(
     Guid Artist,
     int? MaxChunks = null,
     IReadOnlyList<string>? Reask = null
@@ -20,7 +20,7 @@ public sealed record BuildKbCatalogue(
 
 /// TracksPerChunk is the run's returns curve; StillUnsure the recurring titles that neither
 /// pass resolved, most-played first (at most 50), for a person.
-public sealed record KbCatalogueResult(
+public sealed record SongCatalogueResult(
     int Chunks,
     int SongsCreated,
     int KeysResolved,
@@ -35,11 +35,11 @@ public sealed record KbCatalogueResult(
 }
 
 /// Builds or extends one artist's song catalogue with the LLM (string-theory docs/llm.md §3),
-/// then places every track it can. Started by hand (worker --kb-llm-catalogue); a finished
+/// then places every track it can. Started by hand (worker --norm-songs); a finished
 /// band's catalogue may be built once, a touring band's re-run as titles arrive. Each run
 /// asks only about titles nothing resolves yet, and never changes an existing row.
 [Workflow]
-public class KbCatalogueWorkflow
+public class SongCatalogueWorkflow
 {
     private static readonly ActivityOptions Step = new()
     {
@@ -68,10 +68,10 @@ public class KbCatalogueWorkflow
     private const int FailuresInARow = 3;
 
     [WorkflowRun]
-    public async Task<KbCatalogueResult> RunAsync(BuildKbCatalogue request)
+    public async Task<SongCatalogueResult> RunAsync(BuildSongCatalogue request)
     {
         var artist = request.Artist;
-        var total = new KbCatalogueResult(0, 0, 0, 0, 0, 0, 0);
+        var total = new SongCatalogueResult(0, 0, 0, 0, 0, 0, 0);
         var curve = new List<int>();
         // The recurring titles left unsure, by key: a first-pass item stays unless the review
         // pass asks about it again, so a run whose cap ends in the first pass still lists them.
@@ -81,7 +81,7 @@ public class KbCatalogueWorkflow
         if (only != null)
         {
             await Workflow.ExecuteActivityAsync(
-                (KbActivities a) => a.ForgetDecisions(new KbForgetInput(artist, only)),
+                (SongActivities a) => a.ForgetDecisions(new SongForgetInput(artist, only)),
                 Step
             );
         }
@@ -99,7 +99,7 @@ public class KbCatalogueWorkflow
         }
 
         var matched = await Workflow.ExecuteActivityAsync(
-            (KbActivities a) => a.MatchTracks(artist),
+            (SongActivities a) => a.MatchTracks(artist),
             Step
         );
         return total with
@@ -110,11 +110,11 @@ public class KbCatalogueWorkflow
         };
     }
 
-    private static async Task<KbCatalogueResult> Pass(
+    private static async Task<SongCatalogueResult> Pass(
         Guid artist,
         bool review,
         int? maxChunks,
-        KbCatalogueResult total,
+        SongCatalogueResult total,
         List<int> curve,
         Dictionary<string, ReviewItem> unsure,
         IReadOnlyList<string>? only
@@ -129,8 +129,8 @@ public class KbCatalogueWorkflow
             try
             {
                 chunk = await Workflow.ExecuteActivityAsync(
-                    (KbActivities a) =>
-                        a.CatalogueChunk(new KbCatalogueChunkInput(artist, skip, review, only)),
+                    (SongActivities a) =>
+                        a.CatalogueChunk(new SongCatalogueChunkInput(artist, skip, review, only)),
                     ChunkStep
                 );
                 failures = 0;

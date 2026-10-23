@@ -38,8 +38,8 @@ internal sealed class IngestionOperatorCommands(
             "rebuild-artist" => (
                 await imports.RebuildArtistCatalogAsync(new RebuildArtistCatalog(artistId))
             ).WorkflowId,
-            "kb-llm-catalogue" => await normalization.BuildSongCatalogueAsync(
-                new BuildKbCatalogue(artistId.Value, MaxChunks(), ReaskTitles())
+            "norm-songs" => await normalization.BuildSongCatalogueAsync(
+                new BuildSongCatalogue(artistId.Value, MaxChunks(), ReaskTitles())
             ),
             "repair-jerry-venues" => (
                 await imports.RepairJerryVenuesAsync(new RepairJerryVenues(artistId))

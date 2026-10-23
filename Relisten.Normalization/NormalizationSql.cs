@@ -3,7 +3,7 @@ using System.IO;
 
 namespace Relisten.Normalization;
 
-/// The kb DDL, embedded from Sql/: copied verbatim from RelistenNet/string-theory ddl/, so it
+/// The norm DDL, embedded from Sql/: copied verbatim from RelistenNet/string-theory ddl/, so it
 /// stays diffable. RelistenApi's migrations run it in the shared migration sequence.
 public static class NormalizationSql
 {

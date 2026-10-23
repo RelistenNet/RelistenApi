@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Builds relisten_kb_lab: a local copy of a few real artists from the production read-only
-# replica, migrated to the latest schema, so the kb song catalogue can be exercised on real
+# Builds relisten_norm_lab: a local copy of a few real artists from the production read-only
+# replica, migrated to the latest schema, so the norm song catalogue can be exercised on real
 # data before its schema is ratified for production. Production is only read
 # (default_transaction_read_only); everything is written to the local lab database.
 #
-# Usage: ./local-dev/kb-lab.sh [--reset] SLUG...
-#   --reset   drop and recreate relisten_kb_lab first
+# Usage: ./local-dev/norm-lab.sh [--reset] SLUG...
+#   --reset   drop and recreate relisten_norm_lab first
 # Reloading an artist replaces its rows. Needs psql (libpq) on PATH or in PSQL, kubectl
 # access to the relisten3 context (KUBE_CONTEXT), and the local services running.
 
@@ -13,7 +13,7 @@ set -Eeuo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 repo_dir="$(dirname "$script_dir")"
-readonly LAB_DB="relisten_kb_lab"
+readonly LAB_DB="relisten_norm_lab"
 readonly KUBE_CONTEXT="${KUBE_CONTEXT:-relisten3}"
 readonly PROD_HOST="relisten-db-ro.tail09dbf.ts.net"
 PSQL="${PSQL:-$(command -v psql || echo /opt/homebrew/opt/libpq/bin/psql)}"
@@ -70,7 +70,7 @@ filter() {
 }
 
 # Approvals are the lab's own decisions: keep them across a reload of the artist's rows.
-approved="$(local_psql -d "$LAB_DB" -Atc "SELECT coalesce(string_agg(artist_id::text, ','), '') FROM features WHERE artist_id IN ($ids) AND kb_catalogue" 2>/dev/null || true)"
+approved="$(local_psql -d "$LAB_DB" -Atc "SELECT coalesce(string_agg(artist_id::text, ','), '') FROM features WHERE artist_id IN ($ids) AND norm_catalogue" 2>/dev/null || true)"
 
 # Foreign keys and triggers stay off while rows arrive out of order (session_replication_role).
 for ((i = ${#tables[@]} - 1; i >= 0; i--)); do
@@ -79,7 +79,7 @@ for ((i = ${#tables[@]} - 1; i >= 0; i--)); do
 done
 for t in "${tables[@]}"; do
   # The columns both sides have: once migrated, the lab has columns production doesn't yet
-  # (features.kb_catalogue); those keep their defaults.
+  # (features.norm_catalogue); those keep their defaults.
   local_cols="$(local_psql -d "$LAB_DB" -Atc "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '$t' AND is_generated = 'NEVER' ORDER BY ordinal_position")"
   prod_cols="$(prod_psql -Atc "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '$t'")"
   cols="$(grep -Fxf <(echo "$prod_cols") <(echo "$local_cols") | sed 's/.*/"&"/' | paste -sd, -)"
@@ -89,7 +89,7 @@ for t in "${tables[@]}"; do
 done
 
 if [[ -n "$approved" ]]; then
-  local_psql -d "$LAB_DB" -c "UPDATE features SET kb_catalogue = true WHERE artist_id IN ($approved)" > /dev/null
+  local_psql -d "$LAB_DB" -c "UPDATE features SET norm_catalogue = true WHERE artist_id IN ($approved)" > /dev/null
 fi
 
 # Sequences past the copied ids, so local inserts don't collide.

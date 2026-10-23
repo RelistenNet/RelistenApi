@@ -6,21 +6,21 @@ using Temporalio.Activities;
 
 namespace Relisten.Normalization.Temporal;
 
-public sealed record KbCatalogueChunkInput(
+public sealed record SongCatalogueChunkInput(
     Guid Artist,
     IReadOnlyList<string> Skip,
     bool Review = false,
     IReadOnlyList<string>? Only = null
 );
 
-public sealed record KbForgetInput(Guid Artist, IReadOnlyList<string> Spellings);
+public sealed record SongForgetInput(Guid Artist, IReadOnlyList<string> Spellings);
 
-/// The kb catalogue's steps. Each reads the artist's state fresh from the database, so a
+/// The norm catalogue's steps. Each reads the artist's state fresh from the database, so a
 /// retried or resumed step continues from what earlier steps committed.
-public sealed class KbActivities(CatalogueLlm llm, CatalogueMatch match)
+public sealed class SongActivities(CatalogueLlm llm, CatalogueMatch match)
 {
-    [Activity("Kb.CatalogueChunk")]
-    public async Task<CatalogueChunkResult> CatalogueChunk(KbCatalogueChunkInput input)
+    [Activity("Songs.CatalogueChunk")]
+    public async Task<CatalogueChunkResult> CatalogueChunk(SongCatalogueChunkInput input)
     {
         using var heartbeat = new ActivityHeartbeat();
         return await llm.RunChunkAsync(
@@ -34,8 +34,8 @@ public sealed class KbActivities(CatalogueLlm llm, CatalogueMatch match)
 
     /// The first step of a targeted re-ask: forget the machine's decisions about these
     /// spellings so the passes after it ask again.
-    [Activity("Kb.ForgetDecisions")]
-    public async Task<int> ForgetDecisions(KbForgetInput input)
+    [Activity("Songs.ForgetDecisions")]
+    public async Task<int> ForgetDecisions(SongForgetInput input)
     {
         using var heartbeat = new ActivityHeartbeat();
         var (_, tracks) = await llm.ForgetAsync(
@@ -46,7 +46,7 @@ public sealed class KbActivities(CatalogueLlm llm, CatalogueMatch match)
         return tracks;
     }
 
-    [Activity("Kb.MatchTracks")]
+    [Activity("Songs.MatchTracks")]
     public async Task<CatalogueMatchResult> MatchTracks(Guid artist)
     {
         using var heartbeat = new ActivityHeartbeat();

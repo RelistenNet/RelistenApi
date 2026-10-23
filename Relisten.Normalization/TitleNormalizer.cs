@@ -7,7 +7,7 @@ namespace Relisten.Normalization;
 
 /// The normalisation every title lookup uses (string-theory docs/matching.md T1 step 2):
 /// accents folded, lowercase, `&` → and, apostrophes dropped, other punctuation to spaces,
-/// and a small token map (st → saint). kb.song_aliases.normalized holds
+/// and a small token map (st → saint). norm.song_aliases.normalized holds
 /// its output, so changing it means bumping Version and recomputing that column.
 public static class TitleNormalizer
 {

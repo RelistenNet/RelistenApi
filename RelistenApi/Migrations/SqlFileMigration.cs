@@ -4,7 +4,7 @@ using SimpleMigrations;
 
 namespace Migrations;
 
-// Runs files embedded from Migrations/Sql. The kb, media and reality schemas are copied
+// Runs files embedded from Migrations/Sql. The norm, media and reality schemas are copied
 // verbatim from the ratified DDL in RelistenNet/string-theory (ddl/), so they stay diffable.
 public abstract class SqlFileMigration : Migration
 {
@@ -26,7 +26,7 @@ public abstract class SqlFileMigration : Migration
     protected override void Down()
     {
         throw new NotSupportedException(
-            "The kb, media and reality schemas are append-only; roll forward."
+            "The norm, media and reality schemas are append-only; roll forward."
         );
     }
 }

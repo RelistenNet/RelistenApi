@@ -28,7 +28,7 @@ var operations = new[]
     "batch",
     "cancel",
     "rebuild-artist",
-    "kb-llm-catalogue",
+    "norm-songs",
     "repair-jerry-venues",
 }
     .Where(key => builder.Configuration[key] != null)

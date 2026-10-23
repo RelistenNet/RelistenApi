@@ -3,10 +3,10 @@ using FluentAssertions;
 using Npgsql;
 using Relisten.Normalization;
 
-namespace RelistenApiTests.Kb;
+namespace RelistenApiTests.Normalization;
 
 [Category("LocalIngestion")]
-public class TestKbStore
+public class TestNormStore
 {
     private NpgsqlConnection db = null!;
     private NpgsqlTransaction tx = null!;
@@ -31,18 +31,18 @@ public class TestKbStore
     }
 
     // Each store is its own run; a later one resets the transaction's author.
-    private Task<KbStore> As(string authorType, string authorRef) =>
-        KbStore.BeginAsync(db, tx, authorType, authorRef);
+    private Task<NormStore> As(string authorType, string authorRef) =>
+        NormStore.BeginAsync(db, tx, authorType, authorRef);
 
     private Task<string> NameOf(Guid song) =>
         db.QuerySingleAsync<string>(
-            "SELECT name FROM kb.songs WHERE uuid = @song",
+            "SELECT name FROM norm.songs WHERE uuid = @song",
             new { song },
             tx
         );
 
     private Task<long> Changes() =>
-        db.ExecuteScalarAsync<long>("SELECT count(*) FROM kb.changes", transaction: tx);
+        db.ExecuteScalarAsync<long>("SELECT count(*) FROM norm.changes", transaction: tx);
 
     [Test]
     public async Task ReRunningABotChangesAndLogsNothing()
@@ -95,7 +95,7 @@ public class TestKbStore
         await As(AuthorTypes.Algorithm, "matcher@1");
 
         var delete = () =>
-            db.ExecuteAsync("DELETE FROM kb.songs WHERE uuid = @song", new { song }, tx);
+            db.ExecuteAsync("DELETE FROM norm.songs WHERE uuid = @song", new { song }, tx);
 
         await delete.Should().ThrowAsync<PostgresException>().WithMessage("*set by a person*");
     }
@@ -110,7 +110,7 @@ public class TestKbStore
 
         var written = await (await As(AuthorTypes.Llm, "catalogue-llm@2")).WriteSongsAsync(
             [new SongRecord(song, artist, "Sugaree Jam", Confidence: 0.97f)],
-            KbWriteMode.FillOnly
+            NormWriteMode.FillOnly
         );
 
         written.Should().Be(0);
@@ -128,7 +128,7 @@ public class TestKbStore
 
         (
             await db.QueryAsync<string>(
-                "SELECT slug FROM kb.songs WHERE artist_uuid = @artist ORDER BY uuid",
+                "SELECT slug FROM norm.songs WHERE artist_uuid = @artist ORDER BY uuid",
                 new { artist },
                 tx
             )
@@ -173,7 +173,7 @@ public class TestKbStore
 
         (
             await db.QueryAsync<(int, string)>(
-                "SELECT part, array_to_string(qualifiers, ',') FROM kb.track_songs WHERE track_uuid = @track ORDER BY part",
+                "SELECT part, array_to_string(qualifiers, ',') FROM norm.track_songs WHERE track_uuid = @track ORDER BY part",
                 new { track },
                 tx
             )
@@ -182,7 +182,7 @@ public class TestKbStore
             .Equal((1, ""), (2, "partial"));
         (
             await db.QueryAsync<string>(
-                "SELECT op FROM kb.changes WHERE table_name = 'track_songs' AND row_key ->> 'track_uuid' = @t ORDER BY id",
+                "SELECT op FROM norm.changes WHERE table_name = 'track_songs' AND row_key ->> 'track_uuid' = @t ORDER BY id",
                 new { t = track.ToString() },
                 tx
             )
@@ -234,7 +234,7 @@ public class TestKbStore
         (await Snapshot()).Should().Be(before);
         (
             await db.QueryAsync<string>(
-                "SELECT DISTINCT author_ref FROM kb.changes WHERE run_uuid = @Run",
+                "SELECT DISTINCT author_ref FROM norm.changes WHERE run_uuid = @Run",
                 new { moderator.Run },
                 transaction: tx
             )
@@ -304,8 +304,8 @@ public class TestKbStore
     private Task<string> Snapshot() =>
         db.QuerySingleAsync<string>(
             """
-            SELECT coalesce((SELECT string_agg(uuid || name, ',' ORDER BY uuid) FROM kb.songs WHERE artist_uuid = @artist), '')
-                || '|' || coalesce((SELECT string_agg(normalized, ',') FROM kb.song_aliases WHERE artist_uuid = @artist), '')
+            SELECT coalesce((SELECT string_agg(uuid || name, ',' ORDER BY uuid) FROM norm.songs WHERE artist_uuid = @artist), '')
+                || '|' || coalesce((SELECT string_agg(normalized, ',') FROM norm.song_aliases WHERE artist_uuid = @artist), '')
             """,
             new { artist },
             tx
@@ -333,7 +333,7 @@ public class TestKbStore
         forgotten.Aliases.Should().Be(1);
         (
             await db.ExecuteScalarAsync<long>(
-                "SELECT count(*) FROM kb.track_songs WHERE track_uuid = @kept",
+                "SELECT count(*) FROM norm.track_songs WHERE track_uuid = @kept",
                 new { kept },
                 tx
             )
@@ -384,7 +384,7 @@ public class TestKbStore
                 ),
                 new TrackPartRecord(settled, 1, a, "Funky Bitch", Confidence: 0.95f),
             ],
-            KbWriteMode.FillOnly
+            NormWriteMode.FillOnly
         );
 
         var later = await As(AuthorTypes.Llm, "catalogue-llm@4");
@@ -394,12 +394,12 @@ public class TestKbStore
                 new TrackPartRecord(open, 2, b, "The Pendulum", Confidence: 0.95f),
                 new TrackPartRecord(settled, 1, b, "Funky Bitch", Confidence: 0.99f),
             ],
-            KbWriteMode.FillOnly
+            NormWriteMode.FillOnly
         );
 
         (
             await db.QueryAsync<(Guid, int, Guid?, bool)>(
-                "SELECT track_uuid, part, song_uuid, resolved FROM kb.track_songs WHERE track_uuid IN (@open, @settled) ORDER BY track_uuid = @settled, part",
+                "SELECT track_uuid, part, song_uuid, resolved FROM norm.track_songs WHERE track_uuid IN (@open, @settled) ORDER BY track_uuid = @settled, part",
                 new { open, settled },
                 tx
             )

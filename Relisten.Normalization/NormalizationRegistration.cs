@@ -20,10 +20,10 @@ public static class NormalizationRegistration
     /// Normalization's workflows, on the host's workflow worker.
     public static ITemporalWorkerServiceOptionsBuilder AddNormalizationWorkflows(
         this ITemporalWorkerServiceOptionsBuilder workflows
-    ) => workflows.AddWorkflow<KbCatalogueWorkflow>();
+    ) => workflows.AddWorkflow<SongCatalogueWorkflow>();
 
     /// Normalization's database steps, on the host's database worker.
     public static ITemporalWorkerServiceOptionsBuilder AddNormalizationActivities(
         this ITemporalWorkerServiceOptionsBuilder database
-    ) => database.AddScopedActivities<KbActivities>();
+    ) => database.AddScopedActivities<SongActivities>();
 }

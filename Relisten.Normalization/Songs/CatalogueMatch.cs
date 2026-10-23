@@ -23,13 +23,13 @@ public sealed class CatalogueMatch(INormalizationDatabase db)
         await connection.OpenAsync(cancellationToken);
         await using var tx = await connection.BeginTransactionAsync(cancellationToken);
         await connection.ExecuteAsync(
-            "SELECT pg_advisory_xact_lock(hashtext('kb-catalogue'), hashtext(@artist))",
+            "SELECT pg_advisory_xact_lock(hashtext('norm-catalogue'), hashtext(@artist))",
             new { artist = artistUuid.ToString() },
             tx
         );
 
         var state = await CatalogueState.LoadAsync(connection, tx, artistUuid, allTracks: true);
-        var store = await KbStore.BeginAsync(
+        var store = await NormStore.BeginAsync(
             connection,
             tx,
             AuthorTypes.Algorithm,
@@ -37,7 +37,7 @@ public sealed class CatalogueMatch(INormalizationDatabase db)
         );
         var evidence = await store.WriteEvidenceAsync(
             TrackMatcher.Evidence(state),
-            KbWriteMode.FillOnly
+            NormWriteMode.FillOnly
         );
         var match = TrackMatcher.Match(state);
         await store.ClearTracksAsync(match.Cleared);

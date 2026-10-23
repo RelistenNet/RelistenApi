@@ -117,7 +117,7 @@ public class TestCatalogueAnswers
 /// The workflow loops until a step reports nothing left, carrying unresolved keys forward,
 /// then runs the deterministic match.
 [TestFixture, NonParallelizable]
-public class TestKbCatalogueWorkflow
+public class TestSongCatalogueWorkflow
 {
     private WorkflowEnvironment environment = null!;
 
@@ -138,8 +138,8 @@ public class TestKbCatalogueWorkflow
         /// The first chunk fails after (say) its model call.
         public bool FailFirst { get; init; }
 
-        [Activity("Kb.CatalogueChunk")]
-        public CatalogueChunkResult CatalogueChunk(KbCatalogueChunkInput input)
+        [Activity("Songs.CatalogueChunk")]
+        public CatalogueChunkResult CatalogueChunk(SongCatalogueChunkInput input)
         {
             Attempts++;
             if (FailFirst && Attempts == 1)
@@ -165,14 +165,14 @@ public class TestKbCatalogueWorkflow
                 : new CatalogueChunkResult(true, 0, 0, [], [], [], 0, 0, 0, 0);
         }
 
-        [Activity("Kb.ForgetDecisions")]
-        public int ForgetDecisions(KbForgetInput input)
+        [Activity("Songs.ForgetDecisions")]
+        public int ForgetDecisions(SongForgetInput input)
         {
             Forgotten.AddRange(input.Spellings);
             return 1;
         }
 
-        [Activity("Kb.MatchTracks")]
+        [Activity("Songs.MatchTracks")]
         public CatalogueMatchResult MatchTracks(Guid artist)
         {
             Matches++;
@@ -188,7 +188,7 @@ public class TestKbCatalogueWorkflow
             environment.Client,
             new TemporalWorkerOptions(
                 NormalizationQueues.Workflows
-            ).AddWorkflow<KbCatalogueWorkflow>()
+            ).AddWorkflow<SongCatalogueWorkflow>()
         );
         using var database = new TemporalWorker(
             environment.Client,
@@ -198,7 +198,7 @@ public class TestKbCatalogueWorkflow
         var result = await workflows.ExecuteAsync(() =>
             database.ExecuteAsync(() =>
                 environment.Client.ExecuteWorkflowAsync(
-                    (KbCatalogueWorkflow w) => w.RunAsync(new BuildKbCatalogue(Guid.NewGuid())),
+                    (SongCatalogueWorkflow w) => w.RunAsync(new BuildSongCatalogue(Guid.NewGuid())),
                     new WorkflowOptions("test/" + Guid.NewGuid(), NormalizationQueues.Workflows)
                 )
             )
@@ -210,7 +210,7 @@ public class TestKbCatalogueWorkflow
         result
             .Should()
             .BeEquivalentTo(
-                new KbCatalogueResult(2, 6, 80, 2, 207, 2000, 400),
+                new SongCatalogueResult(2, 6, 80, 2, 207, 2000, 400),
                 o => o.Excluding(r => r.TracksPerChunk).Excluding(r => r.StillUnsure)
             );
         result.TracksPerChunk.Should().Equal(100, 100);
@@ -225,7 +225,7 @@ public class TestKbCatalogueWorkflow
             environment.Client,
             new TemporalWorkerOptions(
                 NormalizationQueues.Workflows
-            ).AddWorkflow<KbCatalogueWorkflow>()
+            ).AddWorkflow<SongCatalogueWorkflow>()
         );
         using var database = new TemporalWorker(
             environment.Client,
@@ -235,9 +235,9 @@ public class TestKbCatalogueWorkflow
         await workflows.ExecuteAsync(() =>
             database.ExecuteAsync(() =>
                 environment.Client.ExecuteWorkflowAsync(
-                    (KbCatalogueWorkflow w) =>
+                    (SongCatalogueWorkflow w) =>
                         w.RunAsync(
-                            new BuildKbCatalogue(
+                            new BuildSongCatalogue(
                                 Guid.NewGuid(),
                                 null,
                                 new[] { "Let Me Lie", "Mellow Mood" }
@@ -260,7 +260,7 @@ public class TestKbCatalogueWorkflow
             environment.Client,
             new TemporalWorkerOptions(
                 NormalizationQueues.Workflows
-            ).AddWorkflow<KbCatalogueWorkflow>()
+            ).AddWorkflow<SongCatalogueWorkflow>()
         );
         using var database = new TemporalWorker(
             environment.Client,
@@ -270,8 +270,8 @@ public class TestKbCatalogueWorkflow
         var result = await workflows.ExecuteAsync(() =>
             database.ExecuteAsync(() =>
                 environment.Client.ExecuteWorkflowAsync(
-                    (KbCatalogueWorkflow w) =>
-                        w.RunAsync(new BuildKbCatalogue(Guid.NewGuid(), 2, null)),
+                    (SongCatalogueWorkflow w) =>
+                        w.RunAsync(new BuildSongCatalogue(Guid.NewGuid(), 2, null)),
                     new WorkflowOptions("test/" + Guid.NewGuid(), NormalizationQueues.Workflows)
                 )
             )
@@ -292,7 +292,7 @@ public class TestKbCatalogueWorkflow
             environment.Client,
             new TemporalWorkerOptions(
                 NormalizationQueues.Workflows
-            ).AddWorkflow<KbCatalogueWorkflow>()
+            ).AddWorkflow<SongCatalogueWorkflow>()
         );
         using var database = new TemporalWorker(
             environment.Client,
@@ -302,8 +302,8 @@ public class TestKbCatalogueWorkflow
         var result = await workflows.ExecuteAsync(() =>
             database.ExecuteAsync(() =>
                 environment.Client.ExecuteWorkflowAsync(
-                    (KbCatalogueWorkflow w) =>
-                        w.RunAsync(new BuildKbCatalogue(Guid.NewGuid(), 2, null)),
+                    (SongCatalogueWorkflow w) =>
+                        w.RunAsync(new BuildSongCatalogue(Guid.NewGuid(), 2, null)),
                     new WorkflowOptions("test/" + Guid.NewGuid(), NormalizationQueues.Workflows)
                 )
             )

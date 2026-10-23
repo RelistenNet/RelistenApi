@@ -18,13 +18,13 @@ public sealed class NormalizationClient(ITemporalClient client)
 {
     /// Starts the LLM song catalogue for one artist. Its workflow id is separate from imports,
     /// so a long run never blocks the artist's import; one run per artist at a time.
-    public async Task<string> BuildSongCatalogueAsync(BuildKbCatalogue request)
+    public async Task<string> BuildSongCatalogueAsync(BuildSongCatalogue request)
     {
-        var workflowId = "kb/catalogue/" + request.Artist;
+        var workflowId = "norm/songs/" + request.Artist;
         try
         {
             var handle = await client.StartWorkflowAsync(
-                (KbCatalogueWorkflow workflow) => workflow.RunAsync(request),
+                (SongCatalogueWorkflow workflow) => workflow.RunAsync(request),
                 new WorkflowOptions(workflowId, NormalizationQueues.Workflows)
                 {
                     ExecutionTimeout = TimeSpan.FromDays(7),

@@ -101,8 +101,8 @@ public sealed class CatalogueState
             WHERE t.artist_id = @Id AND NOT t.is_orphaned
               -- unresolved: no parts yet, or a part nobody has placed (an open medley)
               AND (@allTracks
-                   OR NOT EXISTS (SELECT 1 FROM kb.track_songs ts WHERE ts.track_uuid = t.uuid)
-                   OR EXISTS (SELECT 1 FROM kb.track_songs ts WHERE ts.track_uuid = t.uuid AND NOT ts.resolved))
+                   OR NOT EXISTS (SELECT 1 FROM norm.track_songs ts WHERE ts.track_uuid = t.uuid)
+                   OR EXISTS (SELECT 1 FROM norm.track_songs ts WHERE ts.track_uuid = t.uuid AND NOT ts.resolved))
             """,
             new { artist.Id, allTracks },
             tx
@@ -135,15 +135,15 @@ public sealed class CatalogueState
                 """
                 -- A part naming a merged song names its survivor (readers follow merged_into).
                 WITH RECURSIVE survivor AS (
-                    SELECT uuid AS song, uuid, merged_into, 0 AS depth FROM kb.songs WHERE artist_uuid = @artistUuid
+                    SELECT uuid AS song, uuid, merged_into, 0 AS depth FROM norm.songs WHERE artist_uuid = @artistUuid
                     UNION ALL
                     SELECT s.song, m.uuid, m.merged_into, s.depth + 1
-                    FROM survivor s JOIN kb.songs m ON m.uuid = s.merged_into
+                    FROM survivor s JOIN norm.songs m ON m.uuid = s.merged_into
                     WHERE s.depth < 20
                 )
                 SELECT ts.track_uuid, ts.text, coalesce(v.uuid, ts.song_uuid), ts.resolved, ts.confidence, ts.basis,
                        ts.author_type, ts.segue_after
-                FROM kb.track_songs ts JOIN source_tracks t ON t.uuid = ts.track_uuid
+                FROM norm.track_songs ts JOIN source_tracks t ON t.uuid = ts.track_uuid
                 LEFT JOIN survivor v ON v.song = ts.song_uuid AND v.merged_into IS NULL
                 WHERE CASE WHEN @allTracks THEN t.artist_id = @Id ELSE ts.track_uuid = ANY(@open) END
                 ORDER BY ts.track_uuid, ts.part
@@ -176,7 +176,7 @@ public sealed class CatalogueState
                    (SELECT count(*) FROM setlist_songs_plays p WHERE p.played_setlist_song_id = ss.id)::int
             FROM setlist_songs ss
             WHERE ss.artist_id = @Id
-              AND NOT EXISTS (SELECT 1 FROM kb.song_evidence e WHERE e.setlist_song_uuid = ss.uuid)
+              AND NOT EXISTS (SELECT 1 FROM norm.song_evidence e WHERE e.setlist_song_uuid = ss.uuid)
             """,
             new { artist.Id },
             tx
@@ -184,7 +184,7 @@ public sealed class CatalogueState
 
         var songs = await connection.QueryAsync<CatalogueSong>(
             """
-            SELECT uuid, name, kind FROM kb.songs
+            SELECT uuid, name, kind FROM norm.songs
             WHERE artist_uuid = @artistUuid AND merged_into IS NULL ORDER BY name, uuid
             """,
             new { artistUuid },
@@ -195,14 +195,14 @@ public sealed class CatalogueState
         var aliases = await connection.QueryAsync<(string Normalized, Guid Song)>(
             """
             WITH RECURSIVE survivor AS (
-                SELECT uuid AS song, uuid, merged_into, 0 AS depth FROM kb.songs WHERE artist_uuid = @artistUuid
+                SELECT uuid AS song, uuid, merged_into, 0 AS depth FROM norm.songs WHERE artist_uuid = @artistUuid
                 UNION ALL
                 SELECT s.song, m.uuid, m.merged_into, s.depth + 1
-                FROM survivor s JOIN kb.songs m ON m.uuid = s.merged_into
+                FROM survivor s JOIN norm.songs m ON m.uuid = s.merged_into
                 WHERE s.depth < 20
             )
             SELECT a.normalized, v.uuid
-            FROM kb.song_aliases a JOIN survivor v ON v.song = a.song_uuid AND v.merged_into IS NULL
+            FROM norm.song_aliases a JOIN survivor v ON v.song = a.song_uuid AND v.merged_into IS NULL
             WHERE a.artist_uuid = @artistUuid
             """,
             new { artistUuid },
@@ -211,7 +211,7 @@ public sealed class CatalogueState
 
         var held = await connection.QueryAsync<string>(
             """
-            SELECT key FROM kb.review_items
+            SELECT key FROM norm.review_items
             WHERE artist_uuid = @artistUuid AND resolved_at IS NULL AND key IS NOT NULL
               AND author_type IN ('user', 'moderator')
             """,

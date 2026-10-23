@@ -1,10 +1,10 @@
 using Dapper;
 using FluentAssertions;
 
-namespace RelistenApiTests.Kb;
+namespace RelistenApiTests.Normalization;
 
 [Category("LocalIngestion")]
-public class TestKbMigrations
+public class TestNormMigrations
 {
     [SetUp]
     public void RequireDatabase() => MigratedTestDatabase.RequireLocalDatabase();
@@ -15,7 +15,7 @@ public class TestKbMigrations
         await using var db = await MigratedTestDatabase.OpenAsync();
 
         var tables = await db.QueryAsync<string>(
-            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'kb' ORDER BY 1"
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'norm' ORDER BY 1"
         );
 
         tables
@@ -24,10 +24,15 @@ public class TestKbMigrations
                 "changes",
                 "review_items",
                 "runs",
+                "show_venues",
                 "song_aliases",
                 "song_evidence",
                 "songs",
-                "track_songs"
+                "track_songs",
+                "venue_evidence",
+                "venue_external_ids",
+                "venue_names",
+                "venues"
             );
     }
 
@@ -38,12 +43,13 @@ public class TestKbMigrations
         await using var tx = await db.BeginTransactionAsync();
         await db.ExecuteAsync(
             """
-            INSERT INTO kb.changes (table_name, row_key, op) VALUES ('songs', '{}', 'insert')
+            INSERT INTO norm.changes (table_name, row_key, op) VALUES ('songs', '{}', 'insert')
             """,
             transaction: tx
         );
 
-        var update = () => db.ExecuteAsync("UPDATE kb.changes SET op = 'delete'", transaction: tx);
+        var update = () =>
+            db.ExecuteAsync("UPDATE norm.changes SET op = 'delete'", transaction: tx);
 
         await update.Should().ThrowAsync<Npgsql.PostgresException>().WithMessage("*append-only*");
     }
@@ -56,7 +62,7 @@ public class TestKbMigrations
         var column = await db.QuerySingleAsync<(string Type, string Default, string Nullable)>(
             """
             SELECT data_type, column_default, is_nullable FROM information_schema.columns
-            WHERE table_schema = 'public' AND table_name = 'features' AND column_name = 'kb_catalogue'
+            WHERE table_schema = 'public' AND table_name = 'features' AND column_name = 'norm_catalogue'
             """
         );
 
