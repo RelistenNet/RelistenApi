@@ -616,7 +616,21 @@ public sealed partial class NormStore
             return 0;
         }
 
-        var rows = items.DistinctBy(i => (i.Subject, i.ArtistUuid, i.Key ?? i.Title)).ToList();
+        var written = 0;
+        foreach (var subject in items.GroupBy(i => i.Subject))
+        {
+            written += await WriteReviewItemsAsync(subject.Key, subject.ToList());
+        }
+
+        return written;
+    }
+
+    // Each subject has its own one-open-item-per-title index: per artist for songs, across
+    // artists for venues.
+    private async Task<int> WriteReviewItemsAsync(string subject, IReadOnlyList<ReviewRecord> items)
+    {
+        var rows = items.DistinctBy(i => (i.ArtistUuid, i.Key ?? i.Title)).ToList();
+        var conflict = subject == ReviewSubjects.Song ? "(artist_uuid, key)" : "(key)";
         return await connection.ExecuteAsync(
             $"""
             INSERT INTO norm.review_items (uuid, subject, artist_uuid, key, track_uuid, song_uuid, venue_uuid, title,
@@ -626,7 +640,7 @@ public sealed partial class NormStore
             FROM unnest(@uuids, @subjects, @artists, @keys, @tracks, @songs, @venues, @titles, @notes, @proposals,
                         @shows, @confidences)
                  AS x(uuid, subject, artist, key, track, song, venue, title, note, proposal, shows, confidence)
-            ON CONFLICT (subject, artist_uuid, key) WHERE resolved_at IS NULL AND key IS NOT NULL DO UPDATE
+            ON CONFLICT {conflict} WHERE subject = '{subject}' AND resolved_at IS NULL AND key IS NOT NULL DO UPDATE
                 SET proposal = coalesce(EXCLUDED.proposal, norm.review_items.proposal),
                     confidence = coalesce(EXCLUDED.confidence, norm.review_items.confidence),
                     shows = coalesce(EXCLUDED.shows, norm.review_items.shows),

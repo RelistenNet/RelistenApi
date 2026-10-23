@@ -289,8 +289,12 @@ CREATE TABLE norm.review_items (
     CHECK ((resolved_at IS NULL) = (resolved_by IS NULL)),
     FOREIGN KEY (run_uuid, author_type, author_ref) REFERENCES norm.runs (uuid, author_type, author_ref)
 );
-CREATE UNIQUE INDEX review_items_open_key ON norm.review_items (subject, artist_uuid, key) NULLS NOT DISTINCT
-    WHERE resolved_at IS NULL AND key IS NOT NULL;
+-- One open item per title: per artist for songs, across artists for venues (two partial
+-- indexes rather than NULLS NOT DISTINCT, which needs Postgres 15).
+CREATE UNIQUE INDEX review_items_open_song_key ON norm.review_items (artist_uuid, key)
+    WHERE subject = 'song' AND resolved_at IS NULL AND key IS NOT NULL;
+CREATE UNIQUE INDEX review_items_open_venue_key ON norm.review_items (key)
+    WHERE subject = 'venue' AND resolved_at IS NULL AND key IS NOT NULL;
 
 -- Every insert, update and delete on a catalogue table, append-only. row_key is the row's
 -- primary key. The author is the transaction's (SET LOCAL norm.author_type / norm.author_ref /

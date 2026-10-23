@@ -282,6 +282,49 @@ public class TestNormStore
     }
 
     [Test]
+    public async Task APrecisionCorrectionIsWritten()
+    {
+        var venue = Guid.CreateVersion7();
+        var bot = await As(AuthorTypes.Algorithm, "venue-matcher@2");
+        await bot.WriteVenuesAsync([
+            new VenueRecord(
+                venue,
+                "Red Rocks",
+                City: "Morrison",
+                Region: "CO",
+                Country: "US",
+                Latitude: 39.665,
+                Longitude: -105.205,
+                CoordinatePrecision: "city",
+                Confidence: 0.95f
+            ),
+        ]);
+        await (await As(AuthorTypes.Algorithm, "venue-matcher@2")).WriteVenuesAsync([
+            new VenueRecord(
+                venue,
+                "Red Rocks",
+                City: "Morrison",
+                Region: "CO",
+                Country: "US",
+                Latitude: 39.665,
+                Longitude: -105.205,
+                CoordinatePrecision: "venue",
+                Confidence: 0.95f
+            ),
+        ]);
+
+        (
+            await db.ExecuteScalarAsync<string>(
+                "SELECT coordinate_precision FROM norm.venues WHERE uuid = @venue",
+                new { venue },
+                tx
+            )
+        )
+            .Should()
+            .Be("venue");
+    }
+
+    [Test]
     public async Task ARevertLeavesRowsChangedSince()
     {
         var song = Guid.CreateVersion7();

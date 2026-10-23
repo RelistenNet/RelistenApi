@@ -103,7 +103,7 @@ public sealed partial class NormStore
                     WHERE {UpdateWhen(
                         mode,
                         "norm.venues",
-                        "(norm.venues.name, norm.venues.kind, norm.venues.parent_uuid, norm.venues.city, norm.venues.region, norm.venues.country, norm.venues.latitude, norm.venues.longitude) IS DISTINCT FROM (EXCLUDED.name, EXCLUDED.kind, EXCLUDED.parent_uuid, EXCLUDED.city, EXCLUDED.region, EXCLUDED.country, EXCLUDED.latitude, EXCLUDED.longitude)"
+                        "(norm.venues.name, norm.venues.kind, norm.venues.parent_uuid, norm.venues.city, norm.venues.region, norm.venues.country, norm.venues.latitude, norm.venues.longitude, norm.venues.coordinate_precision) IS DISTINCT FROM (EXCLUDED.name, EXCLUDED.kind, EXCLUDED.parent_uuid, EXCLUDED.city, EXCLUDED.region, EXCLUDED.country, EXCLUDED.latitude, EXCLUDED.longitude, EXCLUDED.coordinate_precision)"
                     )}
                     """;
 

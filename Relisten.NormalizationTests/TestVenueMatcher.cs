@@ -229,4 +229,56 @@ public class TestVenueMatcher
         plan.NewVenues.Should().ContainSingle();
         plan.Evidence.Select(e => e.VenueUuid).Distinct().Should().ContainSingle();
     }
+
+    [Test]
+    public void AnIdLearnedInThePassPlacesEveryRowCarryingIt()
+    {
+        var garden = new CatalogueVenue(
+            Guid.NewGuid(),
+            "Madison Square Garden",
+            "site",
+            null,
+            "New York",
+            "NY",
+            "US"
+        );
+        // "The Garden" comes first and only shares the id the second row teaches the venue.
+        var rows = new[]
+        {
+            Row("The Garden", "New York, NY", id: "setlistfm:3bd6bc5c"),
+            Row("Madison Square Garden", "New York, NY", id: "setlistfm:3bd6bc5c"),
+        };
+
+        var plan = VenueMatcher.Match(
+            State(rows, [garden], [("Madison Square Garden", garden.Uuid)])
+        );
+
+        plan.NewVenues.Should().BeEmpty();
+        plan.Evidence.Should().OnlyContain(e => e.VenueUuid == garden.Uuid).And.HaveCount(2);
+    }
+
+    [Test]
+    public void ANameKnownInANeighbouringTownGoesToTheModel()
+    {
+        var known = new CatalogueVenue(
+            Guid.NewGuid(),
+            "Higher Ground",
+            "site",
+            null,
+            "Burlington",
+            "VT",
+            "US"
+        );
+
+        var plan = VenueMatcher.Match(
+            State(
+                [Row("Higher Ground", "South Burlington, VT")],
+                [known],
+                [("Higher Ground", known.Uuid)]
+            )
+        );
+
+        plan.NewVenues.Should().BeEmpty();
+        plan.Left.Should().ContainSingle();
+    }
 }

@@ -38,7 +38,7 @@ public static class VenueMatcher
     public static VenuePlan Match(VenueState state)
     {
         var plan = new PlanBuilder(state);
-        var open = PlaceOnKnown(state, plan);
+        var open = PlaceOnLearnedIds(PlaceOnKnown(state, plan), plan);
         foreach (var family in Families(open))
         {
             if (!CreateIfUnambiguous(family, plan))
@@ -106,6 +106,26 @@ public static class VenueMatcher
         }
 
         return open;
+    }
+
+    /// An external id a row taught a venue in this pass places every other row carrying it,
+    /// whatever order the rows came in.
+    private static List<LegacyVenue> PlaceOnLearnedIds(List<LegacyVenue> open, PlanBuilder plan)
+    {
+        var rest = new List<LegacyVenue>();
+        foreach (var row in open)
+        {
+            if (row.ExternalId is { } id && plan.LearnedVenue(id) is { } venue)
+            {
+                plan.Place(row, venue, Exact);
+            }
+            else
+            {
+                rest.Add(row);
+            }
+        }
+
+        return rest;
     }
 
     /// Step 2: rows that could be one place, together. Names are joined by a shared external
@@ -231,8 +251,10 @@ public static class VenueMatcher
             return false;
         }
 
-        // A name already known in one of those towns belongs to that venue, not a new one.
-        if (byRegion.Any(g => plan.KnownIn(g.First().Locality!.Key, family[0].Key!)))
+        // A name already known in its state (in that town or a neighbouring one) is the LLM's
+        // to place: an incremental run must not split a venue because uploaders wrote a
+        // neighbouring town (Higher Ground in Burlington, then in South Burlington).
+        if (byRegion.Any(g => plan.KnownInRegion(g.Key, family[0].Key!)))
         {
             return false;
         }
@@ -272,8 +294,18 @@ public static class VenueMatcher
         public IEnumerable<string> NamesOf(Guid venue) =>
             known.Where(n => n.Venue == venue).Select(n => n.Key);
 
-        public bool KnownIn(string localityKey, string key) =>
-            state.ByLocality[localityKey].Any(v => known.Contains((key, v.Uuid)));
+        public bool KnownInRegion(string regionKey, string key) =>
+            known.Any(n =>
+                n.Key == key
+                && state.Venues.TryGetValue(n.Venue, out var v)
+                && v.City != null
+                && new Locality(v.City, v.Region, v.Country).RegionKey == regionKey
+            );
+
+        private readonly Dictionary<(string, string), Guid> learned = [];
+
+        public Guid? LearnedVenue((string, string) id) =>
+            learned.TryGetValue(id, out var v) ? v : null;
 
         public void Place(LegacyVenue row, Guid venue, float confidence)
         {
@@ -293,6 +325,7 @@ public static class VenueMatcher
             if (row.ExternalId is { } id && !state.ExternalIds.ContainsKey(id) && idsAdded.Add(id))
             {
                 ids.Add(new VenueExternalIdRecord(id.Provider, id.Key, venue, confidence));
+                learned[id] = venue;
             }
         }
 

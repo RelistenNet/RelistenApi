@@ -533,7 +533,23 @@ internal sealed class VenueRequest
                     .Distinct()
                     .Where(state.Venues.ContainsKey)
                     .Select(v => state.Venues[v])
-                : state.ByLocality[group.Key];
+                // The venues there, and namesakes elsewhere in the state (the club an uploader
+                // filed under a neighbouring town).
+                : state
+                    .ByLocality[group.Key]
+                    .Concat(
+                        group
+                            .SelectMany(s => state.Names[s.Key.Split('@')[0]])
+                            .Distinct()
+                            .Where(state.Venues.ContainsKey)
+                            .Select(v => state.Venues[v])
+                            .Where(v =>
+                                v.City != null
+                                && new Locality(v.City, v.Region, v.Country).RegionKey
+                                    == group.First().Region
+                            )
+                    )
+                    .DistinctBy(v => v.Uuid);
             var venues = here.Select(v =>
                 {
                     var id = $"v{venueIds.Count + 1}";
