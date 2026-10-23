@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Relisten.Kb.Titles;
+namespace Relisten.Normalization.Titles;
 
 /// A distinct part key with how often an artist's tracks use it, and up to a few raw titles
 /// it came from (context for whoever decides what it is).

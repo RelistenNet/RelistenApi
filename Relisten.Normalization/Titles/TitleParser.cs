@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 
-namespace Relisten.Kb.Titles;
+namespace Relisten.Normalization.Titles;
 
 /// What a part of a title looks like before anyone decides which song it is.
 public enum PartHint

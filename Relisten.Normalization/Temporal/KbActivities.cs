@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using Relisten.Kb.Catalogue;
+using Relisten.Normalization.Songs;
 using Temporalio.Activities;
 
-namespace Relisten.Ingestion;
+namespace Relisten.Normalization.Temporal;
 
 public sealed record KbCatalogueChunkInput(
     Guid Artist,

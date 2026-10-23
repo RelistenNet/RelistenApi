@@ -4,9 +4,9 @@ using System.Linq;
 using System.Threading.Tasks;
 using Dapper;
 using Npgsql;
-using Relisten.Kb.Titles;
+using Relisten.Normalization.Titles;
 
-namespace Relisten.Kb;
+namespace Relisten.Normalization;
 
 public static class AuthorTypes
 {

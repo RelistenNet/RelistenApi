@@ -2,18 +2,18 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Relisten.Kb.Catalogue;
+using Relisten.Normalization.Songs;
 using Temporalio.Common;
 using Temporalio.Exceptions;
 using Temporalio.Workflows;
 
-namespace Relisten.Ingestion.Workflows;
+namespace Relisten.Normalization.Temporal;
 
 /// MaxChunks caps the LLM calls of one run (null: until nothing is left to ask). Reask lists
 /// titles to ask about again (a targeted re-ask): their machine decisions are forgotten first
 /// and the run asks about nothing else.
 public sealed record BuildKbCatalogue(
-    ArtistId Artist,
+    Guid Artist,
     int? MaxChunks = null,
     IReadOnlyList<string>? Reask = null
 );
@@ -43,7 +43,7 @@ public class KbCatalogueWorkflow
 {
     private static readonly ActivityOptions Step = new()
     {
-        TaskQueue = IngestionQueues.Database,
+        TaskQueue = NormalizationQueues.Database,
         StartToCloseTimeout = TimeSpan.FromMinutes(10),
         HeartbeatTimeout = TimeSpan.FromSeconds(30),
         RetryPolicy = new RetryPolicy
@@ -59,7 +59,7 @@ public class KbCatalogueWorkflow
     // on, and stops after a few failures in a row.
     private static readonly ActivityOptions ChunkStep = new()
     {
-        TaskQueue = IngestionQueues.Database,
+        TaskQueue = NormalizationQueues.Database,
         StartToCloseTimeout = TimeSpan.FromMinutes(10),
         HeartbeatTimeout = TimeSpan.FromSeconds(30),
         RetryPolicy = new RetryPolicy { MaximumAttempts = 1 },
@@ -70,7 +70,7 @@ public class KbCatalogueWorkflow
     [WorkflowRun]
     public async Task<KbCatalogueResult> RunAsync(BuildKbCatalogue request)
     {
-        var artist = request.Artist.Value;
+        var artist = request.Artist;
         var total = new KbCatalogueResult(0, 0, 0, 0, 0, 0, 0);
         var curve = new List<int>();
         // The recurring titles left unsure, by key: a first-pass item stays unless the review

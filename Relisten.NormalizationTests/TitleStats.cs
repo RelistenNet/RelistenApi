@@ -1,6 +1,6 @@
-using Relisten.Kb.Titles;
+using Relisten.Normalization.Titles;
 
-namespace RelistenApiTests.Kb;
+namespace Relisten.NormalizationTests;
 
 /// Parser and grouper statistics over exported title tables (title, position, tracks, shows
 /// per line, tab-separated), for sizing and spot checks. Run explicitly with TITLE_STATS_DIR.

@@ -3,7 +3,7 @@ using System.Globalization;
 using System.Linq;
 using System.Text;
 
-namespace Relisten.Kb;
+namespace Relisten.Normalization;
 
 /// The normalisation every title lookup uses (string-theory docs/matching.md T1 step 2):
 /// accents folded, lowercase, `&` → and, apostrophes dropped, other punctuation to spaces,

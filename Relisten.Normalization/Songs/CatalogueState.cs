@@ -4,9 +4,9 @@ using System.Linq;
 using System.Threading.Tasks;
 using Dapper;
 using Npgsql;
-using Relisten.Kb.Titles;
+using Relisten.Normalization.Titles;
 
-namespace Relisten.Kb.Catalogue;
+namespace Relisten.Normalization.Songs;
 
 /// Taper and duration (seconds) are evidence for the review pass: independent tapers agreeing
 /// on a title, and very short tracks leaning towards stage talk.

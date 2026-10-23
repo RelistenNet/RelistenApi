@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 using Dapper;
 using Npgsql;
 
-namespace Relisten.Kb.Catalogue;
+namespace Relisten.Normalization.Songs;
 
 /// One artist's catalogue against the legacy tables (string-theory docs/catalogue.md
 /// §Rollout, docs/matching.md §Evaluation).

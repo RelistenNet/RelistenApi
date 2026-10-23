@@ -1,7 +1,7 @@
 using System;
 using System.Text.RegularExpressions;
 
-namespace Relisten.Kb.Titles;
+namespace Relisten.Normalization.Titles;
 
 /// Tapers often number tracks across a whole show while Relisten's positions restart per disc,
 /// so a leading number can survive parsing: "10 waiting for the punchline". Whether a number

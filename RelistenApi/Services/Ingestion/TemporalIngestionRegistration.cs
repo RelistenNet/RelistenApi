@@ -12,6 +12,7 @@ using Relisten.Ingestion.Providers.PhishNet;
 using Relisten.Ingestion.Providers.SetlistFm;
 using Relisten.Ingestion.Transport;
 using Relisten.Ingestion.Workflows;
+using Relisten.Normalization;
 using Temporalio.Converters;
 using Temporalio.Extensions.Hosting;
 
@@ -71,7 +72,6 @@ public static class TemporalIngestionRegistration
             .AddWorkflow<ArtistRefreshWorkflow>()
             .AddWorkflow<ArchiveItemImportWorkflow>()
             .AddWorkflow<RebuildArtistCatalogWorkflow>()
-            .AddWorkflow<KbCatalogueWorkflow>()
             .AddWorkflow<JerryVenueRepairWorkflow>()
             .AddWorkflow<ArchiveWorkflow>()
             .AddWorkflow<PhishInWorkflow>()
@@ -82,11 +82,12 @@ public static class TemporalIngestionRegistration
             .AddWorkflow<JerryVenueRepairProviderWorkflow>()
             .AddWorkflow<LocalWorkflow>()
             .AddWorkflow<RefreshBatchWorkflow>()
-            .AddWorkflow<ArchiveArtistDiscoveryWorkflow>();
+            .AddWorkflow<ArchiveArtistDiscoveryWorkflow>()
+            .AddNormalizationWorkflows();
         services
             .AddHostedTemporalWorker(IngestionQueues.Database)
             .AddScopedActivities<CatalogActivities>()
-            .AddScopedActivities<KbActivities>()
+            .AddNormalizationActivities()
             .AddScopedActivities<IngestionBatchActivities>()
             .ConfigureOptions(o =>
             {

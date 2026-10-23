@@ -4,6 +4,7 @@ using Relisten.Api.Models;
 using Relisten.Data;
 using Relisten.Ingestion;
 using Relisten.Ingestion.Workflows;
+using Relisten.Normalization.Temporal;
 using Temporalio.Client;
 
 namespace RelistenIngestionWorker;
@@ -12,6 +13,7 @@ namespace RelistenIngestionWorker;
 // It returns a printable result; Program owns process lifetime and error reporting.
 internal sealed class IngestionOperatorCommands(
     TemporalIngestionClient imports,
+    NormalizationClient normalization,
     ITemporalClient temporal,
     IServiceScopeFactory scopeFactory,
     IConfiguration configuration
@@ -36,8 +38,8 @@ internal sealed class IngestionOperatorCommands(
             "rebuild-artist" => (
                 await imports.RebuildArtistCatalogAsync(new RebuildArtistCatalog(artistId))
             ).WorkflowId,
-            "kb-llm-catalogue" => await imports.BuildKbCatalogueAsync(
-                new BuildKbCatalogue(artistId, MaxChunks(), ReaskTitles())
+            "kb-llm-catalogue" => await normalization.BuildSongCatalogueAsync(
+                new BuildKbCatalogue(artistId.Value, MaxChunks(), ReaskTitles())
             ),
             "repair-jerry-venues" => (
                 await imports.RepairJerryVenuesAsync(new RepairJerryVenues(artistId))

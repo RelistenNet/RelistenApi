@@ -10,7 +10,8 @@ public sealed class KbSchema : SqlFileMigration
 {
     protected override void Up()
     {
-        ExecuteSqlFile("013_kb.sql");
+        // The DDL ships with Relisten.Normalization (string-theory ddl/002_kb.sql, verbatim).
+        Execute(Relisten.Normalization.NormalizationSql.Read("013_kb.sql"));
 
         // Bands join the kb catalogue one at a time: true once an expert has approved the
         // artist's catalogue. The per-artist API cutover and any automated re-run only touch

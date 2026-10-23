@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Relisten.Kb.Titles;
+using Relisten.Normalization.Titles;
 
-namespace Relisten.Kb.Catalogue;
+namespace Relisten.Normalization.Songs;
 
 /// How one title part resolves: to songs (usually one; an unparsed combination can be
 /// several, in order), to nothing (not a song), with a confidence and the basis it rests on

@@ -3,9 +3,8 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
-using Relisten.Data;
 
-namespace Relisten.Kb.Catalogue;
+namespace Relisten.Normalization.Songs;
 
 public sealed record CatalogueMatchResult(int TracksWritten, int EvidenceWritten);
 
@@ -13,14 +12,14 @@ public sealed record CatalogueMatchResult(int TracksWritten, int EvidenceWritten
 /// songs and aliases as they stand, places tracks that now resolve, and maps setlist songs.
 /// So a person's fix to a song or an alias reaches every track on the next match. It ends
 /// every LLM catalogue run, and is cheap enough to run after imports and edits.
-public sealed class CatalogueMatch(DbService db)
+public sealed class CatalogueMatch(INormalizationDatabase db)
 {
     public async Task<CatalogueMatchResult> RunAsync(
         Guid artistUuid,
         CancellationToken cancellationToken
     )
     {
-        await using var connection = db.CreateConnection(longTimeout: true, readOnly: false);
+        await using var connection = db.CreateWriteConnection();
         await connection.OpenAsync(cancellationToken);
         await using var tx = await connection.BeginTransactionAsync(cancellationToken);
         await connection.ExecuteAsync(

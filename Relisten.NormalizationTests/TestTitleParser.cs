@@ -1,8 +1,9 @@
 using FluentAssertions;
-using Relisten.Kb.Catalogue;
-using Relisten.Kb.Titles;
+using Relisten.Normalization;
+using Relisten.Normalization.Songs;
+using Relisten.Normalization.Titles;
 
-namespace RelistenApiTests.Kb;
+namespace Relisten.NormalizationTests;
 
 /// Titles sampled from production source_tracks (2026-10-19).
 public class TestTitleParser
@@ -240,7 +241,7 @@ public class TestTrackMatcher
     public void ARulingWrittenUnderAnEarlierParseStillMatches()
     {
         var (jam, track) = (Guid.NewGuid(), Guid.NewGuid());
-        var state = new Relisten.Kb.Catalogue.CatalogueState
+        var state = new Relisten.Normalization.Songs.CatalogueState
         {
             ArtistUuid = Guid.NewGuid(),
             ArtistName = "Phish",
@@ -249,7 +250,7 @@ public class TestTrackMatcher
             UnmappedSetlistSongs = [],
             Tracks =
             [
-                new Relisten.Kb.Catalogue.CatalogueTrack(
+                new Relisten.Normalization.Songs.CatalogueTrack(
                     track,
                     1,
                     TitleParser.Parse("(Check) Meat Jam", 1)
@@ -260,8 +261,8 @@ public class TestTrackMatcher
             ],
         };
 
-        Relisten
-            .Kb.Catalogue.TrackMatcher.Match(state)
+        TrackMatcher
+            .Match(state)
             .Records.Select(r => $"{r.SongUuid == jam}:{r.Basis}:{string.Join(",", r.Qualifiers!)}")
             .Should()
             .Equal("True:ruling:soundcheck");
@@ -275,7 +276,7 @@ public class TestTrackMatcher
     public void ARulingWhoseTextMovedIsKeptAtItsPosition(string title, string written)
     {
         var (song, track) = (Guid.NewGuid(), Guid.NewGuid());
-        var state = new Relisten.Kb.Catalogue.CatalogueState
+        var state = new Relisten.Normalization.Songs.CatalogueState
         {
             ArtistUuid = Guid.NewGuid(),
             ArtistName = "moe.",
@@ -284,23 +285,23 @@ public class TestTrackMatcher
             UnmappedSetlistSongs = [],
             Tracks =
             [
-                new Relisten.Kb.Catalogue.CatalogueTrack(track, 1, TitleParser.Parse(title, 7))
+                new Relisten.Normalization.Songs.CatalogueTrack(
+                    track,
+                    1,
+                    TitleParser.Parse(title, 7)
+                )
                 {
                     Existing = [new(written, song, true, 0.95f)],
                 },
             ],
         };
 
-        Relisten
-            .Kb.Catalogue.TrackMatcher.Match(state)
-            .Records.Select(r => r.SongUuid == song)
-            .Should()
-            .Equal(true);
+        TrackMatcher.Match(state).Records.Select(r => r.SongUuid == song).Should().Equal(true);
     }
 
-    private static Relisten.Kb.Catalogue.CatalogueState OneTrack(
+    private static Relisten.Normalization.Songs.CatalogueState OneTrack(
         string title,
-        params Relisten.Kb.Catalogue.ExistingPart[] existing
+        params Relisten.Normalization.Songs.ExistingPart[] existing
     ) =>
         new()
         {
@@ -311,7 +312,7 @@ public class TestTrackMatcher
             UnmappedSetlistSongs = [],
             Tracks =
             [
-                new Relisten.Kb.Catalogue.CatalogueTrack(
+                new Relisten.Normalization.Songs.CatalogueTrack(
                     Guid.NewGuid(),
                     1,
                     TitleParser.Parse(title, 1)
@@ -356,7 +357,7 @@ public class TestTrackMatcher
     {
         var state = OneTrack("Bar", new ExistingPart("Foo", Guid.NewGuid(), true, 0.95f));
 
-        var match = Relisten.Kb.Catalogue.TrackMatcher.Match(state);
+        var match = Relisten.Normalization.Songs.TrackMatcher.Match(state);
 
         match.Records.Should().BeEmpty();
         match.Cleared.Should().Equal(state.Tracks[0].Uuid);
@@ -420,30 +421,27 @@ public class TestTrackMatcher
             new ExistingPart("Unknown Thing", null, false, 0.9f, "open")
         );
 
-        Relisten
-            .Kb.Catalogue.CatalogueLlm.UnresolvedKeys(state)
-            .Keys.Should()
-            .Equal("unknown thing");
+        CatalogueLlm.UnresolvedKeys(state).Keys.Should().Equal("unknown thing");
     }
 
     [Test]
     public void ASandwichKeepsOneRulingPerOccurrence()
     {
         var (rebubula, dragon, track) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
-        var state = new Relisten.Kb.Catalogue.CatalogueState
+        var state = new Relisten.Normalization.Songs.CatalogueState
         {
             ArtistUuid = Guid.NewGuid(),
             ArtistName = "moe.",
             Songs =
             [
-                new Relisten.Kb.Catalogue.CatalogueSong(rebubula, "Rebubula", "song"),
-                new Relisten.Kb.Catalogue.CatalogueSong(dragon, "Paper Dragon", "song"),
+                new Relisten.Normalization.Songs.CatalogueSong(rebubula, "Rebubula", "song"),
+                new Relisten.Normalization.Songs.CatalogueSong(dragon, "Paper Dragon", "song"),
             ],
             Aliases = new Dictionary<string, Guid>(),
             UnmappedSetlistSongs = [],
             Tracks =
             [
-                new Relisten.Kb.Catalogue.CatalogueTrack(
+                new Relisten.Normalization.Songs.CatalogueTrack(
                     track,
                     1,
                     TitleParser.Parse("Rebula > Paper Dragon > Rebula", 1)
@@ -462,7 +460,7 @@ public class TestTrackMatcher
             ],
         };
 
-        var records = Relisten.Kb.Catalogue.TrackMatcher.Match(state).Records;
+        var records = Relisten.Normalization.Songs.TrackMatcher.Match(state).Records;
 
         records
             .Select(r =>

@@ -59,6 +59,9 @@
     <EmbeddedResource Include="Migrations\Sql\*.sql" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\Relisten.Normalization\Relisten.Normalization.csproj" />
+  </ItemGroup>
+  <ItemGroup>
     <Content Update="appsettings.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

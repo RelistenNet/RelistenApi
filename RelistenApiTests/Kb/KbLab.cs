@@ -6,9 +6,9 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using Relisten;
-using Relisten.Kb;
-using Relisten.Kb.Catalogue;
-using Relisten.Kb.Titles;
+using Relisten.Normalization;
+using Relisten.Normalization.Songs;
+using Relisten.Normalization.Titles;
 
 namespace RelistenApiTests.Kb;
 
@@ -137,7 +137,9 @@ public class KbLab
 
                 await ScaffoldFromSetlists(connection, slug, uuid);
                 var watch = Stopwatch.StartNew();
-                var match = new CatalogueMatch(db);
+                var match = new CatalogueMatch(
+                    new Relisten.Services.Normalization.DbServiceNormalizationDatabase(db)
+                );
                 var first = await match.RunAsync(uuid, CancellationToken.None);
                 var elapsed = watch.Elapsed;
 
@@ -215,7 +217,10 @@ public class KbLab
             )
             .Build();
         var db = Db(labUrl);
-        var llm = new CatalogueLlm(db, new OpenAiCatalogueModel(configuration));
+        var llm = new CatalogueLlm(
+            new Relisten.Services.Normalization.DbServiceNormalizationDatabase(db),
+            new OpenAiCatalogueModel(configuration)
+        );
         await using var connection = await Open(db);
 
         foreach (var (slug, uuid) in await Artists(connection))
@@ -308,7 +313,9 @@ public class KbLab
                     )
             );
 
-            await new CatalogueMatch(db).RunAsync(uuid, CancellationToken.None);
+            await new CatalogueMatch(
+                new Relisten.Services.Normalization.DbServiceNormalizationDatabase(db)
+            ).RunAsync(uuid, CancellationToken.None);
             var evaluation = await KbEvaluation.EvaluateAsync(connection, slug);
             TestContext.Out.WriteLine(
                 $"{evaluation} [{model}: {chunks} chunks, {input} in / {output} out tokens, {songs} songs created, {watch.Elapsed.TotalSeconds:F0}s]"
@@ -464,7 +471,9 @@ public class KbLab
             await store.FinishAsync();
             await tx.CommitAsync();
 
-            var rebuilt = await new CatalogueMatch(db).RunAsync(uuid, CancellationToken.None);
+            var rebuilt = await new CatalogueMatch(
+                new Relisten.Services.Normalization.DbServiceNormalizationDatabase(db)
+            ).RunAsync(uuid, CancellationToken.None);
             TestContext.Out.WriteLine(
                 $"{slug}: {aliases.Count} aliases, {removed} removed; rebuild touched {rebuilt.TracksWritten} tracks"
             );

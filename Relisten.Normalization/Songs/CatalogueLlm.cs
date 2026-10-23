@@ -7,10 +7,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
 using Npgsql;
-using Relisten.Data;
-using Relisten.Kb.Titles;
+using Relisten.Normalization.Titles;
 
-namespace Relisten.Kb.Catalogue;
+namespace Relisten.Normalization.Songs;
 
 public sealed record CatalogueChunkResult(
     bool Done,
@@ -32,7 +31,7 @@ public sealed record CatalogueChunkResult(
 /// re-decide a settled fact. Every key it asked comes back as Asked, so the caller doesn't
 /// ask about it again in the same run: a key answered surely can still leave its tracks
 /// unresolved (a combination whose other part nobody knows), and must not be asked forever.
-public sealed class CatalogueLlm(DbService db, ICatalogueModel model)
+public sealed class CatalogueLlm(INormalizationDatabase db, ICatalogueModel model)
 {
     public const string PromptVersion = "catalogue-llm@5";
     public const int ChunkGroups = 50;
@@ -55,7 +54,7 @@ public sealed class CatalogueLlm(DbService db, ICatalogueModel model)
         IReadOnlyCollection<string>? only = null
     )
     {
-        await using var connection = db.CreateConnection(longTimeout: true, readOnly: false);
+        await using var connection = db.CreateWriteConnection();
         await connection.OpenAsync(cancellationToken);
         await using var tx = await connection.BeginTransactionAsync(cancellationToken);
         await connection.ExecuteAsync(
@@ -235,7 +234,7 @@ public sealed class CatalogueLlm(DbService db, ICatalogueModel model)
         CancellationToken cancellationToken
     )
     {
-        await using var connection = db.CreateConnection(longTimeout: true, readOnly: false);
+        await using var connection = db.CreateWriteConnection();
         await connection.OpenAsync(cancellationToken);
         await using var tx = await connection.BeginTransactionAsync(cancellationToken);
         await connection.ExecuteAsync(

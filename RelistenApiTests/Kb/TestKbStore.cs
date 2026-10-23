@@ -1,7 +1,7 @@
 using Dapper;
 using FluentAssertions;
 using Npgsql;
-using Relisten.Kb;
+using Relisten.Normalization;
 
 namespace RelistenApiTests.Kb;
 

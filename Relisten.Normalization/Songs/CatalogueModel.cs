@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using OpenAI.Chat;
 
-namespace Relisten.Kb.Catalogue;
+namespace Relisten.Normalization.Songs;
 
 /// What one model call returned: the JSON text that matched the schema, and its token counts.
 public sealed record ModelReply(string Json, int InputTokens, int OutputTokens);

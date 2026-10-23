@@ -2,7 +2,9 @@ using System;
 using Microsoft.Extensions.DependencyInjection;
 using Relisten.Data;
 using Relisten.Import;
+using Relisten.Normalization;
 using Relisten.Services.Indexing;
+using Relisten.Services.Normalization;
 using Relisten.Services.Notifications;
 using Relisten.Services.Popularity;
 using Relisten.Vendor.ArchiveOrg;
@@ -16,12 +18,8 @@ public static class IngestionServiceRegistration
     public static IServiceCollection AddRelistenCatalogServices(this IServiceCollection services)
     {
         services.AddScoped<CatalogRebuildService>();
-        services.AddSingleton<
-            Relisten.Kb.Catalogue.ICatalogueModel,
-            Relisten.Kb.Catalogue.OpenAiCatalogueModel
-        >();
-        services.AddScoped<Relisten.Kb.Catalogue.CatalogueLlm>();
-        services.AddScoped<Relisten.Kb.Catalogue.CatalogueMatch>();
+        services.AddNormalization();
+        services.AddSingleton<INormalizationDatabase, DbServiceNormalizationDatabase>();
         services.AddScoped<SetlistShowService, SetlistShowService>();
         services.AddScoped<VenueService, VenueService>();
         services.AddScoped<TourService, TourService>();
