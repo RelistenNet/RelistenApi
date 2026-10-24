@@ -171,8 +171,12 @@ public sealed partial class VenueState
         return new VenueState
         {
             Unmapped = WithoutLoneTowns(
-                WithoutStateTypos(
-                    FoldCities(CountryCodes(FillRegions(legacy, catalogue), catalogue))
+                WithoutPlacesInTowns(
+                    WithoutStateTypos(
+                        WithoutCodeTypos(
+                            FoldCities(CountryCodes(FillRegions(legacy, catalogue), catalogue))
+                        )
+                    )
                 )
             ),
             Venues = venues
@@ -357,6 +361,125 @@ public sealed partial class VenueState
 
         return fixedRows;
     }
+
+    /// "Omaha, NB": a state code a letter off the town's usual one, naming a province of
+    /// another country (New Brunswick for Nebraska), is a typo when the town is used three
+    /// times as much in the usual state. Springfield, MA and MO are one country: both stay.
+    internal static List<LegacyVenue> WithoutCodeTypos(IReadOnlyList<LegacyVenue> rows)
+    {
+        var towns = rows.Where(r => r.Locality is { Trusted: true, Region.Length: 2 })
+            .GroupBy(r => VenueNormalizer.Normalize(r.Locality!.City))
+            .ToDictionary(
+                g => g.Key,
+                g =>
+                    g.GroupBy(r => r.Locality!.Key)
+                        .Select(t =>
+                            (Locality: t.First().Locality!, Uses: t.Sum(r => Math.Max(r.Uses, 1)))
+                        )
+                        .OrderByDescending(t => t.Uses)
+                        .ToList()
+            );
+        return rows.Select(r =>
+            {
+                if (
+                    r.Locality is not { Trusted: true, Region.Length: 2 } l
+                    || towns[VenueNormalizer.Normalize(l.City)] is not { Count: > 1 } localities
+                    || localities[0].Locality.Key == l.Key
+                )
+                {
+                    return r;
+                }
+
+                var usual = localities[0];
+                var here = localities.First(t => t.Locality.Key == l.Key).Uses;
+                return
+                    usual.Locality.Country != l.Country
+                    && usual.Locality.Region is { Length: 2 } code
+                    && Titles.TitleGrouper.BoundedLevenshtein(code, l.Region!, 1) <= 1
+                    && usual.Uses >= 3 * here
+                    ? r with
+                    {
+                        Locality = usual.Locality,
+                    }
+                    : r;
+            })
+            .ToList();
+    }
+
+    /// "The Sherman Theater Stroudsburg, PA": a town no other venue is filed under that ends
+    /// with another town of the state ("stroudsburg") is that town, with the venue's name in
+    /// front. West Palm Beach and South Burlington are towns of their own: a direction or
+    /// another town prefix in front never counts, nor does a town other venues use.
+    internal static List<LegacyVenue> WithoutPlacesInTowns(IReadOnlyList<LegacyVenue> rows)
+    {
+        var names = rows.Where(r => r.Key != null && r.Locality is { Trusted: true })
+            .GroupBy(r => r.Locality!.Key)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Select(r => VenueNormalizer.Identities(r.Key!)[0]).Distinct().Count()
+            );
+        var towns = rows.Where(r => r.Locality is { Trusted: true })
+            .GroupBy(r => r.Locality!.RegionKey!)
+            .ToDictionary(
+                g => g.Key,
+                g =>
+                    g.GroupBy(r => VenueNormalizer.Normalize(r.Locality!.City))
+                        .ToDictionary(t => t.Key, t => t.First().Locality!)
+            );
+        return rows.Select(r =>
+            {
+                if (r.Locality is not { Trusted: true } l || names.GetValueOrDefault(l.Key) > 1)
+                {
+                    return r;
+                }
+
+                var city = VenueNormalizer.Normalize(l.City);
+                var town = towns[l.RegionKey!]
+                    .Where(t =>
+                        t.Key != city
+                        && city.EndsWith(" " + t.Key, StringComparison.Ordinal)
+                        && city[..^(t.Key.Length + 1)].Split(' ') is var front
+                        && !(front.Length == 1 && TownPrefixes.Contains(front[0]))
+                    )
+                    .OrderByDescending(t => t.Key.Length)
+                    .Select(t => t.Value)
+                    .FirstOrDefault();
+                return town == null ? r : r with { Locality = town };
+            })
+            .ToList();
+    }
+
+    private static readonly HashSet<string> TownPrefixes =
+    [
+        "north",
+        "south",
+        "east",
+        "west",
+        "new",
+        "old",
+        "fort",
+        "ft",
+        "mount",
+        "mt",
+        "port",
+        "lake",
+        "upper",
+        "lower",
+        "little",
+        "great",
+        "saint",
+        "st",
+        "san",
+        "santa",
+        "el",
+        "la",
+        "los",
+        "las",
+        "palm",
+        "glen",
+        "bay",
+        "point",
+    ];
 
     /// A "town" no other venue name is ever filed under is usually not a town ("Days Inn St
     /// Joseph", "The Sherman Theater Stroudsburg", "Bonnaroo"): when the same name is used at

@@ -217,15 +217,15 @@ public static partial class VenueNormalizer
 
         // A seat, a date or a typed note is not a town ("Stand, Seat 2", "Row R, On Aisle)"),
         // and neither is a state alone ("CO").
-        if (NotATown(fields[0]) || (fields.Count == 1 && Region(Normalize(fields[0])) != null))
+        if (fields.Count == 1 && (NotATown(fields[0]) || Region(Normalize(fields[0])) != null))
         {
             return null;
         }
 
-        var city = CityAliases.GetValueOrDefault(Normalize(fields[0]), fields[0]);
         if (fields.Count == 1)
         {
-            return Placeholders.Contains(Normalize(city)) ? null : new Locality(city, null, null);
+            var only = CityAliases.GetValueOrDefault(Normalize(fields[0]), fields[0]);
+            return Placeholders.Contains(Normalize(only)) ? null : new Locality(only, null, null);
         }
 
         // "Dallas, TX USA": a region and its country in one field.
@@ -270,6 +270,17 @@ public static partial class VenueNormalizer
             region = near;
             country = near.Country;
         }
+
+        // The town is the field just before the region and country ("Montage Mountain,
+        // Scranton, PA" is in Scranton); earlier fields name a place or a neighbourhood.
+        var trailing = country != null && fields.Count > 2 && Countries.ContainsKey(last) ? 2 : 1;
+        var cityField = fields[Math.Max(0, fields.Count - 1 - trailing)];
+        if (NotATown(cityField))
+        {
+            return null;
+        }
+
+        var city = CityAliases.GetValueOrDefault(Normalize(cityField), cityField);
 
         // "NY, NY" and "New York, New York": the city is the region's namesake.
         if (

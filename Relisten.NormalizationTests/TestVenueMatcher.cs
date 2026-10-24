@@ -516,4 +516,45 @@ public class TestVenueMatcher
                 "Chapel Hill"
             );
     }
+
+    [Test]
+    public void AStateCodeALetterOffAcrossABorderIsATypo()
+    {
+        var rows = VenueState.WithoutCodeTypos([
+            Row("Civic Auditorium", "Omaha, NE", 20),
+            Row("The Music Box", "Omaha, NB", 2),
+            Row("Symphony Hall", "Springfield, MA", 20),
+            Row("Shrine Mosque", "Springfield, MO", 2),
+        ]);
+
+        rows.Select(r => r.Locality!.Key)
+            .Should()
+            .Equal("omaha|ne|US", "omaha|ne|US", "springfield|ma|US", "springfield|mo|US");
+    }
+
+    [Test]
+    public void AVenueNameInFrontOfATownIsNotPartOfIt()
+    {
+        var rows = VenueState.WithoutPlacesInTowns([
+            Row("Sherman Theater", "Stroudsburg, PA", 11),
+            Row("The Sherman Theater Stroudsburg, PA", "The Sherman Theater Stroudsburg, PA", 2),
+            Row("Higher Ground", "South Burlington, VT"),
+            Row("Flynn Theater", "Burlington, VT"),
+            Row("Kravis Center", "West Palm Beach, FL"),
+            Row("Sunfest", "West Palm Beach, FL"),
+            Row("Royal Poinciana", "Palm Beach, FL"),
+        ]);
+
+        rows.Select(r => r.Locality!.Key)
+            .Should()
+            .Equal(
+                "stroudsburg|pa|US",
+                "stroudsburg|pa|US",
+                "south burlington|vt|US",
+                "burlington|vt|US",
+                "west palm beach|fl|US",
+                "west palm beach|fl|US",
+                "palm beach|fl|US"
+            );
+    }
 }

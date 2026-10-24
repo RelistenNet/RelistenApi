@@ -74,9 +74,9 @@ public sealed class VenueMatch(INormalizationDatabase db)
         );
     }
 
-    /// One name in two towns of one state is a suburb, a move or two places: no rule can tell,
-    /// so each such name is an open question for a person ("Cat's Cradle — Carrboro, NC /
-    /// Chapel Hill, NC"). A question a person has answered isn't asked again; one whose venues
+    /// One name in two towns of one state is a suburb, a move or two places, and one name twice
+    /// in one town (a site and a room) one place filed two ways or two: no rule can tell, so
+    /// each is an open question for a person ("Cat's Cradle — Carrboro, NC / Chapel Hill, NC"). A question a person has answered isn't asked again; one whose venues
     /// no longer share the name is closed.
     private static async Task AskAboutNamesakesAsync(
         Npgsql.NpgsqlConnection connection,
@@ -84,49 +84,86 @@ public sealed class VenueMatch(INormalizationDatabase db)
         NormStore store
     )
     {
-        var venues = await connection.QueryAsync<(
-            Guid Uuid,
-            string Name,
-            string City,
-            string? Region,
-            string? Country,
-            int Rows
-        )>(
-            """
-            SELECT v.uuid, v.name, v.city, v.region, v.country,
-                   (SELECT count(*) FROM norm.venue_evidence e WHERE e.venue_uuid = v.uuid)::int
-            FROM norm.venues v
-            WHERE v.merged_into IS NULL AND v.kind = 'site' AND v.city IS NOT NULL AND v.country IS NOT NULL
-            """,
-            transaction: tx
-        );
-        var questions = venues
-            .Where(v => VenueNormalizer.Key(v.Name) != null)
-            .Select(v => (Venue: v, Locality: new Locality(v.City, v.Region, v.Country)))
-            .GroupBy(v =>
-                $"same:{string.Concat(VenueNormalizer.Words(VenueNormalizer.Key(v.Venue.Name)!))}@{v.Locality.RegionKey}"
+        var venues = (
+            await connection.QueryAsync<(
+                Guid Uuid,
+                string Name,
+                string Kind,
+                string? Parent,
+                string City,
+                string? Region,
+                string? Country,
+                int Rows
+            )>(
+                """
+                SELECT v.uuid, v.name, v.kind, p.name, v.city, v.region, v.country,
+                       (SELECT count(*) FROM norm.venue_evidence e WHERE e.venue_uuid = v.uuid)::int
+                FROM norm.venues v LEFT JOIN norm.venues p ON p.uuid = v.parent_uuid
+                WHERE v.merged_into IS NULL AND v.city IS NOT NULL AND v.country IS NOT NULL
+                """,
+                transaction: tx
             )
+        ).Where(v => VenueNormalizer.Key(v.Name) != null).Select(v => (Venue: v, Name: string.Concat(VenueNormalizer.Words(VenueNormalizer.Key(v.Name)!)), Locality: new Locality(v.City, v.Region, v.Country))).ToList();
+        string Where(IEnumerable<string> parts) => string.Join(" / ", parts);
+        ReviewRecord Question(string key, string title, string note, IEnumerable<Guid> uuids) =>
+            new(
+                null,
+                title,
+                key,
+                note,
+                string.Join(", ", uuids),
+                Subject: ReviewSubjects.Venue,
+                VenueUuid: uuids.First()
+            );
+
+        // Sites of one name in two towns of a state: a suburb, a move, or two places.
+        var questions = venues
+            .Where(v => v.Venue.Kind == VenueKinds.Site)
+            .GroupBy(v => $"same:{v.Name}@{v.Locality.RegionKey}")
             .Where(g => g.Select(v => v.Locality.Key).Distinct().Count() > 1)
             .Select(g =>
             {
                 var list = g.OrderByDescending(v => v.Venue.Rows).ToList();
-                return new ReviewRecord(
-                    null,
+                return Question(
+                    g.Key,
                     $"{list[0].Venue.Name} — "
-                        + string.Join(
-                            " / ",
+                        + Where(
                             list.Select(v =>
                                 $"{v.Venue.City}, {v.Venue.Region ?? v.Venue.Country} ({v.Venue.Rows} rows)"
                             )
                         ),
-                    g.Key,
                     "One name in two towns of one state: one place under a neighbouring town, a club that moved (two venues), or two places?",
-                    string.Join(", ", list.Select(v => v.Venue.Uuid)),
-                    Subject: ReviewSubjects.Venue,
-                    VenueUuid: list[0].Venue.Uuid
+                    list.Select(v => v.Venue.Uuid)
                 );
             })
             .ToList();
+
+        // One name twice in one town, as a site and a room or inside two sites (the twin merge
+        // leaves those): one place filed two ways, or two (a room named after its building)?
+        questions.AddRange(
+            venues
+                .GroupBy(v => $"same:{v.Name}@{v.Locality.Key}")
+                .Where(g => g.Count() > 1)
+                .Select(g =>
+                {
+                    var list = g.OrderByDescending(v => v.Venue.Rows).ToList();
+                    return Question(
+                        g.Key,
+                        $"{list[0].Venue.Name} — {list[0].Venue.City}: "
+                            + Where(
+                                list.Select(v =>
+                                    (
+                                        v.Venue.Parent == null
+                                            ? v.Venue.Kind
+                                            : $"room of {v.Venue.Parent}"
+                                    ) + $" ({v.Venue.Rows} rows)"
+                                )
+                            ),
+                        "One name twice in one town: one place filed as two (merge, or move the room), or two places?",
+                        list.Select(v => v.Venue.Uuid)
+                    );
+                })
+        );
 
         var asked = (
             await connection.QueryAsync<(string Key, bool Open, bool ByPerson)>(

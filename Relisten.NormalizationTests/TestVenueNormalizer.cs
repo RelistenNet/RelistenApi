@@ -44,6 +44,9 @@ public class TestVenueNormalizer
     [TestCase("Manchester, TN, Bonnaroo 2015", "manchester|tn|US")]
     [TestCase("Bozeman, MT", "bozeman|mt|US")]
     [TestCase("Albany, N.Y.", "albany|ny|US")]
+    [TestCase("Montage Mountain, Scranton, PA", "scranton|pa|US")]
+    [TestCase("1600 Main St, Philadelphia, PA", "philadelphia|pa|US")]
+    [TestCase("Montage Mountain, Scranton, PA, USA", "scranton|pa|US")]
     public void LocationsParseToALocality(string location, string expected) =>
         VenueNormalizer.ParseLocation(location)!.Key.Should().Be(expected);
 

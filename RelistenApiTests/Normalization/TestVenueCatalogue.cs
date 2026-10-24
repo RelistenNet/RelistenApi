@@ -487,4 +487,46 @@ public class TestVenueCatalogue
             .Should()
             .Equal("Brooklyn", "New York");
     }
+
+    [Test]
+    public async Task OneNameTwiceInATownIsAQuestion()
+    {
+        var database = new DbServiceNormalizationDatabase(db);
+        await db.WithWriteConnection(async c =>
+        {
+            var connection = (Npgsql.NpgsqlConnection)c;
+            await using var tx = await connection.BeginTransactionAsync();
+            var store = await NormStore.BeginAsync(connection, tx, AuthorTypes.Llm, "venue-llm@6");
+            var (auditorium, opera, room) = (
+                Guid.CreateVersion7(),
+                Guid.CreateVersion7(),
+                Guid.CreateVersion7()
+            );
+            VenueRecord At(
+                Guid uuid,
+                string name,
+                string kind = VenueKinds.Site,
+                Guid? parent = null
+            ) => new(uuid, name, kind, parent, "St. Louis", "MO", "US", Confidence: 0.9f);
+            await store.WriteVenuesAsync([
+                At(auditorium, "Kiel Auditorium"),
+                At(opera, "Kiel Opera House"),
+                At(room, "Kiel Opera House", VenueKinds.Room, auditorium),
+            ]);
+            await tx.CommitAsync();
+            return 0;
+        });
+
+        await new VenueMatch(database).RunAsync(artists, CancellationToken.None);
+
+        (
+            await Strings(
+                "SELECT title FROM norm.review_items WHERE key LIKE 'same:%' AND resolved_at IS NULL"
+            )
+        )
+            .Should()
+            .Equal(
+                "Kiel Opera House — St. Louis: site (0 rows) / room of Kiel Auditorium (0 rows)"
+            );
+    }
 }
