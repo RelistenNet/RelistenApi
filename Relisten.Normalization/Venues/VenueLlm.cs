@@ -668,6 +668,29 @@ internal sealed class VenueRequest
                         )
                     )
                     .DistinctBy(v => v.Uuid);
+            // Venues elsewhere in the state sharing a word that names a place with a spelling
+            // ("Tussey Mountain Amphitheater" in Boalsburg for "Summer Sun Music Festival @
+            // Tussey Mtn. Amphitheatre" in State College), a few at most.
+            if (place is { Trusted: true })
+            {
+                var keys = group.Select(s => s.Key.Split('@')[0]).ToList();
+                var townWords = VenueNormalizer.Normalize(place.City).Split(' ').ToHashSet();
+                here = here.Concat(
+                        state
+                            .Venues.Values.Where(v =>
+                                v.City != null
+                                && new Locality(v.City, v.Region, v.Country).RegionKey
+                                    == place.RegionKey
+                                && VenueNormalizer.Key(v.Name) is { } name
+                                && keys.Any(k =>
+                                    VenueMatcher.ShareADistinctiveWord(k, name, townWords)
+                                )
+                            )
+                            .Take(8)
+                    )
+                    .DistinctBy(v => v.Uuid);
+            }
+
             // The venues other tapes of these spellings' shows are on: listed too, wherever
             // they are (a tape with a typo'd or missing town is still that show's).
             Dictionary<Guid, int> SameShows(Spelling s) =>

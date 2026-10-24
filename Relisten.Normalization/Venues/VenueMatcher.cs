@@ -31,7 +31,7 @@ public sealed record VenuePlan(
 ///    suburb) goes to the LLM whole.
 public static class VenueMatcher
 {
-    public const string Author = "venue-matcher@2.5.0";
+    public const string Author = "venue-matcher@2.6.0";
     public const float Exact = 0.95f;
     public const float Likely = 0.9f;
 
@@ -686,7 +686,18 @@ public static class VenueMatcher
         public Guid Create(IReadOnlyList<LegacyVenue> rows)
         {
             var venue = Guid.CreateVersion7();
-            var display = rows.GroupBy(r => r.Name.Trim())
+            // The town most of its rows are filed under (one stray tape's "Chicago, IL" never
+            // moves a stadium out of Charleston), named by its most used spelling there.
+            var home = rows.Where(r => r.Locality != null)
+                .GroupBy(r => r.Locality!.Key)
+                // Rows are separate artists' and sources' say; uses only break a tie.
+                .OrderByDescending(g => g.Count())
+                .ThenByDescending(g => g.Sum(r => Math.Max(r.Uses, 1)))
+                .ThenBy(g => g.Key, StringComparer.Ordinal)
+                .First()
+                .Key;
+            var display = rows.Where(r => r.Locality?.Key == home)
+                .GroupBy(r => r.Name.Trim())
                 .OrderByDescending(g => g.Sum(r => r.Uses))
                 .ThenBy(g => g.Key, StringComparer.Ordinal)
                 .First()

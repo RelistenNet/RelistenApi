@@ -659,4 +659,21 @@ public class TestVenueMatcher
         // Two names of one show's place: one family, for the model.
         plan.Left.Should().Contain(f => f.Contains(fieldhouse) && f.Contains(breeden));
     }
+
+    [Test]
+    public void ANewVenueIsInTheTownMostOfItsRowsAreFiledUnder()
+    {
+        var plan = VenueMatcher.Match(
+            State([
+                Row("Credit One Stadium", "Chicago, IL", 6, "setlistfm:4bd6ca4a"),
+                Row("Family Circle Stadium", "Charleston, SC", 3, "setlistfm:4bd6ca4a"),
+                Row("Family Circle Stadium", "Daniel Island, SC", 2, "setlistfm:4bd6ca4a"),
+                Row("Credit One Stadium", "Charleston, SC", 2, "setlistfm:4bd6ca4a"),
+            ])
+        );
+
+        var venue = plan.NewVenues.Should().ContainSingle().Subject;
+        venue.City.Should().Be("Charleston");
+        venue.Name.Should().Be("Family Circle Stadium");
+    }
 }
