@@ -120,15 +120,27 @@ public sealed class VenueMatch(INormalizationDatabase db)
             first == null ? ""
             : first == last ? $", {first}"
             : $", {first}–{last}";
-        ReviewRecord Question(string key, string title, string note, IEnumerable<Guid> uuids) =>
+        ReviewRecord Question(
+            string question,
+            string key,
+            string title,
+            string note,
+            IReadOnlyList<Guid> uuids
+        ) =>
             new(
                 null,
                 title,
                 key,
                 note,
-                string.Join(", ", uuids),
                 Subject: ReviewSubjects.Venue,
-                VenueUuid: uuids.First()
+                VenueUuid: uuids[0],
+                Question: question,
+                Refs: new System.Text.Json.Nodes.JsonObject
+                {
+                    ["venues"] = new System.Text.Json.Nodes.JsonArray(
+                        uuids.Select(u => (System.Text.Json.Nodes.JsonNode)u.ToString()).ToArray()
+                    ),
+                }
             );
 
         // Sites of one name in two towns of a state: a suburb, a move, or two places.
@@ -140,6 +152,7 @@ public sealed class VenueMatch(INormalizationDatabase db)
             {
                 var list = g.OrderByDescending(v => v.Venue.Rows).ToList();
                 return Question(
+                    ReviewQuestions.Namesake,
                     g.Key,
                     $"{list[0].Venue.Name} — "
                         + Where(
@@ -149,7 +162,7 @@ public sealed class VenueMatch(INormalizationDatabase db)
                         ),
                     "One name in two towns of one state: one place under a neighbouring town, a club that moved (two venues), or two places?"
                         + YearsNote(list.Select(v => v.Venue.ShowYears).ToList()),
-                    list.Select(v => v.Venue.Uuid)
+                    list.Select(v => v.Venue.Uuid).ToList()
                 );
             })
             .ToList();
@@ -164,6 +177,7 @@ public sealed class VenueMatch(INormalizationDatabase db)
                 {
                     var list = g.OrderByDescending(v => v.Venue.Rows).ToList();
                     return Question(
+                        ReviewQuestions.SameTown,
                         g.Key,
                         $"{list[0].Venue.Name} — {list[0].Venue.City}: "
                             + Where(
@@ -176,7 +190,7 @@ public sealed class VenueMatch(INormalizationDatabase db)
                                 )
                             ),
                         "One name twice in one town: one place filed as two (merge, or move the room), or two places?",
-                        list.Select(v => v.Venue.Uuid)
+                        list.Select(v => v.Venue.Uuid).ToList()
                     );
                 })
         );

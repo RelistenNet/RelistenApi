@@ -460,6 +460,42 @@ public class TestNormStore
     }
 
     [Test]
+    public async Task OnlyAPersonAnswersAReviewItem()
+    {
+        var bot = await As(AuthorTypes.Llm, "venue-llm@8");
+        await bot.WriteReviewItemsAsync([
+            new ReviewRecord(
+                null,
+                "Pepsi Center - Denver, CO — unknown location",
+                "pepsi center denver co@?",
+                Subject: ReviewSubjects.Venue,
+                Question: ReviewQuestions.Spelling
+            ),
+        ]);
+        var item = await db.QuerySingleAsync<Guid>(
+            "SELECT uuid FROM norm.review_items WHERE key = 'pepsi center denver co@?'",
+            transaction: tx
+        );
+        var answer = new System.Text.Json.Nodes.JsonObject { ["action"] = "not_a_venue" };
+
+        await FluentActions
+            .Awaiting(() => bot.AnswerReviewItemAsync(item, answer))
+            .Should()
+            .ThrowAsync<InvalidOperationException>();
+        await (await As(AuthorTypes.User, "expert")).AnswerReviewItemAsync(item, answer);
+
+        (
+            await db.QuerySingleAsync<string>(
+                "SELECT question || ' ' || resolution || ' ' || (answer->>'action') FROM norm.review_items WHERE uuid = @item",
+                new { item },
+                tx
+            )
+        )
+            .Should()
+            .Be("spelling not_a_venue not_a_venue");
+    }
+
+    [Test]
     public async Task ARevertLeavesRowsChangedSince()
     {
         var song = Guid.CreateVersion7();

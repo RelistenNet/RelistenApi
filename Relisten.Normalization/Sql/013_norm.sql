@@ -280,6 +280,11 @@ CREATE TABLE norm.review_items (
     track_uuid  uuid,                           -- or one track (public.source_tracks.uuid; no FK)
     song_uuid   uuid REFERENCES norm.songs (uuid),  -- or one song
     venue_uuid  uuid REFERENCES norm.venues (uuid), -- or one venue
+    -- What kind of question (decided 2026-10-24): 'title' (an unsure song title), 'track',
+    -- 'spelling' (an unsure venue spelling), 'namesake' (one venue name in two towns of a
+    -- state), 'same_town' (one name twice in a town), and kinds to come; no migration needed.
+    question    text NOT NULL DEFAULT 'title' CHECK (question ~ '^[a-z_]+$'),
+    refs        jsonb NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(refs) = 'object'),  -- its subjects: {"venues": [uuid, ...], "spelling": "..."}
     title       text NOT NULL,                  -- as people read it
     note        text,                           -- why it's open: "maybe Throwing Stones, needs a listen"
     proposal    text,                           -- a machine's answer below its bar ("→ Looks Like Rain")
@@ -287,6 +292,10 @@ CREATE TABLE norm.review_items (
     resolved_at timestamptz,
     resolved_by text,                           -- author_ref of whoever closed it
     resolution  text,
+    -- A person's answer, for code to apply: {"action": "merge", "into": uuid, "from": [uuid]},
+    -- {"action": "two_places"}, {"action": "moved"}, {"action": "room_of", "room": uuid,
+    -- "site": uuid}, {"action": "place", "venue": uuid}, {"action": "not_a_venue"}, ...
+    answer      jsonb CHECK (answer IS NULL OR (jsonb_typeof(answer) = 'object' AND answer ? 'action')),
     author_type text NOT NULL CHECK (author_type IN ('importer', 'algorithm', 'llm', 'user', 'moderator')),
     author_ref  text NOT NULL,
     confidence  real CHECK (confidence BETWEEN 0 AND 1),  -- the proposal's
@@ -295,6 +304,7 @@ CREATE TABLE norm.review_items (
     CHECK (key IS NOT NULL OR track_uuid IS NOT NULL OR song_uuid IS NOT NULL OR venue_uuid IS NOT NULL),
     CHECK (subject <> 'song' OR artist_uuid IS NOT NULL),
     CHECK ((resolved_at IS NULL) = (resolved_by IS NULL)),
+    CHECK (answer IS NULL OR resolved_at IS NOT NULL),
     FOREIGN KEY (run_uuid, author_type, author_ref) REFERENCES norm.runs (uuid, author_type, author_ref)
 );
 -- One open item per title: per artist for songs, across artists for venues (two partial

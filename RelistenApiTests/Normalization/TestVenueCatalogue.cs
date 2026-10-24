@@ -426,17 +426,41 @@ public class TestVenueCatalogue
             "SELECT title FROM norm.review_items WHERE key LIKE 'same:%' AND resolved_at IS NULL";
         (await Strings(open)).Should().ContainSingle().Which.Should().StartWith("Cat's Cradle — ");
 
-        // "Two places": answered, and not asked again.
-        var key = (
+        // A typed question about both venues.
+        (
             await Strings(
-                "SELECT key FROM norm.review_items WHERE key LIKE 'same:%' AND resolved_at IS NULL"
+                "SELECT question || ' ' || jsonb_array_length(refs->'venues') FROM norm.review_items WHERE key LIKE 'same:%' AND resolved_at IS NULL"
             )
-        ).Single();
+        )
+            .Should()
+            .Equal("namesake 2");
+
+        // "Two places": answered, and not asked again.
+        var item = Guid.Parse(
+            (
+                await Strings(
+                    "SELECT uuid::text FROM norm.review_items WHERE key LIKE 'same:%' AND resolved_at IS NULL"
+                )
+            ).Single()
+        );
         await As(
             AuthorTypes.User,
             "expert",
-            store => store.CloseVenueReviewItemsAsync([key], "two places")
+            store =>
+                store.AnswerReviewItemAsync(
+                    item,
+                    new System.Text.Json.Nodes.JsonObject { ["action"] = "two_places" }
+                )
         );
+        (
+            await Strings(
+                "SELECT resolution || ' ' || (answer->>'action') FROM norm.review_items WHERE uuid = '"
+                    + item
+                    + "'"
+            )
+        )
+            .Should()
+            .Equal("two_places two_places");
         await match.RunAsync(artists, CancellationToken.None);
         (await Strings(open)).Should().BeEmpty();
     }

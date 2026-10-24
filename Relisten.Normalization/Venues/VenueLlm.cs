@@ -214,7 +214,18 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
                         a == null ? null : Proposal(a, request, answer),
                         a?.Confidence,
                         s.Uses,
-                        Subject: ReviewSubjects.Venue
+                        Subject: ReviewSubjects.Venue,
+                        Question: ReviewQuestions.Spelling,
+                        Refs: new System.Text.Json.Nodes.JsonObject
+                        {
+                            ["spelling"] = s.Display,
+                            ["rows"] = new System.Text.Json.Nodes.JsonArray(
+                                s.Rows.Select(r =>
+                                        (System.Text.Json.Nodes.JsonNode)r.Uuid.ToString()
+                                    )
+                                    .ToArray()
+                            ),
+                        }
                     );
                 })
                 .ToList()

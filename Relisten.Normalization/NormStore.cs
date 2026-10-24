@@ -59,8 +59,19 @@ public sealed record ReviewRecord(
     Guid? TrackUuid = null,
     Guid? SongUuid = null,
     string Subject = ReviewSubjects.Song,
-    Guid? VenueUuid = null
+    Guid? VenueUuid = null,
+    string Question = ReviewQuestions.Title,
+    System.Text.Json.Nodes.JsonObject? Refs = null
 );
+
+/// What a review item asks (norm.review_items.question). New kinds need no migration.
+public static class ReviewQuestions
+{
+    public const string Title = "title";
+    public const string Spelling = "spelling";
+    public const string Namesake = "namesake";
+    public const string SameTown = "same_town";
+}
 
 public static class ReviewSubjects
 {
@@ -634,14 +645,17 @@ public sealed partial class NormStore
         return await connection.ExecuteAsync(
             $"""
             INSERT INTO norm.review_items (uuid, subject, artist_uuid, key, track_uuid, song_uuid, venue_uuid, title,
-                                           note, proposal, shows, author_type, author_ref, confidence, run_uuid)
+                                           note, proposal, shows, author_type, author_ref, confidence, run_uuid,
+                                           question, refs)
             SELECT x.uuid, x.subject, x.artist, x.key, x.track, x.song, x.venue, x.title, x.note, x.proposal, x.shows,
-                   @AuthorType, @AuthorRef, x.confidence, @Run
+                   @AuthorType, @AuthorRef, x.confidence, @Run, x.question, x.refs::jsonb
             FROM unnest(@uuids, @subjects, @artists, @keys, @tracks, @songs, @venues, @titles, @notes, @proposals,
-                        @shows, @confidences)
-                 AS x(uuid, subject, artist, key, track, song, venue, title, note, proposal, shows, confidence)
+                        @shows, @confidences, @questions, @refs)
+                 AS x(uuid, subject, artist, key, track, song, venue, title, note, proposal, shows, confidence,
+                      question, refs)
             ON CONFLICT {conflict} WHERE subject = '{subject}' AND resolved_at IS NULL AND key IS NOT NULL DO UPDATE
-                SET proposal = coalesce(EXCLUDED.proposal, norm.review_items.proposal),
+                SET title = EXCLUDED.title, refs = EXCLUDED.refs,
+                    proposal = coalesce(EXCLUDED.proposal, norm.review_items.proposal),
                     confidence = coalesce(EXCLUDED.confidence, norm.review_items.confidence),
                     shows = coalesce(EXCLUDED.shows, norm.review_items.shows),
                     note = coalesce(EXCLUDED.note, norm.review_items.note), author_type = EXCLUDED.author_type,
@@ -649,7 +663,7 @@ public sealed partial class NormStore
                 WHERE {UpdateWhen(
                     NormWriteMode.Upsert,
                     "norm.review_items",
-                    "(norm.review_items.proposal, norm.review_items.confidence, norm.review_items.shows, norm.review_items.note) IS DISTINCT FROM (coalesce(EXCLUDED.proposal, norm.review_items.proposal), coalesce(EXCLUDED.confidence, norm.review_items.confidence), coalesce(EXCLUDED.shows, norm.review_items.shows), coalesce(EXCLUDED.note, norm.review_items.note))"
+                    "(norm.review_items.title, norm.review_items.refs, norm.review_items.proposal, norm.review_items.confidence, norm.review_items.shows, norm.review_items.note) IS DISTINCT FROM (EXCLUDED.title, EXCLUDED.refs, coalesce(EXCLUDED.proposal, norm.review_items.proposal), coalesce(EXCLUDED.confidence, norm.review_items.confidence), coalesce(EXCLUDED.shows, norm.review_items.shows), coalesce(EXCLUDED.note, norm.review_items.note))"
                 )}
             """,
             new
@@ -669,9 +683,53 @@ public sealed partial class NormStore
                 proposals = rows.Select(r => r.Proposal).ToArray(),
                 shows = rows.Select(r => r.Shows).ToArray(),
                 confidences = rows.Select(r => r.Confidence).ToArray(),
+                questions = rows.Select(r => r.Question).ToArray(),
+                refs = rows.Select(r =>
+                        (r.Refs ?? new System.Text.Json.Nodes.JsonObject()).ToJsonString()
+                    )
+                    .ToArray(),
             },
             tx
         );
+    }
+
+    /// A person's answer to an open item, for code to apply ({"action": "merge", ...}): the
+    /// item is resolved with it, its action as the resolution. Only a person answers.
+    public async Task AnswerReviewItemAsync(Guid item, System.Text.Json.Nodes.JsonObject answer)
+    {
+        if (!Human)
+        {
+            throw new InvalidOperationException("Only a person answers a review item");
+        }
+
+        var action = (string?)answer["action"];
+        if (string.IsNullOrWhiteSpace(action))
+        {
+            throw new ArgumentException("An answer names its action", nameof(answer));
+        }
+
+        var answered = await connection.ExecuteAsync(
+            """
+            UPDATE norm.review_items SET answer = @answer::jsonb, resolution = @action, resolved_at = now(),
+                resolved_by = @AuthorRef, author_type = @AuthorType, author_ref = @AuthorRef, run_uuid = @Run,
+                updated_at = now()
+            WHERE uuid = @item AND resolved_at IS NULL
+            """,
+            new
+            {
+                item,
+                answer = answer.ToJsonString(),
+                action,
+                AuthorType,
+                AuthorRef,
+                Run,
+            },
+            tx
+        );
+        if (answered == 0)
+        {
+            throw new InvalidOperationException($"No open review item {item}");
+        }
     }
 
     /// Closes the open items about these titles. A machine closes only machines' items: a
