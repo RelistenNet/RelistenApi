@@ -496,6 +496,74 @@ public class TestNormStore
     }
 
     [Test]
+    public async Task OnlyDatedOrSingleOfficialNamesNameAVenue()
+    {
+        var (spectrum, pavilion) = (Guid.CreateVersion7(), Guid.CreateVersion7());
+        var bot = await As(AuthorTypes.Algorithm, "venue-matcher@2");
+        await bot.WriteVenuesAsync([
+            new VenueRecord(
+                spectrum,
+                "The Spectrum",
+                City: "Philadelphia",
+                Region: "PA",
+                Country: "US",
+                Confidence: 0.95f
+            ),
+            new VenueRecord(
+                pavilion,
+                "FleetBoston Pavilion",
+                City: "Boston",
+                Region: "MA",
+                Country: "US",
+                Confidence: 0.95f
+            ),
+        ]);
+        var llm = await As(AuthorTypes.Llm, "venue-history@1");
+        await llm.WriteVenueNamesAsync([
+            new VenueNameRecord(
+                spectrum,
+                "The Spectrum",
+                VenueNameKinds.Official,
+                new DateOnly(1967, 1, 1),
+                new DateOnly(1994, 1, 1),
+                0.9f
+            ),
+            new VenueNameRecord(
+                spectrum,
+                "Wachovia Spectrum",
+                VenueNameKinds.Official,
+                new DateOnly(2003, 1, 1),
+                new DateOnly(2009, 1, 1),
+                0.9f
+            ),
+            new VenueNameRecord(
+                pavilion,
+                "Bank of America Pavilion",
+                VenueNameKinds.Official,
+                Confidence: 0.9f
+            ),
+            new VenueNameRecord(
+                pavilion,
+                "Leader Bank Pavilion",
+                VenueNameKinds.Official,
+                Confidence: 0.9f
+            ),
+        ]);
+        await llm.RefreshVenueNamesAsync();
+
+        // A closed venue shows its last name; undated names don't choose.
+        (
+            await db.QueryAsync<string>(
+                "SELECT name FROM norm.venues WHERE uuid = ANY(@ids) ORDER BY city",
+                new { ids = new[] { spectrum, pavilion } },
+                tx
+            )
+        )
+            .Should()
+            .Equal("FleetBoston Pavilion", "Wachovia Spectrum");
+    }
+
+    [Test]
     public async Task ARevertLeavesRowsChangedSince()
     {
         var song = Guid.CreateVersion7();

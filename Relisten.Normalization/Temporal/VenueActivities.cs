@@ -15,8 +15,18 @@ public sealed record VenueChunkInput(
 
 /// The venue catalogue's steps. Each reads the catalogue fresh, so a resumed run continues
 /// from what earlier steps committed.
-public sealed class VenueActivities(VenueMatch match, VenueLlm llm)
+public sealed class VenueActivities(VenueMatch match, VenueLlm llm, VenueHistory history)
 {
+    [Activity("Venues.History")]
+    public async Task<VenueHistoryResult> History(int minShows)
+    {
+        using var heartbeat = new ActivityHeartbeat();
+        return await history.RunChunkAsync(
+            minShows,
+            ActivityExecutionContext.Current.CancellationToken
+        );
+    }
+
     [Activity("Venues.Match")]
     public async Task<VenueMatchResult> Match(IReadOnlyList<Guid>? artists)
     {

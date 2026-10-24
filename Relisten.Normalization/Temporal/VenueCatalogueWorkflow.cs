@@ -12,11 +12,14 @@ namespace Relisten.Normalization.Temporal;
 /// cross-artist, so a later run for other artists maps onto the venues this one made.
 /// MaxChunks caps the run's model calls, a chunk's re-ask included (null: until nothing is
 /// left to ask). FlaggedOnly: the artists whose venues are switched on (features.norm_venues),
-/// read when the run starts; the nightly schedule's run.
+/// read when the run starts; the nightly schedule's run. HistoryMinShows: after the match,
+/// the official names of venues with at least this many shows that have none (VenueHistory),
+/// within the same budget; 0 skips it.
 public sealed record BuildVenueCatalogue(
     IReadOnlyList<Guid>? Artists = null,
     int? MaxChunks = null,
-    bool FlaggedOnly = false
+    bool FlaggedOnly = false,
+    int HistoryMinShows = 5
 );
 
 public sealed record VenueCatalogueResult(
@@ -30,6 +33,7 @@ public sealed record VenueCatalogueResult(
 {
     public VenueMatchResult? FirstMatch { get; init; }
     public VenueMatchResult? LastMatch { get; init; }
+    public int VenuesNamed { get; init; }
 }
 
 /// Builds or extends the venue catalogue (string-theory docs/matching.md T3): the
@@ -133,12 +137,51 @@ public class VenueCatalogueWorkflow
             (VenueActivities a) => a.Match(request.Artists),
             Step
         );
-        return total with
+        total = total with
         {
             VenuesCreated = total.VenuesCreated + last.VenuesCreated,
             RowsMapped = total.RowsMapped + last.RowsMapped,
             FirstMatch = first,
             LastMatch = last,
         };
+
+        // The names of the venues the model never saw, while the budget lasts.
+        failures = 0;
+        while (
+            request.HistoryMinShows > 0 && (request.MaxChunks is not { } cap || total.Chunks < cap)
+        )
+        {
+            VenueHistoryResult history;
+            var minShows = request.HistoryMinShows;
+            try
+            {
+                history = await Workflow.ExecuteActivityAsync(
+                    (VenueActivities a) => a.History(minShows),
+                    ChunkStep
+                );
+                failures = 0;
+            }
+            catch (ActivityFailureException) when (++failures < FailuresInARow)
+            {
+                total = total with { Chunks = total.Chunks + 1 };
+                continue;
+            }
+
+            if (history.Done)
+            {
+                break;
+            }
+
+            total = total with
+            {
+                Chunks = total.Chunks + 1,
+                VenuesNamed = total.VenuesNamed + history.Named,
+                Unsure = total.Unsure + history.Unsure,
+                InputTokens = total.InputTokens + history.InputTokens,
+                OutputTokens = total.OutputTokens + history.OutputTokens,
+            };
+        }
+
+        return total;
     }
 }

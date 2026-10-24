@@ -71,6 +71,7 @@ public static class ReviewQuestions
     public const string Spelling = "spelling";
     public const string Namesake = "namesake";
     public const string SameTown = "same_town";
+    public const string History = "history";
 }
 
 public static class ReviewSubjects

@@ -489,6 +489,70 @@ public class NormLab
         }
     }
 
+    /// Official names for the lab's busiest venues the model never named (VenueHistory):
+    /// NORM_LAB_MAX_CHUNKS requests of 50 venues with NORM_LAB_MIN_SHOWS shows or more, then
+    /// what each asked venue is called now.
+    [Test, Explicit("Calls OpenAI; run deliberately")]
+    public async Task VenueHistory()
+    {
+        var model = Environment.GetEnvironmentVariable("NORM_LAB_MODEL");
+        var key = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+        if (string.IsNullOrEmpty(model) || string.IsNullOrEmpty(key))
+        {
+            Assert.Ignore("NORM_LAB_MODEL and OPENAI_API_KEY are needed");
+        }
+
+        var calls = int.TryParse(
+            Environment.GetEnvironmentVariable("NORM_LAB_MAX_CHUNKS"),
+            out var c
+        )
+            ? c
+            : 1;
+        var minShows = int.TryParse(
+            Environment.GetEnvironmentVariable("NORM_LAB_MIN_SHOWS"),
+            out var m
+        )
+            ? m
+            : 5;
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["OpenAI:Model"] = model,
+                    ["OpenAI:ApiKey"] = key,
+                }
+            )
+            .Build();
+        var db = Db(labUrl);
+        var history = new Relisten.Normalization.Venues.VenueHistory(
+            new Relisten.Services.Normalization.DbServiceNormalizationDatabase(db),
+            new OpenAiCatalogueModel(configuration)
+        );
+        for (var i = 0; i < calls; i++)
+        {
+            var result = await history.RunChunkAsync(minShows, CancellationToken.None);
+            TestContext.Out.WriteLine(result.ToString());
+            if (result.Done)
+            {
+                break;
+            }
+        }
+
+        await using var connection = await Open(db);
+        foreach (
+            var line in await connection.QueryAsync<string>(
+                """
+                SELECT v.name || ' — ' || v.city || ' — ' || coalesce(r.proposal, '') || ' [' || round(r.confidence::numeric, 2) || ']'
+                FROM norm.review_items r JOIN norm.venues v ON v.uuid = r.venue_uuid
+                WHERE r.key LIKE 'history:%' ORDER BY r.shows DESC NULLS LAST
+                """
+            )
+        )
+        {
+            TestContext.Out.WriteLine("  " + line);
+        }
+    }
+
     /// Which rule links the names of one town (NORM_LAB_TOWN, a locality key): diagnosis
     /// for families that grow too large.
     [Test, Explicit("Prints a town's family links; run deliberately")]

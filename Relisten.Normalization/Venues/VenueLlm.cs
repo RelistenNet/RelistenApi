@@ -355,13 +355,28 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
         var names = new List<VenueNameRecord>();
         foreach (var n in created.Concat(twins))
         {
+            // The proposed name is the current official name: it starts where the last dated
+            // name it lists ended ("Hulu Theater" after "The Theater at Madison Square Garden",
+            // 1991–2018), unless it lists that name itself.
+            var listed = n.Names.Any(m =>
+                m.Kind == VenueNameKinds.Official
+                && VenueNormalizer.Key(m.Name) == VenueNormalizer.Key(n.Name)
+            );
             names.Add(
-                new VenueNameRecord(
-                    refs[n.Ref],
-                    n.Name,
-                    VenueNameKinds.Spelling,
-                    Confidence: Threshold
-                )
+                listed
+                    ? new VenueNameRecord(
+                        refs[n.Ref],
+                        n.Name,
+                        VenueNameKinds.Spelling,
+                        Confidence: Threshold
+                    )
+                    : new VenueNameRecord(
+                        refs[n.Ref],
+                        n.Name,
+                        VenueNameKinds.Official,
+                        n.Names.Where(m => m.Kind == VenueNameKinds.Official).Max(m => m.ValidTo),
+                        Confidence: Threshold
+                    )
             );
             names.AddRange(n.Names.Select(m => m with { VenueUuid = refs[n.Ref] }));
         }
@@ -975,7 +990,7 @@ internal sealed class VenueRequest
         request.Places.TryGetValue(locality, out var place) ? place.RegionKey : null;
 
     /// A name with its kind and dates; null when the name is empty or its dates don't parse.
-    private static VenueNameRecord? Name(Guid venue, JsonNode node)
+    internal static VenueNameRecord? Name(Guid venue, JsonNode node)
     {
         var name = ((string?)node["name"] ?? "").Trim();
         var kind =

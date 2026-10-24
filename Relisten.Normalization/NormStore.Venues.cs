@@ -356,17 +356,23 @@ public sealed partial class NormStore
         );
     }
 
-    /// A venue's display name follows its current official name (an official name with no end):
-    /// "Red Rock Ampitheater", the spelling that created it, becomes "Red Rocks Amphitheatre"
-    /// once that is known. A machine leaves a person's venue alone.
+    /// A venue's display name follows its official names: the current one (no end), else the
+    /// last one of a closed venue ("Wachovia Spectrum"). Only dated names choose, or a single
+    /// undated one ("Red Rock Ampitheater", the spelling that created it, becomes "Red Rocks
+    /// Amphitheatre"); several undated names choose nothing. A machine leaves a person's venue
+    /// alone.
     public Task<int> RefreshVenueNamesAsync() =>
         connection.ExecuteAsync(
             $"""
             UPDATE norm.venues v SET name = n.name, author_type = @AuthorType, author_ref = @AuthorRef,
                 confidence = coalesce(v.confidence, n.confidence, 0.9), run_uuid = @Run, updated_at = now()
-            FROM (SELECT DISTINCT ON (venue_uuid) venue_uuid, name, confidence FROM norm.venue_names
-                  WHERE kind = 'official' AND valid_to IS NULL
-                  ORDER BY venue_uuid, valid_from DESC) n
+            FROM (SELECT DISTINCT ON (o.venue_uuid) o.venue_uuid, o.name, o.confidence
+                  FROM norm.venue_names o
+                  WHERE o.kind = 'official'
+                    AND ((o.valid_from > '-infinity' OR o.valid_to IS NOT NULL)
+                         OR 1 = (SELECT count(*) FROM norm.venue_names x
+                                 WHERE x.venue_uuid = o.venue_uuid AND x.kind = 'official'))
+                  ORDER BY o.venue_uuid, (o.valid_to IS NULL) DESC, o.valid_from DESC, o.valid_to DESC) n
             WHERE v.uuid = n.venue_uuid AND v.merged_into IS NULL AND v.name IS DISTINCT FROM n.name
               {(Human ? "" : "AND v.author_type NOT IN ('user', 'moderator')")}
             """,

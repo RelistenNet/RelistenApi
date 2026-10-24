@@ -137,6 +137,56 @@ internal sealed class ScriptedVenueModel(
         };
 }
 
+/// A history model that knows Red Rocks (sure, or not when unsure is set).
+internal sealed class ScriptedHistoryModel(bool unsure = false) : ICatalogueModel
+{
+    public int Calls { get; private set; }
+    public string ModelId => "scripted-history-1";
+
+    public Task<ModelReply> CompleteAsync(
+        string instructions,
+        string data,
+        string schemaName,
+        string schemaJson,
+        CancellationToken cancellationToken
+    )
+    {
+        Calls++;
+        var venues = new JsonArray();
+        foreach (var v in JsonNode.Parse(data)!["venues"]!.AsArray())
+        {
+            venues.Add(
+                new JsonObject
+                {
+                    ["id"] = (string)v!["id"]!,
+                    ["names"] = new JsonArray(
+                        new JsonObject
+                        {
+                            ["name"] = "Red Rocks Park & Amphitheatre",
+                            ["kind"] = "official",
+                            ["from"] = "1941",
+                            ["to"] = null,
+                        },
+                        new JsonObject
+                        {
+                            ["name"] = "Red Rocks",
+                            ["kind"] = "short",
+                            ["from"] = null,
+                            ["to"] = null,
+                        }
+                    ),
+                    ["confidence"] = unsure ? 0.6 : 0.95,
+                    ["rationale"] = "scripted",
+                }
+            );
+        }
+
+        return Task.FromResult(
+            new ModelReply(new JsonObject { ["venues"] = venues }.ToJsonString(), 80, 40)
+        );
+    }
+}
+
 [TestFixture, NonParallelizable, Category("LocalIngestion")]
 public class TestVenueCatalogue
 {
@@ -366,7 +416,7 @@ public class TestVenueCatalogue
                 WHERE v.name = 'Madison Square Garden' ORDER BY 1
                 """
             )
-        ).Should().Equal("MSG (short)", "Madison Square Garden (spelling)", "The Garden (short)");
+        ).Should().Equal("MSG (short)", "Madison Square Garden (official)", "The Garden (short)");
     }
 
     [Test]
@@ -627,5 +677,31 @@ public class TestVenueCatalogue
         (await flags.VenuesOnAsync(artists[0])).Should().BeTrue();
         (await flags.VenuesOnAsync(artists[1])).Should().BeFalse();
         (await flags.VenueArtistsAsync()).Should().Contain(artists[0]).And.NotContain(artists[1]);
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task AVenueTheModelNeverSawLearnsItsNamesOnce(bool unsure)
+    {
+        var database = new DbServiceNormalizationDatabase(db);
+        await new VenueMatch(database).RunAsync(artists, CancellationToken.None);
+        var model = new ScriptedHistoryModel(unsure);
+        var history = new VenueHistory(database, model);
+
+        var first = await history.RunChunkAsync(1, CancellationToken.None);
+        (await history.RunChunkAsync(1, CancellationToken.None)).Done.Should().BeTrue();
+
+        first.Asked.Should().Be(1); // Red Rocks: the one venue the match created
+        model.Calls.Should().Be(1);
+        (await Strings("SELECT name FROM norm.venues WHERE city = 'Morrison'"))
+            .Should()
+            .Equal(unsure ? "Red Rocks Amphitheatre" : "Red Rocks Park & Amphitheatre");
+        (
+            await Strings(
+                "SELECT question || ' ' || (resolved_at IS NULL)::text FROM norm.review_items WHERE key LIKE 'history:%'"
+            )
+        )
+            .Should()
+            .Equal(unsure ? "history true" : "history false");
     }
 }
