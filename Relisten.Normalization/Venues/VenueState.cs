@@ -276,7 +276,9 @@ public sealed partial class VenueState
         var regions = rows.Select(r => r.Locality)
             .OfType<Locality>()
             .Concat(catalogue)
-            .Where(l => l.Region != null || l.Country != null)
+            // Only places with a state teach one ("NYC" with only a country would block
+            // New York's NY).
+            .Where(l => l.Region != null)
             .GroupBy(l => VenueNormalizer.Normalize(l.City))
             .ToDictionary(
                 g => g.Key,

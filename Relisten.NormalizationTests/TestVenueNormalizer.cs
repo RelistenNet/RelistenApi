@@ -47,6 +47,10 @@ public class TestVenueNormalizer
     [TestCase("Montage Mountain, Scranton, PA", "scranton|pa|US")]
     [TestCase("1600 Main St, Philadelphia, PA", "philadelphia|pa|US")]
     [TestCase("Winnipeg Manitoba Canada", "winnipeg|mb|CA")]
+    [TestCase("Englewood, CO (Denver)", "englewood|co|US")]
+    [TestCase("Sydney, New South Wales", "sydney|nsw|AU")]
+    [TestCase("Sydney, NSW Australia", "sydney|nsw|AU")]
+    [TestCase("Melbourne, Victoria", "melbourne|vic|AU")]
     [TestCase("Montage Mountain, Scranton, PA, USA", "scranton|pa|US")]
     public void LocationsParseToALocality(string location, string expected) =>
         VenueNormalizer.ParseLocation(location)!.Key.Should().Be(expected);

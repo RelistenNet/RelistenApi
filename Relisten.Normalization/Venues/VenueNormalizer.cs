@@ -82,6 +82,9 @@ public static partial class VenueNormalizer
     [System.Text.RegularExpressions.GeneratedRegex(@"\[[^\]]*\]")]
     private static partial System.Text.RegularExpressions.Regex Bracketed();
 
+    [System.Text.RegularExpressions.GeneratedRegex(@"\([^)]*\)")]
+    private static partial System.Text.RegularExpressions.Regex Parenthesised();
+
     // "AT&T", "R&B": short letter groups joined by "&" are one word, not "at and t".
     [System.Text.RegularExpressions.GeneratedRegex(@"\b([A-Za-z]{1,3})&([A-Za-z]{1,3})\b")]
     private static partial System.Text.RegularExpressions.Regex LetterAmpersand();
@@ -271,11 +274,11 @@ public static partial class VenueNormalizer
     private static IReadOnlyList<string> ComputeIdentities(string key)
     {
         var words = Words(key);
-        return
-        [
-            "c:" + string.Concat(words),
-            "s:" + string.Join(' ', words.Order(StringComparer.Ordinal)),
-        ];
+        // Glued words fold too: "GeorgiaTheatre" is "Georgia Theatre".
+        var compact = string.Concat(words)
+            .Replace("theatre", "theater")
+            .Replace("centre", "center");
+        return ["c:" + compact, "s:" + string.Join(' ', words.Order(StringComparer.Ordinal))];
     }
 
     public static bool SameName(string a, string b) => Identities(a).Intersect(Identities(b)).Any();
@@ -348,8 +351,9 @@ public static partial class VenueNormalizer
             return null;
         }
 
-        // "Dayton Ohio/Huber Heights Ohio": the first place named.
-        location = location.Split('/')[0];
+        // "Dayton Ohio/Huber Heights Ohio": the first place named; a note in brackets
+        // ("Englewood, CO (Denver)") is not part of it.
+        location = Parenthesised().Replace(location.Split('/')[0], " ");
         var fields = location.Split(',').Select(f => f.Trim()).Where(f => f.Length > 0).ToList();
         if (fields.Count == 0)
         {
@@ -655,6 +659,23 @@ public static partial class VenueNormalizer
             ("d c", new RegionInfo("DC", "district of columbia", "US")),
             ("pq", new RegionInfo("QC", "quebec", "CA")),
             ("calif", new RegionInfo("CA", "california", "US")),
+            // Australia's states (WA and NT stay Washington and the Northwest Territories).
+            ("nsw", new RegionInfo("NSW", "new south wales", "AU")),
+            ("new south wales", new RegionInfo("NSW", "new south wales", "AU")),
+            ("vic", new RegionInfo("VIC", "victoria", "AU")),
+            ("victoria", new RegionInfo("VIC", "victoria", "AU")),
+            ("qld", new RegionInfo("QLD", "queensland", "AU")),
+            ("queensland", new RegionInfo("QLD", "queensland", "AU")),
+            ("tas", new RegionInfo("TAS", "tasmania", "AU")),
+            ("tasmania", new RegionInfo("TAS", "tasmania", "AU")),
+            ("act", new RegionInfo("ACT", "australian capital territory", "AU")),
+            (
+                "australian capital territory",
+                new RegionInfo("ACT", "australian capital territory", "AU")
+            ),
+            ("western australia", new RegionInfo("WA", "western australia", "AU")),
+            ("south australia", new RegionInfo("SA", "south australia", "AU")),
+            ("northern territory", new RegionInfo("NT", "northern territory", "AU")),
             ("cal", new RegionInfo("CA", "california", "US")),
             ("tenn", new RegionInfo("TN", "tennessee", "US")),
             ("fla", new RegionInfo("FL", "florida", "US")),
