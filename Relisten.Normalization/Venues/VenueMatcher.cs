@@ -31,15 +31,19 @@ public sealed record VenuePlan(
 ///    suburb) goes to the LLM whole.
 public static class VenueMatcher
 {
-    public const string Author = "venue-matcher@2.4.0";
+    public const string Author = "venue-matcher@2.5.0";
     public const float Exact = 0.95f;
     public const float Likely = 0.9f;
 
     public static VenuePlan Match(VenueState state)
     {
         var plan = new PlanBuilder(state);
-        var open = PlaceOnLearnedIds(PlaceOnKnown(state, plan), plan);
-        foreach (var family in Families(open))
+        var open = PlaceOnSameShows(
+            state,
+            PlaceOnLearnedIds(PlaceOnKnown(state, plan), plan),
+            plan
+        );
+        foreach (var family in Families(open, state.SameShowRows))
         {
             if (!CreateIfUnambiguous(family, plan))
             {
@@ -113,6 +117,68 @@ public static class VenueMatcher
         return open;
     }
 
+    /// Every tape of a show was recorded at one place: a row whose shows the other tapes put
+    /// on one venue joins it, when that covers at least half its show dates and the row
+    /// could be that venue by its name (initials, alike, a shared place word) or has no usable
+    /// town. A row whose name says otherwise ("Good Music and Other Stuff" the afternoon The
+    /// Orange Peel had the show) is left: an in-store or a late set is another place.
+    private static List<LegacyVenue> PlaceOnSameShows(
+        VenueState state,
+        List<LegacyVenue> open,
+        PlanBuilder plan
+    )
+    {
+        var rest = new List<LegacyVenue>();
+        foreach (var row in open)
+        {
+            if (
+                state.SameShows.TryGetValue(row.Uuid, out var votes)
+                && votes.Count == 1
+                && votes.Single() is var (venue, dates)
+                && dates * 2 >= state.ShowDates.GetValueOrDefault(row.Uuid, 1)
+                && state.Venues.TryGetValue(venue, out var v)
+                && (
+                    row.Locality is not { Trusted: true }
+                    || (
+                        (
+                            v.LocalityKey == row.Locality.Key
+                            || (
+                                v.City != null
+                                && VenueNormalizer.Normalize(v.City)
+                                    == VenueNormalizer.Normalize(row.Locality.City)
+                            )
+                            || new Locality(v.City ?? "", v.Region, v.Country).RegionKey
+                                == row.Locality.RegionKey
+                        )
+                        && plan.NamesOf(venue)
+                            .Append(VenueNormalizer.Key(v.Name))
+                            .OfType<string>()
+                            .Any(n =>
+                                VenueNormalizer.SameName(n, row.Key!)
+                                || Alike(n, row.Key!)
+                                || ShareADistinctiveWord(
+                                    n,
+                                    row.Key!,
+                                    VenueNormalizer
+                                        .Normalize(row.Locality.City)
+                                        .Split(' ')
+                                        .ToHashSet()
+                                )
+                            )
+                    )
+                )
+            )
+            {
+                plan.Place(row, venue, Likely);
+                continue;
+            }
+
+            rest.Add(row);
+        }
+
+        return rest;
+    }
+
     /// An external id a row taught a venue in this pass places every other row carrying it,
     /// whatever order the rows came in.
     private static List<LegacyVenue> PlaceOnLearnedIds(List<LegacyVenue> open, PlanBuilder plan)
@@ -139,7 +205,10 @@ public static class VenueMatcher
     /// two states (a typo'd state); a shared external id; and names alike, or sharing a word
     /// that names a place, within one town. A row without a town joins the one family its name
     /// has, if it has only one.
-    internal static List<IReadOnlyList<LegacyVenue>> Families(List<LegacyVenue> open)
+    internal static List<IReadOnlyList<LegacyVenue>> Families(
+        List<LegacyVenue> open,
+        IReadOnlyList<(Guid A, Guid B)>? sameShows = null
+    )
     {
         var parent = Enumerable.Range(0, open.Count).ToArray();
         int Find(int x)
@@ -219,6 +288,26 @@ public static class VenueMatcher
                         Union(keys[i].Row, keys[j].Row);
                     }
                 }
+            }
+        }
+
+        // Rows of one show in one state (or one without a usable town) were one place's, by
+        // different names ("BSU Field House" / "Brick Breeden Fieldhouse"), unless an
+        // in-store or a late set: the LLM decides, together.
+        var index = Enumerable.Range(0, open.Count).ToDictionary(i => open[i].Uuid);
+        foreach (var (a, b) in sameShows ?? [])
+        {
+            if (
+                index.TryGetValue(a, out var i)
+                && index.TryGetValue(b, out var j)
+                && (
+                    open[i].Locality is not { Trusted: true }
+                    || open[j].Locality is not { Trusted: true }
+                    || open[i].Locality!.RegionKey == open[j].Locality!.RegionKey
+                )
+            )
+            {
+                Union(i, j);
             }
         }
 

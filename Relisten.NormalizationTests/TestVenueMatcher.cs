@@ -587,4 +587,62 @@ public class TestVenueMatcher
             .Should()
             .BeEmpty();
     }
+
+    [Test]
+    public void ATapeTakesTheVenueTheOtherTapesOfItsShowsAreOn()
+    {
+        var garden = new CatalogueVenue(
+            Guid.NewGuid(),
+            "Madison Square Garden",
+            "site",
+            null,
+            "New York",
+            "NY",
+            "US"
+        );
+        var peel = new CatalogueVenue(
+            Guid.NewGuid(),
+            "The Orange Peel",
+            "site",
+            null,
+            "Asheville",
+            "NC",
+            "US"
+        );
+        var msg = Row("MSG", "Unknown Location");
+        var instore = Row("Good Music and Other Stuff", "Asheville, NC");
+        var fieldhouse = Row("BSU Field House", "Bozeman, MT");
+        var breeden = Row("Brick Breeden Fieldhouse", "Bozeman, Montana");
+        var state = new VenueState
+        {
+            Unmapped = [msg, instore, fieldhouse, breeden],
+            Venues = new Dictionary<Guid, CatalogueVenue>
+            {
+                [garden.Uuid] = garden,
+                [peel.Uuid] = peel,
+            },
+            Names = new[]
+            {
+                ("madison square garden", garden.Uuid),
+                ("orange peel", peel.Uuid),
+            }.ToLookup(n => n.Item1, n => n.Item2),
+            ExternalIds = new Dictionary<(string, string), Guid>(),
+            ShowDates = new Dictionary<Guid, int> { [msg.Uuid] = 2, [instore.Uuid] = 1 },
+            SameShows = new Dictionary<Guid, IReadOnlyDictionary<Guid, int>>
+            {
+                [msg.Uuid] = new Dictionary<Guid, int> { [garden.Uuid] = 2 },
+                [instore.Uuid] = new Dictionary<Guid, int> { [peel.Uuid] = 1 },
+            },
+            SameShowRows = [(fieldhouse.Uuid, breeden.Uuid)],
+        };
+
+        var plan = VenueMatcher.Match(state);
+
+        plan.Evidence.Should()
+            .ContainSingle(e => e.LegacyVenueUuid == msg.Uuid && e.VenueUuid == garden.Uuid);
+        plan.Evidence.Should()
+            .NotContain(e => e.LegacyVenueUuid == instore.Uuid && e.VenueUuid == peel.Uuid);
+        // Two names of one show's place: one family, for the model.
+        plan.Left.Should().Contain(f => f.Contains(fieldhouse) && f.Contains(breeden));
+    }
 }

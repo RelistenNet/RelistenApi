@@ -29,7 +29,7 @@ public sealed record VenueChunkResult(
 /// asks twice.
 public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
 {
-    public const string PromptVersion = "venue-llm@6";
+    public const string PromptVersion = "venue-llm@7";
     public const float Threshold = 0.9f;
 
     internal const string NoAnswer = "no answer";
@@ -497,6 +497,12 @@ internal sealed class VenueRequest
         no usable town at all. Spellings can be misspelled, abbreviated, carry the city, or name
         a room inside a place.
 
+        A spelling's same_shows are the venues other recordings of the same shows were already
+        placed on, with how many shows: every recording of a show was made at one place, so
+        this is strong evidence the spelling is that venue, whatever its text or town says. The
+        exception is another event the same day: an in-store, an afternoon set, a late-night
+        show at a club, a different stage of a festival (a room of that site).
+
         One name in several towns is either a chain or namesakes (House of Blues in Cleveland
         and in Dallas: separate venues) or one place filed under nearby towns (one venue).
         Decide from the towns, the artists and the years. A spelling may be placed on a venue in
@@ -663,9 +669,28 @@ internal sealed class VenueRequest
                         )
                     )
                     .DistinctBy(v => v.Uuid);
+            // The venues other tapes of these spellings' shows are on: listed too, wherever
+            // they are (a tape with a typo'd or missing town is still that show's).
+            Dictionary<Guid, int> SameShows(Spelling s) =>
+                s
+                    .Rows.SelectMany(r =>
+                        state.SameShows.GetValueOrDefault(r.Uuid) ?? new Dictionary<Guid, int>()
+                    )
+                    .GroupBy(v => v.Key)
+                    .ToDictionary(g => g.Key, g => g.Sum(v => v.Value));
+            here = here.Concat(
+                    group
+                        .SelectMany(s => SameShows(s).Keys)
+                        .Distinct()
+                        .Where(state.Venues.ContainsKey)
+                        .Select(v => state.Venues[v])
+                )
+                .DistinctBy(v => v.Uuid);
+            var listed = new Dictionary<Guid, string>();
             var venues = here.Select(v =>
                 {
                     var id = $"v{venueIds.Count + 1}";
+                    listed[v.Uuid] = id;
                     venueIds[id] = v.Uuid;
                     venueNames[id] = v.Name;
                     venueLocality[id] = lid;
@@ -694,6 +719,10 @@ internal sealed class VenueRequest
                     {
                         id,
                         text = s.Display,
+                        same_shows = SameShows(s)
+                            .Where(v => listed.ContainsKey(v.Key))
+                            .OrderByDescending(v => v.Value)
+                            .Select(v => new { venue = listed[v.Key], shows = v.Value }),
                         artists = s.Rows.Select(r => r.ArtistUuid).Distinct().Count(),
                         recordings = s.Uses,
                         years = years.Count == 0

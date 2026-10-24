@@ -67,6 +67,16 @@ public sealed partial class VenueState
     /// (provider, key) → venue (resolved to its survivor).
     public required IReadOnlyDictionary<(string, string), Guid> ExternalIds { get; init; }
 
+    /// Every tape of a show was recorded at one place. For each unmapped row: how many show
+    /// dates it is used on (by a show or a tape), the venues other rows of those shows are
+    /// placed on (→ dates shared), and the unmapped rows it shares a show with.
+    public IReadOnlyDictionary<Guid, int> ShowDates { get; init; } = new Dictionary<Guid, int>();
+
+    public IReadOnlyDictionary<Guid, IReadOnlyDictionary<Guid, int>> SameShows { get; init; } =
+        new Dictionary<Guid, IReadOnlyDictionary<Guid, int>>();
+
+    public IReadOnlyList<(Guid A, Guid B)> SameShowRows { get; init; } = [];
+
     /// Venues by locality key.
     public ILookup<string, CatalogueVenue> ByLocality =>
         byLocality ??= Venues
@@ -152,6 +162,30 @@ public sealed partial class VenueState
             transaction: tx
         );
 
+        // Rows of one artist on one date: the same show, so the same place.
+        var together = (
+            await connection.QueryAsync<(Guid Row, DateTime Date, Guid Other, Guid? Venue)>(
+                """
+                WITH uses AS (
+                    SELECT v.uuid AS row_uuid, v.artist_id, sh.date FROM venues v JOIN shows sh ON sh.venue_id = v.id
+                    UNION
+                    SELECT v.uuid, v.artist_id, sh.date
+                    FROM venues v JOIN sources s ON s.venue_id = v.id JOIN shows sh ON sh.id = s.show_id
+                ), mine AS (
+                    SELECT u.* FROM uses u JOIN artists a ON a.id = u.artist_id
+                    WHERE (@all OR a.uuid = ANY(@artists))
+                      AND NOT EXISTS (SELECT 1 FROM norm.venue_evidence e WHERE e.legacy_venue_uuid = u.row_uuid)
+                )
+                SELECT m.row_uuid, m.date, coalesce(o.row_uuid, m.row_uuid), e.venue_uuid
+                FROM mine m
+                LEFT JOIN uses o ON o.artist_id = m.artist_id AND o.date = m.date AND o.row_uuid <> m.row_uuid
+                LEFT JOIN norm.venue_evidence e ON e.legacy_venue_uuid = o.row_uuid
+                """,
+                new { all = artists == null, artists = artists?.ToArray() ?? [] },
+                tx
+            )
+        ).ToList();
+
         var legacy = rows.Select(r => new LegacyVenue(
                 r.Uuid,
                 r.Artist,
@@ -200,6 +234,27 @@ public sealed partial class VenueState
                 .ToLookup(n => n.Normalized, n => n.Venue),
             ExternalIds = ids.GroupBy(i => (i.Provider, i.Key))
                 .ToDictionary(g => g.Key, g => Survivor(g.First().Venue)),
+            ShowDates = together
+                .GroupBy(t => t.Row)
+                .ToDictionary(g => g.Key, g => g.Select(t => t.Date).Distinct().Count()),
+            SameShows = together
+                .Where(t => t.Venue != null)
+                .GroupBy(t => t.Row)
+                .ToDictionary(
+                    g => g.Key,
+                    g =>
+                        (IReadOnlyDictionary<Guid, int>)
+                            g.GroupBy(t => Survivor(t.Venue!.Value))
+                                .ToDictionary(
+                                    v => v.Key,
+                                    v => v.Select(t => t.Date).Distinct().Count()
+                                )
+                ),
+            SameShowRows = together
+                .Where(t => t.Venue == null && t.Other != t.Row)
+                .Select(t => t.Row.CompareTo(t.Other) < 0 ? (t.Row, t.Other) : (t.Other, t.Row))
+                .Distinct()
+                .ToList(),
         };
     }
 
