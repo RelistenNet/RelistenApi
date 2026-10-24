@@ -36,3 +36,26 @@ public sealed class VenueActivities(VenueMatch match, VenueLlm llm)
         );
     }
 }
+
+/// The venue steps that never call the model, so they run without OpenAI settings: the match
+/// after an artist's import, and the nightly run's artists.
+public sealed class VenueMatchActivities(VenueMatch match, NormFlags flags)
+{
+    /// After an artist's import: the free match for its new rows, when the artist's venues
+    /// are switched on (features.norm_venues); null when they aren't.
+    [Activity("Venues.MatchArtist")]
+    public async Task<VenueMatchResult?> MatchArtist(Guid artist)
+    {
+        if (!await flags.VenuesOnAsync(artist))
+        {
+            return null;
+        }
+
+        using var heartbeat = new ActivityHeartbeat();
+        return await match.RunAsync([artist], ActivityExecutionContext.Current.CancellationToken);
+    }
+
+    /// The artists whose venues are switched on, for the nightly run.
+    [Activity("Venues.FlaggedArtists")]
+    public Task<IReadOnlyList<Guid>> FlaggedArtists() => flags.VenueArtistsAsync();
+}

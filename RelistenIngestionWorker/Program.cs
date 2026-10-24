@@ -51,6 +51,11 @@ if (migrate)
 if (registerSchedules)
 {
     await host.Services.GetRequiredService<TemporalIngestionClient>().RegisterSchedulesAsync();
+    await host
+        .Services.GetRequiredService<Relisten.Normalization.Temporal.NormalizationClient>()
+        .RegisterSchedulesAsync(
+            builder.Configuration.GetValue("Normalization:NightlyVenueCalls", 60)
+        );
     return;
 }
 

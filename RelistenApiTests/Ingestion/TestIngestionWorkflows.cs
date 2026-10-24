@@ -36,7 +36,7 @@ public class TestIngestionWorkflows
         result.FailedItems.Should().Be(1);
         result.Status.Should().Be(ImportStatus.Partial);
         activities.Applied.Should().BeEquivalentTo([0, 3]);
-        activities.Rebuilds.Should().Equal("shows", "years", "cache");
+        activities.Rebuilds.Should().Equal("shows", "years", "cache", "venues");
         activities.DeletionApplications.Should().Be(1);
     }
 
@@ -51,6 +51,7 @@ public class TestIngestionWorkflows
         activities.DeletionApplications.Should().Be(0);
         activities.RequestedItems.Should().Be(1);
         activities.Applied.Should().Equal(0);
+        // A one-item import leaves venues to the nightly run.
         activities.Rebuilds.Should().Equal("shows", "years", "cache");
     }
 
@@ -61,7 +62,15 @@ public class TestIngestionWorkflows
         var result = await Run(activities);
         result.Status.Should().Be(ImportStatus.Completed);
         result.CompletedItems.Should().Be(0);
-        activities.Rebuilds.Should().Equal("shows", "years", "cache");
+        activities.Rebuilds.Should().Equal("shows", "years", "cache", "venues");
+    }
+
+    [Test]
+    public async Task AFailedVenueMatchNeverFailsTheImport()
+    {
+        var activities = new RecordingActivities(1) { FailVenues = true };
+        (await Run(activities)).Status.Should().Be(ImportStatus.Completed);
+        activities.Rebuilds.Should().Equal("shows", "years", "cache", "venues");
     }
 
     [TestCase("years")]
@@ -237,7 +246,7 @@ public class TestIngestionWorkflows
         activities.Applied.Should().BeEmpty();
         activities.Verifications.Should().Be(0);
         activities.DeletionApplications.Should().Be(0);
-        activities.Rebuilds.Should().Equal("shows", "years", "cache");
+        activities.Rebuilds.Should().Equal("shows", "years", "cache", "venues");
     }
 
     [Test]
@@ -248,7 +257,7 @@ public class TestIngestionWorkflows
         await run.Should().ThrowAsync<WorkflowFailedException>();
         activities.PhishListings.Should().Be(0);
         activities.Applied.Should().BeEmpty();
-        activities.Rebuilds.Should().Equal("shows", "years", "cache");
+        activities.Rebuilds.Should().Equal("shows", "years", "cache", "venues");
     }
 
     [Test]
@@ -291,7 +300,7 @@ public class TestIngestionWorkflows
                         .Which.ErrorType.Should()
                         .Be("PhantasyTourForbidden");
                     activities.Applied.Should().BeEquivalentTo([0, 1]);
-                    activities.Rebuilds.Should().Equal("shows", "years", "cache");
+                    activities.Rebuilds.Should().Equal("shows", "years", "cache", "venues");
 
                     var replayer = new WorkflowReplayer(
                         new WorkflowReplayerOptions().AddWorkflow<ArtistRefreshWorkflow>()
@@ -785,6 +794,21 @@ public class TestIngestionWorkflows
 
         [Activity("Catalog.InvalidateArtistCache")]
         public void InvalidateArtistCache(ProviderWorkflowContext context) => RebuildStep("cache");
+
+        public bool FailVenues { get; init; }
+
+        [Activity("Venues.MatchArtist")]
+        public Relisten.Normalization.Venues.VenueMatchResult? MatchArtist(Guid artist)
+        {
+            lock (sync)
+                Rebuilds.Add("venues");
+            if (FailVenues)
+                throw new ApplicationFailureException(
+                    "Venue catalogue unavailable",
+                    nonRetryable: true
+                );
+            return null;
+        }
 
         private void RebuildStep(string step)
         {

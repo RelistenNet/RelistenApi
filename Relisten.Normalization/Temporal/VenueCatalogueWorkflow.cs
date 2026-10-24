@@ -11,10 +11,12 @@ namespace Relisten.Normalization.Temporal;
 /// Artists limits the legacy rows considered (null: every artist); venues themselves are
 /// cross-artist, so a later run for other artists maps onto the venues this one made.
 /// MaxChunks caps the run's model calls, a chunk's re-ask included (null: until nothing is
-/// left to ask).
+/// left to ask). FlaggedOnly: the artists whose venues are switched on (features.norm_venues),
+/// read when the run starts; the nightly schedule's run.
 public sealed record BuildVenueCatalogue(
     IReadOnlyList<Guid>? Artists = null,
-    int? MaxChunks = null
+    int? MaxChunks = null,
+    bool FlaggedOnly = false
 );
 
 public sealed record VenueCatalogueResult(
@@ -33,7 +35,8 @@ public sealed record VenueCatalogueResult(
 /// Builds or extends the venue catalogue (string-theory docs/matching.md T3): the
 /// deterministic match, the LLM one locality at a time for what it leaves, then the match
 /// again, which places every show's venue in norm. Started by hand
-/// (worker --norm-venues=all|<artist>), like the song catalogue.
+/// (worker --norm-venues=all|<artist>) or nightly for the switched-on artists
+/// (NormalizationClient.RegisterSchedulesAsync).
 [Workflow]
 public class VenueCatalogueWorkflow
 {
@@ -65,6 +68,20 @@ public class VenueCatalogueWorkflow
     [WorkflowRun]
     public async Task<VenueCatalogueResult> RunAsync(BuildVenueCatalogue request)
     {
+        if (request.FlaggedOnly)
+        {
+            var flagged = await Workflow.ExecuteActivityAsync(
+                (VenueMatchActivities a) => a.FlaggedArtists(),
+                Step
+            );
+            if (flagged.Count == 0)
+            {
+                return new VenueCatalogueResult(0, 0, 0, 0, 0, 0);
+            }
+
+            request = request with { Artists = flagged, FlaggedOnly = false };
+        }
+
         var first = await Workflow.ExecuteActivityAsync(
             (VenueActivities a) => a.Match(request.Artists),
             Step

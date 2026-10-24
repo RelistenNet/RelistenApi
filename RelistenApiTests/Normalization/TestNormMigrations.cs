@@ -54,16 +54,19 @@ public class TestNormMigrations
         await update.Should().ThrowAsync<Npgsql.PostgresException>().WithMessage("*append-only*");
     }
 
-    [Test]
-    public async Task EveryArtistStartsUnapproved()
+    // Read (norm_catalogue) and write (norm_venues) start off for every artist.
+    [TestCase("norm_catalogue")]
+    [TestCase("norm_venues")]
+    public async Task EveryArtistStartsUnapproved(string flag)
     {
         await using var db = await MigratedTestDatabase.OpenAsync();
 
         var column = await db.QuerySingleAsync<(string Type, string Default, string Nullable)>(
             """
             SELECT data_type, column_default, is_nullable FROM information_schema.columns
-            WHERE table_schema = 'public' AND table_name = 'features' AND column_name = 'norm_catalogue'
-            """
+            WHERE table_schema = 'public' AND table_name = 'features' AND column_name = @flag
+            """,
+            new { flag }
         );
 
         column.Should().Be(("boolean", "false", "NO"));

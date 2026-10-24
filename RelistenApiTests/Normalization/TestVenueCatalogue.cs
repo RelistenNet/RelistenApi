@@ -611,4 +611,21 @@ public class TestVenueCatalogue
         chunk.ModelCalls.Should().Be(1);
         chunk.Unsure.Should().Be(1);
     }
+
+    [Test]
+    public async Task OnlyArtistsWhoseVenuesAreSwitchedOnAreKeptCurrent()
+    {
+        var database = new DbServiceNormalizationDatabase(db);
+        await db.WithWriteConnection(c =>
+            c.ExecuteAsync(
+                "INSERT INTO features (artist_id, norm_venues) SELECT id, true FROM artists WHERE uuid = @on",
+                new { on = artists[0] }
+            )
+        );
+        var flags = new NormFlags(database);
+
+        (await flags.VenuesOnAsync(artists[0])).Should().BeTrue();
+        (await flags.VenuesOnAsync(artists[1])).Should().BeFalse();
+        (await flags.VenueArtistsAsync()).Should().Contain(artists[0]).And.NotContain(artists[1]);
+    }
 }

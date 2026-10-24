@@ -4,8 +4,12 @@
 # data before its schema is ratified for production. Production is only read
 # (default_transaction_read_only); everything is written to the local lab database.
 #
-# Usage: ./local-dev/norm-lab.sh [--reset] SLUG...
-#   --reset   drop and recreate relisten_norm_lab first
+# Usage: ./local-dev/norm-lab.sh [--reset] [--venues] [--all | SLUG...]
+#   --reset   drop and recreate the lab database first
+#   --venues  only what the venue catalogue reads (artists, features, venues, shows, sources)
+#   --all     every artist (with --venues: production's whole venue picture, about 1.2 GB)
+# NORM_LAB_DB names the database (default relisten_norm_lab), so a full-scale venue copy can
+# sit beside the lab: NORM_LAB_DB=relisten_norm_scale ./local-dev/norm-lab.sh --venues --all
 # Reloading an artist replaces its rows. Needs psql (libpq) on PATH or in PSQL, kubectl
 # access to the relisten3 context (KUBE_CONTEXT), and the local services running.
 
@@ -13,21 +17,25 @@ set -Eeuo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 repo_dir="$(dirname "$script_dir")"
-readonly LAB_DB="relisten_norm_lab"
+readonly LAB_DB="${NORM_LAB_DB:-relisten_norm_lab}"
 readonly KUBE_CONTEXT="${KUBE_CONTEXT:-relisten3}"
 readonly PROD_HOST="relisten-db-ro.tail09dbf.ts.net"
 PSQL="${PSQL:-$(command -v psql || echo /opt/homebrew/opt/libpq/bin/psql)}"
 
 reset=0
+venues_only=0
+all_artists=0
 slugs=()
 for arg in "$@"; do
   case "$arg" in
     --reset) reset=1 ;;
-    -h | --help) sed -n '2,12p' "$0"; exit 0 ;;
+    --venues) venues_only=1 ;;
+    --all) all_artists=1 ;;
+    -h | --help) sed -n '2,15p' "$0"; exit 0 ;;
     *) slugs+=("$arg") ;;
   esac
 done
-[[ ${#slugs[@]} -gt 0 ]] || { echo "usage: $0 [--reset] SLUG..." >&2; exit 2; }
+[[ ${#slugs[@]} -gt 0 || $all_artists -eq 1 ]] || { echo "usage: $0 [--reset] [--venues] [--all | SLUG...]" >&2; exit 2; }
 
 db_container="$(docker compose -f "$script_dir/docker-compose.yml" ps -q relisten-db)"
 [[ -n "$db_container" ]] || { echo "error: start the local services first (./start-local-databases.sh)" >&2; exit 1; }
@@ -54,15 +62,20 @@ fi
 
 # 2. The artists' rows. Each table's filter selects one artist's evidence; columns are those
 # the local and production schemas share.
-slug_list="$(printf "'%s'," "${slugs[@]}")"
-ids="$(prod_psql -Atc "SELECT string_agg(id::text, ',') FROM artists WHERE slug IN (${slug_list%,})")"
-[[ -n "$ids" ]] || { echo "error: no artists match ${slugs[*]}" >&2; exit 1; }
+if [[ $all_artists -eq 1 ]]; then
+  ids="SELECT id FROM artists"
+else
+  slug_list="$(printf "'%s'," "${slugs[@]}")"
+  ids="$(prod_psql -Atc "SELECT string_agg(id::text, ',') FROM artists WHERE slug IN (${slug_list%,})")"
+  [[ -n "$ids" ]] || { echo "error: no artists match ${slugs[*]}" >&2; exit 1; }
+fi
 
 tables=(artists features venues tours eras shows sources source_sets source_tracks setlist_songs setlist_shows setlist_songs_plays)
+[[ $venues_only -eq 1 ]] && tables=(artists features venues shows sources)
 filter() {
   case "$1" in
     artists) echo "id IN ($ids)" ;;
-    venues) echo "artist_id IN ($ids) OR id IN (SELECT venue_id FROM shows WHERE artist_id IN ($ids) UNION SELECT venue_id FROM sources WHERE artist_id IN ($ids) UNION SELECT venue_id FROM setlist_shows WHERE artist_id IN ($ids))" ;;
+    venues) [[ $all_artists -eq 1 ]] && echo "true" || echo "artist_id IN ($ids) OR id IN (SELECT venue_id FROM shows WHERE artist_id IN ($ids) UNION SELECT venue_id FROM sources WHERE artist_id IN ($ids) UNION SELECT venue_id FROM setlist_shows WHERE artist_id IN ($ids))" ;;
     source_sets) echo "source_id IN (SELECT id FROM sources WHERE artist_id IN ($ids))" ;;
     setlist_songs_plays) echo "played_setlist_show_id IN (SELECT id FROM setlist_shows WHERE artist_id IN ($ids))" ;;
     *) echo "artist_id IN ($ids)" ;;
@@ -105,6 +118,13 @@ echo "==> migrating"
 DATABASE_URL="postgresql://relisten:local_dev_password@127.0.0.1:15432/$LAB_DB" \
   Ingestion__LocalSchemaBaseline=12 \
   dotnet run --project "$repo_dir/RelistenIngestionWorker" -- --migrate
+
+if [[ $venues_only -eq 1 ]]; then
+  local_psql -d "$LAB_DB" -c "
+    SELECT (SELECT count(*) FROM artists) AS artists, (SELECT count(*) FROM venues) AS venues,
+           (SELECT count(*) FROM shows) AS shows, (SELECT count(*) FROM sources) AS sources"
+  exit 0
+fi
 
 local_psql -d "$LAB_DB" -c "
   SELECT a.slug, count(DISTINCT s.id) AS sources, count(t.id) AS tracks
