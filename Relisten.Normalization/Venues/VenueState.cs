@@ -164,7 +164,7 @@ public sealed partial class VenueState
 
         // Rows of one artist on one date: the same show, so the same place.
         var together = (
-            await connection.QueryAsync<(Guid Row, DateTime Date, Guid Other, Guid? Venue)>(
+            await connection.QueryAsync<(Guid Row, string Date, Guid Other, Guid? Venue)>(
                 """
                 WITH uses AS (
                     SELECT v.uuid AS row_uuid, v.artist_id, sh.date FROM venues v JOIN shows sh ON sh.venue_id = v.id
@@ -176,7 +176,7 @@ public sealed partial class VenueState
                     WHERE (@all OR a.uuid = ANY(@artists))
                       AND NOT EXISTS (SELECT 1 FROM norm.venue_evidence e WHERE e.legacy_venue_uuid = u.row_uuid)
                 )
-                SELECT m.row_uuid, m.date, coalesce(o.row_uuid, m.row_uuid), e.venue_uuid
+                SELECT m.row_uuid, m.date::date::text, coalesce(o.row_uuid, m.row_uuid), e.venue_uuid
                 FROM mine m
                 LEFT JOIN uses o ON o.artist_id = m.artist_id AND o.date = m.date AND o.row_uuid <> m.row_uuid
                 LEFT JOIN norm.venue_evidence e ON e.legacy_venue_uuid = o.row_uuid

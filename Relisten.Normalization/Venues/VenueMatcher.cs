@@ -291,20 +291,18 @@ public static class VenueMatcher
             }
         }
 
-        // Rows of one show in one state (or one without a usable town) were one place's, by
-        // different names ("BSU Field House" / "Brick Breeden Fieldhouse"), unless an
-        // in-store or a late set: the LLM decides, together.
+        // Rows of one show in one town were one place's, by different names ("BSU Field House" / "Brick Breeden Fieldhouse"), unless an
+        // in-store or a late set: the LLM decides, together. Across towns a few mis-dated tapes
+        // would chain a state's venues into one family; there each spelling's same_shows carry it.
         var index = Enumerable.Range(0, open.Count).ToDictionary(i => open[i].Uuid);
         foreach (var (a, b) in sameShows ?? [])
         {
             if (
                 index.TryGetValue(a, out var i)
                 && index.TryGetValue(b, out var j)
-                && (
-                    open[i].Locality is not { Trusted: true }
-                    || open[j].Locality is not { Trusted: true }
-                    || open[i].Locality!.RegionKey == open[j].Locality!.RegionKey
-                )
+                && open[i].Locality is { Trusted: true } li
+                && open[j].Locality is { Trusted: true } lj
+                && li.Key == lj.Key
             )
             {
                 Union(i, j);
