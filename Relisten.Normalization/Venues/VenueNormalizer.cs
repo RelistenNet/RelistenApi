@@ -48,7 +48,12 @@ public static partial class VenueNormalizer
     /// variants folded (theatre/theater, amphitheatre/amphitheater, centre/center).
     /// Lowercase words without punctuation or accents, as written: venues and places keep
     /// "st", "mt" and "n" (titles' "saint", "mount", "and" would make Montana "mount").
-    public static string Normalize(string text) => TitleNormalizer.Normalize(text, tokens: false);
+    public static string Normalize(string text) =>
+        TitleNormalizer.Normalize(QuoteApostrophe().Replace(text, ""), tokens: false);
+
+    // A double quote typed for an apostrophe inside a word: Slim"s.
+    [System.Text.RegularExpressions.GeneratedRegex(@"(?<=\p{L})""(?=s\b)")]
+    private static partial System.Text.RegularExpressions.Regex QuoteApostrophe();
 
     public static string? Key(string? name)
     {
@@ -510,6 +515,12 @@ public static partial class VenueNormalizer
     private static (string City, string Region)? TrailingRegion(string field)
     {
         var words = field.Replace('.', ' ').Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        // "Winnipeg Manitoba Canada": the country after the region says nothing more.
+        if (words.Length > 2 && Countries.ContainsKey(Normalize(words[^1])))
+        {
+            words = words[..^1];
+        }
+
         for (var take = Math.Min(3, words.Length - 1); take >= 1; take--)
         {
             var region = string.Join(' ', words[^take..]);

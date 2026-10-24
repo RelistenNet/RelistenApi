@@ -125,6 +125,9 @@ public sealed class VenueHistory(INormalizationDatabase db, ICatalogueModel mode
             NormWriteMode.FillOnly
         );
         await store.RefreshVenueNamesAsync();
+        // Two venues the names show are one building renamed (Knickerbocker Arena and MVP
+        // Arena) are twins now.
+        await store.MergeTwinVenuesAsync();
         var answered = answers.ToDictionary(a => a.Venue);
         await store.WriteReviewItemsAsync(
             venues

@@ -31,7 +31,7 @@ public sealed record VenuePlan(
 ///    suburb) goes to the LLM whole.
 public static class VenueMatcher
 {
-    public const string Author = "venue-matcher@2.9.0";
+    public const string Author = "venue-matcher@2.10.0";
     public const float Exact = 0.95f;
     public const float Likely = 0.9f;
 

@@ -428,6 +428,7 @@ public class TestVenueMatcher
     [TestCase("Beacon Threatre", "Beacon Theatre")]
     [TestCase("ATT Performing Arts Center", "AT&T Performing Arts Center")]
     [TestCase("The Back Room", "The Backroom")]
+    [TestCase("Slim\"s", "Slim's")]
     [TestCase("Hollywood Palladium Auditorum", "Hollywood Palladium Auditorium")]
     public void SpellingsOfOneNameAreOneName(string a, string b) =>
         VenueNormalizer

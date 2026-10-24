@@ -30,7 +30,7 @@ public sealed record VenueChunkResult(
 /// asks twice.
 public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
 {
-    public const string PromptVersion = "venue-llm@8";
+    public const string PromptVersion = "venue-llm@9";
     public const float Threshold = 0.9f;
 
     internal const string NoAnswer = "no answer";
@@ -530,8 +530,9 @@ internal sealed class VenueRequest
         A spelling's same_shows are the venues other recordings of the same shows were already
         placed on, with how many shows: every recording of a show was made at one place, so
         this is strong evidence the spelling is that venue, whatever its text or town says. The
-        exception is another event the same day: an in-store, an afternoon set, a late-night
-        show at a club, a different stage of a festival (a room of that site).
+        exception is another event the same day: an in-store, a radio or TV studio session, an
+        afternoon set, a late-night show at a club, a different stage of a festival (a room of
+        that site); a spelling naming a studio, a station or a store is that place.
 
         One name in several towns is either a chain or namesakes (House of Blues in Cleveland
         and in Dallas: separate venues) or one place filed under nearby towns (one venue).
@@ -555,7 +556,8 @@ internal sealed class VenueRequest
         - rationale: one short sentence.
 
         A new venue: its locality (the l-id of the town it really is in, never l0),
-        its current official name, kind "site" (a building or grounds) or "room" (a hall,
+        its current official name, spelled correctly with its accents ("La Boule Noire",
+        "Élysée Montmartre"), not copied from a misspelled spelling, kind "site" (a building or grounds) or "room" (a hall,
         theater, stage or tent inside a site; give the site as parent, a v-id or n-id in the
         same locality), and its names: official names it had, with the date each started and
         ended when you know them (YYYY, YYYY-MM or YYYY-MM-DD; null when open or unknown), and
