@@ -93,18 +93,33 @@ public sealed class VenueMatch(INormalizationDatabase db)
                 string City,
                 string? Region,
                 string? Country,
-                int Rows
+                int Rows,
+                int? First,
+                int? Last,
+                int[] ShowYears
             )>(
                 """
                 SELECT v.uuid, v.name, v.kind, p.name, v.city, v.region, v.country,
-                       (SELECT count(*) FROM norm.venue_evidence e WHERE e.venue_uuid = v.uuid)::int
+                       (SELECT count(*) FROM norm.venue_evidence e WHERE e.venue_uuid = v.uuid)::int,
+                       y.first, y.last, coalesce(y.years, '{}')
                 FROM norm.venues v LEFT JOIN norm.venues p ON p.uuid = v.parent_uuid
+                LEFT JOIN LATERAL (
+                    SELECT extract(year FROM min(sh.date))::int AS first,
+                           extract(year FROM max(sh.date))::int AS last,
+                           array_agg(extract(year FROM sh.date)::int) AS years
+                    FROM norm.show_venues sv JOIN shows sh ON sh.uuid = sv.show_uuid
+                    WHERE sv.venue_uuid = v.uuid
+                ) y ON true
                 WHERE v.merged_into IS NULL AND v.city IS NOT NULL AND v.country IS NOT NULL
                 """,
                 transaction: tx
             )
         ).Where(v => VenueNormalizer.Key(v.Name) != null).Select(v => (Venue: v, Name: string.Concat(VenueNormalizer.Words(VenueNormalizer.Key(v.Name)!)), Locality: new Locality(v.City, v.Region, v.Country))).ToList();
         string Where(IEnumerable<string> parts) => string.Join(" / ", parts);
+        string Years(int? first, int? last) =>
+            first == null ? ""
+            : first == last ? $", {first}"
+            : $", {first}–{last}";
         ReviewRecord Question(string key, string title, string note, IEnumerable<Guid> uuids) =>
             new(
                 null,
@@ -129,10 +144,11 @@ public sealed class VenueMatch(INormalizationDatabase db)
                     $"{list[0].Venue.Name} — "
                         + Where(
                             list.Select(v =>
-                                $"{v.Venue.City}, {v.Venue.Region ?? v.Venue.Country} ({v.Venue.Rows} rows)"
+                                $"{v.Venue.City}, {v.Venue.Region ?? v.Venue.Country} ({v.Venue.Rows} rows{Years(v.Venue.First, v.Venue.Last)})"
                             )
                         ),
-                    "One name in two towns of one state: one place under a neighbouring town, a club that moved (two venues), or two places?",
+                    "One name in two towns of one state: one place under a neighbouring town, a club that moved (two venues), or two places?"
+                        + YearsNote(list.Select(v => v.Venue.ShowYears).ToList()),
                     list.Select(v => v.Venue.Uuid)
                 );
             })
@@ -183,6 +199,37 @@ public sealed class VenueMatch(INormalizationDatabase db)
             asked.Where(a => a.Open && !current.Contains(a.Key)).Select(a => a.Key).ToList(),
             "resolved"
         );
+    }
+
+    /// Neighbouring towns whose shows fall in separate years look like a move (two venues):
+    /// said only with three years of shows on each side, a stray show or two allowed.
+    internal static string YearsNote(IReadOnlyList<int[]> years)
+    {
+        var sides = years.Where(y => y.Distinct().Count() >= 3).ToList();
+        if (sides.Count < 2 || sides.Count < years.Count)
+        {
+            return "";
+        }
+
+        // Each side's span without its outer tenth of shows (a stray filed under the wrong
+        // town shouldn't stretch it).
+        static (int From, int To) Span(int[] years)
+        {
+            var sorted = years.Order().ToArray();
+            var trim = sorted.Length / 10;
+            return (sorted[trim], sorted[^(trim + 1)]);
+        }
+
+        var strays = sides
+            .SelectMany(
+                (a, i) =>
+                    sides
+                        .Where((_, j) => j != i)
+                        .Select(Span)
+                        .Select(b => a.Count(y => y >= b.From && y <= b.To))
+            )
+            .Sum();
+        return strays <= 2 ? " Their years barely overlap: a move?" : " Their years overlap.";
     }
 
     /// Every show's venue in norm (the new tables hold the whole picture): derived from the

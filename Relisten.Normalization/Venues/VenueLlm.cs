@@ -176,7 +176,12 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
                         null,
                         $"{s.Display} — {s.Place}",
                         s.Key,
-                        $"{s.Rows.Select(r => r.ArtistUuid).Distinct().Count()} artists, {s.Uses} uses",
+                        $"{s.Rows.Select(r => r.ArtistUuid).Distinct().Count()} artists, {s.Uses} uses"
+                            + (
+                                answer.Dropped.TryGetValue(s.Key, out var why)
+                                    ? $"; model answer: {why}"
+                                    : ""
+                            ),
                         a == null ? null : Proposal(a, request, answer),
                         a?.Confidence,
                         s.Uses,
@@ -420,11 +425,16 @@ internal sealed record SpellingAnswer(
 
 internal sealed record KnownNameAnswer(string Ref, VenueNameRecord Name);
 
+/// Dropped: why a spelling's answer was set aside (its key → reason), for its review item.
 internal sealed record VenueAnswer(
     IReadOnlyList<NewVenueAnswer> NewVenues,
     IReadOnlyDictionary<string, SpellingAnswer> Spellings,
     IReadOnlyList<KnownNameAnswer> KnownNames
-);
+)
+{
+    public IReadOnlyDictionary<string, string> Dropped { get; init; } =
+        new Dictionary<string, string>();
+}
 
 /// The request and answer shapes of one venue chunk. Short refs only (l1 a locality, v1 a
 /// known venue, n1 a proposed venue, s1 a spelling), and every ref in an answer must be one
@@ -769,7 +779,9 @@ internal sealed class VenueRequest
             .GroupBy(p => p.Key)
             .ToDictionary(g => g.Key, g => g.First().Value);
 
+        var proposed = newNodes.Select(n => (string?)n!["id"]).OfType<string>().ToHashSet();
         var spellings = new Dictionary<string, SpellingAnswer>();
+        var dropped = new Dictionary<string, string>();
         foreach (
             var group in spellingNodes
                 .Select(s => (Id: (string?)s!["id"], Node: s))
@@ -785,6 +797,7 @@ internal sealed class VenueRequest
             // under a neighbouring town), or anywhere for a spelling with no usable town.
             if (VenueNormalizer.Key((string?)node["spelling_text"]) != key.Split('@')[0])
             {
+                dropped[key] = $"restated as \"{(string?)node["spelling_text"]}\"";
                 continue;
             }
 
@@ -803,6 +816,11 @@ internal sealed class VenueRequest
                 )
             )
             {
+                dropped[key] =
+                    !localityOf.ContainsKey(venue) && proposed.Contains(venue)
+                        ? $"its new venue {venue} was set aside (a room whose site is elsewhere, or a repeated id)"
+                    : !localityOf.ContainsKey(venue) ? $"unknown venue {venue}"
+                    : $"venue {venue} is in another state";
                 continue;
             }
 
@@ -819,7 +837,12 @@ internal sealed class VenueRequest
             .Where(k => k.Ref != null && request.VenueIds.ContainsKey(k.Ref) && k.Name != null)
             .Select(k => new KnownNameAnswer(k.Ref!, k.Name!))
             .ToList();
-        return new VenueAnswer(newVenues, spellings, known);
+        foreach (var key in request.SpellingIds.Values.Where(k => !spellings.ContainsKey(k)))
+        {
+            dropped.TryAdd(key, "no answer");
+        }
+
+        return new VenueAnswer(newVenues, spellings, known) { Dropped = dropped };
     }
 
     private static bool SameCity(VenueRequest request, string a, string b) =>

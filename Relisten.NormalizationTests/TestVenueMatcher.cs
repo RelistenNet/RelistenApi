@@ -557,4 +557,34 @@ public class TestVenueMatcher
                 "palm beach|fl|US"
             );
     }
+
+    [Test]
+    public void ShowsInSeparateYearsLookLikeAMove()
+    {
+        // Cat's Cradle: Chapel Hill until 1992, Carrboro since 1998, one show filed under the
+        // wrong town in 1990.
+        VenueMatch
+            .YearsNote([
+                [1990, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2016, 2019],
+                [1988, 1989, 1990, 1991, 1992],
+            ])
+            .Should()
+            .Contain("a move?");
+        // Palace Theatres in three towns, all years: not a move.
+        VenueMatch
+            .YearsNote([
+                [1995, 1997, 2001, 2005],
+                [1996, 1999, 2003, 2008],
+            ])
+            .Should()
+            .Contain("overlap.");
+        // Too few shows to say.
+        VenueMatch
+            .YearsNote([
+                [2003, 2005, 2009],
+                [2025],
+            ])
+            .Should()
+            .BeEmpty();
+    }
 }

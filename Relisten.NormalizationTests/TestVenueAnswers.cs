@@ -92,6 +92,14 @@ public class TestVenueAnswers
         );
 
         answer.Spellings.Should().BeEmpty();
+        // Each set-aside answer says why, for the review item.
+        answer
+            .Dropped.Values.Should()
+            .BeEquivalentTo(
+                "venue v1 is in another state",
+                "restated as \"Madison Square Garden\"",
+                "no answer"
+            );
     }
 
     [Test]
