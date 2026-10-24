@@ -348,6 +348,29 @@ public sealed partial class NormStore
         );
     }
 
+    /// A venue's display name follows its current official name (an official name with no end):
+    /// "Red Rock Ampitheater", the spelling that created it, becomes "Red Rocks Amphitheatre"
+    /// once that is known. A machine leaves a person's venue alone.
+    public Task<int> RefreshVenueNamesAsync() =>
+        connection.ExecuteAsync(
+            $"""
+            UPDATE norm.venues v SET name = n.name, author_type = @AuthorType, author_ref = @AuthorRef,
+                confidence = coalesce(v.confidence, n.confidence, 0.9), run_uuid = @Run, updated_at = now()
+            FROM (SELECT DISTINCT ON (venue_uuid) venue_uuid, name, confidence FROM norm.venue_names
+                  WHERE kind = 'official' AND valid_to IS NULL
+                  ORDER BY venue_uuid, valid_from DESC) n
+            WHERE v.uuid = n.venue_uuid AND v.merged_into IS NULL AND v.name IS DISTINCT FROM n.name
+              {(Human ? "" : "AND v.author_type NOT IN ('user', 'moderator')")}
+            """,
+            new
+            {
+                AuthorType,
+                AuthorRef,
+                Run,
+            },
+            tx
+        );
+
     /// Removes derived show venues whose mapping is gone (a ruling stays).
     public Task<int> ClearDerivedShowVenuesAsync(IReadOnlyCollection<Guid> shows) =>
         connection.ExecuteAsync(

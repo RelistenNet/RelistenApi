@@ -47,6 +47,7 @@ public sealed class VenueMatch(INormalizationDatabase db)
         await store.WriteVenueNamesAsync(plan.Names, NormWriteMode.FillOnly);
         await store.WriteVenueExternalIdsAsync(plan.ExternalIds, NormWriteMode.FillOnly);
         await store.WriteVenueEvidenceAsync(plan.Evidence, NormWriteMode.FillOnly);
+        await store.RefreshVenueNamesAsync();
         var shows = await DeriveShowVenues(connection, tx, store, artists);
         // A machine's open question about a spelling it has now placed is answered.
         var mapped = plan.Evidence.Select(e => e.LegacyVenueUuid).ToHashSet();

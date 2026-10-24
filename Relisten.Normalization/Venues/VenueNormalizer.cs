@@ -63,6 +63,10 @@ public static partial class VenueNormalizer
         return string.Join(' ', words);
     }
 
+    /// The key without spaces: what identity compares, so "1stBank Center", "Barrel House" and
+    /// "9:30 Club" match "1st Bank Center", "Barrelhouse" and "930 Club".
+    public static string Compact(string key) => key.Replace(" ", "");
+
     private static readonly Dictionary<string, string> Fold = new()
     {
         ["theatre"] = "theater",
@@ -146,6 +150,17 @@ public static partial class VenueNormalizer
             region = fields.Count > 2 ? Region(TitleNormalizer.Normalize(fields[^2])) : null;
         }
 
+        // A misspelled state ("Morrison, Colorade, USA"): the one state name a typo away.
+        var regionField =
+            country != null && region == null && fields.Count > 2 ? fields[^2]
+            : country == null && region == null ? fields[^1]
+            : null;
+        if (regionField != null && NearRegion(TitleNormalizer.Normalize(regionField)) is { } near)
+        {
+            region = near;
+            country = near.Country;
+        }
+
         // "NY, NY" and "New York, New York": the city is the region's namesake.
         if (
             region != null
@@ -227,6 +242,22 @@ public static partial class VenueNormalizer
     }
 
     private sealed record RegionInfo(string Code, string Name, string Country);
+
+    private static RegionInfo? NearRegion(string key)
+    {
+        if (key.Length < 5)
+        {
+            return null;
+        }
+
+        var limit = key.Length >= 8 ? 2 : 1;
+        var near = RegionTable
+            .Where(r => Titles.TitleGrouper.BoundedLevenshtein(r.Name, key, limit) <= limit)
+            .Select(r => new RegionInfo(r.Code, r.Name, r.Country))
+            .Take(2)
+            .ToList();
+        return near.Count == 1 ? near[0] : null;
+    }
 
     private static RegionInfo? Region(string key) =>
         RegionsByKey.TryGetValue(key, out var region) ? region : null;

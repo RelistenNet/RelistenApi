@@ -210,6 +210,9 @@ public class TestVenueMatcher
     [TestCase("tweeter center", "tweeter center at the waterfront", true)]
     [TestCase("hammerstien ballroom", "hammerstein ballroom", true)]
     [TestCase("fillmore east", "fillmore west", false)]
+    [TestCase("winterland arena", "winterland ballroom", true)]
+    [TestCase("red rock ampitheater", "red rocks amphitheater", true)]
+    [TestCase("fillmore west", "fillmore auditorium", false)]
     [TestCase("fox theater", "orpheum theater", false)]
     public void NamesThatCouldBeOnePlace(string a, string b, bool expected) =>
         VenueMatcher.Alike(a, b).Should().Be(expected);
@@ -280,5 +283,36 @@ public class TestVenueMatcher
 
         plan.NewVenues.Should().BeEmpty();
         plan.Left.Should().ContainSingle();
+    }
+
+    [Test]
+    public void SpacingDoesNotMakeAnotherVenue()
+    {
+        var plan = VenueMatcher.Match(
+            State([
+                Row("1st Bank Center", "Broomfield, CO", 20),
+                Row("1stBank Center", "Broomfield, CO", 5),
+            ])
+        );
+
+        // One name in two spacings, in one town: one venue.
+        plan.NewVenues.Should().ContainSingle();
+        plan.Evidence.Select(e => e.VenueUuid).Distinct().Should().ContainSingle();
+        plan.Left.Should().BeEmpty();
+    }
+
+    [Test]
+    public void ATypodStateJoinsTheVenueInTheRealOne()
+    {
+        var rows = new[]
+        {
+            Row("Red Rocks Amphitheatre", "Morrison, CO", 130),
+            Row("Red Rocks Amphitheatre", "Morrison, CA", 1),
+        };
+
+        var plan = VenueMatcher.Match(State(rows));
+
+        plan.NewVenues.Should().ContainSingle().Which.Region.Should().Be("CO");
+        plan.Evidence.Select(e => e.VenueUuid).Distinct().Should().ContainSingle();
     }
 }

@@ -32,6 +32,8 @@ public class TestVenueNormalizer
     [TestCase("Tokyo, Kanto", "tokyo|kanto|")]
     [TestCase("Richmond, NSW, Australia", "richmond|nsw|AU")]
     [TestCase("Phoenix AZ", "phoenix|az|US")]
+    [TestCase("Morrison, Colorade, USA", "morrison|co|US")]
+    [TestCase("Morrison, Colorade", "morrison|co|US")]
     [TestCase("Huber Heights Ohio", "huber heights|oh|US")]
     [TestCase("Broomfield. CO", "broomfield|co|US")]
     [TestCase("Dayton Ohio/Huber Heights Ohio", "dayton|oh|US")]

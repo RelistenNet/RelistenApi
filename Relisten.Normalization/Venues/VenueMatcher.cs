@@ -68,7 +68,11 @@ public static class VenueMatcher
                 continue;
             }
 
-            var named = state.Names[row.Key].Distinct().Where(state.Venues.ContainsKey).ToList();
+            var named = state
+                .CompactNames[VenueNormalizer.Compact(row.Key)]
+                .Distinct()
+                .Where(state.Venues.ContainsKey)
+                .ToList();
             if (row.Locality is { Trusted: true } here)
             {
                 var inTown = named.Where(v => state.Venues[v].LocalityKey == here.Key).ToList();
@@ -145,6 +149,16 @@ public static class VenueMatcher
 
         void Union(string a, string b) => parent[Find(a)] = Find(b);
 
+        // Spellings that differ only in spaces or punctuation are one name.
+        foreach (var group in open.GroupBy(r => VenueNormalizer.Compact(r.Key!)))
+        {
+            var keys = group.Select(r => r.Key!).Distinct().ToList();
+            foreach (var key in keys.Skip(1))
+            {
+                Union(keys[0], key);
+            }
+        }
+
         foreach (var group in open.Where(r => r.ExternalId != null).GroupBy(r => r.ExternalId))
         {
             var keys = group.Select(r => r.Key!).Distinct().ToList();
@@ -193,8 +207,16 @@ public static class VenueMatcher
             return true;
         }
 
-        // A typo sits inside a long word ("hammerstien"), not in a short one that changes the
-        // place ("east" / "west").
+        // The same name with a different kind of room ("Winterland Arena" / "Winterland
+        // Ballroom"): what is left without the generic words is one distinctive name.
+        var (coreA, coreB) = (Core(a), Core(b));
+        if (coreA.Length >= 4 && coreA == coreB)
+        {
+            return true;
+        }
+
+        // Up to two words a plural or a typo apart ("Red Rock Ampitheater" / "Red Rocks
+        // Amphitheater"), never a short word that changes the place ("east" / "west").
         var (wa, wb) = (a.Split(' '), b.Split(' '));
         if (wa.Length != wb.Length)
         {
@@ -202,11 +224,49 @@ public static class VenueMatcher
         }
 
         var differing = wa.Zip(wb).Where(p => p.First != p.Second).ToList();
-        return differing.Count == 1
-            && differing[0].First.Length >= 5
-            && differing[0].Second.Length >= 5
-            && TitleGrouper.BoundedLevenshtein(differing[0].First, differing[0].Second, 2) <= 2;
+        return differing.Count is > 0 and <= 2
+            && differing.Count < wa.Length
+            && differing.All(p =>
+                p.First.TrimEnd('s') == p.Second.TrimEnd('s')
+                || (
+                    p.First.Length >= 5
+                    && p.Second.Length >= 5
+                    && TitleGrouper.BoundedLevenshtein(p.First, p.Second, 2) <= 2
+                )
+            );
     }
+
+    private static readonly HashSet<string> GenericWords =
+    [
+        "theater",
+        "arena",
+        "ballroom",
+        "auditorium",
+        "hall",
+        "music",
+        "center",
+        "club",
+        "nightclub",
+        "amphitheater",
+        "pavilion",
+        "stadium",
+        "coliseum",
+        "room",
+        "lounge",
+        "bar",
+        "cafe",
+        "tavern",
+        "pub",
+        "grill",
+        "live",
+        "venue",
+        "and",
+        "at",
+        "of",
+    ];
+
+    private static string Core(string key) =>
+        string.Join(' ', key.Split(' ').Where(w => !GenericWords.Contains(w)));
 
     /// Step 3: one name in at most one trusted town per state is one venue per state. A family
     /// with several names, or a name in several towns of a state, is the LLM's.
@@ -236,12 +296,14 @@ public static class VenueMatcher
             }
         }
 
-        if (family.Select(r => r.Key).Distinct().Count() > 1)
+        if (family.Select(r => VenueNormalizer.Compact(r.Key!)).Distinct().Count() > 1)
         {
             return false;
         }
 
-        var trusted = family.Where(r => r.Locality is { Trusted: true }).ToList();
+        var trusted = WithoutStateTypos(
+            family.Where(r => r.Locality is { Trusted: true }).ToList()
+        );
         var byRegion = trusted.GroupBy(r => r.Locality!.RegionKey!).ToList();
         if (
             byRegion.Count == 0
@@ -277,6 +339,43 @@ public static class VenueMatcher
         return true;
     }
 
+    /// The same name in a town of the same name in another state, used a tenth as much, is a
+    /// typo'd state ("Red Rocks — Morrison, CA" beside 130 rows in Morrison, CO): those rows
+    /// take the dominant locality.
+    private static List<LegacyVenue> WithoutStateTypos(List<LegacyVenue> trusted)
+    {
+        var fixedRows = trusted.ToList();
+        foreach (var town in trusted.GroupBy(r => TitleNormalizer.Normalize(r.Locality!.City)))
+        {
+            var regions = town.GroupBy(r => r.Locality!.RegionKey)
+                .OrderByDescending(g => g.Sum(r => Math.Max(r.Uses, 1)))
+                .ToList();
+            if (regions.Count < 2)
+            {
+                continue;
+            }
+
+            var dominant = regions[0];
+            var main = dominant.Sum(r => Math.Max(r.Uses, 1));
+            foreach (
+                var minor in regions
+                    .Skip(1)
+                    .Where(g => g.Sum(r => Math.Max(r.Uses, 1)) * 10 <= main)
+            )
+            {
+                foreach (var row in minor)
+                {
+                    fixedRows[fixedRows.IndexOf(row)] = row with
+                    {
+                        Locality = dominant.First().Locality,
+                    };
+                }
+            }
+        }
+
+        return fixedRows;
+    }
+
     private sealed class PlanBuilder(VenueState state)
     {
         private readonly List<VenueRecord> newVenues = [];
@@ -296,7 +395,7 @@ public static class VenueMatcher
 
         public bool KnownInRegion(string regionKey, string key) =>
             known.Any(n =>
-                n.Key == key
+                VenueNormalizer.Compact(n.Key) == VenueNormalizer.Compact(key)
                 && state.Venues.TryGetValue(n.Venue, out var v)
                 && v.City != null
                 && new Locality(v.City, v.Region, v.Country).RegionKey == regionKey

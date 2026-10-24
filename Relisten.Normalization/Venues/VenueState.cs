@@ -50,6 +50,15 @@ public sealed partial class VenueState
     /// Normalised name → venues that carry it (resolved to survivors).
     public required ILookup<string, Guid> Names { get; init; }
 
+    /// Compact name (spaces ignored, VenueNormalizer.Compact) → venues: what identity compares.
+    public ILookup<string, Guid> CompactNames =>
+        compactNames ??= Names
+            .SelectMany(g => g.Select(v => (Key: VenueNormalizer.Compact(g.Key), Venue: v)))
+            .Distinct()
+            .ToLookup(n => n.Key, n => n.Venue);
+
+    private ILookup<string, Guid>? compactNames;
+
     /// (provider, key) → venue (resolved to its survivor).
     public required IReadOnlyDictionary<(string, string), Guid> ExternalIds { get; init; }
 
