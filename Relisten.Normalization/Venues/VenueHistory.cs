@@ -45,7 +45,44 @@ public sealed class VenueHistory(INormalizationDatabase db, ICatalogueModel mode
             transaction: tx
         );
 
-        var venues = (
+        var venues = await NextVenuesAsync(connection, tx, minShows);
+        if (venues.Count == 0)
+        {
+            return new VenueHistoryResult(true, 0, 0, 0, 0, 0);
+        }
+
+        var ids = venues
+            .Select((v, i) => (Id: $"h{i + 1}", Venue: v))
+            .ToDictionary(x => x.Id, x => x.Venue);
+        var reply = await model.CompleteAsync(
+            Instructions,
+            Data(ids),
+            "venue_history",
+            Schema,
+            cancellationToken
+        );
+        var answers = Parse(reply.Json, ids);
+        var named = await PersistAsync(connection, tx, venues, answers);
+        await tx.CommitAsync(cancellationToken);
+
+        return new VenueHistoryResult(
+            false,
+            venues.Count,
+            named,
+            venues.Count - named,
+            reply.InputTokens,
+            reply.OutputTokens
+        );
+    }
+
+    /// The busiest venues with enough shows, no dated official name, and no history question
+    /// yet (open or answered): a venue is asked once.
+    private static async Task<List<HistoryVenue>> NextVenuesAsync(
+        Npgsql.NpgsqlConnection connection,
+        Npgsql.NpgsqlTransaction tx,
+        int minShows
+    ) =>
+        (
             await connection.QueryAsync<HistoryVenue>(
                 """
                 SELECT v.uuid, v.name, v.kind, p.name AS parent, v.city, v.region, v.country,
@@ -72,15 +109,9 @@ public sealed class VenueHistory(INormalizationDatabase db, ICatalogueModel mode
                 tx
             )
         ).ToList();
-        if (venues.Count == 0)
-        {
-            return new VenueHistoryResult(true, 0, 0, 0, 0, 0);
-        }
 
-        var ids = venues
-            .Select((v, i) => (Id: $"h{i + 1}", Venue: v))
-            .ToDictionary(x => x.Id, x => x.Venue);
-        var data = JsonSerializer.Serialize(
+    private static string Data(IReadOnlyDictionary<string, HistoryVenue> ids) =>
+        JsonSerializer.Serialize(
             new
             {
                 venues = ids.Select(x => new
@@ -99,15 +130,17 @@ public sealed class VenueHistory(INormalizationDatabase db, ICatalogueModel mode
                 }),
             }
         );
-        var reply = await model.CompleteAsync(
-            Instructions,
-            data,
-            "venue_history",
-            Schema,
-            cancellationToken
-        );
-        var answers = Parse(reply.Json, ids);
 
+    /// Writes the answers as one run: sure names (and the display names and twin merges they
+    /// bring), then one history item per asked venue: open when unsure, closed ("named") when
+    /// sure, so either way the venue is never asked again. Returns how many were named.
+    private async Task<int> PersistAsync(
+        Npgsql.NpgsqlConnection connection,
+        Npgsql.NpgsqlTransaction tx,
+        IReadOnlyList<HistoryVenue> venues,
+        IReadOnlyList<HistoryAnswer> answers
+    )
+    {
         var store = await NormStore.BeginAsync(
             connection,
             tx,
@@ -128,6 +161,7 @@ public sealed class VenueHistory(INormalizationDatabase db, ICatalogueModel mode
         // Two venues the names show are one building renamed (Knickerbocker Arena and MVP
         // Arena) are twins now.
         await store.MergeTwinVenuesAsync();
+
         var answered = answers.ToDictionary(a => a.Venue);
         await store.WriteReviewItemsAsync(
             venues
@@ -150,22 +184,12 @@ public sealed class VenueHistory(INormalizationDatabase db, ICatalogueModel mode
                 })
                 .ToList()
         );
-        // A sure answer is no open question: its item only records that the venue was asked.
         await store.CloseVenueReviewItemsAsync(
             sure.Select(a => "history:" + a.Venue).ToList(),
             "named"
         );
         await store.FinishAsync();
-        await tx.CommitAsync(cancellationToken);
-
-        return new VenueHistoryResult(
-            false,
-            venues.Count,
-            sure.Count,
-            venues.Count - sure.Count,
-            reply.InputTokens,
-            reply.OutputTokens
-        );
+        return sure.Count;
     }
 
     private static string Describe(VenueNameRecord n) =>

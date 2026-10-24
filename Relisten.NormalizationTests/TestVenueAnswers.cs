@@ -249,4 +249,111 @@ public class TestVenueAnswers
         // One request at a time is the busiest families together, whatever their states.
         VenueLlm.NextChunk(spellings).Should().HaveCount(5);
     }
+
+    [Test]
+    public void ARoomIsInsideASiteOfItsOwnTown()
+    {
+        var (request, _) = Request();
+        var answer = VenueRequest.Parse(
+            Answer(
+                "[]",
+                """
+                [{"id": "n3", "locality": "l1", "name": "Arena Complex", "kind": "site", "parent": null, "names": []},
+                 {"id": "n2", "locality": "l1", "name": "Theater", "kind": "room", "parent": "n3", "names": []},
+                 {"id": "n1", "locality": "l1", "name": "Balcony", "kind": "room", "parent": "n2", "names": []}]
+                """
+            ),
+            request
+        );
+
+        // A room inside a room is no room of ours.
+        answer.NewVenues.Select(n => n.Ref).Should().BeEquivalentTo("n3", "n2");
+    }
+
+    [Test]
+    public void ARoomOfAKnownSiteElsewhereIsDropped()
+    {
+        var oakland = new CatalogueVenue(
+            Guid.NewGuid(),
+            "Fox Theatre",
+            "site",
+            null,
+            "Oakland",
+            "CA",
+            "US"
+        );
+        var state = new VenueState
+        {
+            Unmapped = [],
+            Venues = new Dictionary<Guid, CatalogueVenue> { [oakland.Uuid] = oakland },
+            Names = new[] { ("fox theater", oakland.Uuid) }.ToLookup(n => n.Item1, n => n.Item2),
+            ExternalIds = new Dictionary<(string, string), Guid>(),
+        };
+        var row = Row("Fox Theatre", "Redwood City, CA");
+        var request = VenueRequest.Build(state, [new Spelling(VenueKeys.Of(row)!, [row])]);
+        var fox = request.VenueIds.Single(v => v.Value == oakland.Uuid).Key;
+
+        var answer = VenueRequest.Parse(
+            Answer(
+                "[]",
+                $$"""[{"id": "n1", "locality": "l1", "name": "Lounge", "kind": "room", "parent": "{{fox}}", "names": []}]"""
+            ),
+            request
+        );
+
+        answer.NewVenues.Should().BeEmpty();
+    }
+
+    [Test]
+    public void AnOfficialPeriodThatEndsBeforeItStartsIsNoName()
+    {
+        var node = System.Text.Json.Nodes.JsonNode.Parse(
+            """{"name": "Spectrum", "kind": "official", "from": "2010", "to": "2010"}"""
+        )!;
+        VenueRequest.Name(Guid.NewGuid(), node).Should().BeNull();
+        var shortName = System.Text.Json.Nodes.JsonNode.Parse(
+            """{"name": "MSG", "kind": "short", "from": "1968", "to": null}"""
+        )!;
+        VenueRequest.Name(Guid.NewGuid(), shortName)!.ValidFrom.Should().BeNull();
+    }
+
+    [Test]
+    public void AKnownRoomSaysWhichSiteItIsIn()
+    {
+        var site = new CatalogueVenue(
+            Guid.NewGuid(),
+            "Three Sisters Park",
+            "site",
+            null,
+            "Chillicothe",
+            "IL",
+            "US"
+        );
+        var room = new CatalogueVenue(
+            Guid.NewGuid(),
+            "Main Stage",
+            "room",
+            site.Uuid,
+            "Chillicothe",
+            "IL",
+            "US"
+        );
+        var state = new VenueState
+        {
+            Unmapped = [],
+            Venues = new Dictionary<Guid, CatalogueVenue>
+            {
+                [site.Uuid] = site,
+                [room.Uuid] = room,
+            },
+            Names = new[] { ("main stage", room.Uuid) }.ToLookup(n => n.Item1, n => n.Item2),
+            ExternalIds = new Dictionary<(string, string), Guid>(),
+        };
+        var row = Row("Main Stage", "Chillicothe, IL");
+
+        VenueRequest
+            .Build(state, [new Spelling(VenueKeys.Of(row)!, [row])])
+            .Data.Should()
+            .Contain("\"inside\":\"Three Sisters Park\"");
+    }
 }

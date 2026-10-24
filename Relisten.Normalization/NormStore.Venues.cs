@@ -449,6 +449,28 @@ public sealed partial class NormStore
                 transaction: tx
             )
         ).ToLookup(n => n.Venue, n => n.Normalized);
+        // Rooms compare the sites they are in now: two sites merged make their rooms' parents one.
+        var mergedInto = (
+            await connection.QueryAsync<(Guid Uuid, Guid Into)>(
+                "SELECT uuid, merged_into FROM norm.venues WHERE merged_into IS NOT NULL",
+                transaction: tx
+            )
+        ).ToDictionary(m => m.Uuid, m => m.Into);
+        Guid? Site(Guid? parent)
+        {
+            for (
+                var depth = 0;
+                parent is { } p && depth < 20 && mergedInto.TryGetValue(p, out var next);
+                depth++
+            )
+            {
+                parent = next;
+            }
+
+            return parent;
+        }
+
+        venues = venues.Select(v => v with { Parent = Site(v.Parent) }).ToList();
 
         var merged = new HashSet<Guid>();
         var count = 0;

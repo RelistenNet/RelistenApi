@@ -227,7 +227,11 @@ public sealed partial class VenueState
                         v.Uuid,
                         v.Name,
                         v.Kind,
-                        v.Parent,
+                        // A room of a merged site is a room of the site it was merged into.
+                        v.Parent
+                            is { } parent
+                            ? Survivor(parent)
+                            : null,
                         v.City,
                         v.Region,
                         v.Country

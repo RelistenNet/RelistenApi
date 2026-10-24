@@ -117,7 +117,11 @@ public class VenueCatalogueWorkflow
             }
             catch (ActivityFailureException) when (++failures < FailuresInARow)
             {
-                total = total with { Chunks = total.Chunks + 1 };
+                // A failed step may have made every call it could: all of them count.
+                total = total with
+                {
+                    Chunks = total.Chunks + input.Parallel * (input.MayRetry ? 2 : 1),
+                };
                 continue;
             }
 
@@ -184,6 +188,18 @@ public class VenueCatalogueWorkflow
                 Unsure = total.Unsure + history.Unsure,
                 InputTokens = total.InputTokens + history.InputTokens,
                 OutputTokens = total.OutputTokens + history.OutputTokens,
+            };
+        }
+
+        // History merges renamed twins: their shows move to the survivor.
+        if (total.VenuesNamed > 0)
+        {
+            total = total with
+            {
+                LastMatch = await Workflow.ExecuteActivityAsync(
+                    (VenueActivities a) => a.Match(request.Artists),
+                    Step
+                ),
             };
         }
 

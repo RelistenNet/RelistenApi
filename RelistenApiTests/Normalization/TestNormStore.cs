@@ -564,6 +564,42 @@ public class TestNormStore
     }
 
     [Test]
+    public async Task RoomsOfMergedSitesAreTwinsToo()
+    {
+        Guid Venue() => Guid.CreateVersion7();
+        var (site, twinSite, stage, twinStage) = (Venue(), Venue(), Venue(), Venue());
+        var bot = await As(AuthorTypes.Algorithm, "venue-matcher@2");
+        VenueRecord At(
+            Guid uuid,
+            string name,
+            string kind = VenueKinds.Site,
+            Guid? parent = null
+        ) => new(uuid, name, kind, parent, "Chillicothe", "IL", "US", Confidence: 0.95f);
+        await bot.WriteVenuesAsync([
+            At(site, "Three Sisters Park"),
+            At(twinSite, "Three Sisters Park"),
+        ]);
+        await bot.WriteVenuesAsync([
+            At(stage, "Main Stage", VenueKinds.Room, site),
+            At(twinStage, "Main Stage", VenueKinds.Room, twinSite),
+        ]);
+        await bot.WriteVenueNamesAsync([
+            new VenueNameRecord(site, "Three Sisters Park", Confidence: 0.95f),
+            new VenueNameRecord(twinSite, "Three Sisters Park", Confidence: 0.95f),
+            new VenueNameRecord(stage, "Main Stage", Confidence: 0.95f),
+            new VenueNameRecord(twinStage, "Main Stage", Confidence: 0.95f),
+        ]);
+
+        // The sites merge first; their rooms are then rooms of one site, and twins.
+        (await (await As(AuthorTypes.Algorithm, "venue-matcher@2")).MergeTwinVenuesAsync())
+            .Should()
+            .Be(1);
+        (await (await As(AuthorTypes.Algorithm, "venue-matcher@2")).MergeTwinVenuesAsync())
+            .Should()
+            .Be(1);
+    }
+
+    [Test]
     public async Task ARevertLeavesRowsChangedSince()
     {
         var song = Guid.CreateVersion7();

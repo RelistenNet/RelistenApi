@@ -30,7 +30,7 @@ public sealed record VenueChunkResult(
 /// asks twice.
 public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
 {
-    public const string PromptVersion = "venue-llm@10";
+    public const string PromptVersion = "venue-llm@11";
     public const float Threshold = 0.9f;
 
     internal const string NoAnswer = "no answer";
@@ -68,53 +68,18 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
         }
 
         var total = new Tally();
-        var replies = await Ask(
-            chunks.Select(c => VenueRequest.Build(state, c)).ToList(),
-            cancellationToken
-        );
-        // A long request can come back with spellings left out or placed on refs it never
-        // declared (the lab's Tabernacle, 213 uses; Red Rocks on an undeclared "n32"): those
-        // are asked once more on their own, after these answers are written.
-        var skipped = new List<List<Spelling>>();
-        foreach (
-            var (chunk, request, answer, reply) in chunks.Zip(
-                replies,
-                (c, r) => (c, r.Request, r.Answer, r.Reply)
-            )
-        )
-        {
-            var left = mayRetry ? chunk.Where(s => answer.Dropped.ContainsKey(s.Key)).ToList() : [];
-            if (left.Count > 0)
-            {
-                skipped.Add(left);
-            }
-
-            var unsure = chunk.Where(s => !IsSure(answer, s.Key)).Except(left).ToList();
-            total.Add(
-                await PersistAsync(connection, tx, request, answer, unsure),
-                chunk.Count - unsure.Count - left.Count,
-                unsure.Count,
-                reply
-            );
-        }
-
+        var first = await Ask(state, chunks, cancellationToken);
+        var skipped = await PersistRoundAsync(connection, tx, first, total, holdBack: mayRetry);
         if (skipped.Count > 0)
         {
             var again = await VenueState.LoadAsync(connection, tx, artists);
-            var second = await Ask(
-                skipped.Select(c => VenueRequest.Build(again, c)).ToList(),
-                cancellationToken
+            await PersistRoundAsync(
+                connection,
+                tx,
+                await Ask(again, skipped, cancellationToken),
+                total,
+                holdBack: false
             );
-            foreach (var (chunk, (request, answer, reply)) in skipped.Zip(second))
-            {
-                var unsure = chunk.Where(s => !IsSure(answer, s.Key)).ToList();
-                total.Add(
-                    await PersistAsync(connection, tx, request, answer, unsure),
-                    chunk.Count - unsure.Count,
-                    unsure.Count,
-                    reply
-                );
-            }
         }
 
         await tx.CommitAsync(cancellationToken);
@@ -154,17 +119,58 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
         }
     }
 
-    private async Task<(VenueRequest Request, VenueAnswer Answer, Songs.ModelReply Reply)[]> Ask(
-        IReadOnlyList<VenueRequest> requests,
+    private sealed record Asked(
+        List<Spelling> Chunk,
+        VenueRequest Request,
+        VenueAnswer Answer,
+        Songs.ModelReply Reply
+    );
+
+    /// The chunks' requests, asked at once.
+    private async Task<Asked[]> Ask(
+        VenueState state,
+        IReadOnlyList<List<Spelling>> chunks,
         CancellationToken cancellationToken
     ) =>
         await Task.WhenAll(
-            requests.Select(async r =>
+            chunks.Select(async chunk =>
             {
-                var (answer, reply) = await AskAsync(r, cancellationToken);
-                return (r, answer, reply);
+                var request = VenueRequest.Build(state, chunk);
+                var (answer, reply) = await AskAsync(request, cancellationToken);
+                return new Asked(chunk, request, answer, reply);
             })
         );
+
+    /// Writes one round of answers, one after another. A sure answer is written; an unsure one
+    /// becomes a review item. With holdBack, spellings an answer set aside (left out, or placed
+    /// on a ref it never declared) are not review items yet: they are returned, by request,
+    /// to be asked once more on their own.
+    private async Task<List<List<Spelling>>> PersistRoundAsync(
+        Npgsql.NpgsqlConnection connection,
+        Npgsql.NpgsqlTransaction tx,
+        IReadOnlyList<Asked> round,
+        Tally total,
+        bool holdBack
+    )
+    {
+        var setAside = new List<List<Spelling>>();
+        foreach (var (chunk, request, answer, reply) in round)
+        {
+            var again = holdBack
+                ? chunk.Where(s => answer.Dropped.ContainsKey(s.Key)).ToList()
+                : [];
+            if (again.Count > 0)
+            {
+                setAside.Add(again);
+            }
+
+            var unsure = chunk.Where(s => !IsSure(answer, s.Key)).Except(again).ToList();
+            var written = await PersistAsync(connection, tx, request, answer, unsure);
+            total.Add(written, chunk.Count - unsure.Count - again.Count, unsure.Count, reply);
+        }
+
+        return setAside;
+    }
 
     /// The spellings the deterministic pass leaves, less those asked earlier in this run and
     /// those with an open question already (a person's, or an earlier run's below the bar):
@@ -859,6 +865,11 @@ internal sealed class VenueRequest
                         id,
                         name = v.Name,
                         kind = v.Kind,
+                        // A room says which site it is in: two "Main Stage"s are two festivals'.
+                        inside = v.ParentUuid is { } parent
+                        && state.Venues.TryGetValue(parent, out var site)
+                            ? site.Name
+                            : null,
                         // A venue listed from another town says where it really is.
                         town = v.LocalityKey == place?.Key
                             ? null
@@ -981,20 +992,34 @@ internal sealed class VenueRequest
             .VenueLocality.Concat(newVenues.Select(n => KeyValuePair.Create(n.Ref, n.Locality)))
             .GroupBy(p => p.Key)
             .ToDictionary(g => g.Key, g => g.First().Value);
-        // A room's site is in its locality and survives itself; anything else drops the room,
-        // and so on down (a room of a dropped room is dropped too).
+        // A room is inside a site, in the room's own town: a known site in its real town (not
+        // the town it was offered under), or a proposed site of the same locality. Rooms
+        // inside rooms, or a site elsewhere, drop the room, and so on down.
+        bool InASiteHere(NewVenueAnswer n, IReadOnlyList<NewVenueAnswer> proposals)
+        {
+            if (n.Parent == null)
+            {
+                return true;
+            }
+
+            if (n.Parent == n.Ref)
+            {
+                return false;
+            }
+
+            if (request.VenuePlaces.TryGetValue(n.Parent, out var known))
+            {
+                return known.Kind == VenueKinds.Site
+                    && known.Locality == request.Places[n.Locality].Key;
+            }
+
+            var site = proposals.FirstOrDefault(m => m.Ref == n.Parent);
+            return site is { Parent: null } && site.Locality == n.Locality;
+        }
+
         while (true)
         {
-            var kept = newVenues
-                .Where(n =>
-                    n.Parent == null
-                    || (
-                        localityOf.TryGetValue(n.Parent, out var l)
-                        && l == n.Locality
-                        && n.Parent != n.Ref
-                    )
-                )
-                .ToList();
+            var kept = newVenues.Where(n => InASiteHere(n, newVenues)).ToList();
             if (kept.Count == newVenues.Count)
             {
                 break;
@@ -1103,9 +1128,15 @@ internal sealed class VenueRequest
             return null;
         }
 
-        if (kind == VenueNameKinds.Short || (from != null && to != null && from >= to))
+        // A short name has no dates; an official period that ends before it starts is no
+        // answer (kept, it would read as the name of every date).
+        if (kind == VenueNameKinds.Short)
         {
             (from, to) = (null, null);
+        }
+        else if (from != null && to != null && from >= to)
+        {
+            return null;
         }
 
         return new VenueNameRecord(venue, name, kind, from, to, VenueLlm.Threshold);
