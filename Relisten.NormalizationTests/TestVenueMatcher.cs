@@ -426,6 +426,8 @@ public class TestVenueMatcher
     [TestCase("The Pavilion at the Toyota Music Factory", "The Pavilion at Toyota Music Factory")]
     [TestCase("1stBank Center", "1st Bank Center")]
     [TestCase("Beacon Threatre", "Beacon Theatre")]
+    [TestCase("ATT Performing Arts Center", "AT&T Performing Arts Center")]
+    [TestCase("The Back Room", "The Backroom")]
     [TestCase("Hollywood Palladium Auditorum", "Hollywood Palladium Auditorium")]
     public void SpellingsOfOneNameAreOneName(string a, string b) =>
         VenueNormalizer
@@ -437,6 +439,8 @@ public class TestVenueMatcher
     [TestCase("This Tent", "This Other Tent")]
     [TestCase("Walnut Valley Festival Stage 1", "Walnut Valley Festival Stage 2")]
     [TestCase("Universal Amphitheatre", "University Amphitheatre")]
+    [TestCase("The Backroom", "The Ballroom")]
+    [TestCase("Bandroom", "Ballroom")]
     public void OtherNamesAreNot(string a, string b) =>
         VenueNormalizer
             .SameName(VenueNormalizer.Key(a)!, VenueNormalizer.Key(b)!)
@@ -713,4 +717,45 @@ public class TestVenueMatcher
     [TestCase(new[] { "St. Louis", "saint louis" }, "St. Louis")]
     public void ATownIsShownAsItIsBestWritten(string[] spellings, string expected) =>
         VenueNormalizer.DisplayCity(spellings).Should().Be(expected);
+
+    [Test]
+    public void APlaceWithoutItsCountryTakesTheOneTheDataGivesIt()
+    {
+        var rows = VenueState.FillCountries(
+            [
+                Row("Enmore Theatre", "Newtown, New South Wales"),
+                Row("Metro Theatre", "Sydney, New South Wales, Australia"),
+                Row("Lismore City Hall", "Lismore, New South Wales, Australia"),
+                Row("Orangerie", "Brussels, Région de Bruxelles-Capitale"),
+                Row("Ancienne Belgique", "Brussels, Belgium"),
+                Row("Teatro Metropolitan", "Mexico City, Distrito Federal"),
+                Row("Ginasio Nilson Nelson", "Brasilia, Distrito Federal, Brazil"),
+                Row("Palacio de los Deportes", "Mexico City, Mexico"),
+            ],
+            []
+        );
+
+        rows.Select(r => r.Locality!.Country)
+            .Should()
+            .Equal("AU", "AU", "AU", "BE", "BE", "MX", "BR", "MX");
+    }
+
+    [TestCase("Paris, FR", "paris||FR")]
+    [TestCase("Athens, Greece", "athens||GR")]
+    [TestCase("Seoul, South Korea", "seoul||KR")]
+    public void MoreCountriesParse(string location, string key) =>
+        VenueNormalizer.ParseLocation(location)!.Key.Should().Be(key);
+
+    [Test]
+    public void OneNameSpacedTwoWaysInATownIsOneVenue()
+    {
+        var plan = VenueMatcher.Match(
+            State([
+                Row("The Back Room", "Philadelphia, PA", 4),
+                Row("The Backroom", "Philadelphia, PA", 2),
+            ])
+        );
+
+        plan.NewVenues.Should().ContainSingle();
+    }
 }

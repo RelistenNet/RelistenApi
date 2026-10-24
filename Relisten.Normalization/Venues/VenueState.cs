@@ -209,7 +209,12 @@ public sealed partial class VenueState
                 WithoutPlacesInTowns(
                     WithoutStateTypos(
                         WithoutCodeTypos(
-                            FoldCities(CountryCodes(FillRegions(legacy, catalogue), catalogue))
+                            FoldCities(
+                                CountryCodes(
+                                    FillCountries(FillRegions(legacy, catalogue), catalogue),
+                                    catalogue
+                                )
+                            )
                         )
                     )
                 )
@@ -298,6 +303,51 @@ public sealed partial class VenueState
                         Locality = l with { Region = only[0].Region, Country = only[0].Country },
                     }
                     : r;
+            })
+            .ToList();
+    }
+
+    /// A place written without its country ("Sydney, New South Wales", "Brussels, Région de
+    /// Bruxelles-Capitale") takes the one country the data gives that region elsewhere
+    /// ("Sydney, New South Wales, Australia"), the town's own country first.
+    internal static List<LegacyVenue> FillCountries(
+        IReadOnlyList<LegacyVenue> rows,
+        IEnumerable<Locality> catalogue
+    )
+    {
+        var known = rows.Select(r => r.Locality)
+            .OfType<Locality>()
+            .Concat(catalogue)
+            .Where(l => l.Country != null)
+            .ToList();
+        // A region teaches its country only from two towns or more: "Distrito Federal" is
+        // Mexico's, Brazil's and Venezuela's, and one Brasília row would file Mexico City.
+        var byRegion = known
+            .Where(l => l.Region != null)
+            .GroupBy(l => VenueNormalizer.Normalize(l.Region!))
+            .Where(g => g.Select(l => VenueNormalizer.Normalize(l.City)).Distinct().Count() >= 2)
+            .ToDictionary(g => g.Key, g => g.Select(l => l.Country).Distinct().ToList());
+        var byCity = known
+            .GroupBy(l => VenueNormalizer.Normalize(l.City))
+            .ToDictionary(g => g.Key, g => g.Select(l => l.Country).Distinct().ToList());
+        return rows.Select(r =>
+            {
+                if (r.Locality is not { Country: null } l)
+                {
+                    return r;
+                }
+
+                // The town's own country first; the region's when the town is new.
+                var country =
+                    byCity.TryGetValue(VenueNormalizer.Normalize(l.City), out var local)
+                    && local.Count == 1
+                        ? local[0]
+                    : l.Region != null
+                    && byRegion.TryGetValue(VenueNormalizer.Normalize(l.Region), out var regional)
+                    && regional.Count == 1
+                        ? regional[0]
+                    : null;
+                return country == null ? r : r with { Locality = l with { Country = country } };
             })
             .ToList();
     }

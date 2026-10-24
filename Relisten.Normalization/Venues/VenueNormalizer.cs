@@ -53,7 +53,13 @@ public static partial class VenueNormalizer
     public static string? Key(string? name)
     {
         // A bracketed note is about the recording, not the place ("[24bit]", "[SBD]").
-        var key = Normalize(RecordingNotes().Replace(Bracketed().Replace(name ?? "", " "), " "));
+        var key = Normalize(
+            LetterAmpersand()
+                .Replace(
+                    RecordingNotes().Replace(Bracketed().Replace(name ?? "", " "), " "),
+                    "$1$2"
+                )
+        );
         if (key.Length == 0 || Placeholders.Contains(key))
         {
             return null;
@@ -70,6 +76,10 @@ public static partial class VenueNormalizer
 
     [System.Text.RegularExpressions.GeneratedRegex(@"\[[^\]]*\]")]
     private static partial System.Text.RegularExpressions.Regex Bracketed();
+
+    // "AT&T", "R&B": short letter groups joined by "&" are one word, not "at and t".
+    [System.Text.RegularExpressions.GeneratedRegex(@"\b([A-Za-z]{1,3})&([A-Za-z]{1,3})\b")]
+    private static partial System.Text.RegularExpressions.Regex LetterAmpersand();
 
     // Notes about the recording or the set written into a venue name: "24 bit source",
     // "FOB ORTF", "SBD", "late show", "1st set".
@@ -190,7 +200,7 @@ public static partial class VenueNormalizer
     }
 
     /// A common venue word misspelled is that word ("threatre", "auditorum", "colliseum"):
-    /// one letter off, two from eight letters. Other words stay as written.
+    /// one letter off. Other words stay as written.
     private static string VenueWord(string w)
     {
         if (w.Length < 6 || VenueWords.ContainsKey(w))
@@ -198,7 +208,8 @@ public static partial class VenueNormalizer
             return VenueWords.GetValueOrDefault(w, w);
         }
 
-        var limit = w.Length >= 8 ? 2 : 1;
+        // One letter only: two would make "backroom" a "ballroom".
+        const int limit = 1;
         var near = VenueWords
             .Where(v => Math.Abs(v.Key.Length - w.Length) <= limit)
             .Where(v => Titles.TitleGrouper.BoundedLevenshtein(v.Key, w, limit) <= limit)
@@ -727,5 +738,98 @@ public static partial class VenueNormalizer
         ["aut"] = "AT",
         ["irl"] = "IE",
         ["che"] = "CH",
+        ["greece"] = "GR",
+        ["south korea"] = "KR",
+        ["korea"] = "KR",
+        ["china"] = "CN",
+        ["hong kong"] = "HK",
+        ["taiwan"] = "TW",
+        ["singapore"] = "SG",
+        ["thailand"] = "TH",
+        ["india"] = "IN",
+        ["venezuela"] = "VE",
+        ["colombia"] = "CO",
+        ["chile"] = "CL",
+        ["peru"] = "PE",
+        ["costa rica"] = "CR",
+        ["puerto rico"] = "PR",
+        ["cuba"] = "CU",
+        ["dominican republic"] = "DO",
+        ["bahamas"] = "BS",
+        ["uruguay"] = "UY",
+        ["south africa"] = "ZA",
+        ["morocco"] = "MA",
+        ["turkey"] = "TR",
+        ["russia"] = "RU",
+        ["ukraine"] = "UA",
+        ["hungary"] = "HU",
+        ["czechia"] = "CZ",
+        ["slovakia"] = "SK",
+        ["slovenia"] = "SI",
+        ["croatia"] = "HR",
+        ["serbia"] = "RS",
+        ["romania"] = "RO",
+        ["bulgaria"] = "BG",
+        ["estonia"] = "EE",
+        ["latvia"] = "LV",
+        ["lithuania"] = "LT",
+        ["luxembourg"] = "LU",
+        ["monaco"] = "MC",
+        ["united arab emirates"] = "AE",
+        ["philippines"] = "PH",
+        ["indonesia"] = "ID",
+        ["malaysia"] = "MY",
+        ["vietnam"] = "VN",
+        ["belize"] = "BZ",
+        ["panama"] = "PA",
+        ["ecuador"] = "EC",
+        ["bolivia"] = "BO",
+        // ISO codes that can't be read as a US state or Canadian province ("Paris, FR").
+        ["fr"] = "FR",
+        ["es"] = "ES",
+        ["au"] = "AU",
+        ["jp"] = "JP",
+        ["it"] = "IT",
+        ["se"] = "SE",
+        ["dk"] = "DK",
+        ["be"] = "BE",
+        ["at"] = "AT",
+        ["ch"] = "CH",
+        ["ie"] = "IE",
+        ["nz"] = "NZ",
+        ["mx"] = "MX",
+        ["br"] = "BR",
+        ["gr"] = "GR",
+        ["cz"] = "CZ",
+        ["pl"] = "PL",
+        ["pt"] = "PT",
+        ["no"] = "NO",
+        ["fi"] = "FI",
+        ["hu"] = "HU",
+        ["hr"] = "HR",
+        ["si"] = "SI",
+        ["ro"] = "RO",
+        ["bg"] = "BG",
+        ["rs"] = "RS",
+        ["tr"] = "TR",
+        ["ru"] = "RU",
+        ["ua"] = "UA",
+        ["ee"] = "EE",
+        ["lv"] = "LV",
+        ["lt"] = "LT",
+        ["lu"] = "LU",
+        ["jm"] = "JM",
+        ["cr"] = "CR",
+        ["cl"] = "CL",
+        ["uy"] = "UY",
+        ["ve"] = "VE",
+        ["za"] = "ZA",
+        ["kr"] = "KR",
+        ["cn"] = "CN",
+        ["hk"] = "HK",
+        ["tw"] = "TW",
+        ["sg"] = "SG",
+        ["th"] = "TH",
+        ["is"] = "IS",
     };
 }
