@@ -258,8 +258,9 @@ public sealed partial class VenueState
         };
     }
 
-    /// A town written without its state ("New York City") takes the one state that town name
-    /// has everywhere else in the data; a name found in several states (Portland) stays as is.
+    /// A town written without its state ("New York City", "Melbourne, Australia") takes the
+    /// one state that town name has elsewhere in the data (in its country, when it has one); a
+    /// name found in several states (Portland) stays as is.
     internal static List<LegacyVenue> FillRegions(
         IReadOnlyList<LegacyVenue> rows,
         IEnumerable<Locality> catalogue
@@ -275,21 +276,33 @@ public sealed partial class VenueState
                 g => g.Select(l => (l.Region, l.Country)).Distinct().ToList()
             );
         return rows.Select(r =>
-                r.Locality is { Region: null, Country: null } l
-                && regions.TryGetValue(VenueNormalizer.Normalize(l.City), out var only)
-                && only.Count == 1
+            {
+                if (
+                    r.Locality is not { Region: null } l
+                    || !regions.TryGetValue(VenueNormalizer.Normalize(l.City), out var seen)
+                )
+                {
+                    return r;
+                }
+
+                // "Melbourne, Australia": the one state the town has in its country.
+                var only =
+                    l.Country == null
+                        ? seen
+                        : seen.Where(x => x.Country == l.Country && x.Region != null).ToList();
+                return only.Count == 1
                     ? r with
                     {
                         Locality = l with { Region = only[0].Region, Country = only[0].Country },
                     }
-                    : r
-            )
+                    : r;
+            })
             .ToList();
     }
 
     /// "Amsterdam, NL", "Lorsch, DE", "Toronto, CA": a state code that is also a country's code
-    /// names the country when the town is found elsewhere only in that country, never in the
-    /// state's. The row takes the town's most used locality there.
+    /// names the country when the town is found in that country and never in the state the
+    /// code would mean. The row takes the town's most used locality in that country.
     internal static List<LegacyVenue> CountryCodes(
         IReadOnlyList<LegacyVenue> rows,
         IEnumerable<Locality> catalogue
@@ -312,16 +325,23 @@ public sealed partial class VenueState
         return rows.Select(r =>
             {
                 var code = Code(r);
+                // The town seen in the code's country, and never in the state the code would
+                // mean (Amsterdam, NY is no reason to read "NL" as Newfoundland).
                 if (
                     code == null
                     || !towns.TryGetValue(VenueNormalizer.Normalize(r.Locality!.City), out var seen)
-                    || seen.Any(t => t.Locality.Country != code)
+                    || !seen.Any(t => t.Locality.Country == code)
+                    || seen.Any(t =>
+                        t.Locality.Country == r.Locality.Country
+                        && t.Locality.Region == r.Locality.Region
+                    )
                 )
                 {
                     return r;
                 }
 
-                var locality = seen.GroupBy(t => t.Locality.Key)
+                var locality = seen.Where(t => t.Locality.Country == code)
+                    .GroupBy(t => t.Locality.Key)
                     .OrderByDescending(g => g.Sum(t => t.Uses))
                     .First()
                     .First()

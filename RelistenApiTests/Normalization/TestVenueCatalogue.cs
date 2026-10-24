@@ -15,11 +15,13 @@ namespace RelistenApiTests.Normalization;
 /// name MSG) is a new site, its Theater a room inside it.
 /// twin: it also proposes Madison Square Garden a second time, for "MSG". stages: the Garden
 /// and the Beacon Theatre each get a room named "Main Stage" ("MSG" goes to the Beacon's).
-/// forgetful: its first answer leaves "MSG" out.
+/// forgetful: its first answer leaves "MSG" out. sloppy: its first answer places "MSG" on a
+/// new venue it never declares.
 internal sealed class ScriptedVenueModel(
     bool twin = false,
     bool stages = false,
-    bool forgetful = false
+    bool forgetful = false,
+    bool sloppy = false
 ) : ICatalogueModel
 {
     public int Calls { get; private set; }
@@ -84,7 +86,8 @@ internal sealed class ScriptedVenueModel(
                         ["id"] = (string)s["id"]!,
                         ["spelling_text"] = text,
                         ["venue"] =
-                            stages && text.Contains("Theater") ? "n5"
+                            sloppy && Calls == 0 && text == "MSG" ? "n9"
+                            : stages && text.Contains("Theater") ? "n5"
                             : stages && text == "MSG" ? "n6"
                             : text.Contains("Theater") ? "n2"
                             : twin && text == "MSG" ? "n3"
@@ -543,11 +546,12 @@ public class TestVenueCatalogue
             );
     }
 
-    [Test]
-    public async Task ASpellingTheModelLeftOutIsAskedAgain()
+    [TestCase(true, false)]
+    [TestCase(false, true)]
+    public async Task ASpellingTheModelLeftOutIsAskedAgain(bool forgetful, bool sloppy)
     {
         var database = new DbServiceNormalizationDatabase(db);
-        var model = new ScriptedVenueModel(forgetful: true);
+        var model = new ScriptedVenueModel(forgetful: forgetful, sloppy: sloppy);
         await new VenueMatch(database).RunAsync(artists, CancellationToken.None);
         var chunk = await new VenueLlm(database, model).RunChunkAsync(
             artists,

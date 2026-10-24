@@ -133,12 +133,24 @@ public class TestVenueMatcher
                 Row("Madison Square Garden", "New York, NY"),
                 Row("Crystal Ballroom", "Portland"),
             ],
-            [new Locality("Portland", "OR", "US"), new Locality("Portland", "ME", "US")]
+            [
+                new Locality("Portland", "OR", "US"),
+                new Locality("Portland", "ME", "US"),
+                new Locality("Melbourne", "VIC", "AU"),
+            ]
         );
 
         rows.Select(r => r.Locality!.Key)
             .Should()
             .Equal("new york|ny|US", "new york|ny|US", "portland||");
+        VenueState
+            .FillRegions(
+                [Row("Sidney Myer Music Bowl", "Melbourne, Australia")],
+                [new Locality("Melbourne", "VIC", "AU")]
+            )
+            .Single()
+            .Locality!.Key.Should()
+            .Be("melbourne|vic|AU");
     }
 
     [Test]
@@ -348,6 +360,7 @@ public class TestVenueMatcher
             [
                 Row("Paradiso", "Amsterdam, NL"),
                 Row("Paradiso", "Amsterdam, Netherlands"),
+                Row("Riverlink", "Amsterdam, NY"),
                 Row("Field House", "Toronto, CA"),
                 Row("Massey Hall", "Toronto, ON, Canada"),
                 Row("Tivoli Gardens", "Copenhagen, DE"),
@@ -363,6 +376,7 @@ public class TestVenueMatcher
             .Equal(
                 "amsterdam||NL",
                 "amsterdam||NL",
+                "amsterdam|ny|US",
                 "toronto|on|CA",
                 "toronto|on|CA",
                 // DE is Germany's code, not Denmark's; TX names no country.

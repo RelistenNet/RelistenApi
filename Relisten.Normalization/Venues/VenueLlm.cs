@@ -35,7 +35,7 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
     internal const string NoAnswer = "no answer";
 
     /// About this many spellings per request; a locality is never split below it.
-    public const int ChunkSpellings = 120;
+    public const int ChunkSpellings = 80;
 
     public string Author => $"{PromptVersion}+{model.ModelId}";
 
@@ -63,11 +63,10 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
 
         var request = VenueRequest.Build(state, chunk);
         var (answer, reply) = await AskAsync(request, cancellationToken);
-        // A long request can come back with spellings left out (the lab's Tabernacle, 213
-        // uses): those are asked once more on their own, after this answer is written.
-        var skipped = chunk
-            .Where(s => answer.Dropped.GetValueOrDefault(s.Key) == NoAnswer)
-            .ToList();
+        // A long request can come back with spellings left out or placed on refs it never
+        // declared (the lab's Tabernacle, 213 uses; Red Rocks on an undeclared "n32"): those
+        // are asked once more on their own, after this answer is written.
+        var skipped = chunk.Where(s => answer.Dropped.ContainsKey(s.Key)).ToList();
         var unsure = chunk.Where(s => !IsSure(answer, s.Key)).Except(skipped).ToList();
         var written = await PersistAsync(connection, tx, request, answer, unsure);
         var (resolved, unsureCount) = (chunk.Count - unsure.Count - skipped.Count, unsure.Count);
