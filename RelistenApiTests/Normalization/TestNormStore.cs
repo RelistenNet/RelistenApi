@@ -325,6 +325,71 @@ public class TestNormStore
     }
 
     [Test]
+    public async Task AMachinesSpellingLearnsItIsAnOfficialName()
+    {
+        var venue = Guid.CreateVersion7();
+        var bot = await As(AuthorTypes.Algorithm, "venue-matcher@2");
+        await bot.WriteVenuesAsync([
+            new VenueRecord(
+                venue,
+                "Spectrum",
+                City: "Philadelphia",
+                Region: "PA",
+                Country: "US",
+                Confidence: 0.95f
+            ),
+        ]);
+        await bot.WriteVenueNamesAsync(
+            [new VenueNameRecord(venue, "Spectrum", Confidence: 0.95f)],
+            NormWriteMode.FillOnly
+        );
+
+        await (await As(AuthorTypes.Llm, "venue-llm@4")).WriteVenueNamesAsync(
+            [
+                new VenueNameRecord(
+                    venue,
+                    "The Spectrum",
+                    VenueNameKinds.Official,
+                    ValidTo: new DateOnly(1994, 1, 1),
+                    Confidence: 0.9f
+                ),
+                new VenueNameRecord(
+                    venue,
+                    "CoreStates Spectrum",
+                    VenueNameKinds.Official,
+                    ValidFrom: new DateOnly(1994, 1, 1),
+                    Confidence: 0.9f
+                ),
+            ],
+            NormWriteMode.FillOnly
+        );
+        // A spelling never overwrites the official name it is.
+        await (await As(AuthorTypes.Algorithm, "venue-matcher@2")).WriteVenueNamesAsync(
+            [new VenueNameRecord(venue, "Spectrum", Confidence: 0.95f)],
+            NormWriteMode.FillOnly
+        );
+
+        (
+            await db.QueryAsync<string>(
+                "SELECT name || ' ' || kind || ' ' || coalesce(valid_to::text, '-') FROM norm.venue_names WHERE venue_uuid = @venue ORDER BY valid_from",
+                new { venue },
+                tx
+            )
+        )
+            .Should()
+            .Equal("Spectrum official 1994-01-01", "CoreStates Spectrum official -");
+        (
+            await db.ExecuteScalarAsync<string>(
+                "SELECT norm.venue_name_on(@venue, '1990-05-01')",
+                new { venue },
+                tx
+            )
+        )
+            .Should()
+            .Be("Spectrum");
+    }
+
+    [Test]
     public async Task ARevertLeavesRowsChangedSince()
     {
         var song = Guid.CreateVersion7();

@@ -108,7 +108,10 @@ public static class SongEvaluation
                 JOIN setlist_shows ss ON ss.artist_id = sh.artist_id AND ss.date = sh.date
                 JOIN survivor v ON v.song = ts.song_uuid AND v.merged_into IS NULL
                 JOIN norm.songs k ON k.uuid = v.uuid
-                WHERE t.artist_id = @Id AND ts.song_uuid IS NOT NULL
+                -- A soundcheck isn't the show's setlist, and an orphaned track is no longer
+                -- part of its source.
+                WHERE t.artist_id = @Id AND ts.song_uuid IS NOT NULL AND NOT t.is_orphaned
+                  AND NOT 'soundcheck' = ANY(ts.qualifiers)
                   AND EXISTS (SELECT 1 FROM setlist_songs_plays p WHERE p.played_setlist_show_id = ss.id)
                 """,
                 new { artist.Id, artist.Uuid }

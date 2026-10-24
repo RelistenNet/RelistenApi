@@ -211,7 +211,15 @@ public sealed partial class NormStore
                    @AuthorType, @AuthorRef, x.confidence, @Run
             FROM unnest(@venues, @normalized, @names, @kinds, @froms, @tos, @confidences)
                  AS x(venue, normalized, name, kind, valid_from, valid_to, confidence)
-            ON CONFLICT (venue_uuid, normalized, valid_from) DO {(mode == NormWriteMode.FillOnly ? "NOTHING" : $"""
+            ON CONFLICT (venue_uuid, normalized, valid_from) DO {(mode == NormWriteMode.FillOnly ? $"""
+                -- Fill-only still lets a machine's plain spelling learn that it is an official or
+                -- short name, with its dates ("Spectrum" until 1994): nothing else changes.
+                UPDATE SET kind = EXCLUDED.kind, valid_to = EXCLUDED.valid_to,
+                    author_type = EXCLUDED.author_type, author_ref = EXCLUDED.author_ref,
+                    confidence = EXCLUDED.confidence, run_uuid = EXCLUDED.run_uuid, updated_at = now()
+                WHERE norm.venue_names.kind = 'spelling' AND EXCLUDED.kind <> 'spelling'
+                  AND norm.venue_names.author_type NOT IN ('user', 'moderator')
+                """ : $"""
                 UPDATE SET name = EXCLUDED.name, kind = EXCLUDED.kind,
                     valid_to = EXCLUDED.valid_to, author_type = EXCLUDED.author_type,
                     author_ref = EXCLUDED.author_ref, confidence = EXCLUDED.confidence,
