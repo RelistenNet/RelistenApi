@@ -6,11 +6,13 @@ using Temporalio.Activities;
 
 namespace Relisten.Normalization.Temporal;
 
-/// MayRetry: a second model call for left-out spellings fits the run's budget.
+/// MayRetry: a second round for left-out spellings fits the run's budget. Parallel: requests
+/// asked at once.
 public sealed record VenueChunkInput(
     IReadOnlyList<Guid>? Artists,
     IReadOnlyList<string> Skip,
-    bool MayRetry = true
+    bool MayRetry = true,
+    int Parallel = 1
 );
 
 /// The venue catalogue's steps. Each reads the catalogue fresh, so a resumed run continues
@@ -42,7 +44,8 @@ public sealed class VenueActivities(VenueMatch match, VenueLlm llm, VenueHistory
             input.Artists,
             input.Skip,
             ActivityExecutionContext.Current.CancellationToken,
-            input.MayRetry
+            input.MayRetry,
+            input.Parallel
         );
     }
 }

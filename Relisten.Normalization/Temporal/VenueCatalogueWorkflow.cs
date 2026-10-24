@@ -14,12 +14,14 @@ namespace Relisten.Normalization.Temporal;
 /// left to ask). FlaggedOnly: the artists whose venues are switched on (features.norm_venues),
 /// read when the run starts; the nightly schedule's run. HistoryMinShows: after the match,
 /// the official names of venues with at least this many shows that have none (VenueHistory),
-/// within the same budget; 0 skips it.
+/// within the same budget; 0 skips it. Parallel: model requests asked at once, each about
+/// different states or countries.
 public sealed record BuildVenueCatalogue(
     IReadOnlyList<Guid>? Artists = null,
     int? MaxChunks = null,
     bool FlaggedOnly = false,
-    int HistoryMinShows = 5
+    int HistoryMinShows = 5,
+    int Parallel = 6
 );
 
 public sealed record VenueCatalogueResult(
@@ -96,11 +98,14 @@ public class VenueCatalogueWorkflow
         while (request.MaxChunks is not { } max || total.Chunks < max)
         {
             VenueChunkResult chunk;
-            // A re-ask is a second model call: only when the budget has it.
+            // At most the budget's remaining calls at once; a re-ask round only when it fits too.
+            var remaining = request.MaxChunks is { } max2 ? max2 - total.Chunks : int.MaxValue;
+            var parallel = Math.Max(1, Math.Min(request.Parallel, remaining));
             var input = new VenueChunkInput(
                 request.Artists,
                 skip,
-                request.MaxChunks == null || total.Chunks + 2 <= request.MaxChunks
+                remaining >= 2 * parallel,
+                parallel
             );
             try
             {

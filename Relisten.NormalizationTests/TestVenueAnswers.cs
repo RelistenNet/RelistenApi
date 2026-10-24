@@ -220,4 +220,33 @@ public class TestVenueAnswers
 
         chunk.Select(s => s.Locality).Distinct().Should().Equal("chicago|il|US");
     }
+
+    [Test]
+    public void RequestsAskedAtOnceNeverShareAState()
+    {
+        Spelling One(string name, string location, int family, int uses = 5)
+        {
+            var row = Row(name, location, uses);
+            return new Spelling(VenueKeys.Of(row)!, [row], family);
+        }
+
+        var spellings = new[]
+        {
+            One("Red Rocks", "Morrison, CO", 0, 50),
+            One("Fox Theatre", "Boulder, CO", 1, 40),
+            One("Fillmore", "San Francisco, CA", 2, 30),
+            One("Paradiso", "Amsterdam, Netherlands", 3, 20),
+            One("Gothic Theatre", "Englewood, CO", 4, 10),
+        };
+
+        var chunks = VenueLlm.NextChunks(spellings, 3);
+
+        chunks.Should().HaveCount(3);
+        chunks
+            .Select(c => string.Join(",", c.Select(s => s.Region).Distinct()))
+            .Should()
+            .Equal("co|US", "ca|US", "NL");
+        // One request at a time is the busiest families together, whatever their states.
+        VenueLlm.NextChunk(spellings).Should().HaveCount(5);
+    }
 }

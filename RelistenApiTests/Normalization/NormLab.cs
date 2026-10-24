@@ -669,13 +669,23 @@ public class NormLab
         var (chunks, input, output) = (0, 0, 0);
         while (chunks < maxChunks)
         {
-            var chunk = await llm.RunChunkAsync(artists, skip, CancellationToken.None);
+            var chunk = await llm.RunChunkAsync(
+                artists,
+                skip,
+                CancellationToken.None,
+                parallel: int.TryParse(
+                    Environment.GetEnvironmentVariable("NORM_LAB_PARALLEL"),
+                    out var p
+                )
+                    ? p
+                    : 1
+            );
             if (chunk.Done)
             {
                 break;
             }
 
-            chunks++;
+            chunks += chunk.ModelCalls;
             skip.AddRange(chunk.Asked);
             (input, output) = (input + chunk.InputTokens, output + chunk.OutputTokens);
             TestContext.Out.WriteLine(

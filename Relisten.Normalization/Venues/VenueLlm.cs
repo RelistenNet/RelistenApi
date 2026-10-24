@@ -30,7 +30,7 @@ public sealed record VenueChunkResult(
 /// asks twice.
 public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
 {
-    public const string PromptVersion = "venue-llm@9";
+    public const string PromptVersion = "venue-llm@10";
     public const float Threshold = 0.9f;
 
     internal const string NoAnswer = "no answer";
@@ -40,12 +40,15 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
 
     public string Author => $"{PromptVersion}+{model.ModelId}";
 
-    /// mayRetry: whether a second model call for left-out spellings fits the run's budget.
+    /// mayRetry: whether a second round for left-out spellings fits the run's budget.
+    /// parallel: how many requests to ask at once, each about different states or countries
+    /// (venues never repeat across them, so their answers can't make twins of each other).
     public async Task<VenueChunkResult> RunChunkAsync(
         IReadOnlyCollection<Guid>? artists,
         IReadOnlyCollection<string> skip,
         CancellationToken cancellationToken,
-        bool mayRetry = true
+        bool mayRetry = true,
+        int parallel = 1
     )
     {
         await using var connection = db.CreateWriteConnection();
@@ -58,53 +61,110 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
         );
 
         var state = await VenueState.LoadAsync(connection, tx, artists);
-        var chunk = NextChunk(await OpenSpellings(connection, tx, state, skip));
-        if (chunk.Count == 0)
+        var chunks = NextChunks(await OpenSpellings(connection, tx, state, skip), parallel);
+        if (chunks.Count == 0)
         {
             return new VenueChunkResult(true, [], 0, 0, 0, 0, 0, 0);
         }
 
-        var request = VenueRequest.Build(state, chunk);
-        var (answer, reply) = await AskAsync(request, cancellationToken);
+        var total = new Tally();
+        var replies = await Ask(
+            chunks.Select(c => VenueRequest.Build(state, c)).ToList(),
+            cancellationToken
+        );
         // A long request can come back with spellings left out or placed on refs it never
         // declared (the lab's Tabernacle, 213 uses; Red Rocks on an undeclared "n32"): those
-        // are asked once more on their own, after this answer is written.
-        var skipped = mayRetry ? chunk.Where(s => answer.Dropped.ContainsKey(s.Key)).ToList() : [];
-        var unsure = chunk.Where(s => !IsSure(answer, s.Key)).Except(skipped).ToList();
-        var written = await PersistAsync(connection, tx, request, answer, unsure);
-        var (resolved, unsureCount) = (chunk.Count - unsure.Count - skipped.Count, unsure.Count);
-        var (input, output) = (reply.InputTokens, reply.OutputTokens);
+        // are asked once more on their own, after these answers are written.
+        var skipped = new List<List<Spelling>>();
+        foreach (
+            var (chunk, request, answer, reply) in chunks.Zip(
+                replies,
+                (c, r) => (c, r.Request, r.Answer, r.Reply)
+            )
+        )
+        {
+            var left = mayRetry ? chunk.Where(s => answer.Dropped.ContainsKey(s.Key)).ToList() : [];
+            if (left.Count > 0)
+            {
+                skipped.Add(left);
+            }
+
+            var unsure = chunk.Where(s => !IsSure(answer, s.Key)).Except(left).ToList();
+            total.Add(
+                await PersistAsync(connection, tx, request, answer, unsure),
+                chunk.Count - unsure.Count - left.Count,
+                unsure.Count,
+                reply
+            );
+        }
+
         if (skipped.Count > 0)
         {
-            var again = VenueRequest.Build(
-                await VenueState.LoadAsync(connection, tx, artists),
-                skipped
+            var again = await VenueState.LoadAsync(connection, tx, artists);
+            var second = await Ask(
+                skipped.Select(c => VenueRequest.Build(again, c)).ToList(),
+                cancellationToken
             );
-            var (second, secondReply) = await AskAsync(again, cancellationToken);
-            var stillUnsure = skipped.Where(s => !IsSure(second, s.Key)).ToList();
-            var more = await PersistAsync(connection, tx, again, second, stillUnsure);
-            written = (written.Venues + more.Venues, written.Rows + more.Rows);
-            (resolved, unsureCount) = (
-                resolved + skipped.Count - stillUnsure.Count,
-                unsureCount + stillUnsure.Count
-            );
-            (input, output) = (input + secondReply.InputTokens, output + secondReply.OutputTokens);
+            foreach (var (chunk, (request, answer, reply)) in skipped.Zip(second))
+            {
+                var unsure = chunk.Where(s => !IsSure(answer, s.Key)).ToList();
+                total.Add(
+                    await PersistAsync(connection, tx, request, answer, unsure),
+                    chunk.Count - unsure.Count,
+                    unsure.Count,
+                    reply
+                );
+            }
         }
 
         await tx.CommitAsync(cancellationToken);
 
         return new VenueChunkResult(
             false,
-            chunk.Select(s => s.Key).ToList(),
-            resolved,
-            unsureCount,
-            written.Venues,
-            written.Rows,
-            input,
-            output,
-            skipped.Count > 0 ? 2 : 1
+            chunks.SelectMany(c => c).Select(s => s.Key).ToList(),
+            total.Resolved,
+            total.Unsure,
+            total.Venues,
+            total.Rows,
+            total.Input,
+            total.Output,
+            chunks.Count + skipped.Count
         );
     }
+
+    private sealed class Tally
+    {
+        public int Resolved,
+            Unsure,
+            Venues,
+            Rows,
+            Input,
+            Output;
+
+        public void Add(
+            (int Venues, int Rows) written,
+            int resolved,
+            int unsure,
+            Songs.ModelReply reply
+        )
+        {
+            (Venues, Rows) = (Venues + written.Venues, Rows + written.Rows);
+            (Resolved, Unsure) = (Resolved + resolved, Unsure + unsure);
+            (Input, Output) = (Input + reply.InputTokens, Output + reply.OutputTokens);
+        }
+    }
+
+    private async Task<(VenueRequest Request, VenueAnswer Answer, Songs.ModelReply Reply)[]> Ask(
+        IReadOnlyList<VenueRequest> requests,
+        CancellationToken cancellationToken
+    ) =>
+        await Task.WhenAll(
+            requests.Select(async r =>
+            {
+                var (answer, reply) = await AskAsync(r, cancellationToken);
+                return (r, answer, reply);
+            })
+        );
 
     /// The spellings the deterministic pass leaves, less those asked earlier in this run and
     /// those with an open question already (a person's, or an earlier run's below the bar):
@@ -235,28 +295,62 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
     }
 
     /// The busiest families first, whole; a request holds about ChunkSpellings spellings.
-    internal static List<Spelling> NextChunk(IReadOnlyList<Spelling> spellings)
+    internal static List<Spelling> NextChunk(IReadOnlyList<Spelling> spellings) =>
+        NextChunks(spellings, 1).FirstOrDefault() ?? [];
+
+    /// Up to count requests, the busiest families first and each family whole; no two
+    /// requests share a state or country (spellings without a usable town are one more), so
+    /// asked at once, none can propose a venue another is proposing.
+    internal static List<List<Spelling>> NextChunks(IReadOnlyList<Spelling> spellings, int count)
     {
-        var chunk = new List<Spelling>();
+        var chunks = new List<List<Spelling>>();
+        var owner = new Dictionary<string, int>();
         foreach (
             var family in spellings
                 .GroupBy(s => s.Family)
                 .OrderByDescending(g => g.Sum(s => s.Uses))
         )
         {
+            var regions = family.Select(s => s.Region ?? Spelling.Unknown).Distinct().ToList();
+            var owners = regions.Where(owner.ContainsKey).Select(r => owner[r]).Distinct().ToList();
+            int target;
+            if (owners.Count > 1)
+            {
+                continue; // spans two requests' states: a later batch
+            }
+            else if (owners.Count == 1)
+            {
+                target = owners[0];
+            }
+            else if (chunks.Count < count)
+            {
+                chunks.Add([]);
+                target = chunks.Count - 1;
+            }
+            else
+            {
+                target = Enumerable.Range(0, chunks.Count).MinBy(i => chunks[i].Count);
+            }
+
+            var chunk = chunks[target];
             if (chunk.Count > 0 && chunk.Count + family.Count() > ChunkSpellings)
             {
                 continue;
             }
 
             chunk.AddRange(family.OrderByDescending(s => s.Uses).Take(ChunkSpellings * 2));
-            if (chunk.Count >= ChunkSpellings)
+            foreach (var region in regions)
+            {
+                owner[region] = target;
+            }
+
+            if (chunks.Count == count && chunks.All(c => c.Count >= ChunkSpellings))
             {
                 break;
             }
         }
 
-        return chunk;
+        return chunks.Where(c => c.Count > 0).ToList();
     }
 
     private static string Proposal(SpellingAnswer answer, VenueRequest request, VenueAnswer all) =>
@@ -553,7 +647,8 @@ internal sealed class VenueRequest
           null if it is not a venue or you can't tell.
         - not_a_venue: true for something that is not a place (a radio station, "various").
         - confidence: 0 to 1; 0.9 or more only when you are sure. Lower is not recorded.
-        - rationale: one short sentence.
+        - rationale: one short sentence when your confidence is below 0.9; otherwise "" (an
+          unsure answer goes to a person, who reads it).
 
         A new venue: its locality (the l-id of the town it really is in, never l0),
         its current official name, spelled correctly with its accents ("La Boule Noire",
