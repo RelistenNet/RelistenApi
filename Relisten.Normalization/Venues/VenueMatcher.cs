@@ -68,8 +68,9 @@ public static class VenueMatcher
                 continue;
             }
 
-            var named = state
-                .CompactNames[VenueNormalizer.Compact(row.Key)]
+            var named = VenueNormalizer
+                .Identities(row.Key)
+                .SelectMany(id => state.IdentityNames[id])
                 .Distinct()
                 .Where(state.Venues.ContainsKey)
                 .ToList();
@@ -132,12 +133,16 @@ public static class VenueMatcher
         return rest;
     }
 
-    /// Step 2: rows that could be one place, together. Names are joined by a shared external
-    /// id, or by looking alike within one trusted town.
-    private static List<IReadOnlyList<LegacyVenue>> Families(List<LegacyVenue> open)
+    /// Step 2: rows that could be one place, together, each in its town (a name is a different
+    /// place in another state: House of Blues in Chicago and in Dallas). Rows are joined by one
+    /// name in one town; one name in two towns of a state (a suburb) or in a town of one name in
+    /// two states (a typo'd state); a shared external id; and names alike, or sharing a word
+    /// that names a place, within one town. A row without a town joins the one family its name
+    /// has, if it has only one.
+    internal static List<IReadOnlyList<LegacyVenue>> Families(List<LegacyVenue> open)
     {
-        var parent = open.Select(r => r.Key!).Distinct().ToDictionary(k => k, k => k);
-        string Find(string x)
+        var parent = Enumerable.Range(0, open.Count).ToArray();
+        int Find(int x)
         {
             while (parent[x] != x)
             {
@@ -147,53 +152,108 @@ public static class VenueMatcher
             return x;
         }
 
-        void Union(string a, string b) => parent[Find(a)] = Find(b);
+        void Union(int a, int b) => parent[Find(a)] = Find(b);
 
-        // Spellings that differ only in spaces or punctuation are one name.
-        foreach (var group in open.GroupBy(r => VenueNormalizer.Compact(r.Key!)))
+        void UnionAll(IEnumerable<IEnumerable<int>> groups)
         {
-            var keys = group.Select(r => r.Key!).Distinct().ToList();
-            foreach (var key in keys.Skip(1))
+            foreach (var group in groups)
             {
-                Union(keys[0], key);
+                var rows = group.ToList();
+                foreach (var row in rows.Skip(1))
+                {
+                    Union(rows[0], row);
+                }
             }
         }
 
-        foreach (var group in open.Where(r => r.ExternalId != null).GroupBy(r => r.ExternalId))
-        {
-            var keys = group.Select(r => r.Key!).Distinct().ToList();
-            foreach (var key in keys.Skip(1))
-            {
-                Union(keys[0], key);
-            }
-        }
+        var trusted = Enumerable
+            .Range(0, open.Count)
+            .Where(i => open[i].Locality is { Trusted: true })
+            .ToList();
+        var named = trusted
+            .SelectMany(i =>
+                VenueNormalizer.Identities(open[i].Key!).Select(id => (Id: id, Row: i))
+            )
+            .ToList();
+        UnionAll(named.GroupBy(n => (n.Id, open[n.Row].Locality!.RegionKey), n => n.Row));
+        UnionAll(
+            named.GroupBy(
+                n => (n.Id, TitleNormalizer.Normalize(open[n.Row].Locality!.City)),
+                n => n.Row
+            )
+        );
+        UnionAll(
+            Enumerable
+                .Range(0, open.Count)
+                .Where(i => open[i].ExternalId != null)
+                .GroupBy(i => open[i].ExternalId)
+        );
 
-        foreach (
-            var town in open.Where(r => r.Locality is { Trusted: true })
-                .GroupBy(r => r.Locality!.Key)
-        )
+        foreach (var town in trusted.GroupBy(i => open[i].Locality!.Key))
         {
-            var keys = town.Select(r => r.Key!).Distinct().ToList();
+            var locality = open[town.First()].Locality!;
+            var townWords = TitleNormalizer.Normalize(locality.City).Split(' ').ToHashSet();
+            if (locality.Region != null)
+            {
+                townWords.Add(locality.Region.ToLowerInvariant());
+            }
+
+            var keys = town.GroupBy(i => open[i].Key!)
+                .Select(g => (Key: g.Key, Local: WithoutTown(g.Key, townWords), Row: g.First()))
+                .ToList();
             for (var i = 0; i < keys.Count; i++)
             {
                 for (var j = i + 1; j < keys.Count; j++)
                 {
-                    if (Alike(keys[i], keys[j]))
+                    if (
+                        Alike(keys[i].Key, keys[j].Key)
+                        || ShareADistinctiveWord(keys[i].Key, keys[j].Key, townWords)
+                        || (
+                            keys[i].Local is { } a
+                            && keys[j].Local is { } b
+                            && (a != keys[i].Key || b != keys[j].Key)
+                            && (VenueNormalizer.SameName(a, b) || Alike(a, b))
+                        )
+                    )
                     {
-                        Union(keys[i], keys[j]);
+                        Union(keys[i].Row, keys[j].Row);
                     }
                 }
             }
         }
 
-        return open.GroupBy(r => Find(r.Key!))
-            .Select(g => (IReadOnlyList<LegacyVenue>)g.ToList())
+        // A row without a town: into the one family its name has, else with its namesakes.
+        var families = named.ToLookup(n => n.Id, n => n.Row);
+        var weak = Enumerable.Range(0, open.Count).Except(trusted).ToList();
+        var loose = new List<(string Id, int Row)>();
+        foreach (var row in weak)
+        {
+            var ids = VenueNormalizer.Identities(open[row].Key!);
+            var roots = ids.SelectMany(id => families[id]).Select(Find).Distinct().ToList();
+            if (roots.Count == 1)
+            {
+                Union(row, roots[0]);
+            }
+            else
+            {
+                loose.AddRange(ids.Select(id => (id, row)));
+            }
+        }
+
+        UnionAll(loose.GroupBy(l => l.Id, l => l.Row));
+
+        return Enumerable
+            .Range(0, open.Count)
+            .GroupBy(Find)
+            .Select(g => (IReadOnlyList<LegacyVenue>)g.Select(i => open[i]).ToList())
             .ToList();
     }
 
-    /// Two names that could be one place: initials ("MSG"), one inside the other with at least
-    /// two words ("Tweeter Center" / "Tweeter Center at the Waterfront"), or one word a typo
-    /// apart.
+    /// Two names that could be one place, for the LLM to decide: initials ("MSG"); the same
+    /// name with another kind of room ("Winterland Arena" / "Winterland Ballroom"); one name's
+    /// words all within the other's, a typo or an abbreviation allowed ("Dobson Arena" / "Dobson
+    /// Ice Arena", "Northrop Auditorium, U. of Minn." / "... U. of Minnesota"), sharing one
+    /// distinctive word exactly or every word a typo apart ("The Garage" / "The Garrage").
     internal static bool Alike(string a, string b)
     {
         if (VenueNormalizer.IsInitialsOf(a, b) || VenueNormalizer.IsInitialsOf(b, a))
@@ -201,39 +261,128 @@ public static class VenueMatcher
             return true;
         }
 
-        var (shorter, longer) = a.Length <= b.Length ? (a, b) : (b, a);
-        if (shorter.Contains(' ') && $" {longer} ".Contains($" {shorter} "))
-        {
-            return true;
-        }
-
-        // The same name with a different kind of room ("Winterland Arena" / "Winterland
-        // Ballroom"): what is left without the generic words is one distinctive name.
         var (coreA, coreB) = (Core(a), Core(b));
-        if (coreA.Length >= 4 && coreA == coreB)
+        if (coreA.Length >= 3 && coreA == coreB)
         {
             return true;
         }
 
-        // Up to two words a plural or a typo apart ("Red Rock Ampitheater" / "Red Rocks
-        // Amphitheater"), never a short word that changes the place ("east" / "west").
-        var (wa, wb) = (a.Split(' '), b.Split(' '));
-        if (wa.Length != wb.Length)
+        var (wa, wb) = (
+            VenueNormalizer.Words(a).Distinct().ToList(),
+            VenueNormalizer.Words(b).Distinct().ToList()
+        );
+        var (small, large) = wa.Count <= wb.Count ? (wa, wb) : (wb, wa);
+        if (
+            small.All(w => large.Any(l => WordAlike(w, l)))
+            && (
+                small.Count == large.Count
+                || (
+                    small.Any(w =>
+                        Distinctive(w) && large.Any(l => l == w || (w.Length >= 7 && Typo(w, l)))
+                    ) && (small.Count >= 2 || small[0].Length >= 5)
+                )
+            )
+        )
+        {
+            return true;
+        }
+
+        // Spaced differently and a typo apart ("13-13 Club" / "13x13 Club").
+        var (fa, fb) = (VenueNormalizer.Words(a), VenueNormalizer.Words(b));
+        var (ca, cb) = (string.Concat(fa), string.Concat(fb));
+        return fa.Count != fb.Count
+            && Math.Min(ca.Length, cb.Length) >= 6
+            && TitleGrouper.BoundedLevenshtein(ca, cb, 2) <= (ca.Length >= 12 ? 2 : 1);
+    }
+
+    /// One word for another: the same, a doubled letter apart ("starr"), a typo apart (five letters or more, never "east" /
+    /// "west"), or its abbreviation ("minn", "fac").
+    private static bool WordAlike(string w, string other) =>
+        w == other
+        || (w.Length >= 4 && other.Length >= 4 && Undoubled(w) == Undoubled(other))
+        || Typo(w, other)
+        || Abbreviates(w, other)
+        || Abbreviates(other, w);
+
+    /// A letter or two wrong, missing or swapped: "elbo" / "elbow", "arean" / "arena",
+    /// "woodmen" / "woodsman". Short words keep their first letter ("east" is not "west").
+    private static bool Typo(string w, string other)
+    {
+        var shortest = Math.Min(w.Length, other.Length);
+        if (shortest < 4 || (shortest < 5 && w[0] != other[0]) || w.Any(char.IsDigit))
         {
             return false;
         }
 
-        var differing = wa.Zip(wb).Where(p => p.First != p.Second).ToList();
-        return differing.Count is > 0 and <= 2
-            && differing.Count < wa.Length
-            && differing.All(p =>
-                p.First.TrimEnd('s') == p.Second.TrimEnd('s')
-                || (
-                    p.First.Length >= 5
-                    && p.Second.Length >= 5
-                    && TitleGrouper.BoundedLevenshtein(p.First, p.Second, 2) <= 2
-                )
+        var limit = shortest >= 7 ? 2 : 1;
+        return TitleGrouper.BoundedLevenshtein(w, other, limit) <= limit || Swapped(w, other);
+    }
+
+    private static bool Swapped(string w, string other)
+    {
+        if (w.Length != other.Length)
+        {
+            return false;
+        }
+
+        var differ = Enumerable.Range(0, w.Length).Where(i => w[i] != other[i]).ToList();
+        return differ.Count == 2
+            && differ[1] == differ[0] + 1
+            && w[differ[0]] == other[differ[1]]
+            && w[differ[1]] == other[differ[0]];
+    }
+
+    private static bool Abbreviates(string w, string other) =>
+        w.Length >= 3
+        && other.Length > w.Length + 1
+        && other.StartsWith(w, StringComparison.Ordinal)
+        && !w.Any(char.IsDigit);
+
+    /// Two names in one town sharing a word that names a place ("Schottenstein Center, OSU" /
+    /// "Jerome Schottenstein Center"): not a generic word, the town's own name or a number.
+    internal static bool ShareADistinctiveWord(
+        string a,
+        string b,
+        IReadOnlySet<string> townWords
+    ) =>
+        VenueNormalizer
+            .Words(a)
+            .Intersect(VenueNormalizer.Words(b))
+            .Any(w =>
+                w.Length >= 4 && Distinctive(w) && !townWords.Contains(w) && !w.Any(char.IsDigit)
             );
+
+    /// The name without its town's words ("Hampton Coliseum" in Hampton is "Coliseum",
+    /// "Prudential Center Newark NJ" in Newark is "Prudential Center"); null when nothing is left.
+    private static string? WithoutTown(string key, IReadOnlySet<string> townWords)
+    {
+        var words = key.Split(' ').Where(w => !townWords.Contains(w)).ToList();
+        return words.Count > 0 ? string.Join(' ', words) : null;
+    }
+
+    /// "starr" → "star": a doubled letter written once.
+    private static string Undoubled(string w) =>
+        string.Concat(w.Where((c, i) => i == 0 || c != w[i - 1]));
+
+    /// Whether keys are all one name, joined by shared identities.
+    private static bool OneName(IReadOnlyList<string> keys)
+    {
+        var reached = new HashSet<string> { keys[0] };
+        var grew = true;
+        while (grew)
+        {
+            grew = false;
+            foreach (var key in keys.Where(k => !reached.Contains(k)))
+            {
+                if (reached.Any(r => VenueNormalizer.SameName(r, key)))
+                {
+                    reached.Add(key);
+                    grew = true;
+                }
+            }
+        }
+
+        return reached.Count == keys.Count;
     }
 
     private static readonly HashSet<string> GenericWords =
@@ -260,10 +409,56 @@ public static class VenueMatcher
         "grill",
         "live",
         "venue",
+        "stage",
+        "tent",
         "and",
         "at",
         "of",
     ];
+
+    /// Words too common to tie two names together: kinds of place, parts of a campus or a
+    /// festival, directions.
+    private static readonly HashSet<string> CommonWords =
+    [
+        "park",
+        "festival",
+        "st",
+        "ave",
+        "university",
+        "college",
+        "state",
+        "company",
+        "main",
+        "international",
+        "national",
+        "memorial",
+        "civic",
+        "county",
+        "city",
+        "community",
+        "fairground",
+        "fair",
+        "house",
+        "field",
+        "garden",
+        "hotel",
+        "casino",
+        "church",
+        "school",
+        "high",
+        "brewery",
+        "inn",
+        "square",
+        "west",
+        "east",
+        "north",
+        "south",
+        "new",
+        "old",
+    ];
+
+    private static bool Distinctive(string w) =>
+        !GenericWords.Contains(w) && !CommonWords.Contains(w);
 
     private static string Core(string key) =>
         string.Join(' ', key.Split(' ').Where(w => !GenericWords.Contains(w)));
@@ -296,7 +491,7 @@ public static class VenueMatcher
             }
         }
 
-        if (family.Select(r => VenueNormalizer.Compact(r.Key!)).Distinct().Count() > 1)
+        if (!OneName(family.Select(r => r.Key!).Distinct().ToList()))
         {
             return false;
         }
@@ -304,6 +499,17 @@ public static class VenueMatcher
         var trusted = WithoutStateTypos(
             family.Where(r => r.Locality is { Trusted: true }).ToList()
         );
+        // The same name in a town of one name in two states, neither dominant (Pelham, AL and
+        // Pelham, TN): one of them is a typo, and only the LLM can tell which.
+        if (
+            trusted
+                .GroupBy(r => TitleNormalizer.Normalize(r.Locality!.City))
+                .Any(t => t.Select(r => r.Locality!.RegionKey).Distinct().Count() > 1)
+        )
+        {
+            return false;
+        }
+
         var byRegion = trusted.GroupBy(r => r.Locality!.RegionKey!).ToList();
         if (
             byRegion.Count == 0
@@ -395,7 +601,7 @@ public static class VenueMatcher
 
         public bool KnownInRegion(string regionKey, string key) =>
             known.Any(n =>
-                VenueNormalizer.Compact(n.Key) == VenueNormalizer.Compact(key)
+                VenueNormalizer.SameName(n.Key, key)
                 && state.Venues.TryGetValue(n.Venue, out var v)
                 && v.City != null
                 && new Locality(v.City, v.Region, v.Country).RegionKey == regionKey

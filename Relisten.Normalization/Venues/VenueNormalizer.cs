@@ -48,13 +48,14 @@ public static partial class VenueNormalizer
     /// variants folded (theatre/theater, amphitheatre/amphitheater, centre/center).
     public static string? Key(string? name)
     {
-        var key = TitleNormalizer.Normalize(name ?? "");
+        // A bracketed note is about the recording, not the place ("[24bit]", "[SBD]").
+        var key = TitleNormalizer.Normalize(Bracketed().Replace(name ?? "", " "));
         if (key.Length == 0 || Placeholders.Contains(key))
         {
             return null;
         }
 
-        var words = key.Split(' ').Select(w => Fold.GetValueOrDefault(w, w)).ToList();
+        var words = JoinInitials(key.Split(' ')).Select(w => Fold.GetValueOrDefault(w, w)).ToList();
         if (words.Count > 1 && words[0] == "the")
         {
             words.RemoveAt(0);
@@ -63,9 +64,101 @@ public static partial class VenueNormalizer
         return string.Join(' ', words);
     }
 
-    /// The key without spaces: what identity compares, so "1stBank Center", "Barrel House" and
-    /// "9:30 Club" match "1st Bank Center", "Barrelhouse" and "930 Club".
-    public static string Compact(string key) => key.Replace(" ", "");
+    [System.Text.RegularExpressions.GeneratedRegex(@"\[[^\]]*\]")]
+    private static partial System.Text.RegularExpressions.Regex Bracketed();
+
+    /// Letters written with periods are one word: "U.S." → "us", "S.M.U." → "smu" (and never
+    /// "university s").
+    private static IEnumerable<string> JoinInitials(string[] words)
+    {
+        var run = "";
+        foreach (var word in words)
+        {
+            if (word.Length == 1 && char.IsLetter(word[0]))
+            {
+                run += word;
+                continue;
+            }
+
+            if (run.Length > 0)
+            {
+                yield return run;
+                run = "";
+            }
+
+            yield return word;
+        }
+
+        if (run.Length > 0)
+        {
+            yield return run;
+        }
+    }
+
+    /// A two-letter code that names a country as well as a state or province: "DE" (Delaware,
+    /// Germany), "CA" (California, Canada), "NL" (Newfoundland, the Netherlands).
+    public static bool IsCountryCode(string code) =>
+        Countries.ContainsValue(code.ToUpperInvariant());
+
+    /// The words that name the place: spellings and abbreviations folded ("St." and "Street",
+    /// "Amph." and "Ampitheatre"), possessives and plurals dropped ("Smith's", "Red Rocks"),
+    /// and the small words gone ("the", "at", "of").
+    public static IReadOnlyList<string> Words(string key)
+    {
+        var words = key.Split(' ')
+            .Select(w => Canon.GetValueOrDefault(w, w))
+            .Select(w => w.Length > 3 && w[^1] == 's' && w[^2] != 's' ? w[..^1] : w)
+            .Where(w => !SmallWords.Contains(w))
+            .ToList();
+        return words.Count > 0 ? words : key.Split(' ');
+    }
+
+    /// What identity compares: two keys share an identity when they are one name. The words
+    /// without spaces ("1stBank Center", "Barrel House" and "9:30 Club" are "1st Bank Center",
+    /// "Barrelhouse" and "930 Club"), and the words in any order ("Wakarusa - Main Stage" is
+    /// "Main Stage - Wakarusa", "Notre Dame University" is "University of Notre Dame").
+    public static IReadOnlyList<string> Identities(string key)
+    {
+        var words = Words(key);
+        return
+        [
+            "c:" + string.Concat(words),
+            "s:" + string.Join(' ', words.Order(StringComparer.Ordinal)),
+        ];
+    }
+
+    public static bool SameName(string a, string b) => Identities(a).Intersect(Identities(b)).Any();
+
+    private static readonly HashSet<string> SmallWords = ["the", "at", "of", "and", "in", "on"];
+
+    private static readonly Dictionary<string, string> Canon = new()
+    {
+        ["amphitheater"] = "amphitheater",
+        ["ampitheater"] = "amphitheater",
+        ["ampitheatre"] = "amphitheater",
+        ["amphitheatre"] = "amphitheater",
+        ["amphitheter"] = "amphitheater",
+        ["amph"] = "amphitheater",
+        ["amp"] = "amphitheater",
+        ["street"] = "st",
+        ["saint"] = "st",
+        ["avenue"] = "ave",
+        ["co"] = "company",
+        ["bros"] = "brothers",
+        ["col"] = "college",
+        ["coll"] = "college",
+        ["mount"] = "mt",
+        ["fort"] = "ft",
+        ["nite"] = "night",
+        ["dorm"] = "dormitory",
+        ["pavillion"] = "pavilion",
+        ["brewing"] = "brewery",
+        ["olde"] = "old",
+        ["intl"] = "international",
+        ["natl"] = "national",
+        ["mem"] = "memorial",
+        ["hs"] = "high school",
+    };
 
     private static readonly Dictionary<string, string> Fold = new()
     {

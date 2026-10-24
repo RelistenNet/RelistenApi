@@ -214,8 +214,33 @@ public class TestVenueMatcher
     [TestCase("red rock ampitheater", "red rocks amphitheater", true)]
     [TestCase("fillmore west", "fillmore auditorium", false)]
     [TestCase("fox theater", "orpheum theater", false)]
-    public void NamesThatCouldBeOnePlace(string a, string b, bool expected) =>
+    [TestCase("dobson ice arena", "dobson arena", true)]
+    [TestCase("pnc bank arts center", "pnc bank center", true)]
+    [TestCase("northrop auditorium u of minn", "northrop auditorium u of minnesota", true)]
+    [TestCase("starr hill music hall", "star hill music hall", true)]
+    [TestCase("garage", "garrage", true)]
+    [TestCase("13 13 club", "13x13 club", true)]
+    [TestCase("event center borgata casino", "borgata hotel and casino event center", true)]
+    [TestCase(
+        "alpha delta pi university of pennsylvania",
+        "pi kappa alpha university of pennsylvania",
+        false
+    )]
+    [TestCase("this tent bonnaroo", "that tent bonnaroo", false)]
+    [TestCase("terminal island correctional fac", "terminal island correctional facility", true)]
+    [TestCase("smiths old bar", "smiths olde bar", true)]
+    [TestCase("elbo room", "elbow room", true)]
+    [TestCase("coliseum arena", "coliseum arean", true)]
+    [TestCase("woodmen of world hall", "woodsman of world hall", true)]
+    [TestCase("tree house brewing", "tree house brewery", true)]
+    [TestCase("cafe 210 west", "cafe 10 west", false)]
+    [TestCase("vic", "vic theater", true)]
+    [TestCase("continential arena", "continental airlines arena", true)]
+    public void NamesThatCouldBeOnePlace(string a, string b, bool expected)
+    {
         VenueMatcher.Alike(a, b).Should().Be(expected);
+        VenueMatcher.Alike(b, a).Should().Be(expected);
+    }
 
     [Test]
     public void SeatsInTheLocationDontMakeAnotherGarden()
@@ -314,5 +339,157 @@ public class TestVenueMatcher
 
         plan.NewVenues.Should().ContainSingle().Which.Region.Should().Be("CO");
         plan.Evidence.Select(e => e.VenueUuid).Distinct().Should().ContainSingle();
+    }
+
+    [Test]
+    public void AStateCodeThatIsACountryCodeNamesTheCountryTheTownIsIn()
+    {
+        var rows = VenueState.CountryCodes(
+            [
+                Row("Paradiso", "Amsterdam, NL"),
+                Row("Paradiso", "Amsterdam, Netherlands"),
+                Row("Field House", "Toronto, CA"),
+                Row("Massey Hall", "Toronto, ON, Canada"),
+                Row("Tivoli Gardens", "Copenhagen, DE"),
+                Row("Tivoli Gardens", "Copenhagen, Denmark"),
+                Row("Paris Theater", "Paris, TX"),
+                Row("Olympia", "Paris, France"),
+            ],
+            []
+        );
+
+        rows.Select(r => r.Locality!.Key)
+            .Should()
+            .Equal(
+                "amsterdam||NL",
+                "amsterdam||NL",
+                "toronto|on|CA",
+                "toronto|on|CA",
+                // DE is Germany's code, not Denmark's; TX names no country.
+                "copenhagen|de|US",
+                "copenhagen||DK",
+                "paris|tx|US",
+                "paris||FR"
+            );
+    }
+
+    [Test]
+    public void OneNameInATownOfOneNameInTwoStatesIsTheModels()
+    {
+        var plan = VenueMatcher.Match(
+            State([
+                Row("The Caverns Amphitheater", "Pelham, TN", 3),
+                Row("The Caverns Amphitheater", "Pelham, AL", 2),
+            ])
+        );
+
+        plan.NewVenues.Should().BeEmpty();
+        plan.Left.Should().ContainSingle();
+    }
+
+    [Test]
+    public void LettersWithPeriodsAreOneWord()
+    {
+        var plan = VenueMatcher.Match(
+            State([
+                Row("U.S. Cellular Center", "Asheville, NC", 6),
+                Row("US Cellular Center", "Asheville, NC", 2),
+            ])
+        );
+
+        plan.NewVenues.Should().ContainSingle();
+        VenueNormalizer.Key("McFarlin Auditorium, S.M.U.").Should().Be("mcfarlin auditorium smu");
+        VenueNormalizer.Key("Ohio U").Should().Be("ohio university");
+    }
+
+    [TestCase("Wakarusa - Main Stage", "Main Stage - Wakarusa")]
+    [TestCase("Notre Dame University", "University of Notre Dame")]
+    [TestCase("Water St. Music Hall", "Water Street Music Hall")]
+    [TestCase("Rock Island Brewing Co.", "Rock Island Brewing Company")]
+    [TestCase("Graffiti's", "Graffiti")]
+    [TestCase("Oak Mountain Ampitheatre", "Oak Mountain Amphitheatre")]
+    [TestCase("The Pavilion at the Toyota Music Factory", "The Pavilion at Toyota Music Factory")]
+    [TestCase("1stBank Center", "1st Bank Center")]
+    public void SpellingsOfOneNameAreOneName(string a, string b) =>
+        VenueNormalizer
+            .SameName(VenueNormalizer.Key(a)!, VenueNormalizer.Key(b)!)
+            .Should()
+            .BeTrue();
+
+    [TestCase("Fillmore East", "Fillmore West")]
+    [TestCase("This Tent", "This Other Tent")]
+    [TestCase("Walnut Valley Festival Stage 1", "Walnut Valley Festival Stage 2")]
+    public void OtherNamesAreNot(string a, string b) =>
+        VenueNormalizer
+            .SameName(VenueNormalizer.Key(a)!, VenueNormalizer.Key(b)!)
+            .Should()
+            .BeFalse();
+
+    [Test]
+    public void AnAbbreviatedWordIsOneFamilyForTheModel()
+    {
+        var plan = VenueMatcher.Match(
+            State([
+                Row("Terminal Island Correctional Fac.", "San Pedro, CA, USA", 1),
+                Row("Terminal Island Correctional Facility", "San Pedro, CA", 1),
+            ])
+        );
+
+        plan.NewVenues.Should().BeEmpty();
+        plan.Left.Should().ContainSingle();
+    }
+
+    [TestCase("Schottenstein Center, OSU", "Jerome Schottenstein Center", "Columbus", true)]
+    [TestCase("Shrine Exposition Hall", "Shrine Exhibition Hall", "Los Angeles", true)]
+    [TestCase("Portland Civic Auditorium", "Portland Memorial Coliseum", "Portland", false)]
+    [TestCase("Cafe 210 West", "Cafe 10 West", "State College", false)]
+    public void NamesSharingAPlaceWordInATownAreOneFamily(
+        string a,
+        string b,
+        string town,
+        bool shared
+    ) =>
+        VenueMatcher
+            .ShareADistinctiveWord(
+                VenueNormalizer.Key(a)!,
+                VenueNormalizer.Key(b)!,
+                TitleNormalizer.Normalize(town).Split(' ').ToHashSet()
+            )
+            .Should()
+            .Be(shared);
+
+    [Test]
+    public void ABracketedNoteIsNotPartOfTheName() =>
+        VenueNormalizer
+            .Key("Sugar Creek Music Festival [24bit]")
+            .Should()
+            .Be("sugar creek music festival");
+
+    [Test]
+    public void TheTownsNameInAVenueNameIsOneFamily()
+    {
+        var plan = VenueMatcher.Match(
+            State([
+                Row("Hampton Coliseum", "Hampton, VA", 30),
+                Row("Coliseum", "Hampton, VA", 2),
+                Row("Prudental Center Newark NJ", "Newark, NJ", 1),
+                Row("Prudential Center", "Newark, NJ", 5),
+            ])
+        );
+
+        plan.NewVenues.Should().BeEmpty();
+        plan.Left.Should().HaveCount(2);
+    }
+
+    [Test]
+    public void OneNameInTwoStatesIsTwoFamilies()
+    {
+        var families = VenueMatcher.Families([
+            Row("House of Blues", "Chicago, IL"),
+            Row("House of Blues", "Dallas, TX"),
+            Row("House of Blues", "Unknown"),
+        ]);
+
+        families.Should().HaveCount(3);
     }
 }

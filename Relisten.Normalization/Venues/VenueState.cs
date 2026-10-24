@@ -50,14 +50,18 @@ public sealed partial class VenueState
     /// Normalised name → venues that carry it (resolved to survivors).
     public required ILookup<string, Guid> Names { get; init; }
 
-    /// Compact name (spaces ignored, VenueNormalizer.Compact) → venues: what identity compares.
-    public ILookup<string, Guid> CompactNames =>
-        compactNames ??= Names
-            .SelectMany(g => g.Select(v => (Key: VenueNormalizer.Compact(g.Key), Venue: v)))
+    /// Name identity (VenueNormalizer.Identities) → venues: what identity compares.
+    public ILookup<string, Guid> IdentityNames =>
+        identityNames ??= Names
+            .SelectMany(g =>
+                VenueNormalizer
+                    .Identities(g.Key)
+                    .SelectMany(id => g.Select(v => (Id: id, Venue: v)))
+            )
             .Distinct()
-            .ToLookup(n => n.Key, n => n.Venue);
+            .ToLookup(n => n.Id, n => n.Venue);
 
-    private ILookup<string, Guid>? compactNames;
+    private ILookup<string, Guid>? identityNames;
 
     /// (provider, key) → venue (resolved to its survivor).
     public required IReadOnlyDictionary<(string, string), Guid> ExternalIds { get; init; }
@@ -166,7 +170,7 @@ public sealed partial class VenueState
 
         return new VenueState
         {
-            Unmapped = FoldCities(FillRegions(legacy, catalogue)),
+            Unmapped = FoldCities(CountryCodes(FillRegions(legacy, catalogue), catalogue)),
             Venues = venues
                 .Where(v => v.MergedInto == null)
                 .ToDictionary(
@@ -216,6 +220,50 @@ public sealed partial class VenueState
                     }
                     : r
             )
+            .ToList();
+    }
+
+    /// "Amsterdam, NL", "Lorsch, DE", "Toronto, CA": a state code that is also a country's code
+    /// names the country when the town is found elsewhere only in that country, never in the
+    /// state's. The row takes the town's most used locality there.
+    internal static List<LegacyVenue> CountryCodes(
+        IReadOnlyList<LegacyVenue> rows,
+        IEnumerable<Locality> catalogue
+    )
+    {
+        static string? Code(LegacyVenue r) =>
+            r.Locality is { Region: { Length: 2 } code, Country: { } country }
+            && r.Location != null
+            && TitleNormalizer.Normalize(r.Location.Split(',')[^1]) == code.ToLowerInvariant()
+            && VenueNormalizer.IsCountryCode(code)
+            && !code.Equals(country, StringComparison.OrdinalIgnoreCase)
+                ? code.ToUpperInvariant()
+                : null;
+
+        var towns = rows.Where(r => Code(r) == null && r.Locality is { Trusted: true })
+            .Select(r => (Locality: r.Locality!, Uses: Math.Max(r.Uses, 1)))
+            .Concat(catalogue.Where(l => l.Country != null).Select(l => (Locality: l, Uses: 1)))
+            .GroupBy(t => TitleNormalizer.Normalize(t.Locality.City))
+            .ToDictionary(g => g.Key, g => g.ToList());
+        return rows.Select(r =>
+            {
+                var code = Code(r);
+                if (
+                    code == null
+                    || !towns.TryGetValue(TitleNormalizer.Normalize(r.Locality!.City), out var seen)
+                    || seen.Any(t => t.Locality.Country != code)
+                )
+                {
+                    return r;
+                }
+
+                var locality = seen.GroupBy(t => t.Locality.Key)
+                    .OrderByDescending(g => g.Sum(t => t.Uses))
+                    .First()
+                    .First()
+                    .Locality;
+                return r with { Locality = locality };
+            })
             .ToList();
     }
 

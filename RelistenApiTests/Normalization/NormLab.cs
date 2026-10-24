@@ -435,6 +435,50 @@ public class NormLab
         );
     }
 
+    /// The deterministic plan for venue names containing NORM_LAB_VENUE (nothing written):
+    /// each row's locality, and whether it was created, placed or left in a family.
+    [Test, Explicit("Prints a venue plan; run deliberately")]
+    public async Task VenuePlan()
+    {
+        var filter = Environment.GetEnvironmentVariable("NORM_LAB_VENUE") ?? "";
+        var db = Db(labUrl);
+        await using var connection = await Open(db);
+        var artists = (await Artists(connection)).Select(a => a.Uuid).ToList();
+        var state = await Relisten.Normalization.Venues.VenueState.LoadAsync(
+            connection,
+            null,
+            artists
+        );
+        var plan = Relisten.Normalization.Venues.VenueMatcher.Match(state);
+        bool Wanted(Relisten.Normalization.Venues.LegacyVenue r) =>
+            r.Name.Contains(filter, StringComparison.OrdinalIgnoreCase);
+        var placed = plan.Evidence.ToDictionary(e => e.LegacyVenueUuid, e => e.VenueUuid);
+        var sizes = plan.Left.Select(f => f.Select(r => r.Key).Distinct().Count()).ToList();
+        TestContext.Out.WriteLine(
+            $"left families {sizes.Count}: names 1 {sizes.Count(n => n == 1)}, 2-5 {sizes.Count(n => n is >= 2 and <= 5)}, 6-20 {sizes.Count(n => n is > 5 and <= 20)}, >20 {sizes.Count(n => n > 20)}, largest {(sizes.Count > 0 ? sizes.Max() : 0)}"
+        );
+        foreach (var big in plan.Left.Where(f => f.Select(r => r.Key).Distinct().Count() > 40))
+        {
+            TestContext.Out.WriteLine(
+                $"big family {big.Select(r => r.Key).Distinct().Count()} @ {string.Join(",", big.Select(r => r.Locality?.Key).Distinct().Take(3))}: {string.Join(" / ", big.Select(r => r.Key).Distinct().Take(40))}"
+            );
+        }
+
+        foreach (var row in state.Unmapped.Where(Wanted))
+        {
+            var family = plan.Left.FirstOrDefault(f => f.Any(r => r.Uuid == row.Uuid));
+            TestContext.Out.WriteLine(
+                $"{row.Name} | {row.Location} → {row.Locality?.Key} : "
+                    + (
+                        placed.TryGetValue(row.Uuid, out var v) ? $"venue {v}"
+                        : family != null
+                            ? $"left, family of {family.Count}: {string.Join(" / ", family.Select(r => r.Key).Distinct().Take(8))}"
+                        : "unplaced"
+                    )
+            );
+        }
+    }
+
     /// The venue catalogue over the lab's artists, as the workflow runs it (match, LLM chunks
     /// up to NORM_LAB_MAX_CHUNKS, match), then the fixture places.
     [Test, Explicit("Calls OpenAI; run deliberately")]
