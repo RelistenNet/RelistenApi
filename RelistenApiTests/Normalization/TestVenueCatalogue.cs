@@ -12,7 +12,8 @@ namespace RelistenApiTests.Normalization;
 
 /// A venue model that answers New York from the request alone: Madison Square Garden (short
 /// name MSG) is a new site, its Theater a room inside it.
-internal sealed class ScriptedVenueModel : ICatalogueModel
+/// twin: it also proposes Madison Square Garden a second time, for "MSG".
+internal sealed class ScriptedVenueModel(bool twin = false) : ICatalogueModel
 {
     public string ModelId => "scripted-venues-1";
 
@@ -40,6 +41,13 @@ internal sealed class ScriptedVenueModel : ICatalogueModel
                     ("The Theater at Madison Square Garden", "official")
                 )
             );
+            if (twin)
+            {
+                newVenues.Add(
+                    Venue("n3", l, "Madison Square Garden", "site", null, ("The Garden", "short"))
+                );
+            }
+
             foreach (var s in locality["spellings"]!.AsArray())
             {
                 var text = (string)s!["text"]!;
@@ -48,7 +56,10 @@ internal sealed class ScriptedVenueModel : ICatalogueModel
                     {
                         ["id"] = (string)s["id"]!,
                         ["spelling_text"] = text,
-                        ["venue"] = text.Contains("Theater") ? "n2" : "n1",
+                        ["venue"] =
+                            text.Contains("Theater") ? "n2"
+                            : twin && text == "MSG" ? "n3"
+                            : "n1",
                         ["not_a_venue"] = false,
                         ["confidence"] = 0.95,
                         ["rationale"] = "scripted",
@@ -133,6 +144,30 @@ public class TestVenueCatalogue
             var uuid = Guid.NewGuid();
             artists.Add(uuid);
         }
+
+        // Venues are cross-artist: each test starts from none.
+        await db.WithWriteConnection(c =>
+            c.ExecuteAsync(
+                """
+                DO $$
+                DECLARE r uuid := gen_random_uuid();
+                BEGIN
+                    INSERT INTO norm.runs(uuid, author_type, author_ref) VALUES (r, 'algorithm', 'test-reset@1');
+                    PERFORM set_config('norm.author_type', 'algorithm', true),
+                            set_config('norm.author_ref', 'test-reset@1', true),
+                            set_config('norm.run_uuid', r::text, true);
+                    DELETE FROM norm.review_items WHERE subject = 'venue';
+                    DELETE FROM norm.show_venues;
+                    DELETE FROM norm.venue_evidence;
+                    DELETE FROM norm.venue_external_ids;
+                    DELETE FROM norm.venue_names;
+                    UPDATE norm.venues SET parent_uuid = NULL, merged_into = NULL
+                    WHERE parent_uuid IS NOT NULL OR merged_into IS NOT NULL;
+                    DELETE FROM norm.venues;
+                END $$
+                """
+            )
+        );
 
         await db.WithWriteConnection(async c =>
         {
@@ -277,5 +312,27 @@ public class TestVenueCatalogue
         )
             .Should()
             .Equal("0");
+    }
+
+    [Test]
+    public async Task AProposedTwinOfAVenueIsThatVenue()
+    {
+        var database = new DbServiceNormalizationDatabase(db);
+        await new VenueMatch(database).RunAsync(artists, CancellationToken.None);
+        var chunk = await new VenueLlm(database, new ScriptedVenueModel(twin: true)).RunChunkAsync(
+            artists,
+            [],
+            CancellationToken.None
+        );
+
+        chunk.VenuesCreated.Should().Be(2);
+        (
+            await Strings(
+                """
+                SELECT n.name || ' (' || n.kind || ')' FROM norm.venues v JOIN norm.venue_names n ON n.venue_uuid = v.uuid
+                WHERE v.name = 'Madison Square Garden' ORDER BY 1
+                """
+            )
+        ).Should().Equal("MSG (short)", "Madison Square Garden (spelling)", "The Garden (short)");
     }
 }

@@ -10,7 +10,7 @@ namespace Relisten.Normalization.Venues;
 public sealed record Locality(string City, string? Region, string? Country)
 {
     public string Key =>
-        $"{TitleNormalizer.Normalize(City)}|{Region?.ToLowerInvariant()}|{Country}";
+        $"{VenueNormalizer.Normalize(City)}|{Region?.ToLowerInvariant()}|{Country}";
 
     /// The state or country part: two towns in different regions are different places.
     public string? RegionKey =>
@@ -46,10 +46,14 @@ public static partial class VenueNormalizer
 
     /// The name key: TitleNormalizer's folding, then a leading "the" dropped and spelling
     /// variants folded (theatre/theater, amphitheatre/amphitheater, centre/center).
+    /// Lowercase words without punctuation or accents, as written: venues and places keep
+    /// "st", "mt" and "n" (titles' "saint", "mount", "and" would make Montana "mount").
+    public static string Normalize(string text) => TitleNormalizer.Normalize(text, tokens: false);
+
     public static string? Key(string? name)
     {
         // A bracketed note is about the recording, not the place ("[24bit]", "[SBD]").
-        var key = TitleNormalizer.Normalize(Bracketed().Replace(name ?? "", " "));
+        var key = Normalize(Bracketed().Replace(name ?? "", " "));
         if (key.Length == 0 || Placeholders.Contains(key))
         {
             return null;
@@ -192,10 +196,7 @@ public static partial class VenueNormalizer
     /// placeholder or a string with no city.
     public static Locality? ParseLocation(string? location)
     {
-        if (
-            string.IsNullOrWhiteSpace(location)
-            || Placeholders.Contains(TitleNormalizer.Normalize(location))
-        )
+        if (string.IsNullOrWhiteSpace(location) || Placeholders.Contains(Normalize(location)))
         {
             return null;
         }
@@ -216,31 +217,47 @@ public static partial class VenueNormalizer
 
         // A seat, a date or a typed note is not a town ("Stand, Seat 2", "Row R, On Aisle)"),
         // and neither is a state alone ("CO").
-        if (
-            NotATown(fields[0])
-            || (fields.Count == 1 && Region(TitleNormalizer.Normalize(fields[0])) != null)
-        )
+        if (NotATown(fields[0]) || (fields.Count == 1 && Region(Normalize(fields[0])) != null))
         {
             return null;
         }
 
-        var city = CityAliases.GetValueOrDefault(TitleNormalizer.Normalize(fields[0]), fields[0]);
+        var city = CityAliases.GetValueOrDefault(Normalize(fields[0]), fields[0]);
         if (fields.Count == 1)
         {
-            return Placeholders.Contains(TitleNormalizer.Normalize(city))
-                ? null
-                : new Locality(city, null, null);
+            return Placeholders.Contains(Normalize(city)) ? null : new Locality(city, null, null);
+        }
+
+        // "Dallas, TX USA": a region and its country in one field.
+        if (
+            fields.Count >= 2
+            && Normalize(fields[^1]).Split(' ') is { Length: >= 2 } lastWords
+            && Countries.ContainsKey(lastWords[^1])
+            && Region(string.Join(' ', lastWords[..^1])) != null
+        )
+        {
+            fields[^1] = string.Join(' ', lastWords[..^1]);
+        }
+
+        // A note after the region ("Manchester, TN, Bonnaroo 2015") is not a place.
+        while (
+            fields.Count > 2
+            && !Recognised(Normalize(fields[^1]))
+            && Recognised(Normalize(fields[^2]))
+        )
+        {
+            fields.RemoveAt(fields.Count - 1);
         }
 
         // The last field is the region or country; a middle field ("Cambridge, MA, USA") is the
         // region when the last is a country.
-        var last = TitleNormalizer.Normalize(fields[^1]);
+        var last = Normalize(fields[^1]);
         var region = Region(last);
         string? country = region?.Country;
         if (region == null && Countries.TryGetValue(last, out var c))
         {
             country = c;
-            region = fields.Count > 2 ? Region(TitleNormalizer.Normalize(fields[^2])) : null;
+            region = fields.Count > 2 ? Region(Normalize(fields[^2])) : null;
         }
 
         // A misspelled state ("Morrison, Colorade, USA"): the one state name a typo away.
@@ -248,7 +265,7 @@ public static partial class VenueNormalizer
             country != null && region == null && fields.Count > 2 ? fields[^2]
             : country == null && region == null ? fields[^1]
             : null;
-        if (regionField != null && NearRegion(TitleNormalizer.Normalize(regionField)) is { } near)
+        if (regionField != null && NearRegion(Normalize(regionField)) is { } near)
         {
             region = near;
             country = near.Country;
@@ -257,7 +274,7 @@ public static partial class VenueNormalizer
         // "NY, NY" and "New York, New York": the city is the region's namesake.
         if (
             region != null
-            && TitleNormalizer.Normalize(city) is var cityKey
+            && Normalize(city) is var cityKey
             && (cityKey == region.Code.ToLowerInvariant() || cityKey == region.Name)
         )
         {
@@ -269,7 +286,7 @@ public static partial class VenueNormalizer
             };
         }
 
-        if (Placeholders.Contains(TitleNormalizer.Normalize(city)))
+        if (Placeholders.Contains(Normalize(city)))
         {
             return null;
         }
@@ -310,7 +327,7 @@ public static partial class VenueNormalizer
 
     private static bool NotATown(string field)
     {
-        var key = TitleNormalizer.Normalize(field);
+        var key = Normalize(field);
         return key.Length == 0
             || key.Any(char.IsDigit)
             || key.Split(' ').Any(SeatWords.Contains)
@@ -325,7 +342,7 @@ public static partial class VenueNormalizer
         for (var take = Math.Min(3, words.Length - 1); take >= 1; take--)
         {
             var region = string.Join(' ', words[^take..]);
-            if (Region(TitleNormalizer.Normalize(region)) != null)
+            if (Region(Normalize(region)) != null)
             {
                 return (string.Join(' ', words[..^take]), region);
             }
@@ -352,8 +369,14 @@ public static partial class VenueNormalizer
         return near.Count == 1 ? near[0] : null;
     }
 
+    /// "N.Y." is "NY".
     private static RegionInfo? Region(string key) =>
-        RegionsByKey.TryGetValue(key, out var region) ? region : null;
+        RegionsByKey.TryGetValue(key, out var region) ? region
+        : key.Length <= 3 && RegionsByKey.TryGetValue(key.Replace(" ", ""), out region) ? region
+        : null;
+
+    private static bool Recognised(string key) =>
+        Region(key) != null || Countries.ContainsKey(key) || NearRegion(key) != null;
 
     private static readonly Dictionary<string, string> CityAliases = new()
     {
@@ -450,6 +473,32 @@ public static partial class VenueNormalizer
             ("d c", new RegionInfo("DC", "district of columbia", "US")),
             ("pq", new RegionInfo("QC", "quebec", "CA")),
             ("calif", new RegionInfo("CA", "california", "US")),
+            ("cal", new RegionInfo("CA", "california", "US")),
+            ("tenn", new RegionInfo("TN", "tennessee", "US")),
+            ("fla", new RegionInfo("FL", "florida", "US")),
+            ("ill", new RegionInfo("IL", "illinois", "US")),
+            ("mich", new RegionInfo("MI", "michigan", "US")),
+            ("wis", new RegionInfo("WI", "wisconsin", "US")),
+            ("wisc", new RegionInfo("WI", "wisconsin", "US")),
+            ("minn", new RegionInfo("MN", "minnesota", "US")),
+            ("colo", new RegionInfo("CO", "colorado", "US")),
+            ("ariz", new RegionInfo("AZ", "arizona", "US")),
+            ("conn", new RegionInfo("CT", "connecticut", "US")),
+            ("wash", new RegionInfo("WA", "washington", "US")),
+            ("ore", new RegionInfo("OR", "oregon", "US")),
+            ("oreg", new RegionInfo("OR", "oregon", "US")),
+            ("okla", new RegionInfo("OK", "oklahoma", "US")),
+            ("tex", new RegionInfo("TX", "texas", "US")),
+            ("ala", new RegionInfo("AL", "alabama", "US")),
+            ("ind", new RegionInfo("IN", "indiana", "US")),
+            ("kans", new RegionInfo("KS", "kansas", "US")),
+            ("neb", new RegionInfo("NE", "nebraska", "US")),
+            ("nebr", new RegionInfo("NE", "nebraska", "US")),
+            ("nev", new RegionInfo("NV", "nevada", "US")),
+            ("mont", new RegionInfo("MT", "montana", "US")),
+            ("wyo", new RegionInfo("WY", "wyoming", "US")),
+            ("ark", new RegionInfo("AR", "arkansas", "US")),
+            ("del", new RegionInfo("DE", "delaware", "US")),
             ("mass", new RegionInfo("MA", "massachusetts", "US")),
             ("penn", new RegionInfo("PA", "pennsylvania", "US")),
         ])
@@ -502,5 +551,21 @@ public static partial class VenueNormalizer
         ["egypt"] = "EG",
         ["israel"] = "IL",
         ["iceland"] = "IS",
+        ["ger"] = "DE",
+        ["deu"] = "DE",
+        ["gbr"] = "GB",
+        ["nld"] = "NL",
+        ["fra"] = "FR",
+        ["can"] = "CA",
+        ["mex"] = "MX",
+        ["jpn"] = "JP",
+        ["esp"] = "ES",
+        ["ita"] = "IT",
+        ["swe"] = "SE",
+        ["dnk"] = "DK",
+        ["bel"] = "BE",
+        ["aut"] = "AT",
+        ["irl"] = "IE",
+        ["che"] = "CH",
     };
 }

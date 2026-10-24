@@ -21,7 +21,10 @@ public static class TitleNormalizer
         ["w"] = "with",
     };
 
-    public static string Normalize(string text)
+    public static string Normalize(string text) => Normalize(text, true);
+
+    /// tokens: false keeps every word as written ("mt" stays "mt": Montana, not "mount").
+    public static string Normalize(string text, bool tokens)
     {
         var folded = new StringBuilder(text.Length);
         foreach (var c in text.Normalize(NormalizationForm.FormKD))
@@ -49,7 +52,7 @@ public static class TitleNormalizer
             folded
                 .ToString()
                 .Split(' ', System.StringSplitOptions.RemoveEmptyEntries)
-                .Select(t => Tokens.GetValueOrDefault(t, t))
+                .Select(t => tokens ? Tokens.GetValueOrDefault(t, t) : t)
         );
     }
 

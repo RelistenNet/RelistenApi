@@ -170,7 +170,9 @@ public sealed partial class VenueState
 
         return new VenueState
         {
-            Unmapped = FoldCities(CountryCodes(FillRegions(legacy, catalogue), catalogue)),
+            Unmapped = WithoutStateTypos(
+                FoldCities(CountryCodes(FillRegions(legacy, catalogue), catalogue))
+            ),
             Venues = venues
                 .Where(v => v.MergedInto == null)
                 .ToDictionary(
@@ -205,14 +207,14 @@ public sealed partial class VenueState
             .OfType<Locality>()
             .Concat(catalogue)
             .Where(l => l.Region != null || l.Country != null)
-            .GroupBy(l => TitleNormalizer.Normalize(l.City))
+            .GroupBy(l => VenueNormalizer.Normalize(l.City))
             .ToDictionary(
                 g => g.Key,
                 g => g.Select(l => (l.Region, l.Country)).Distinct().ToList()
             );
         return rows.Select(r =>
                 r.Locality is { Region: null, Country: null } l
-                && regions.TryGetValue(TitleNormalizer.Normalize(l.City), out var only)
+                && regions.TryGetValue(VenueNormalizer.Normalize(l.City), out var only)
                 && only.Count == 1
                     ? r with
                     {
@@ -234,7 +236,7 @@ public sealed partial class VenueState
         static string? Code(LegacyVenue r) =>
             r.Locality is { Region: { Length: 2 } code, Country: { } country }
             && r.Location != null
-            && TitleNormalizer.Normalize(r.Location.Split(',')[^1]) == code.ToLowerInvariant()
+            && VenueNormalizer.Normalize(r.Location.Split(',')[^1]) == code.ToLowerInvariant()
             && VenueNormalizer.IsCountryCode(code)
             && !code.Equals(country, StringComparison.OrdinalIgnoreCase)
                 ? code.ToUpperInvariant()
@@ -243,14 +245,14 @@ public sealed partial class VenueState
         var towns = rows.Where(r => Code(r) == null && r.Locality is { Trusted: true })
             .Select(r => (Locality: r.Locality!, Uses: Math.Max(r.Uses, 1)))
             .Concat(catalogue.Where(l => l.Country != null).Select(l => (Locality: l, Uses: 1)))
-            .GroupBy(t => TitleNormalizer.Normalize(t.Locality.City))
+            .GroupBy(t => VenueNormalizer.Normalize(t.Locality.City))
             .ToDictionary(g => g.Key, g => g.ToList());
         return rows.Select(r =>
             {
                 var code = Code(r);
                 if (
                     code == null
-                    || !towns.TryGetValue(TitleNormalizer.Normalize(r.Locality!.City), out var seen)
+                    || !towns.TryGetValue(VenueNormalizer.Normalize(r.Locality!.City), out var seen)
                     || seen.Any(t => t.Locality.Country != code)
                 )
                 {
@@ -274,7 +276,7 @@ public sealed partial class VenueState
     {
         var uses = rows.Where(r => r.Locality is { Trusted: true })
             .GroupBy(r =>
-                (Region: r.Locality!.RegionKey!, City: TitleNormalizer.Normalize(r.Locality.City))
+                (Region: r.Locality!.RegionKey!, City: VenueNormalizer.Normalize(r.Locality.City))
             )
             .ToDictionary(
                 g => g.Key,
@@ -301,7 +303,7 @@ public sealed partial class VenueState
         return rows.Select(r =>
                 r.Locality is { Trusted: true } l
                 && folded.TryGetValue(
-                    (l.RegionKey!, TitleNormalizer.Normalize(l.City)),
+                    (l.RegionKey!, VenueNormalizer.Normalize(l.City)),
                     out var city
                 )
                     ? r with
@@ -311,6 +313,47 @@ public sealed partial class VenueState
                     : r
             )
             .ToList();
+    }
+
+    /// One name in a town of one name in another state, used a tenth as much, is a typo'd state
+    /// ("Red Rocks — Morrison, CA" beside 130 rows in Morrison, CO): those rows take the
+    /// dominant locality.
+    internal static List<LegacyVenue> WithoutStateTypos(IReadOnlyList<LegacyVenue> rows)
+    {
+        var fixedRows = rows.ToList();
+        var groups = Enumerable
+            .Range(0, rows.Count)
+            .Where(i => rows[i].Key != null && rows[i].Locality is { Trusted: true })
+            .GroupBy(i =>
+                (
+                    Name: VenueNormalizer.Identities(rows[i].Key!)[0],
+                    City: VenueNormalizer.Normalize(rows[i].Locality!.City)
+                )
+            );
+        foreach (var town in groups)
+        {
+            var regions = town.GroupBy(i => rows[i].Locality!.RegionKey)
+                .OrderByDescending(g => g.Sum(i => Math.Max(rows[i].Uses, 1)))
+                .ToList();
+            if (regions.Count < 2)
+            {
+                continue;
+            }
+
+            var main = regions[0].Sum(i => Math.Max(rows[i].Uses, 1));
+            var dominant = rows[regions[0].First()].Locality;
+            foreach (
+                var i in regions
+                    .Skip(1)
+                    .Where(g => g.Sum(i => Math.Max(rows[i].Uses, 1)) * 10 <= main)
+                    .SelectMany(g => g)
+            )
+            {
+                fixedRows[i] = rows[i] with { Locality = dominant };
+            }
+        }
+
+        return fixedRows;
     }
 
     /// The provider ids legacy rows carry: "setlistfm:4bd6ca4a", "pt:12345". Other upstream

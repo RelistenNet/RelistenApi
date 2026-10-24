@@ -31,7 +31,7 @@ public sealed record VenuePlan(
 ///    suburb) goes to the LLM whole.
 public static class VenueMatcher
 {
-    public const string Author = "venue-matcher@2.1.0";
+    public const string Author = "venue-matcher@2.2.0";
     public const float Exact = 0.95f;
     public const float Likely = 0.9f;
 
@@ -178,7 +178,7 @@ public static class VenueMatcher
         UnionAll(named.GroupBy(n => (n.Id, open[n.Row].Locality!.RegionKey), n => n.Row));
         UnionAll(
             named.GroupBy(
-                n => (n.Id, TitleNormalizer.Normalize(open[n.Row].Locality!.City)),
+                n => (n.Id, VenueNormalizer.Normalize(open[n.Row].Locality!.City)),
                 n => n.Row
             )
         );
@@ -192,7 +192,7 @@ public static class VenueMatcher
         foreach (var town in trusted.GroupBy(i => open[i].Locality!.Key))
         {
             var locality = open[town.First()].Locality!;
-            var townWords = TitleNormalizer.Normalize(locality.City).Split(' ').ToHashSet();
+            var townWords = VenueNormalizer.Normalize(locality.City).Split(' ').ToHashSet();
             if (locality.Region != null)
             {
                 townWords.Add(locality.Region.ToLowerInvariant());
@@ -496,14 +496,12 @@ public static class VenueMatcher
             return false;
         }
 
-        var trusted = WithoutStateTypos(
-            family.Where(r => r.Locality is { Trusted: true }).ToList()
-        );
+        var trusted = family.Where(r => r.Locality is { Trusted: true }).ToList();
         // The same name in a town of one name in two states, neither dominant (Pelham, AL and
         // Pelham, TN): one of them is a typo, and only the LLM can tell which.
         if (
             trusted
-                .GroupBy(r => TitleNormalizer.Normalize(r.Locality!.City))
+                .GroupBy(r => VenueNormalizer.Normalize(r.Locality!.City))
                 .Any(t => t.Select(r => r.Locality!.RegionKey).Distinct().Count() > 1)
         )
         {
@@ -543,43 +541,6 @@ public static class VenueMatcher
         }
 
         return true;
-    }
-
-    /// The same name in a town of the same name in another state, used a tenth as much, is a
-    /// typo'd state ("Red Rocks — Morrison, CA" beside 130 rows in Morrison, CO): those rows
-    /// take the dominant locality.
-    private static List<LegacyVenue> WithoutStateTypos(List<LegacyVenue> trusted)
-    {
-        var fixedRows = trusted.ToList();
-        foreach (var town in trusted.GroupBy(r => TitleNormalizer.Normalize(r.Locality!.City)))
-        {
-            var regions = town.GroupBy(r => r.Locality!.RegionKey)
-                .OrderByDescending(g => g.Sum(r => Math.Max(r.Uses, 1)))
-                .ToList();
-            if (regions.Count < 2)
-            {
-                continue;
-            }
-
-            var dominant = regions[0];
-            var main = dominant.Sum(r => Math.Max(r.Uses, 1));
-            foreach (
-                var minor in regions
-                    .Skip(1)
-                    .Where(g => g.Sum(r => Math.Max(r.Uses, 1)) * 10 <= main)
-            )
-            {
-                foreach (var row in minor)
-                {
-                    fixedRows[fixedRows.IndexOf(row)] = row with
-                    {
-                        Locality = dominant.First().Locality,
-                    };
-                }
-            }
-        }
-
-        return fixedRows;
     }
 
     private sealed class PlanBuilder(VenueState state)

@@ -29,7 +29,7 @@ public sealed record VenueChunkResult(
 /// asks twice.
 public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
 {
-    public const string PromptVersion = "venue-llm@4";
+    public const string PromptVersion = "venue-llm@5";
     public const float Threshold = 0.9f;
 
     /// About this many spellings per request; a locality is never split below it.
@@ -135,6 +135,15 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
         }
     }
 
+    private static IReadOnlyList<string> TwinNames(NewVenueAnswer n) =>
+        n
+            .Names.Where(m => m.Kind != VenueNameKinds.Short)
+            .Select(m => m.Name)
+            .Append(n.Name)
+            .Select(VenueNormalizer.Key)
+            .OfType<string>()
+            .ToList();
+
     private static bool IsSure(VenueAnswer answer, string key) =>
         answer.Spellings.TryGetValue(key, out var a)
         && a.Confidence >= Threshold
@@ -232,11 +241,40 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
             used.Add(room.Parent!);
         }
 
+        // A proposed venue that repeats a venue listed in its locality (or one proposed before
+        // it there) under one of its names is that venue: the model doesn't make a twin.
         var refs = new Dictionary<string, Guid>(request.VenueIds);
-        var created = answer.NewVenues.Where(n => used.Contains(n.Ref)).ToList();
-        foreach (var n in created)
+        var created = new List<NewVenueAnswer>();
+        var twins = new List<NewVenueAnswer>();
+        foreach (var n in answer.NewVenues.Where(n => used.Contains(n.Ref)))
         {
+            var twin = request
+                .VenueLocality.Where(v => v.Value == n.Locality)
+                .Select(v => v.Key)
+                .Concat(
+                    created
+                        .Where(c => c.Locality == n.Locality && c.Kind == n.Kind)
+                        .Select(c => c.Ref)
+                )
+                .FirstOrDefault(r =>
+                    TwinNames(n)
+                        .Any(k =>
+                            (
+                                request.VenueKeys.TryGetValue(r, out var keys)
+                                    ? keys
+                                    : TwinNames(created.First(c => c.Ref == r))
+                            ).Any(other => VenueNormalizer.SameName(k, other))
+                        )
+                );
+            if (twin != null)
+            {
+                refs[n.Ref] = refs[twin];
+                twins.Add(n);
+                continue;
+            }
+
             refs[n.Ref] = Guid.CreateVersion7();
+            created.Add(n);
         }
 
         await store.WriteVenuesAsync(
@@ -260,7 +298,7 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
         );
 
         var names = new List<VenueNameRecord>();
-        foreach (var n in created)
+        foreach (var n in created.Concat(twins))
         {
             names.Add(
                 new VenueNameRecord(
@@ -392,6 +430,10 @@ internal sealed class VenueRequest
     public required IReadOnlyDictionary<string, string> SpellingLocality { get; init; }
     public required IReadOnlyDictionary<string, Locality> Places { get; init; }
 
+    /// Each listed venue's name keys, to keep a proposed venue from repeating a known one.
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> VenueKeys { get; init; } =
+        new Dictionary<string, IReadOnlyList<string>>();
+
     public const string Instructions = """
         You normalise the venues of live concert recordings: one physical place, whatever the
         recordings call it, shared by every band that played there. You get a few families of
@@ -406,7 +448,9 @@ internal sealed class VenueRequest
         One name in several towns is either a chain or namesakes (House of Blues in Cleveland
         and in Dallas: separate venues) or one place filed under nearby towns (one venue).
         Decide from the towns, the artists and the years. A spelling may be placed on a venue in
-        another town of the same state; an l0 spelling on any venue.
+        another town of the same state, or in a town of the same name in another state (a typo'd
+        state); a spelling whose town has no known state, or that is in l0, on any venue. Never
+        propose a new venue for a place already listed: place the spelling on it.
 
         A family holds names that only might be one place. Every spelling of one place is one
         venue, however differently written; but names that share a word or sit inside one
@@ -514,6 +558,7 @@ internal sealed class VenueRequest
         var venueIds = new Dictionary<string, Guid>();
         var venueNames = new Dictionary<string, string>();
         var venueLocality = new Dictionary<string, string>();
+        var venueKeys = new Dictionary<string, IReadOnlyList<string>>();
         var spellings = new Dictionary<string, Spelling>();
         var spellingIds = new Dictionary<string, string>();
         var spellingLocality = new Dictionary<string, string>();
@@ -533,27 +578,35 @@ internal sealed class VenueRequest
                 places[lid] = group.First().Rows[0].Locality!;
             }
 
-            var here = unknown
-                ? group
-                    .SelectMany(s => state.Names[s.Key.Split('@')[0]])
-                    .Distinct()
-                    .Where(state.Venues.ContainsKey)
-                    .Select(v => state.Venues[v])
-                // The venues there, and namesakes elsewhere in the state (the club an uploader
-                // filed under a neighbouring town).
+            var namesakes = group
+                .SelectMany(s => VenueNormalizer.Identities(s.Key.Split('@')[0]))
+                .SelectMany(id => state.IdentityNames[id])
+                .Distinct()
+                .Where(state.Venues.ContainsKey)
+                .Select(v => state.Venues[v])
+                .ToList();
+            var place = unknown ? null : group.First().Rows[0].Locality!;
+            var here = place is not { Trusted: true }
+                // No usable town, or one without a known state: venues carrying one of
+                // its names anywhere, and those in a town of that name.
+                ? namesakes
+                    .Concat(place == null ? [] : SameTown(state, place))
+                    .DistinctBy(v => v.Uuid)
+                // The venues there; namesakes elsewhere in the state (the club an uploader
+                // filed under a neighbouring town); and those in a town of the same name in
+                // another state (a typo'd state).
                 : state
                     .ByLocality[group.Key]
                     .Concat(
-                        group
-                            .SelectMany(s => state.Names[s.Key.Split('@')[0]])
-                            .Distinct()
-                            .Where(state.Venues.ContainsKey)
-                            .Select(v => state.Venues[v])
-                            .Where(v =>
-                                v.City != null
-                                && new Locality(v.City, v.Region, v.Country).RegionKey
-                                    == group.First().Region
+                        namesakes.Where(v =>
+                            v.City != null
+                            && (
+                                new Locality(v.City, v.Region, v.Country).RegionKey
+                                    == place.RegionKey
+                                || VenueNormalizer.Normalize(v.City)
+                                    == VenueNormalizer.Normalize(place.City)
                             )
+                        )
                     )
                     .DistinctBy(v => v.Uuid);
             var venues = here.Select(v =>
@@ -562,6 +615,9 @@ internal sealed class VenueRequest
                     venueIds[id] = v.Uuid;
                     venueNames[id] = v.Name;
                     venueLocality[id] = lid;
+                    venueKeys[id] = namesOf[v.Uuid]
+                        .Append(VenueNormalizer.Key(v.Name) ?? "")
+                        .ToList();
                     return new
                     {
                         id,
@@ -617,8 +673,16 @@ internal sealed class VenueRequest
             SpellingIds = spellingIds,
             SpellingLocality = spellingLocality,
             Places = places,
+            VenueKeys = venueKeys,
         };
     }
+
+    /// The venues in a town of this name, whatever its state.
+    private static IEnumerable<CatalogueVenue> SameTown(VenueState state, Locality place) =>
+        state.Venues.Values.Where(v =>
+            v.City != null
+            && VenueNormalizer.Normalize(v.City) == VenueNormalizer.Normalize(place.City)
+        );
 
     /// Parses and checks an answer. A spelling whose answer breaks the rules (an unknown ref,
     /// a venue of another locality, a restated text that isn't the spelling) stays unresolved;
@@ -713,6 +777,8 @@ internal sealed class VenueRequest
                         from == "l0"
                         || l == from
                         || (Region(request, l) is { } r && r == Region(request, from))
+                        || SameCity(request, l, from)
+                        || request.Places[from] is not { Trusted: true }
                     )
                 )
             )
@@ -735,6 +801,11 @@ internal sealed class VenueRequest
             .ToList();
         return new VenueAnswer(newVenues, spellings, known);
     }
+
+    private static bool SameCity(VenueRequest request, string a, string b) =>
+        request.Places.TryGetValue(a, out var pa)
+        && request.Places.TryGetValue(b, out var pb)
+        && VenueNormalizer.Normalize(pa.City) == VenueNormalizer.Normalize(pb.City);
 
     private static string? Region(VenueRequest request, string locality) =>
         request.Places.TryGetValue(locality, out var place) ? place.RegionKey : null;

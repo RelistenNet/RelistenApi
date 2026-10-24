@@ -335,7 +335,7 @@ public class TestVenueMatcher
             Row("Red Rocks Amphitheatre", "Morrison, CA", 1),
         };
 
-        var plan = VenueMatcher.Match(State(rows));
+        var plan = VenueMatcher.Match(State(VenueState.WithoutStateTypos(rows)));
 
         plan.NewVenues.Should().ContainSingle().Which.Region.Should().Be("CO");
         plan.Evidence.Select(e => e.VenueUuid).Distinct().Should().ContainSingle();
@@ -453,7 +453,7 @@ public class TestVenueMatcher
             .ShareADistinctiveWord(
                 VenueNormalizer.Key(a)!,
                 VenueNormalizer.Key(b)!,
-                TitleNormalizer.Normalize(town).Split(' ').ToHashSet()
+                VenueNormalizer.Normalize(town).Split(' ').ToHashSet()
             )
             .Should()
             .Be(shared);

@@ -38,6 +38,12 @@ public class TestVenueNormalizer
     [TestCase("Broomfield. CO", "broomfield|co|US")]
     [TestCase("Dayton Ohio/Huber Heights Ohio", "dayton|oh|US")]
     [TestCase("Richmond, VIC, Australia", "richmond|vic|AU")]
+    [TestCase("Nashville, Tenn.", "nashville|tn|US")]
+    [TestCase("Dallas, TX USA", "dallas|tx|US")]
+    [TestCase("Lorsch, GER", "lorsch||DE")]
+    [TestCase("Manchester, TN, Bonnaroo 2015", "manchester|tn|US")]
+    [TestCase("Bozeman, MT", "bozeman|mt|US")]
+    [TestCase("Albany, N.Y.", "albany|ny|US")]
     public void LocationsParseToALocality(string location, string expected) =>
         VenueNormalizer.ParseLocation(location)!.Key.Should().Be(expected);
 
