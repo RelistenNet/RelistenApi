@@ -15,8 +15,15 @@ namespace RelistenApiTests.Normalization;
 /// name MSG) is a new site, its Theater a room inside it.
 /// twin: it also proposes Madison Square Garden a second time, for "MSG". stages: the Garden
 /// and the Beacon Theatre each get a room named "Main Stage" ("MSG" goes to the Beacon's).
-internal sealed class ScriptedVenueModel(bool twin = false, bool stages = false) : ICatalogueModel
+/// forgetful: its first answer leaves "MSG" out.
+internal sealed class ScriptedVenueModel(
+    bool twin = false,
+    bool stages = false,
+    bool forgetful = false
+) : ICatalogueModel
 {
+    public int Calls { get; private set; }
+
     public string ModelId => "scripted-venues-1";
 
     public Task<ModelReply> CompleteAsync(
@@ -66,6 +73,11 @@ internal sealed class ScriptedVenueModel(bool twin = false, bool stages = false)
             foreach (var s in locality["spellings"]!.AsArray())
             {
                 var text = (string)s!["text"]!;
+                if (forgetful && Calls == 0 && text == "MSG")
+                {
+                    continue;
+                }
+
                 spellings.Add(
                     new JsonObject
                     {
@@ -91,6 +103,7 @@ internal sealed class ScriptedVenueModel(bool twin = false, bool stages = false)
             ["spellings"] = spellings,
             ["known_names"] = new JsonArray(),
         };
+        Calls++;
         return Task.FromResult(new ModelReply(reply.ToJsonString(), 100, 50));
     }
 
@@ -528,5 +541,28 @@ public class TestVenueCatalogue
             .Equal(
                 "Kiel Opera House — St. Louis: site (0 rows) / room of Kiel Auditorium (0 rows)"
             );
+    }
+
+    [Test]
+    public async Task ASpellingTheModelLeftOutIsAskedAgain()
+    {
+        var database = new DbServiceNormalizationDatabase(db);
+        var model = new ScriptedVenueModel(forgetful: true);
+        await new VenueMatch(database).RunAsync(artists, CancellationToken.None);
+        var chunk = await new VenueLlm(database, model).RunChunkAsync(
+            artists,
+            [],
+            CancellationToken.None
+        );
+
+        model.Calls.Should().Be(2);
+        chunk.Unsure.Should().Be(0);
+        (
+            await Strings(
+                "SELECT lv.name FROM norm.venue_evidence e JOIN venues lv ON lv.uuid = e.legacy_venue_uuid JOIN norm.venues v ON v.uuid = e.venue_uuid WHERE lv.name = 'MSG' AND v.name = 'Madison Square Garden'"
+            )
+        )
+            .Should()
+            .ContainSingle();
     }
 }

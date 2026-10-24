@@ -312,6 +312,24 @@ public static partial class VenueNormalizer
         return new Locality(city, region?.Code ?? written, country);
     }
 
+    /// A row with no usable location often has it in the name ("Pepsi Center - Denver, CO",
+    /// "Shorefront Park, Patchogue, NY"): the part after a dash, or the whole name, when it ends
+    /// with a known state or country. Null otherwise ("HOB Cleveland" names no state).
+    public static Locality? LocationInName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name) || !name.Contains(','))
+        {
+            return null;
+        }
+
+        var dash = name.LastIndexOf(" - ", StringComparison.Ordinal);
+        var place = (dash >= 0 ? ParseLocation(name[(dash + 3)..]) : null)
+            is { Trusted: true } afterDash
+            ? afterDash
+            : ParseLocation(name);
+        return place is { Trusted: true } ? place : null;
+    }
+
     private static readonly HashSet<string> SeatWords =
     [
         "row",

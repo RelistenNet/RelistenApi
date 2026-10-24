@@ -32,6 +32,8 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
     public const string PromptVersion = "venue-llm@6";
     public const float Threshold = 0.9f;
 
+    internal const string NoAnswer = "no answer";
+
     /// About this many spellings per request; a locality is never split below it.
     public const int ChunkSpellings = 120;
 
@@ -61,19 +63,43 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
 
         var request = VenueRequest.Build(state, chunk);
         var (answer, reply) = await AskAsync(request, cancellationToken);
-        var unsure = chunk.Where(s => !IsSure(answer, s.Key)).ToList();
+        // A long request can come back with spellings left out (the lab's Tabernacle, 213
+        // uses): those are asked once more on their own, after this answer is written.
+        var skipped = chunk
+            .Where(s => answer.Dropped.GetValueOrDefault(s.Key) == NoAnswer)
+            .ToList();
+        var unsure = chunk.Where(s => !IsSure(answer, s.Key)).Except(skipped).ToList();
         var written = await PersistAsync(connection, tx, request, answer, unsure);
+        var (resolved, unsureCount) = (chunk.Count - unsure.Count - skipped.Count, unsure.Count);
+        var (input, output) = (reply.InputTokens, reply.OutputTokens);
+        if (skipped.Count > 0)
+        {
+            var again = VenueRequest.Build(
+                await VenueState.LoadAsync(connection, tx, artists),
+                skipped
+            );
+            var (second, secondReply) = await AskAsync(again, cancellationToken);
+            var stillUnsure = skipped.Where(s => !IsSure(second, s.Key)).ToList();
+            var more = await PersistAsync(connection, tx, again, second, stillUnsure);
+            written = (written.Venues + more.Venues, written.Rows + more.Rows);
+            (resolved, unsureCount) = (
+                resolved + skipped.Count - stillUnsure.Count,
+                unsureCount + stillUnsure.Count
+            );
+            (input, output) = (input + secondReply.InputTokens, output + secondReply.OutputTokens);
+        }
+
         await tx.CommitAsync(cancellationToken);
 
         return new VenueChunkResult(
             false,
             chunk.Select(s => s.Key).ToList(),
-            chunk.Count - unsure.Count,
-            unsure.Count,
+            resolved,
+            unsureCount,
             written.Venues,
             written.Rows,
-            reply.InputTokens,
-            reply.OutputTokens
+            input,
+            output
         );
     }
 
@@ -839,7 +865,7 @@ internal sealed class VenueRequest
             .ToList();
         foreach (var key in request.SpellingIds.Values.Where(k => !spellings.ContainsKey(k)))
         {
-            dropped.TryAdd(key, "no answer");
+            dropped.TryAdd(key, VenueLlm.NoAnswer);
         }
 
         return new VenueAnswer(newVenues, spellings, known) { Dropped = dropped };

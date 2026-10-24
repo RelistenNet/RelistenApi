@@ -66,4 +66,13 @@ public class TestVenueNormalizer
     [TestCase("madison", "madison square garden", false)]
     public void AShortNameIsALongNamesInitials(string shortKey, string fullKey, bool expected) =>
         VenueNormalizer.IsInitialsOf(shortKey, fullKey).Should().Be(expected);
+
+    [TestCase("Pepsi Center - Denver, CO", "denver|co|US")]
+    [TestCase("Shorefront Park, Patchogue, NY", "patchogue|ny|US")]
+    [TestCase("LOCKN' Festival, Arrington, VA", "arrington|va|US")]
+    [TestCase("HOB Cleveland", null)]
+    [TestCase("Madison Square Garden", null)]
+    [TestCase("Ballroom, U. of Co.", null)]
+    public void ARowWithoutALocationCanCarryItInItsName(string name, string? expected) =>
+        (VenueNormalizer.LocationInName(name)?.Key).Should().Be(expected);
 }

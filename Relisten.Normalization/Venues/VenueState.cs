@@ -22,7 +22,8 @@ public sealed record LegacyVenue(
 )
 {
     public string? Key { get; } = VenueNormalizer.Key(Name);
-    public Locality? Locality { get; init; } = VenueNormalizer.ParseLocation(Location);
+    public Locality? Locality { get; init; } =
+        VenueNormalizer.ParseLocation(Location) ?? VenueNormalizer.LocationInName(Name);
     public (string Provider, string Key)? ExternalId { get; init; }
 }
 
