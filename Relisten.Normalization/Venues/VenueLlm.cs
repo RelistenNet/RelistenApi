@@ -29,7 +29,7 @@ public sealed record VenueChunkResult(
 /// asks twice.
 public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
 {
-    public const string PromptVersion = "venue-llm@3";
+    public const string PromptVersion = "venue-llm@4";
     public const float Threshold = 0.9f;
 
     /// About this many spellings per request; a locality is never split below it.
@@ -407,6 +407,12 @@ internal sealed class VenueRequest
         and in Dallas: separate venues) or one place filed under nearby towns (one venue).
         Decide from the towns, the artists and the years. A spelling may be placed on a venue in
         another town of the same state; an l0 spelling on any venue.
+
+        A family holds names that only might be one place. Every spelling of one place is one
+        venue, however differently written; but names that share a word or sit inside one
+        another are often different places in one town (two fraternity houses on one campus,
+        two stages of a festival, two arenas of one university, a stadium and its parking lot):
+        give each its own venue, or a room of a common site.
 
         For every spelling answer with:
         - spelling_text: the spelling's text exactly as given.
