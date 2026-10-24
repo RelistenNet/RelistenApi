@@ -31,7 +31,7 @@ public sealed record VenuePlan(
 ///    suburb) goes to the LLM whole.
 public static class VenueMatcher
 {
-    public const string Author = "venue-matcher@2.7.0";
+    public const string Author = "venue-matcher@2.8.0";
     public const float Exact = 0.95f;
     public const float Likely = 0.9f;
 
@@ -797,7 +797,9 @@ public static class VenueMatcher
                 new VenueRecord(
                     venue,
                     display.Name.Trim(),
-                    City: display.Locality!.City,
+                    City: VenueNormalizer.DisplayCity(
+                        rows.Where(r => r.Locality?.Key == home).Select(r => r.Locality!.City)
+                    ),
                     Region: display.Locality.Region,
                     Country: display.Locality.Country,
                     Confidence: Exact

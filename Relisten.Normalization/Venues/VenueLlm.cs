@@ -650,7 +650,13 @@ internal sealed class VenueRequest
             var lid = unknown ? "l0" : $"l{places.Count + 1}";
             if (!unknown)
             {
-                places[lid] = group.First().Rows[0].Locality!;
+                var first = group.First().Rows[0].Locality!;
+                places[lid] = first with
+                {
+                    City = VenueNormalizer.DisplayCity(
+                        group.SelectMany(s => s.Rows).Select(r => r.Locality!.City)
+                    ),
+                };
             }
 
             var namesakes = group

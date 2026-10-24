@@ -183,9 +183,66 @@ public static partial class VenueNormalizer
         var words = key.Split(' ')
             .Select(w => Canon.GetValueOrDefault(w, w))
             .Select(w => w.Length > 3 && w[^1] == 's' && w[^2] != 's' ? w[..^1] : w)
+            .Select(VenueWord)
             .Where(w => !SmallWords.Contains(w))
             .ToList();
         return words.Count > 0 ? words : key.Split(' ');
+    }
+
+    /// A common venue word misspelled is that word ("threatre", "auditorum", "colliseum"):
+    /// one letter off, two from eight letters. Other words stay as written.
+    private static string VenueWord(string w)
+    {
+        if (w.Length < 6 || VenueWords.ContainsKey(w))
+        {
+            return VenueWords.GetValueOrDefault(w, w);
+        }
+
+        var limit = w.Length >= 8 ? 2 : 1;
+        var near = VenueWords
+            .Where(v => Math.Abs(v.Key.Length - w.Length) <= limit)
+            .Where(v => Titles.TitleGrouper.BoundedLevenshtein(v.Key, w, limit) <= limit)
+            .Select(v => v.Value)
+            .Distinct()
+            .Take(2)
+            .ToList();
+        return near.Count == 1 ? near[0] : w;
+    }
+
+    // Each spelling a typo is measured from → the word it is.
+    private static readonly Dictionary<string, string> VenueWords = new()
+    {
+        ["theater"] = "theater",
+        ["theatre"] = "theater",
+        ["amphitheater"] = "amphitheater",
+        ["amphitheatre"] = "amphitheater",
+        ["auditorium"] = "auditorium",
+        ["coliseum"] = "coliseum",
+        ["pavilion"] = "pavilion",
+        ["ballroom"] = "ballroom",
+        ["stadium"] = "stadium",
+        ["fairground"] = "fairground",
+        ["fieldhouse"] = "fieldhouse",
+        ["playhouse"] = "playhouse",
+        ["center"] = "center",
+        ["centre"] = "center",
+    };
+
+    /// How a town is shown: the most used spelling written with capitals ("San Francisco",
+    /// never a row's "san francisco"), else the name with each word capitalised.
+    public static string DisplayCity(IEnumerable<string> spellings)
+    {
+        var list = spellings.Select(c => c.Trim()).Where(c => c.Length > 0).ToList();
+        var written = list.Where(c => c.Any(char.IsUpper))
+            .GroupBy(c => c)
+            .OrderByDescending(g => g.Count())
+            .ThenBy(g => g.Key, StringComparer.Ordinal)
+            .Select(g => g.Key)
+            .FirstOrDefault();
+        return written
+            ?? System.Globalization.CultureInfo.InvariantCulture.TextInfo.ToTitleCase(
+                list.FirstOrDefault() ?? ""
+            );
     }
 
     /// What identity compares: two keys share an identity when they are one name. The words

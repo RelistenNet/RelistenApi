@@ -425,6 +425,8 @@ public class TestVenueMatcher
     [TestCase("Oak Mountain Ampitheatre", "Oak Mountain Amphitheatre")]
     [TestCase("The Pavilion at the Toyota Music Factory", "The Pavilion at Toyota Music Factory")]
     [TestCase("1stBank Center", "1st Bank Center")]
+    [TestCase("Beacon Threatre", "Beacon Theatre")]
+    [TestCase("Hollywood Palladium Auditorum", "Hollywood Palladium Auditorium")]
     public void SpellingsOfOneNameAreOneName(string a, string b) =>
         VenueNormalizer
             .SameName(VenueNormalizer.Key(a)!, VenueNormalizer.Key(b)!)
@@ -434,6 +436,7 @@ public class TestVenueMatcher
     [TestCase("Fillmore East", "Fillmore West")]
     [TestCase("This Tent", "This Other Tent")]
     [TestCase("Walnut Valley Festival Stage 1", "Walnut Valley Festival Stage 2")]
+    [TestCase("Universal Amphitheatre", "University Amphitheatre")]
     public void OtherNamesAreNot(string a, string b) =>
         VenueNormalizer
             .SameName(VenueNormalizer.Key(a)!, VenueNormalizer.Key(b)!)
@@ -704,4 +707,10 @@ public class TestVenueMatcher
         plan.NewVenues.Should().BeEmpty();
         plan.Left.Should().HaveCount(2);
     }
+
+    [TestCase(new[] { "san francisco", "San Francisco", "San Francisco" }, "San Francisco")]
+    [TestCase(new[] { "philadelphia", "philadelphia" }, "Philadelphia")]
+    [TestCase(new[] { "St. Louis", "saint louis" }, "St. Louis")]
+    public void ATownIsShownAsItIsBestWritten(string[] spellings, string expected) =>
+        VenueNormalizer.DisplayCity(spellings).Should().Be(expected);
 }
