@@ -390,6 +390,57 @@ public class TestNormStore
     }
 
     [Test]
+    public async Task MachineTwinsInOneTownMergeButAPersonsVenueStays()
+    {
+        Guid Venue() => Guid.CreateVersion7();
+        var (comcast, xfinity, other, persons) = (Venue(), Venue(), Venue(), Venue());
+        var bot = await As(AuthorTypes.Algorithm, "venue-matcher@2");
+        VenueRecord At(Guid uuid, string name, string city) =>
+            new(uuid, name, City: city, Region: "MA", Country: "US", Confidence: 0.95f);
+        await bot.WriteVenuesAsync([
+            At(comcast, "Comcast Center", "Mansfield"),
+            At(xfinity, "Xfinity Center", "Mansfield"),
+            At(other, "Xfinity Center", "Worcester"),
+        ]);
+        await bot.WriteVenueNamesAsync([
+            new VenueNameRecord(comcast, "Comcast Center", Confidence: 0.95f),
+            new VenueNameRecord(xfinity, "Xfinity Center", Confidence: 0.95f),
+            new VenueNameRecord(other, "Xfinity Center", Confidence: 0.95f),
+        ]);
+        await (await As(AuthorTypes.Llm, "venue-llm@5")).WriteVenueNamesAsync([
+            new VenueNameRecord(
+                comcast,
+                "Xfinity Center",
+                VenueNameKinds.Official,
+                ValidFrom: new DateOnly(2014, 1, 1),
+                Confidence: 0.9f
+            ),
+        ]);
+        await (await As(AuthorTypes.User, "expert")).WriteVenuesAsync([
+            new VenueRecord(
+                persons,
+                "Xfinity Center",
+                City: "Mansfield",
+                Region: "MA",
+                Country: "US"
+            ),
+        ]);
+
+        (await (await As(AuthorTypes.Algorithm, "venue-matcher@2")).MergeTwinVenuesAsync())
+            .Should()
+            .Be(1);
+        (
+            await db.QueryAsync<Guid>(
+                "SELECT uuid FROM norm.venues WHERE merged_into = @comcast",
+                new { comcast },
+                tx
+            )
+        )
+            .Should()
+            .Equal(xfinity);
+    }
+
+    [Test]
     public async Task ARevertLeavesRowsChangedSince()
     {
         var song = Guid.CreateVersion7();

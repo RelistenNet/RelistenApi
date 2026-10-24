@@ -410,6 +410,99 @@ public sealed partial class NormStore
             tx
         );
 
+    /// Twins a machine made: two machine venues of one kind in one town, one carrying the
+    /// other's name ("Xfinity Center" created from its own rows, and the venue the LLM learned
+    /// is Great Woods → Tweeter → Comcast → Xfinity). The docs' auto-merge: an exact normalised
+    /// name in the same place. The venue with fewer rows points at the other; a person's venue
+    /// is never merged or merged into. Returns how many merged.
+    public async Task<int> MergeTwinVenuesAsync()
+    {
+        var venues = (
+            await connection.QueryAsync<(
+                Guid Uuid,
+                string Name,
+                string Kind,
+                Guid? Parent,
+                string? City,
+                string? Region,
+                string? Country,
+                string AuthorType,
+                int Rows
+            )>(
+                """
+                SELECT v.uuid, v.name, v.kind, v.parent_uuid, v.city, v.region, v.country, v.author_type,
+                       (SELECT count(*) FROM norm.venue_evidence e WHERE e.venue_uuid = v.uuid)::int
+                FROM norm.venues v WHERE v.merged_into IS NULL AND v.city IS NOT NULL
+                """,
+                transaction: tx
+            )
+        ).ToList();
+        var names = (
+            await connection.QueryAsync<(Guid Venue, string Normalized)>(
+                "SELECT venue_uuid, normalized FROM norm.venue_names WHERE kind <> 'short'",
+                transaction: tx
+            )
+        ).ToLookup(n => n.Venue, n => n.Normalized);
+
+        var merged = new HashSet<Guid>();
+        var count = 0;
+        foreach (
+            var town in venues
+                .Where(v => v.AuthorType is not ("user" or "moderator"))
+                .GroupBy(v => (new Locality(v.City!, v.Region, v.Country).Key, v.Kind, v.Parent))
+                .Where(g => g.Count() > 1)
+        )
+        {
+            var list = town.OrderByDescending(v => v.Rows).ThenBy(v => v.Uuid).ToList();
+            foreach (var keep in list)
+            {
+                if (merged.Contains(keep.Uuid))
+                {
+                    continue;
+                }
+
+                var keepNames = names[keep.Uuid]
+                    .Append(VenueNormalizer.Key(keep.Name))
+                    .OfType<string>()
+                    .ToList();
+                foreach (
+                    var twin in list.Where(v => v.Uuid != keep.Uuid && !merged.Contains(v.Uuid))
+                )
+                {
+                    var twinName = VenueNormalizer.Key(twin.Name);
+                    if (
+                        twinName == null
+                        || !keepNames.Any(k => VenueNormalizer.SameName(k, twinName))
+                    )
+                    {
+                        continue;
+                    }
+
+                    await connection.ExecuteAsync(
+                        """
+                        UPDATE norm.venues SET merged_into = @into, author_type = @AuthorType, author_ref = @AuthorRef,
+                            run_uuid = @Run, updated_at = now()
+                        WHERE (uuid = @from OR merged_into = @from) AND author_type NOT IN ('user', 'moderator')
+                        """,
+                        new
+                        {
+                            from = twin.Uuid,
+                            into = keep.Uuid,
+                            AuthorType,
+                            AuthorRef,
+                            Run,
+                        },
+                        tx
+                    );
+                    merged.Add(twin.Uuid);
+                    count++;
+                }
+            }
+        }
+
+        return count;
+    }
+
     /// An expert's merge: venue `from` is the same place as `into`. Like songs: the old venue
     /// points at the survivor (as do venues merged into it before), and its names, external
     /// ids and evidence resolve to the survivor wherever they are read. Only a person merges.

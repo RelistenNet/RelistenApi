@@ -492,4 +492,28 @@ public class TestVenueMatcher
 
         families.Should().HaveCount(3);
     }
+
+    [Test]
+    public void ATownNoOtherVenueIsFiledUnderTakesTheNamesTown()
+    {
+        var rows = VenueState.WithoutLoneTowns([
+            Row("Czar's", "St. Joseph, MI", 4),
+            Row("Silver Beach", "St. Joseph, MI", 4),
+            Row("Czar's", "Days Inn St Joseph, MI", 1),
+            Row("Cat's Cradle", "Carrboro, NC", 13),
+            Row("Cat's Cradle", "Chapel Hill, NC", 3),
+            Row("Varsity Theatre", "Chapel Hill, NC", 3),
+        ]);
+
+        rows.Select(r => r.Locality!.City)
+            .Should()
+            .Equal(
+                "St. Joseph",
+                "St. Joseph",
+                "St. Joseph",
+                "Carrboro",
+                "Chapel Hill",
+                "Chapel Hill"
+            );
+    }
 }

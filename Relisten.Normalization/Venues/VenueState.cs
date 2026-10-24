@@ -170,8 +170,10 @@ public sealed partial class VenueState
 
         return new VenueState
         {
-            Unmapped = WithoutStateTypos(
-                FoldCities(CountryCodes(FillRegions(legacy, catalogue), catalogue))
+            Unmapped = WithoutLoneTowns(
+                WithoutStateTypos(
+                    FoldCities(CountryCodes(FillRegions(legacy, catalogue), catalogue))
+                )
             ),
             Venues = venues
                 .Where(v => v.MergedInto == null)
@@ -354,6 +356,54 @@ public sealed partial class VenueState
         }
 
         return fixedRows;
+    }
+
+    /// A "town" no other venue name is ever filed under is usually not a town ("Days Inn St
+    /// Joseph", "The Sherman Theater Stroudsburg", "Bonnaroo"): when the same name is used at
+    /// least twice as much in one other town of the state, its rows take that town.
+    internal static List<LegacyVenue> WithoutLoneTowns(IReadOnlyList<LegacyVenue> rows)
+    {
+        var trusted = rows.Where(r => r.Key != null && r.Locality is { Trusted: true }).ToList();
+        var namesInTown = trusted
+            .GroupBy(r => r.Locality!.Key)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Select(r => VenueNormalizer.Identities(r.Key!)[0]).Distinct().Count()
+            );
+        var uses = trusted
+            .GroupBy(r => (Name: VenueNormalizer.Identities(r.Key!)[0], r.Locality!.RegionKey))
+            .ToDictionary(
+                g => g.Key,
+                g =>
+                    g.GroupBy(r => r.Locality!.Key)
+                        .Select(t =>
+                            (Locality: t.First().Locality!, Uses: t.Sum(r => Math.Max(r.Uses, 1)))
+                        )
+                        .OrderByDescending(t => t.Uses)
+                        .ToList()
+            );
+        return rows.Select(r =>
+            {
+                if (
+                    r.Key == null
+                    || r.Locality is not { Trusted: true } l
+                    || namesInTown[l.Key] > 1
+                )
+                {
+                    return r;
+                }
+
+                var towns = uses[(VenueNormalizer.Identities(r.Key)[0], l.RegionKey)];
+                var here = towns.First(t => t.Locality.Key == l.Key).Uses;
+                var elsewhere = towns.Where(t => t.Locality.Key != l.Key).ToList();
+                return elsewhere.Count == 1 && elsewhere[0].Uses >= 2 * here
+                    ? r with
+                    {
+                        Locality = elsewhere[0].Locality,
+                    }
+                    : r;
+            })
+            .ToList();
     }
 
     /// The provider ids legacy rows carry: "setlistfm:4bd6ca4a", "pt:12345". Other upstream
