@@ -286,3 +286,6 @@ _Pvt_Extensions
 .ralph/
 .codex/
 .superpowers
+
+# Local secrets (OPENAI_API_KEY for the norm lab)
+.env.local

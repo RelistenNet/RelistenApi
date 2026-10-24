@@ -1,0 +1,175 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using Relisten.Normalization.Songs;
+using Temporalio.Common;
+using Temporalio.Exceptions;
+using Temporalio.Workflows;
+
+namespace Relisten.Normalization.Temporal;
+
+/// MaxChunks caps the LLM calls of one run (null: until nothing is left to ask). Reask lists
+/// titles to ask about again (a targeted re-ask): their machine decisions are forgotten first
+/// and the run asks about nothing else.
+public sealed record BuildSongCatalogue(
+    Guid Artist,
+    int? MaxChunks = null,
+    IReadOnlyList<string>? Reask = null
+);
+
+/// TracksPerChunk is the run's returns curve; StillUnsure the recurring titles that neither
+/// pass resolved, most-played first (at most 50), for a person.
+public sealed record SongCatalogueResult(
+    int Chunks,
+    int SongsCreated,
+    int KeysResolved,
+    int KeysUnresolved,
+    int TracksWritten,
+    int InputTokens,
+    int OutputTokens
+)
+{
+    public IReadOnlyList<int> TracksPerChunk { get; init; } = [];
+    public IReadOnlyList<ReviewItem> StillUnsure { get; init; } = [];
+}
+
+/// Builds or extends one artist's song catalogue with the LLM (string-theory docs/llm.md §3),
+/// then places every track it can. Started by hand (worker --norm-songs); a finished
+/// band's catalogue may be built once, a touring band's re-run as titles arrive. Each run
+/// asks only about titles nothing resolves yet, and never changes an existing row.
+[Workflow]
+public class SongCatalogueWorkflow
+{
+    private static readonly ActivityOptions Step = new()
+    {
+        TaskQueue = NormalizationQueues.Database,
+        StartToCloseTimeout = TimeSpan.FromMinutes(10),
+        HeartbeatTimeout = TimeSpan.FromSeconds(30),
+        RetryPolicy = new RetryPolicy
+        {
+            MaximumAttempts = 3,
+            InitialInterval = TimeSpan.FromSeconds(10),
+            NonRetryableErrorTypes = ["InvalidOperationException"],
+        },
+    };
+
+    // A chunk calls the model before it writes, so a retried chunk is another paid call.
+    // It isn't retried by Temporal: the pass counts a failed chunk against MaxChunks and moves
+    // on, and stops after a few failures in a row.
+    private static readonly ActivityOptions ChunkStep = new()
+    {
+        TaskQueue = NormalizationQueues.Database,
+        StartToCloseTimeout = TimeSpan.FromMinutes(10),
+        HeartbeatTimeout = TimeSpan.FromSeconds(30),
+        RetryPolicy = new RetryPolicy { MaximumAttempts = 1 },
+    };
+
+    private const int FailuresInARow = 3;
+
+    [WorkflowRun]
+    public async Task<SongCatalogueResult> RunAsync(BuildSongCatalogue request)
+    {
+        var artist = request.Artist;
+        var total = new SongCatalogueResult(0, 0, 0, 0, 0, 0, 0);
+        var curve = new List<int>();
+        // The recurring titles left unsure, by key: a first-pass item stays unless the review
+        // pass asks about it again, so a run whose cap ends in the first pass still lists them.
+        var unsure = new Dictionary<string, ReviewItem>();
+
+        var only = request.Reask is { Count: > 0 } reask ? reask : null;
+        if (only != null)
+        {
+            await Workflow.ExecuteActivityAsync(
+                (SongActivities a) => a.ForgetDecisions(new SongForgetInput(artist, only)),
+                Step
+            );
+        }
+
+        // First pass: every unresolved title (or only the re-asked ones), most-played first.
+        total = await Pass(artist, review: false, request.MaxChunks, total, curve, unsure, only);
+
+        // Review pass: the recurring titles still unresolved, asked again with the titles
+        // around them as context.
+        // MaxChunks is the run's whole budget: the review pass gets what the first pass left.
+        var remaining = request.MaxChunks is { } cap ? Math.Max(0, cap - total.Chunks) : (int?)null;
+        if (remaining != 0)
+        {
+            total = await Pass(artist, review: true, remaining, total, curve, unsure, only);
+        }
+
+        var matched = await Workflow.ExecuteActivityAsync(
+            (SongActivities a) => a.MatchTracks(artist),
+            Step
+        );
+        return total with
+        {
+            TracksWritten = total.TracksWritten + matched.TracksWritten,
+            TracksPerChunk = curve,
+            StillUnsure = unsure.Values.OrderByDescending(r => r.Shows).Take(50).ToList(),
+        };
+    }
+
+    private static async Task<SongCatalogueResult> Pass(
+        Guid artist,
+        bool review,
+        int? maxChunks,
+        SongCatalogueResult total,
+        List<int> curve,
+        Dictionary<string, ReviewItem> unsure,
+        IReadOnlyList<string>? only
+    )
+    {
+        // No key is asked twice in a pass, sure or not.
+        var skip = new List<string>();
+        var failures = 0;
+        for (var chunks = 0; maxChunks is not { } max || chunks < max; chunks++)
+        {
+            CatalogueChunkResult chunk;
+            try
+            {
+                chunk = await Workflow.ExecuteActivityAsync(
+                    (SongActivities a) =>
+                        a.CatalogueChunk(new SongCatalogueChunkInput(artist, skip, review, only)),
+                    ChunkStep
+                );
+                failures = 0;
+            }
+            catch (ActivityFailureException) when (++failures < FailuresInARow)
+            {
+                // It may have paid for a model call: it counts as a chunk, with nothing written.
+                curve.Add(0);
+                total = total with { Chunks = total.Chunks + 1 };
+                continue;
+            }
+
+            if (chunk.Done)
+            {
+                break;
+            }
+
+            skip.AddRange(chunk.Asked);
+            curve.Add(chunk.TracksWritten);
+            foreach (var key in chunk.Asked)
+            {
+                unsure.Remove(key);
+            }
+            foreach (var item in chunk.Review)
+            {
+                unsure[item.Key] = item;
+            }
+            total = total with
+            {
+                Chunks = total.Chunks + 1,
+                SongsCreated = total.SongsCreated + chunk.SongsCreated,
+                KeysResolved = total.KeysResolved + chunk.KeysResolved,
+                KeysUnresolved = total.KeysUnresolved + chunk.Unresolved.Count,
+                TracksWritten = total.TracksWritten + chunk.TracksWritten,
+                InputTokens = total.InputTokens + chunk.InputTokens,
+                OutputTokens = total.OutputTokens + chunk.OutputTokens,
+            };
+        }
+
+        return total;
+    }
+}

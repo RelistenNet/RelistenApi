@@ -16,6 +16,10 @@
 /RelistenIngestionWorker/obj/
 /RelistenApiTests/bin/
 /RelistenApiTests/obj/
+/Relisten.Normalization/bin/
+/Relisten.Normalization/obj/
+/Relisten.NormalizationTests/bin/
+/Relisten.NormalizationTests/obj/
 
 # Local credentials and editor caches are not image inputs.
 /.env

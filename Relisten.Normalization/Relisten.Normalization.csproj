@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Catalogue normalization (string-theory ddl/002_norm.sql): the norm store, title and venue
+       matching, the LLM catalogue and their Temporal workflows. RelistenApi keeps only what is
+       API-specific (the migration runner's thin classes, and read queries after cutover). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>Relisten.Normalization</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="RelistenApiTests" />
+    <InternalsVisibleTo Include="Relisten.NormalizationTests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Dapper" Version="2.1.66" />
+    <PackageReference Include="Npgsql" Version="10.0.1" />
+    <PackageReference Include="OpenAI" Version="2.1.0" />
+    <PackageReference Include="Temporalio.Extensions.Hosting" Version="1.20.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Sql\*.sql" />
+  </ItemGroup>
+</Project>
