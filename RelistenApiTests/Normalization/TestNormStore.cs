@@ -416,6 +416,15 @@ public class TestNormStore
                 Confidence: 0.9f
             ),
         ]);
+        await (await As(AuthorTypes.Llm, "venue-llm@5")).WriteVenueNamesAsync([
+            new VenueNameRecord(
+                xfinity,
+                "Great Woods",
+                VenueNameKinds.Official,
+                ValidTo: new DateOnly(2001, 1, 1),
+                Confidence: 0.9f
+            ),
+        ]);
         await (await As(AuthorTypes.User, "expert")).WriteVenuesAsync([
             new VenueRecord(
                 persons,
@@ -438,6 +447,16 @@ public class TestNormStore
         )
             .Should()
             .Equal(xfinity);
+        // The merged venue's periods are the survivor's history.
+        (
+            await db.ExecuteScalarAsync<string>(
+                "SELECT norm.venue_name_on(@comcast, '1995-06-01')",
+                new { comcast },
+                tx
+            )
+        )
+            .Should()
+            .Be("Great Woods");
     }
 
     [Test]

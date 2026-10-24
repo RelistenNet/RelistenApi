@@ -268,6 +268,47 @@ public class TestTrackMatcher
             .Equal("True:ruling:soundcheck");
     }
 
+    [Test]
+    public void ASoundcheckCoversEverySongItsTitleNames()
+    {
+        var (wrangler, walkin, track) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        var state = new Relisten.Normalization.Songs.CatalogueState
+        {
+            ArtistUuid = Guid.NewGuid(),
+            ArtistName = "Widespread Panic",
+            Songs = [],
+            Aliases = new Dictionary<string, Guid>(),
+            UnmappedSetlistSongs = [],
+            Tracks =
+            [
+                new Relisten.Normalization.Songs.CatalogueTrack(
+                    track,
+                    1,
+                    TitleParser.Parse("(Check) Space Wrangler Walkin", 1)
+                )
+                {
+                    Existing =
+                    [
+                        new(
+                            "(Check) Space Wrangler Walkin",
+                            wrangler,
+                            true,
+                            0.95f,
+                            SegueAfter: true
+                        ),
+                        new("(Check) Space Wrangler Walkin", walkin, true, 0.95f),
+                    ],
+                },
+            ],
+        };
+
+        TrackMatcher
+            .Match(state)
+            .Records.Select(r => string.Join(",", r.Qualifiers!))
+            .Should()
+            .Equal("soundcheck", "soundcheck");
+    }
+
     [TestCase("05:12 - Nebraska", "12 - Nebraska")]
     [TestCase(
         "07 BillS2018-09-06 07 Pike Co brkdwn_Little Maggie set1",

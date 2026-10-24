@@ -246,16 +246,25 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
         var refs = new Dictionary<string, Guid>(request.VenueIds);
         var created = new List<NewVenueAnswer>();
         var twins = new List<NewVenueAnswer>();
-        foreach (var n in answer.NewVenues.Where(n => used.Contains(n.Ref)))
+        // Sites first, so a room's parent has its uuid when the room is compared.
+        var placed = new Dictionary<string, (string Locality, string Kind, Guid? Parent)>();
+        foreach (
+            var n in answer
+                .NewVenues.Where(n => used.Contains(n.Ref))
+                .OrderBy(n => n.Parent == null ? 0 : 1)
+        )
         {
+            // A twin is in the same town (a known venue's own town, not the one it was listed
+            // under), of the same kind, inside the same site.
+            var here = (
+                Locality: request.Places[n.Locality].Key,
+                n.Kind,
+                Parent: n.Parent == null ? (Guid?)null : refs.GetValueOrDefault(n.Parent)
+            );
             var twin = request
-                .VenueLocality.Where(v => v.Value == n.Locality)
+                .VenuePlaces.Where(v => v.Value == here)
                 .Select(v => v.Key)
-                .Concat(
-                    created
-                        .Where(c => c.Locality == n.Locality && c.Kind == n.Kind)
-                        .Select(c => c.Ref)
-                )
+                .Concat(created.Where(c => placed[c.Ref] == here).Select(c => c.Ref))
                 .FirstOrDefault(r =>
                     TwinNames(n)
                         .Any(k =>
@@ -274,6 +283,7 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
             }
 
             refs[n.Ref] = Guid.CreateVersion7();
+            placed[n.Ref] = here;
             created.Add(n);
         }
 
@@ -434,6 +444,12 @@ internal sealed class VenueRequest
     public IReadOnlyDictionary<string, IReadOnlyList<string>> VenueKeys { get; init; } =
         new Dictionary<string, IReadOnlyList<string>>();
 
+    /// Each listed venue's own town (whatever locality it was listed under), kind and site.
+    public IReadOnlyDictionary<
+        string,
+        (string? Locality, string Kind, Guid? Parent)
+    > VenuePlaces { get; init; } = new Dictionary<string, (string?, string, Guid?)>();
+
     public const string Instructions = """
         You normalise the venues of live concert recordings: one physical place, whatever the
         recordings call it, shared by every band that played there. You get a few families of
@@ -560,6 +576,7 @@ internal sealed class VenueRequest
         var venueNames = new Dictionary<string, string>();
         var venueLocality = new Dictionary<string, string>();
         var venueKeys = new Dictionary<string, IReadOnlyList<string>>();
+        var venuePlaces = new Dictionary<string, (string?, string, Guid?)>();
         var spellings = new Dictionary<string, Spelling>();
         var spellingIds = new Dictionary<string, string>();
         var spellingLocality = new Dictionary<string, string>();
@@ -616,6 +633,7 @@ internal sealed class VenueRequest
                     venueIds[id] = v.Uuid;
                     venueNames[id] = v.Name;
                     venueLocality[id] = lid;
+                    venuePlaces[id] = (v.LocalityKey, v.Kind, v.ParentUuid);
                     venueKeys[id] = namesOf[v.Uuid]
                         .Append(VenueNormalizer.Key(v.Name) ?? "")
                         .ToList();
@@ -675,6 +693,7 @@ internal sealed class VenueRequest
             SpellingLocality = spellingLocality,
             Places = places,
             VenueKeys = venueKeys,
+            VenuePlaces = venuePlaces,
         };
     }
 

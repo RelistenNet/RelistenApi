@@ -196,7 +196,10 @@ public static class TrackMatcher
                         ? part.Qualifiers
                         : [.. part.Qualifiers, decision.Qualifier];
                 // A part naming several songs (an unparsed "space wrangler walkin") becomes one
-                // record per song, each segueing into the next.
+                // record per song, each segueing into the next; a soundcheck covers them all.
+                IReadOnlyList<string> everySong = qualifiers.Contains("soundcheck")
+                    ? ["soundcheck"]
+                    : [];
                 var songs =
                     decision.Songs.Count == 0
                         ? [(Guid?)null]
@@ -211,7 +214,7 @@ public static class TrackMatcher
                             songs[i],
                             part.Text,
                             last ? part.SegueAfter : true,
-                            last ? qualifiers : [],
+                            last ? qualifiers : everySong,
                             decision.Confidence,
                             Basis: decision.Basis,
                             Notes: last ? part.Notes : []

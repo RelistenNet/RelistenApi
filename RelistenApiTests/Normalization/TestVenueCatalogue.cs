@@ -13,8 +13,9 @@ namespace RelistenApiTests.Normalization;
 
 /// A venue model that answers New York from the request alone: Madison Square Garden (short
 /// name MSG) is a new site, its Theater a room inside it.
-/// twin: it also proposes Madison Square Garden a second time, for "MSG".
-internal sealed class ScriptedVenueModel(bool twin = false) : ICatalogueModel
+/// twin: it also proposes Madison Square Garden a second time, for "MSG". stages: the Garden
+/// and the Beacon Theatre each get a room named "Main Stage" ("MSG" goes to the Beacon's).
+internal sealed class ScriptedVenueModel(bool twin = false, bool stages = false) : ICatalogueModel
 {
     public string ModelId => "scripted-venues-1";
 
@@ -42,6 +43,19 @@ internal sealed class ScriptedVenueModel(bool twin = false) : ICatalogueModel
                     ("The Theater at Madison Square Garden", "official")
                 )
             );
+            if (stages)
+            {
+                newVenues.Add(
+                    Venue("n4", l, "Beacon Theatre", "site", null, ("The Beacon", "short"))
+                );
+                newVenues.Add(
+                    Venue("n5", l, "Main Stage", "room", "n1", ("Garden Stage", "short"))
+                );
+                newVenues.Add(
+                    Venue("n6", l, "Main Stage", "room", "n4", ("Beacon Stage", "short"))
+                );
+            }
+
             if (twin)
             {
                 newVenues.Add(
@@ -58,7 +72,9 @@ internal sealed class ScriptedVenueModel(bool twin = false) : ICatalogueModel
                         ["id"] = (string)s["id"]!,
                         ["spelling_text"] = text,
                         ["venue"] =
-                            text.Contains("Theater") ? "n2"
+                            stages && text.Contains("Theater") ? "n5"
+                            : stages && text == "MSG" ? "n6"
+                            : text.Contains("Theater") ? "n2"
                             : twin && text == "MSG" ? "n3"
                             : "n1",
                         ["not_a_venue"] = false,
@@ -407,5 +423,68 @@ public class TestVenueCatalogue
         );
         await match.RunAsync(artists, CancellationToken.None);
         (await Strings(open)).Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task RoomsOfOneNameInDifferentSitesStayApart()
+    {
+        var database = new DbServiceNormalizationDatabase(db);
+        await new VenueMatch(database).RunAsync(artists, CancellationToken.None);
+        await new VenueLlm(database, new ScriptedVenueModel(stages: true)).RunChunkAsync(
+            artists,
+            [],
+            CancellationToken.None
+        );
+
+        (
+            await Strings(
+                "SELECT r.name || ' in ' || p.name FROM norm.venues r JOIN norm.venues p ON p.uuid = r.parent_uuid ORDER BY 1"
+            )
+        )
+            .Should()
+            .Equal("Main Stage in Beacon Theatre", "Main Stage in Madison Square Garden");
+    }
+
+    [Test]
+    public async Task ANamesakeInAnotherTownIsNoTwin()
+    {
+        var database = new DbServiceNormalizationDatabase(db);
+        await db.WithWriteConnection(async c =>
+        {
+            var connection = (Npgsql.NpgsqlConnection)c;
+            await using var tx = await connection.BeginTransactionAsync();
+            var store = await NormStore.BeginAsync(connection, tx, AuthorTypes.Llm, "venue-llm@5");
+            var brooklyn = Guid.CreateVersion7();
+            await store.WriteVenuesAsync([
+                new VenueRecord(
+                    brooklyn,
+                    "Madison Square Garden",
+                    City: "Brooklyn",
+                    Region: "NY",
+                    Country: "US",
+                    Confidence: 0.9f
+                ),
+            ]);
+            await store.WriteVenueNamesAsync([
+                new VenueNameRecord(brooklyn, "Madison Square Garden", Confidence: 0.9f),
+            ]);
+            await tx.CommitAsync();
+            return 0;
+        });
+
+        await new VenueMatch(database).RunAsync(artists, CancellationToken.None);
+        await new VenueLlm(database, new ScriptedVenueModel()).RunChunkAsync(
+            artists,
+            [],
+            CancellationToken.None
+        );
+
+        (
+            await Strings(
+                "SELECT city FROM norm.venues WHERE name = 'Madison Square Garden' ORDER BY 1"
+            )
+        )
+            .Should()
+            .Equal("Brooklyn", "New York");
     }
 }

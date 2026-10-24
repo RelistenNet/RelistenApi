@@ -1,4 +1,4 @@
--- RelistenNet/string-theory ddl/002_norm.sql (WS-5 revision, 2026-10-23), copied verbatim.
+-- RelistenNet/string-theory ddl/002_norm.sql (WS-5 revision, 2026-10-24), copied verbatim.
 
 -- The catalogue: songs, and venues since 2026-10-23 (docs/catalogue.md). Revised 2026-10-19 (WS-5): plain tables are the
 -- source of truth, replacing the claims, predicate registry and projections ratified with
@@ -251,12 +251,20 @@ CREATE INDEX ON norm.show_venues (venue_uuid);
 
 -- The name a venue had on a date: its official name whose period covers the date, else today's.
 CREATE FUNCTION norm.venue_name_on(venue uuid, on_date date) RETURNS text LANGUAGE sql STABLE AS $$
+    -- Names stay on the rows of venues merged into this one: their periods count too, the
+    -- venue's own first where periods overlap.
+    WITH RECURSIVE merged AS (
+        SELECT venue AS uuid, 0 AS depth
+        UNION ALL
+        SELECT m.uuid, f.depth + 1 FROM norm.venues m JOIN merged f ON m.merged_into = f.uuid
+        WHERE f.depth < 20
+    )
     SELECT coalesce(
-        (SELECT n.name FROM norm.venue_names n
-         WHERE n.venue_uuid = venue AND n.kind = 'official'
+        (SELECT n.name FROM norm.venue_names n JOIN merged f ON f.uuid = n.venue_uuid
+         WHERE n.kind = 'official'
            AND n.valid_from <= on_date
            AND (n.valid_to IS NULL OR on_date < n.valid_to)
-         ORDER BY n.valid_from DESC LIMIT 1),
+         ORDER BY f.depth, n.valid_from DESC LIMIT 1),
         (SELECT v.name FROM norm.venues v WHERE v.uuid = venue))
 $$;
 
