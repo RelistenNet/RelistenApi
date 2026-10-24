@@ -247,6 +247,7 @@ public class TestVenueMatcher
     [TestCase("tree house brewing", "tree house brewery", true)]
     [TestCase("cafe 210 west", "cafe 10 west", false)]
     [TestCase("vic", "vic theater", true)]
+    [TestCase("rose records", "roseboom recording", false)]
     [TestCase("continential arena", "continental airlines arena", true)]
     public void NamesThatCouldBeOnePlace(string a, string b, bool expected)
     {
@@ -667,7 +668,6 @@ public class TestVenueMatcher
             State([
                 Row("Credit One Stadium", "Chicago, IL", 6, "setlistfm:4bd6ca4a"),
                 Row("Family Circle Stadium", "Charleston, SC", 3, "setlistfm:4bd6ca4a"),
-                Row("Family Circle Stadium", "Daniel Island, SC", 2, "setlistfm:4bd6ca4a"),
                 Row("Credit One Stadium", "Charleston, SC", 2, "setlistfm:4bd6ca4a"),
             ])
         );
@@ -689,5 +689,19 @@ public class TestVenueMatcher
         rows.Select(r => r.Locality!.City)
             .Should()
             .Equal("South Burlington", "Burlington", "Winooski");
+    }
+
+    [Test]
+    public void ANameInTwoTownsOfAStateIsTheModelsEvenWithAProviderId()
+    {
+        var plan = VenueMatcher.Match(
+            State([
+                Row("Yankee Stadium", "New York, NY", 8, "setlistfm:1bd6a1a1"),
+                Row("Yankee Stadium", "The Bronx, NY", 3, "setlistfm:2bd6a1a2"),
+            ])
+        );
+
+        plan.NewVenues.Should().BeEmpty();
+        plan.Left.Should().HaveCount(2);
     }
 }

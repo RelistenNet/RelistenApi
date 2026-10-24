@@ -53,7 +53,7 @@ public static partial class VenueNormalizer
     public static string? Key(string? name)
     {
         // A bracketed note is about the recording, not the place ("[24bit]", "[SBD]").
-        var key = Normalize(Bracketed().Replace(name ?? "", " "));
+        var key = Normalize(RecordingNotes().Replace(Bracketed().Replace(name ?? "", " "), " "));
         if (key.Length == 0 || Placeholders.Contains(key))
         {
             return null;
@@ -70,6 +70,65 @@ public static partial class VenueNormalizer
 
     [System.Text.RegularExpressions.GeneratedRegex(@"\[[^\]]*\]")]
     private static partial System.Text.RegularExpressions.Regex Bracketed();
+
+    // Notes about the recording or the set written into a venue name: "24 bit source",
+    // "FOB ORTF", "SBD", "late show", "1st set".
+    [System.Text.RegularExpressions.GeneratedRegex(
+        @"\b(\d+\s*-?\s*bit|sbd|aud|fob|ortf|matrix|flac|mp3|source|(early|late)\s+shows?|(1st|2nd|3rd|first|second|third)\s+set)\b",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase
+    )]
+    private static partial System.Text.RegularExpressions.Regex RecordingNotes();
+
+    /// The words of a place's town, state and country, which say nothing about which venue
+    /// a name is: "chicago", "il", "illinois", "us", "usa".
+    public static IReadOnlySet<string> PlaceWords(Locality locality)
+    {
+        var words = RegionWords(locality).ToHashSet();
+        words.UnionWith(Normalize(locality.City).Split(' '));
+        words.ExceptWith(["of", "the", "new", "north", "south", "east", "west", "united"]);
+        return words;
+    }
+
+    /// A name without the place written into it: the town as a phrase ("little rock", never
+    /// "rock" alone), the state's and country's words one by one. Null when nothing is left.
+    public static string? WithoutPlace(string key, Locality locality)
+    {
+        var city = Normalize(locality.City);
+        var rest = $" {key} ".Replace($" {city} ", " ", StringComparison.Ordinal);
+        var region = RegionWords(locality);
+        var words = rest.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Where(w => !region.Contains(w))
+            .ToList();
+        return words.Count > 0 ? string.Join(' ', words) : null;
+    }
+
+    private static HashSet<string> RegionWords(Locality locality)
+    {
+        var words = new HashSet<string>();
+        if (locality.Region != null)
+        {
+            words.Add(locality.Region.ToLowerInvariant());
+            foreach (
+                var r in RegionTable.Where(r =>
+                    r.Code == locality.Region && r.Country == locality.Country
+                )
+            )
+            {
+                words.UnionWith(r.Name.Split(' '));
+            }
+        }
+
+        if (locality.Country != null)
+        {
+            words.Add(locality.Country.ToLowerInvariant());
+            words.UnionWith(
+                Countries.Where(c => c.Value == locality.Country).SelectMany(c => c.Key.Split(' '))
+            );
+        }
+
+        words.ExceptWith(["of", "the"]);
+        return words;
+    }
 
     /// Letters written with periods are one word: "U.S." → "us", "S.M.U." → "smu" (and never
     /// "university s").
@@ -107,7 +166,19 @@ public static partial class VenueNormalizer
     /// The words that name the place: spellings and abbreviations folded ("St." and "Street",
     /// "Amph." and "Ampitheatre"), possessives and plurals dropped ("Smith's", "Red Rocks"),
     /// and the small words gone ("the", "at", "of").
-    public static IReadOnlyList<string> Words(string key)
+    // Memoised: the matcher compares names pairwise, hundreds of thousands of times.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<
+        string,
+        IReadOnlyList<string>
+    > WordsOf = new();
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<
+        string,
+        IReadOnlyList<string>
+    > IdentitiesOf = new();
+
+    public static IReadOnlyList<string> Words(string key) => WordsOf.GetOrAdd(key, ComputeWords);
+
+    private static IReadOnlyList<string> ComputeWords(string key)
     {
         var words = key.Split(' ')
             .Select(w => Canon.GetValueOrDefault(w, w))
@@ -121,7 +192,10 @@ public static partial class VenueNormalizer
     /// without spaces ("1stBank Center", "Barrel House" and "9:30 Club" are "1st Bank Center",
     /// "Barrelhouse" and "930 Club"), and the words in any order ("Wakarusa - Main Stage" is
     /// "Main Stage - Wakarusa", "Notre Dame University" is "University of Notre Dame").
-    public static IReadOnlyList<string> Identities(string key)
+    public static IReadOnlyList<string> Identities(string key) =>
+        IdentitiesOf.GetOrAdd(key, ComputeIdentities);
+
+    private static IReadOnlyList<string> ComputeIdentities(string key)
     {
         var words = Words(key);
         return

@@ -69,7 +69,7 @@ public sealed partial class VenueState
 
     /// Every tape of a show was recorded at one place. For each unmapped row: how many show
     /// dates it is used on (by a show or a tape), the venues other rows of those shows are
-    /// placed on (→ dates shared), and the unmapped rows it shares a show with.
+    /// placed on (→ dates shared), and the unmapped rows it shares two shows or more with.
     public IReadOnlyDictionary<Guid, int> ShowDates { get; init; } = new Dictionary<Guid, int>();
 
     public IReadOnlyDictionary<Guid, IReadOnlyDictionary<Guid, int>> SameShows { get; init; } =
@@ -250,10 +250,12 @@ public sealed partial class VenueState
                                     v => v.Select(t => t.Date).Distinct().Count()
                                 )
                 ),
+            // Two shows at least: one mis-dated tape, or a second gig the same night, is no link.
             SameShowRows = together
                 .Where(t => t.Venue == null && t.Other != t.Row)
-                .Select(t => t.Row.CompareTo(t.Other) < 0 ? (t.Row, t.Other) : (t.Other, t.Row))
-                .Distinct()
+                .GroupBy(t => t.Row.CompareTo(t.Other) < 0 ? (t.Row, t.Other) : (t.Other, t.Row))
+                .Where(g => g.Select(t => t.Date).Distinct().Count() >= 2)
+                .Select(g => g.Key)
                 .ToList(),
         };
     }
@@ -509,18 +511,25 @@ public sealed partial class VenueState
                     return r;
                 }
 
-                var city = VenueNormalizer.Normalize(l.City);
-                var town = towns[l.RegionKey!]
-                    .Where(t =>
-                        t.Key != city
-                        && city.EndsWith(" " + t.Key, StringComparison.Ordinal)
-                        && city[..^(t.Key.Length + 1)].Split(' ') is var front
-                        && !(front.Length == 1 && TownPrefixes.Contains(front[0]))
-                    )
-                    .OrderByDescending(t => t.Key.Length)
-                    .Select(t => t.Value)
-                    .FirstOrDefault();
-                return town == null ? r : r with { Locality = town };
+                // The longest run of its last words that is another town of the state (a set
+                // lookup per suffix, not a scan of every town).
+                var words = VenueNormalizer.Normalize(l.City).Split(' ');
+                var inRegion = towns[l.RegionKey!];
+                for (var start = 1; start < words.Length; start++)
+                {
+                    var front = words[..start];
+                    if (front.Length == 1 && TownPrefixes.Contains(front[0]))
+                    {
+                        continue;
+                    }
+
+                    if (inRegion.TryGetValue(string.Join(' ', words[start..]), out var town))
+                    {
+                        return r with { Locality = town };
+                    }
+                }
+
+                return r;
             })
             .ToList();
     }
@@ -563,6 +572,12 @@ public sealed partial class VenueState
     internal static List<LegacyVenue> WithoutLoneTowns(IReadOnlyList<LegacyVenue> rows)
     {
         var trusted = rows.Where(r => r.Key != null && r.Locality is { Trusted: true }).ToList();
+        var idsByTownName = trusted
+            .Where(r => r.ExternalId != null)
+            .ToLookup(
+                r => (r.Locality!.Key, VenueNormalizer.Identities(r.Key!)[0]),
+                r => r.ExternalId
+            );
         var namesInTown = trusted
             .GroupBy(r => r.Locality!.Key)
             .ToDictionary(
@@ -600,14 +615,7 @@ public sealed partial class VenueState
                 // Winooski, then South Burlington): the towns stay apart.
                 var theirIds =
                     elsewhere.Count == 1
-                        ? trusted
-                            .Where(o =>
-                                o.Locality!.Key == elsewhere[0].Locality.Key
-                                && VenueNormalizer.Identities(o.Key!)[0] == name
-                                && o.ExternalId != null
-                            )
-                            .Select(o => o.ExternalId)
-                            .ToHashSet()
+                        ? idsByTownName[(elsewhere[0].Locality.Key, name)].ToHashSet()
                         : [];
                 var otherBuilding =
                     r.ExternalId != null && theirIds.Count > 0 && !theirIds.Contains(r.ExternalId);

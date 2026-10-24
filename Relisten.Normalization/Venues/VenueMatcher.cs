@@ -31,7 +31,7 @@ public sealed record VenuePlan(
 ///    suburb) goes to the LLM whole.
 public static class VenueMatcher
 {
-    public const string Author = "venue-matcher@2.6.0";
+    public const string Author = "venue-matcher@2.7.0";
     public const float Exact = 0.95f;
     public const float Likely = 0.9f;
 
@@ -43,6 +43,13 @@ public static class VenueMatcher
             PlaceOnLearnedIds(PlaceOnKnown(state, plan), plan),
             plan
         );
+        // One name in two towns of a state (a suburb, a move, or two places): never created
+        // here; each town's family goes to the LLM, which sees the other as a namesake.
+        plan.InSeveralTowns = open.Where(r => r.Locality is { Trusted: true })
+            .GroupBy(r => (VenueNormalizer.Identities(r.Key!)[0], r.Locality!.RegionKey))
+            .Where(g => g.Select(r => r.Locality!.Key).Distinct().Count() > 1)
+            .Select(g => g.Key)
+            .ToHashSet();
         foreach (var family in Families(open, state.SameShowRows))
         {
             if (!CreateIfUnambiguous(family, plan))
@@ -244,7 +251,6 @@ public static class VenueMatcher
                 VenueNormalizer.Identities(open[i].Key!).Select(id => (Id: id, Row: i))
             )
             .ToList();
-        UnionAll(named.GroupBy(n => (n.Id, open[n.Row].Locality!.RegionKey), n => n.Row));
         UnionAll(
             named.GroupBy(
                 n => (n.Id, VenueNormalizer.Normalize(open[n.Row].Locality!.City)),
@@ -261,28 +267,35 @@ public static class VenueMatcher
         foreach (var town in trusted.GroupBy(i => open[i].Locality!.Key))
         {
             var locality = open[town.First()].Locality!;
-            var townWords = VenueNormalizer.Normalize(locality.City).Split(' ').ToHashSet();
-            if (locality.Region != null)
-            {
-                townWords.Add(locality.Region.ToLowerInvariant());
-            }
+            var townWords = VenueNormalizer.PlaceWords(locality);
 
+            // A word links names only when few names in the town use it: in New York,
+            // "bowery" or "garden" would chain hundreds of places into one family.
+            var rare = town.Select(i => open[i].Key!)
+                .Distinct()
+                .SelectMany(k => VenueNormalizer.Words(k).Distinct())
+                .GroupBy(w => w)
+                .Where(g => g.Count() <= RareWordNames)
+                .Select(g => g.Key)
+                .ToHashSet();
+            // Names are compared without the town's, state's and country's words: "Chicago, IL"
+            // written into a name ("Cubby Bear Chicago IL") is no part of it, and a name that is
+            // only a town ("chicago il") is like nothing. Shared words link names only in towns
+            // of modest size: in Chicago they are mostly streets ("michigan", "wells").
             var keys = town.GroupBy(i => open[i].Key!)
-                .Select(g => (Key: g.Key, Local: WithoutTown(g.Key, townWords), Row: g.First()))
+                .Select(g => (Local: VenueNormalizer.WithoutPlace(g.Key, locality), Row: g.First()))
+                .Where(k => k.Local != null)
                 .ToList();
+            var byWord = keys.Count <= WordLinkTownNames;
             for (var i = 0; i < keys.Count; i++)
             {
                 for (var j = i + 1; j < keys.Count; j++)
                 {
+                    var (a, b) = (keys[i].Local!, keys[j].Local!);
                     if (
-                        Alike(keys[i].Key, keys[j].Key)
-                        || ShareADistinctiveWord(keys[i].Key, keys[j].Key, townWords)
-                        || (
-                            keys[i].Local is { } a
-                            && keys[j].Local is { } b
-                            && (a != keys[i].Key || b != keys[j].Key)
-                            && (VenueNormalizer.SameName(a, b) || Alike(a, b))
-                        )
+                        VenueNormalizer.SameName(a, b)
+                        || Alike(a, b)
+                        || (byWord && ShareADistinctiveWord(a, b, townWords, rare))
                     )
                     {
                         Union(keys[i].Row, keys[j].Row);
@@ -361,11 +374,24 @@ public static class VenueMatcher
         var (small, large) = wa.Count <= wb.Count ? (wa, wb) : (wb, wa);
         if (
             small.All(w => large.Any(l => WordAlike(w, l)))
+            // One word abbreviated is plausible ("U. of Minn."); two is a coincidence ("rose
+            // records" is not "roseboom recording").
+            && small.Count(w =>
+                !large.Any(l => WordAlike(w, l) && !Abbreviates(w, l) && !Abbreviates(l, w))
+            ) <= 1
             && (
                 small.Count == large.Count
                 || (
                     small.Any(w =>
-                        Distinctive(w) && large.Any(l => l == w || (w.Length >= 7 && Typo(w, l)))
+                        Distinctive(w)
+                        && large.Any(l =>
+                            l == w
+                            || (
+                                w.Length >= 7
+                                && TitleGrouper.BoundedLevenshtein(w, l, 1)
+                                    <= (w.Length >= 10 ? 2 : 1)
+                            )
+                        )
                     ) && (small.Count >= 2 || small[0].Length >= 5)
                 )
             )
@@ -427,25 +453,26 @@ public static class VenueMatcher
 
     /// Two names in one town sharing a word that names a place ("Schottenstein Center, OSU" /
     /// "Jerome Schottenstein Center"): not a generic word, the town's own name or a number.
+    internal const int RareWordNames = 3;
+    internal const int WordLinkTownNames = 60;
+
+    /// rare: when given, only these words count (the town's rare ones).
     internal static bool ShareADistinctiveWord(
         string a,
         string b,
-        IReadOnlySet<string> townWords
+        IReadOnlySet<string> townWords,
+        IReadOnlySet<string>? rare = null
     ) =>
         VenueNormalizer
             .Words(a)
             .Intersect(VenueNormalizer.Words(b))
             .Any(w =>
-                w.Length >= 4 && Distinctive(w) && !townWords.Contains(w) && !w.Any(char.IsDigit)
+                w.Length >= 4
+                && Distinctive(w)
+                && !townWords.Contains(w)
+                && !w.Any(char.IsDigit)
+                && (rare == null || rare.Contains(w))
             );
-
-    /// The name without its town's words ("Hampton Coliseum" in Hampton is "Coliseum",
-    /// "Prudential Center Newark NJ" in Newark is "Prudential Center"); null when nothing is left.
-    private static string? WithoutTown(string key, IReadOnlySet<string> townWords)
-    {
-        var words = key.Split(' ').Where(w => !townWords.Contains(w)).ToList();
-        return words.Count > 0 ? string.Join(' ', words) : null;
-    }
 
     /// "starr" → "star": a doubled letter written once.
     private static string Undoubled(string w) =>
@@ -554,6 +581,20 @@ public static class VenueMatcher
     /// with several names, or a name in several towns of a state, is the LLM's.
     private static bool CreateIfUnambiguous(IReadOnlyList<LegacyVenue> family, PlanBuilder plan)
     {
+        // A name in two towns of the state is the LLM's, even with a provider id: providers
+        // have their own duplicates (Yankee Stadium under New York and The Bronx).
+        if (
+            family.Any(r =>
+                r.Locality is { Trusted: true }
+                && plan.InSeveralTowns.Contains(
+                    (VenueNormalizer.Identities(r.Key!)[0], r.Locality!.RegionKey)
+                )
+            )
+        )
+        {
+            return false;
+        }
+
         // One external id across the family: one place, however its rows spell it.
         var ids = family.Select(r => r.ExternalId).Where(i => i != null).Distinct().ToList();
         if (
@@ -636,24 +677,72 @@ public static class VenueMatcher
         private readonly List<VenueNameRecord> names = [];
         private readonly List<VenueExternalIdRecord> ids = [];
         private readonly List<VenueEvidenceRecord> evidence = [];
-        private readonly HashSet<(string Key, Guid Venue)> known = state
-            .Names.SelectMany(g => g.Select(v => (g.Key, v)))
-            .ToHashSet();
+        private readonly HashSet<(string Key, Guid Venue)> known = [];
+        private readonly Dictionary<Guid, List<string>> namesByVenue = [];
+        private readonly Dictionary<string, HashSet<Guid>> venuesByIdentity = [];
         private readonly HashSet<(string, string)> idsAdded = [];
+        private bool loaded;
 
         public List<IReadOnlyList<LegacyVenue>> Left { get; } = [];
         public List<LegacyVenue> Unplaced { get; } = [];
+        public HashSet<(string, string?)> InSeveralTowns { get; set; } = [];
 
-        public IEnumerable<string> NamesOf(Guid venue) =>
-            known.Where(n => n.Venue == venue).Select(n => n.Key);
+        // Indexed both ways: a scan of every known name per row is hours at production scale.
+        private bool Remember(string key, Guid venue)
+        {
+            if (!known.Add((key, venue)))
+            {
+                return false;
+            }
 
-        public bool KnownInRegion(string regionKey, string key) =>
-            known.Any(n =>
-                VenueNormalizer.SameName(n.Key, key)
-                && state.Venues.TryGetValue(n.Venue, out var v)
-                && v.City != null
-                && new Locality(v.City, v.Region, v.Country).RegionKey == regionKey
+            (namesByVenue.TryGetValue(venue, out var list) ? list : namesByVenue[venue] = []).Add(
+                key
             );
+            foreach (var id in VenueNormalizer.Identities(key))
+            {
+                (
+                    venuesByIdentity.TryGetValue(id, out var set) ? set : venuesByIdentity[id] = []
+                ).Add(venue);
+            }
+
+            return true;
+        }
+
+        private void Load()
+        {
+            if (loaded)
+            {
+                return;
+            }
+
+            loaded = true;
+            foreach (var g in state.Names)
+            {
+                foreach (var v in g)
+                {
+                    Remember(g.Key, v);
+                }
+            }
+        }
+
+        public IEnumerable<string> NamesOf(Guid venue)
+        {
+            Load();
+            return namesByVenue.TryGetValue(venue, out var list) ? list : [];
+        }
+
+        public bool KnownInRegion(string regionKey, string key)
+        {
+            Load();
+            return VenueNormalizer
+                .Identities(key)
+                .SelectMany(id => venuesByIdentity.GetValueOrDefault(id) ?? [])
+                .Any(venue =>
+                    state.Venues.TryGetValue(venue, out var v)
+                    && v.City != null
+                    && new Locality(v.City, v.Region, v.Country).RegionKey == regionKey
+                );
+        }
 
         private readonly Dictionary<(string, string), Guid> learned = [];
 
@@ -663,7 +752,8 @@ public static class VenueMatcher
         public void Place(LegacyVenue row, Guid venue, float confidence)
         {
             evidence.Add(new VenueEvidenceRecord(row.Uuid, venue, confidence));
-            if (row.Key != null && known.Add((row.Key, venue)))
+            Load();
+            if (row.Key != null && Remember(row.Key, venue))
             {
                 names.Add(
                     new VenueNameRecord(

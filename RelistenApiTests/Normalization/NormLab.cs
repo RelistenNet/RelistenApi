@@ -444,12 +444,22 @@ public class NormLab
         var db = Db(labUrl);
         await using var connection = await Open(db);
         var artists = (await Artists(connection)).Select(a => a.Uuid).ToList();
+        var watch = Stopwatch.StartNew();
         var state = await Relisten.Normalization.Venues.VenueState.LoadAsync(
             connection,
             null,
             artists
         );
+        TestContext.Out.WriteLine($"load {watch.Elapsed.TotalSeconds:F1}s");
+        watch.Restart();
+        var families = Relisten.Normalization.Venues.VenueMatcher.Families(
+            state.Unmapped.Where(r => r.Key != null).ToList(),
+            state.SameShowRows
+        );
+        TestContext.Out.WriteLine($"families {watch.Elapsed.TotalSeconds:F1}s ({families.Count})");
+        watch.Restart();
         var plan = Relisten.Normalization.Venues.VenueMatcher.Match(state);
+        TestContext.Out.WriteLine($"match {watch.Elapsed.TotalSeconds:F1}s");
         bool Wanted(Relisten.Normalization.Venues.LegacyVenue r) =>
             r.Name.Contains(filter, StringComparison.OrdinalIgnoreCase);
         var placed = plan.Evidence.ToDictionary(e => e.LegacyVenueUuid, e => e.VenueUuid);
@@ -475,6 +485,77 @@ public class NormLab
                             ? $"left, family of {family.Count}: {string.Join(" / ", family.Select(r => r.Key).Distinct().Take(8))}"
                         : "unplaced"
                     )
+            );
+        }
+    }
+
+    /// Which rule links the names of one town (NORM_LAB_TOWN, a locality key): diagnosis
+    /// for families that grow too large.
+    [Test, Explicit("Prints a town's family links; run deliberately")]
+    public async Task VenueTownLinks()
+    {
+        var town = Environment.GetEnvironmentVariable("NORM_LAB_TOWN") ?? "chicago|il|US";
+        var db = Db(labUrl);
+        await using var connection = await Open(db);
+        var artists = (await Artists(connection)).Select(a => a.Uuid).ToList();
+        var state = await Relisten.Normalization.Venues.VenueState.LoadAsync(
+            connection,
+            null,
+            artists
+        );
+        var rows = state.Unmapped.Where(r => r.Key != null && r.Locality?.Key == town).ToList();
+        var keys = rows.Select(r => r.Key!).Distinct().ToList();
+        var locality = rows[0].Locality!;
+        var townWords = Relisten.Normalization.Venues.VenueNormalizer.PlaceWords(locality);
+        var rare = keys.SelectMany(k =>
+                Relisten.Normalization.Venues.VenueNormalizer.Words(k).Distinct()
+            )
+            .GroupBy(w => w)
+            .Where(g => g.Count() <= 3)
+            .Select(g => g.Key)
+            .ToHashSet();
+        var counts = new Dictionary<string, int>();
+        var samples = new Dictionary<string, List<string>>();
+        void Count(string rule, string a, string b)
+        {
+            counts[rule] = counts.GetValueOrDefault(rule) + 1;
+            (samples.TryGetValue(rule, out var l) ? l : samples[rule] = []).Add($"{a} ~ {b}");
+        }
+        var local = keys.Select(k =>
+                Relisten.Normalization.Venues.VenueNormalizer.WithoutPlace(k, locality)
+            )
+            .Where(k => k != null)
+            .Select(k => k!)
+            .Distinct()
+            .ToList();
+        var byWord = local.Count <= Relisten.Normalization.Venues.VenueMatcher.WordLinkTownNames;
+        for (var i = 0; i < local.Count; i++)
+        for (var j = i + 1; j < local.Count; j++)
+        {
+            var (a, b) = (local[i], local[j]);
+            if (Relisten.Normalization.Venues.VenueNormalizer.SameName(a, b))
+                Count("same", a, b);
+            else if (Relisten.Normalization.Venues.VenueMatcher.Alike(a, b))
+                Count("alike", a, b);
+            else if (
+                byWord
+                && Relisten.Normalization.Venues.VenueMatcher.ShareADistinctiveWord(
+                    a,
+                    b,
+                    townWords,
+                    rare
+                )
+            )
+                Count("word", a, b);
+        }
+        var ids = rows.Select(r => r.Uuid).ToHashSet();
+        TestContext.Out.WriteLine(
+            $"{town}: {keys.Count} names, same-show links {state.SameShowRows.Count(p => ids.Contains(p.A) && ids.Contains(p.B))}"
+        );
+        foreach (var (rule, n) in counts)
+        {
+            TestContext.Out.WriteLine(
+                $"  {rule}: {n} — {string.Join(" | ", samples[rule].OrderBy(_ => Guid.NewGuid()).Take(12))}"
             );
         }
     }
