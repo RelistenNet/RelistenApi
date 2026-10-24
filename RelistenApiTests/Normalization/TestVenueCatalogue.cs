@@ -4,6 +4,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Relisten;
+using Relisten.Normalization;
 using Relisten.Normalization.Songs;
 using Relisten.Normalization.Venues;
 using Relisten.Services.Normalization;
@@ -152,8 +153,8 @@ public class TestVenueCatalogue
                 DO $$
                 DECLARE r uuid := gen_random_uuid();
                 BEGIN
-                    INSERT INTO norm.runs(uuid, author_type, author_ref) VALUES (r, 'algorithm', 'test-reset@1');
-                    PERFORM set_config('norm.author_type', 'algorithm', true),
+                    INSERT INTO norm.runs(uuid, author_type, author_ref) VALUES (r, 'moderator', 'test-reset@1');
+                    PERFORM set_config('norm.author_type', 'moderator', true),
                             set_config('norm.author_ref', 'test-reset@1', true),
                             set_config('norm.run_uuid', r::text, true);
                     DELETE FROM norm.review_items WHERE subject = 'venue';
@@ -334,5 +335,77 @@ public class TestVenueCatalogue
                 """
             )
         ).Should().Equal("MSG (short)", "Madison Square Garden (spelling)", "The Garden (short)");
+    }
+
+    [Test]
+    public async Task OneNameInTwoTownsOfAStateIsAQuestionUntilAPersonAnswersIt()
+    {
+        var database = new DbServiceNormalizationDatabase(db);
+        async Task As(
+            string authorType,
+            string authorRef,
+            Func<Relisten.Normalization.NormStore, Task> write
+        )
+        {
+            await db.WithWriteConnection(async c =>
+            {
+                var connection = (Npgsql.NpgsqlConnection)c;
+                await using var tx = await connection.BeginTransactionAsync();
+                await write(
+                    await Relisten.Normalization.NormStore.BeginAsync(
+                        connection,
+                        tx,
+                        authorType,
+                        authorRef
+                    )
+                );
+                await tx.CommitAsync();
+                return 0;
+            });
+        }
+
+        await As(
+            AuthorTypes.Llm,
+            "venue-llm@5",
+            store =>
+                store.WriteVenuesAsync([
+                    new VenueRecord(
+                        Guid.CreateVersion7(),
+                        "Cat's Cradle",
+                        City: "Carrboro",
+                        Region: "NC",
+                        Country: "US",
+                        Confidence: 0.9f
+                    ),
+                    new VenueRecord(
+                        Guid.CreateVersion7(),
+                        "Cat's Cradle",
+                        City: "Chapel Hill",
+                        Region: "NC",
+                        Country: "US",
+                        Confidence: 0.9f
+                    ),
+                ])
+        );
+        var match = new VenueMatch(database);
+        await match.RunAsync(artists, CancellationToken.None);
+        await match.RunAsync(artists, CancellationToken.None);
+        const string open =
+            "SELECT title FROM norm.review_items WHERE key LIKE 'same:%' AND resolved_at IS NULL";
+        (await Strings(open)).Should().ContainSingle().Which.Should().StartWith("Cat's Cradle — ");
+
+        // "Two places": answered, and not asked again.
+        var key = (
+            await Strings(
+                "SELECT key FROM norm.review_items WHERE key LIKE 'same:%' AND resolved_at IS NULL"
+            )
+        ).Single();
+        await As(
+            AuthorTypes.User,
+            "expert",
+            store => store.CloseVenueReviewItemsAsync([key], "two places")
+        );
+        await match.RunAsync(artists, CancellationToken.None);
+        (await Strings(open)).Should().BeEmpty();
     }
 }

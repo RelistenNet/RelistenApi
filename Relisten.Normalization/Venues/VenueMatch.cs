@@ -61,6 +61,7 @@ public sealed class VenueMatch(INormalizationDatabase db)
                 .ToList(),
             "placed"
         );
+        await AskAboutNamesakesAsync(connection, tx, store);
         await store.FinishAsync();
         await tx.CommitAsync(cancellationToken);
 
@@ -70,6 +71,80 @@ public sealed class VenueMatch(INormalizationDatabase db)
             plan.Left.Sum(f => f.Count),
             plan.Unplaced.Count,
             shows
+        );
+    }
+
+    /// One name in two towns of one state is a suburb, a move or two places: no rule can tell,
+    /// so each such name is an open question for a person ("Cat's Cradle — Carrboro, NC /
+    /// Chapel Hill, NC"). A question a person has answered isn't asked again; one whose venues
+    /// no longer share the name is closed.
+    private static async Task AskAboutNamesakesAsync(
+        Npgsql.NpgsqlConnection connection,
+        Npgsql.NpgsqlTransaction tx,
+        NormStore store
+    )
+    {
+        var venues = await connection.QueryAsync<(
+            Guid Uuid,
+            string Name,
+            string City,
+            string? Region,
+            string? Country,
+            int Rows
+        )>(
+            """
+            SELECT v.uuid, v.name, v.city, v.region, v.country,
+                   (SELECT count(*) FROM norm.venue_evidence e WHERE e.venue_uuid = v.uuid)::int
+            FROM norm.venues v
+            WHERE v.merged_into IS NULL AND v.kind = 'site' AND v.city IS NOT NULL AND v.country IS NOT NULL
+            """,
+            transaction: tx
+        );
+        var questions = venues
+            .Where(v => VenueNormalizer.Key(v.Name) != null)
+            .Select(v => (Venue: v, Locality: new Locality(v.City, v.Region, v.Country)))
+            .GroupBy(v =>
+                $"same:{string.Concat(VenueNormalizer.Words(VenueNormalizer.Key(v.Venue.Name)!))}@{v.Locality.RegionKey}"
+            )
+            .Where(g => g.Select(v => v.Locality.Key).Distinct().Count() > 1)
+            .Select(g =>
+            {
+                var list = g.OrderByDescending(v => v.Venue.Rows).ToList();
+                return new ReviewRecord(
+                    null,
+                    $"{list[0].Venue.Name} — "
+                        + string.Join(
+                            " / ",
+                            list.Select(v =>
+                                $"{v.Venue.City}, {v.Venue.Region ?? v.Venue.Country} ({v.Venue.Rows} rows)"
+                            )
+                        ),
+                    g.Key,
+                    "One name in two towns of one state: one place under a neighbouring town, a club that moved (two venues), or two places?",
+                    string.Join(", ", list.Select(v => v.Venue.Uuid)),
+                    Subject: ReviewSubjects.Venue,
+                    VenueUuid: list[0].Venue.Uuid
+                );
+            })
+            .ToList();
+
+        var asked = (
+            await connection.QueryAsync<(string Key, bool Open, bool ByPerson)>(
+                """
+                SELECT key, resolved_at IS NULL, author_type IN ('user', 'moderator')
+                FROM norm.review_items WHERE subject = 'venue' AND key LIKE 'same:%'
+                """,
+                transaction: tx
+            )
+        ).ToList();
+        var answered = asked.Where(a => !a.Open && a.ByPerson).Select(a => a.Key).ToHashSet();
+        await store.WriteReviewItemsAsync(
+            questions.Where(q => !answered.Contains(q.Key!)).ToList()
+        );
+        var current = questions.Select(q => q.Key).ToHashSet();
+        await store.CloseVenueReviewItemsAsync(
+            asked.Where(a => a.Open && !current.Contains(a.Key)).Select(a => a.Key).ToList(),
+            "resolved"
         );
     }
 

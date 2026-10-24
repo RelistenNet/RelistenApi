@@ -29,7 +29,7 @@ public sealed record VenueChunkResult(
 /// asks twice.
 public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
 {
-    public const string PromptVersion = "venue-llm@5";
+    public const string PromptVersion = "venue-llm@6";
     public const float Threshold = 0.9f;
 
     /// About this many spellings per request; a locality is never split below it.
@@ -474,7 +474,8 @@ internal sealed class VenueRequest
         short names people use ("MSG"). One place renamed is one venue with several official
         names ("CoreStates Center" 1996-1998, "First Union Center", "Wachovia Center", "Wells
         Fargo Center"); two buildings are two venues even when their names resemble each other
-        or one replaced the other. Known venues can gain names too (known_names). A festival or
+        or one replaced the other, and a club that moved to another building is two venues (the
+        name goes with it: Higher Ground in Winooski, then in South Burlington). Known venues can gain names too (known_names). A festival or
         event is not a place: a spelling naming a festival is the grounds it was held on, and a
         festival's stage or tent is a room of those grounds. Never merge different rooms into
         their site ("The Theater at Madison Square Garden" is not Madison Square Garden), and
