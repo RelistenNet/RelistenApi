@@ -118,6 +118,53 @@ public class TestVenueAnswers
     }
 
     [Test]
+    public void ARoomOfADroppedRoomIsDroppedWithIt()
+    {
+        var (request, _) = Request();
+        var answer = VenueRequest.Parse(
+            Answer(
+                """[{"id": "s2", "spelling_text": "The Theater at Madison Square Garden", "venue": "n1", "not_a_venue": false, "confidence": 0.95, "rationale": ""}]""",
+                """
+                [{"id": "n1", "locality": "l1", "name": "Balcony", "kind": "room", "parent": "n2", "names": []},
+                 {"id": "n2", "locality": "l1", "name": "Theater", "kind": "room", "parent": "n9", "names": []}]
+                """
+            ),
+            request
+        );
+
+        answer.NewVenues.Should().BeEmpty();
+        answer.Spellings.Should().BeEmpty();
+    }
+
+    [Test]
+    public void AVenueListedFromAnotherTownSaysWhereItIs()
+    {
+        var (request, _) = Request();
+        // The Garden is listed for New York's spellings (its own town) only.
+        request.Data.Should().NotContain("\"town\":\"New York");
+        var oakland = new CatalogueVenue(
+            Guid.NewGuid(),
+            "Fox Theatre",
+            "site",
+            null,
+            "Oakland",
+            "CA",
+            "US"
+        );
+        var state = new VenueState
+        {
+            Unmapped = [],
+            Venues = new Dictionary<Guid, CatalogueVenue> { [oakland.Uuid] = oakland },
+            Names = new[] { ("fox theater", oakland.Uuid) }.ToLookup(n => n.Item1, n => n.Item2),
+            ExternalIds = new Dictionary<(string, string), Guid>(),
+        };
+        var row = Row("Fox Theatre", "Redwood City, CA");
+        var redwood = VenueRequest.Build(state, [new Spelling(VenueKeys.Of(row)!, [row])]);
+
+        redwood.Data.Should().Contain("\"town\":\"Oakland, CA\"");
+    }
+
+    [Test]
     public void AVenueInsideAnotherIsARoom()
     {
         var (request, _) = Request();

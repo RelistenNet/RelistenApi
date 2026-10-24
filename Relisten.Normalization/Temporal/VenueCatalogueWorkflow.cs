@@ -10,7 +10,8 @@ namespace Relisten.Normalization.Temporal;
 
 /// Artists limits the legacy rows considered (null: every artist); venues themselves are
 /// cross-artist, so a later run for other artists maps onto the venues this one made.
-/// MaxChunks caps the run's model calls (null: until nothing is left to ask).
+/// MaxChunks caps the run's model calls, a chunk's re-ask included (null: until nothing is
+/// left to ask).
 public sealed record BuildVenueCatalogue(
     IReadOnlyList<Guid>? Artists = null,
     int? MaxChunks = null
@@ -74,10 +75,16 @@ public class VenueCatalogueWorkflow
         while (request.MaxChunks is not { } max || total.Chunks < max)
         {
             VenueChunkResult chunk;
+            // A re-ask is a second model call: only when the budget has it.
+            var input = new VenueChunkInput(
+                request.Artists,
+                skip,
+                request.MaxChunks == null || total.Chunks + 2 <= request.MaxChunks
+            );
             try
             {
                 chunk = await Workflow.ExecuteActivityAsync(
-                    (VenueActivities a) => a.Chunk(new VenueChunkInput(request.Artists, skip)),
+                    (VenueActivities a) => a.Chunk(input),
                     ChunkStep
                 );
                 failures = 0;
@@ -96,7 +103,7 @@ public class VenueCatalogueWorkflow
             skip.AddRange(chunk.Asked);
             total = total with
             {
-                Chunks = total.Chunks + 1,
+                Chunks = total.Chunks + chunk.ModelCalls,
                 VenuesCreated = total.VenuesCreated + chunk.VenuesCreated,
                 RowsMapped = total.RowsMapped + chunk.RowsMapped,
                 Unsure = total.Unsure + chunk.Unsure,

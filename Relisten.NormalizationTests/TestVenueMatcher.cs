@@ -676,4 +676,18 @@ public class TestVenueMatcher
         venue.City.Should().Be("Charleston");
         venue.Name.Should().Be("Family Circle Stadium");
     }
+
+    [Test]
+    public void ALoneTownWithAnotherProviderIdIsAnotherBuilding()
+    {
+        var rows = VenueState.WithoutLoneTowns([
+            Row("Higher Ground", "South Burlington, VT", 30, "setlistfm:53d633f1"),
+            Row("Flynn Theater", "Burlington, VT"),
+            Row("Higher Ground", "Winooski, VT", 10, "setlistfm:73d6b2a1"),
+        ]);
+
+        rows.Select(r => r.Locality!.City)
+            .Should()
+            .Equal("South Burlington", "Burlington", "Winooski");
+    }
 }

@@ -19,7 +19,8 @@ public sealed record VenueChunkResult(
     int VenuesCreated,
     int RowsMapped,
     int InputTokens,
-    int OutputTokens
+    int OutputTokens,
+    int ModelCalls = 1
 );
 
 /// One step of the venue catalogue (string-theory docs/matching.md T3, step 3): the next
@@ -29,7 +30,7 @@ public sealed record VenueChunkResult(
 /// asks twice.
 public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
 {
-    public const string PromptVersion = "venue-llm@7";
+    public const string PromptVersion = "venue-llm@8";
     public const float Threshold = 0.9f;
 
     internal const string NoAnswer = "no answer";
@@ -39,10 +40,12 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
 
     public string Author => $"{PromptVersion}+{model.ModelId}";
 
+    /// mayRetry: whether a second model call for left-out spellings fits the run's budget.
     public async Task<VenueChunkResult> RunChunkAsync(
         IReadOnlyCollection<Guid>? artists,
         IReadOnlyCollection<string> skip,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        bool mayRetry = true
     )
     {
         await using var connection = db.CreateWriteConnection();
@@ -66,7 +69,7 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
         // A long request can come back with spellings left out or placed on refs it never
         // declared (the lab's Tabernacle, 213 uses; Red Rocks on an undeclared "n32"): those
         // are asked once more on their own, after this answer is written.
-        var skipped = chunk.Where(s => answer.Dropped.ContainsKey(s.Key)).ToList();
+        var skipped = mayRetry ? chunk.Where(s => answer.Dropped.ContainsKey(s.Key)).ToList() : [];
         var unsure = chunk.Where(s => !IsSure(answer, s.Key)).Except(skipped).ToList();
         var written = await PersistAsync(connection, tx, request, answer, unsure);
         var (resolved, unsureCount) = (chunk.Count - unsure.Count - skipped.Count, unsure.Count);
@@ -98,7 +101,8 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
             written.Venues,
             written.Rows,
             input,
-            output
+            output,
+            skipped.Count > 0 ? 2 : 1
         );
     }
 
@@ -489,7 +493,8 @@ internal sealed class VenueRequest
         You normalise the venues of live concert recordings: one physical place, whatever the
         recordings call it, shared by every band that played there. You get a few families of
         names that may be one place, as localities (l1, l2, ...) with the venues already known
-        there (v1, v2, ...) and the spellings recordings used (s1, s2, ...), with how many
+        there (v1, v2, ...; one listed from another town gives its town) and the spellings
+        recordings used (s1, s2, ...), with how many
         artists and recordings use each, the years, and a few raw examples. Locations are typed
         by uploaders: towns are misspelled, a club is filed under a neighbouring town or suburb
         (Williamsburg for Brooklyn, South Burlington for Burlington), and l0 holds spellings with
@@ -725,6 +730,13 @@ internal sealed class VenueRequest
                         id,
                         name = v.Name,
                         kind = v.Kind,
+                        // A venue listed from another town says where it really is.
+                        town = v.LocalityKey == place?.Key
+                            ? null
+                            : string.Join(
+                                ", ",
+                                new[] { v.City, v.Region ?? v.Country }.OfType<string>()
+                            ),
                         names = namesOf[v.Uuid].Take(12),
                     };
                 })
@@ -840,17 +852,32 @@ internal sealed class VenueRequest
             .VenueLocality.Concat(newVenues.Select(n => KeyValuePair.Create(n.Ref, n.Locality)))
             .GroupBy(p => p.Key)
             .ToDictionary(g => g.Key, g => g.First().Value);
-        // A room's site is in its locality; anything else drops the room.
-        newVenues = newVenues
-            .Where(n =>
-                n.Parent == null
-                || (
-                    localityOf.TryGetValue(n.Parent, out var l)
-                    && l == n.Locality
-                    && n.Parent != n.Ref
+        // A room's site is in its locality and survives itself; anything else drops the room,
+        // and so on down (a room of a dropped room is dropped too).
+        while (true)
+        {
+            var kept = newVenues
+                .Where(n =>
+                    n.Parent == null
+                    || (
+                        localityOf.TryGetValue(n.Parent, out var l)
+                        && l == n.Locality
+                        && n.Parent != n.Ref
+                    )
                 )
-            )
-            .ToList();
+                .ToList();
+            if (kept.Count == newVenues.Count)
+            {
+                break;
+            }
+
+            newVenues = kept;
+            localityOf = request
+                .VenueLocality.Concat(newVenues.Select(n => KeyValuePair.Create(n.Ref, n.Locality)))
+                .GroupBy(p => p.Key)
+                .ToDictionary(g => g.Key, g => g.First().Value);
+        }
+
         localityOf = request
             .VenueLocality.Concat(newVenues.Select(n => KeyValuePair.Create(n.Ref, n.Locality)))
             .GroupBy(p => p.Key)

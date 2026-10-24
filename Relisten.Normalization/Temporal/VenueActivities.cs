@@ -6,7 +6,12 @@ using Temporalio.Activities;
 
 namespace Relisten.Normalization.Temporal;
 
-public sealed record VenueChunkInput(IReadOnlyList<Guid>? Artists, IReadOnlyList<string> Skip);
+/// MayRetry: a second model call for left-out spellings fits the run's budget.
+public sealed record VenueChunkInput(
+    IReadOnlyList<Guid>? Artists,
+    IReadOnlyList<string> Skip,
+    bool MayRetry = true
+);
 
 /// The venue catalogue's steps. Each reads the catalogue fresh, so a resumed run continues
 /// from what earlier steps committed.
@@ -26,7 +31,8 @@ public sealed class VenueActivities(VenueMatch match, VenueLlm llm)
         return await llm.RunChunkAsync(
             input.Artists,
             input.Skip,
-            ActivityExecutionContext.Current.CancellationToken
+            ActivityExecutionContext.Current.CancellationToken,
+            input.MayRetry
         );
     }
 }

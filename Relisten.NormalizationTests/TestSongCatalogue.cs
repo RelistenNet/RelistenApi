@@ -313,4 +313,14 @@ public class TestSongCatalogueWorkflow
         steps.Attempts.Should().Be(2);
         result.Chunks.Should().Be(2);
     }
+
+    [TestCase("10 Punchline", "punchline", "Punchline")]
+    [TestCase("Punchline", "punchline", "Punchline")]
+    [TestCase("46 Days", "46 days", "46 Days")]
+    [TestCase("Some Text", "other key", "other key")]
+    public void AnAliasIsStoredUnderTheSpellingTheMatcherLooksUp(
+        string text,
+        string spelled,
+        string expected
+    ) => Relisten.Normalization.Songs.CatalogueLlm.AliasText(text, spelled).Should().Be(expected);
 }

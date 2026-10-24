@@ -569,4 +569,22 @@ public class TestVenueCatalogue
             .Should()
             .ContainSingle();
     }
+
+    [Test]
+    public async Task NoReaskWhenTheBudgetHasNoRoom()
+    {
+        var database = new DbServiceNormalizationDatabase(db);
+        var model = new ScriptedVenueModel(sloppy: true);
+        await new VenueMatch(database).RunAsync(artists, CancellationToken.None);
+        var chunk = await new VenueLlm(database, model).RunChunkAsync(
+            artists,
+            [],
+            CancellationToken.None,
+            mayRetry: false
+        );
+
+        model.Calls.Should().Be(1);
+        chunk.ModelCalls.Should().Be(1);
+        chunk.Unsure.Should().Be(1);
+    }
 }

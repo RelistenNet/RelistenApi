@@ -592,10 +592,26 @@ public sealed partial class VenueState
                     return r;
                 }
 
-                var towns = uses[(VenueNormalizer.Identities(r.Key)[0], l.RegionKey)];
+                var name = VenueNormalizer.Identities(r.Key)[0];
+                var towns = uses[(name, l.RegionKey)];
                 var here = towns.First(t => t.Locality.Key == l.Key).Uses;
                 var elsewhere = towns.Where(t => t.Locality.Key != l.Key).ToList();
-                return elsewhere.Count == 1 && elsewhere[0].Uses >= 2 * here
+                // Rows there with other provider ids are another building (Higher Ground in
+                // Winooski, then South Burlington): the towns stay apart.
+                var theirIds =
+                    elsewhere.Count == 1
+                        ? trusted
+                            .Where(o =>
+                                o.Locality!.Key == elsewhere[0].Locality.Key
+                                && VenueNormalizer.Identities(o.Key!)[0] == name
+                                && o.ExternalId != null
+                            )
+                            .Select(o => o.ExternalId)
+                            .ToHashSet()
+                        : [];
+                var otherBuilding =
+                    r.ExternalId != null && theirIds.Count > 0 && !theirIds.Contains(r.ExternalId);
+                return elsewhere.Count == 1 && elsewhere[0].Uses >= 2 * here && !otherBuilding
                     ? r with
                     {
                         Locality = elsewhere[0].Locality,

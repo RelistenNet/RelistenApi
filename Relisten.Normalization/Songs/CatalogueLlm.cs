@@ -593,7 +593,10 @@ public sealed class CatalogueLlm(INormalizationDatabase db, ICatalogueModel mode
                 aliasRecords.Add(
                     new AliasRecord(
                         state.ArtistUuid,
-                        spelled == key ? info.Display : decision.SongText!.Trim(),
+                        AliasText(
+                            spelled == key ? info.Display : decision.SongText!.Trim(),
+                            spelled
+                        ),
                         songs[0],
                         decision.Confidence
                     )
@@ -631,6 +634,24 @@ public sealed class CatalogueLlm(INormalizationDatabase db, ICatalogueModel mode
 
         // Tracks this run changed: an open medley re-matched to the same parts is not one.
         return (newSongs.Count, store.TracksTouched);
+    }
+
+    /// An alias's text, whose normalised form is the spelling the matcher looks up: the
+    /// recordings' text without a number the fold discarded ("10 Punchline" is stored as
+    /// "Punchline" for the key "punchline"), else the key itself.
+    internal static string AliasText(string text, string spelled)
+    {
+        if (TitleNormalizer.Normalize(text) == spelled)
+        {
+            return text;
+        }
+
+        var unnumbered = System.Text.RegularExpressions.Regex.Replace(
+            text,
+            @"^\s*\d+[\s.):-]*",
+            ""
+        );
+        return TitleNormalizer.Normalize(unnumbered) == spelled ? unnumbered : spelled;
     }
 
     /// The song name an answer read in a title: its song_text, normalised, when that is a run
