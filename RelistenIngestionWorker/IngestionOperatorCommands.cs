@@ -4,6 +4,7 @@ using Relisten.Api.Models;
 using Relisten.Data;
 using Relisten.Ingestion;
 using Relisten.Ingestion.Workflows;
+using Relisten.Normalization;
 using Relisten.Normalization.Temporal;
 using Temporalio.Client;
 
@@ -31,13 +32,35 @@ internal sealed class IngestionOperatorCommands(
             return await StartBatchAsync(configuration[operation]!);
         }
 
-        // Venues are cross-artist: --norm-venues=all, or one artist's rows.
+        // Venues run only for the artists switched on (features.norm_venues): --norm-venues=all
+        // is every one of them; one artist must be switched on first.
         if (operation == "norm-venues")
         {
             var scope = configuration[operation]!;
-            var artists = scope == "all" ? null : new[] { (await ResolveArtistAsync(scope)).Value };
+            if (scope == "all")
+            {
+                return await normalization.BuildVenueCatalogueAsync(
+                    new BuildVenueCatalogue(null, MaxChunks(), FlaggedOnly: true)
+                );
+            }
+
+            var artist = (await ResolveArtistAsync(scope)).Value;
+            using (var flagScope = scopeFactory.CreateScope())
+            {
+                if (
+                    !await flagScope
+                        .ServiceProvider.GetRequiredService<NormFlags>()
+                        .VenuesOnAsync(artist)
+                )
+                {
+                    throw new InvalidOperationException(
+                        $"Venues are off for {scope}: switch features.norm_venues on first"
+                    );
+                }
+            }
+
             return await normalization.BuildVenueCatalogueAsync(
-                new BuildVenueCatalogue(artists, MaxChunks())
+                new BuildVenueCatalogue([artist], MaxChunks())
             );
         }
 
