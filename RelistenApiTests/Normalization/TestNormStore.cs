@@ -261,6 +261,39 @@ public class TestNormStore
     }
 
     [Test]
+    public async Task ARevertRemovesASongWithItsDerivedTracks()
+    {
+        var (song, track) = (Guid.CreateVersion7(), Guid.NewGuid());
+        var run = await As(AuthorTypes.Llm, "catalogue-llm@5");
+        await run.WriteSongsAsync([new SongRecord(song, artist, "Sugaree", Confidence: 0.95f)]);
+        await run.WriteTrackSongsAsync([
+            new TrackPartRecord(
+                track,
+                1,
+                song,
+                "Sugaree",
+                Confidence: 0.95f,
+                Basis: TrackBasis.SongName
+            ),
+        ]);
+
+        var (reverted, skipped) = await (await As(AuthorTypes.Moderator, "m1")).RevertRunAsync(
+            run.Run
+        );
+
+        (reverted, skipped).Should().Be((1, 0));
+        (
+            await db.ExecuteScalarAsync<long>(
+                "SELECT (SELECT count(*) FROM norm.songs WHERE uuid = @song) + (SELECT count(*) FROM norm.track_songs WHERE track_uuid = @track)",
+                new { song, track },
+                tx
+            )
+        )
+            .Should()
+            .Be(0);
+    }
+
+    [Test]
     public async Task ARevertSkipsARowWhoseSlugIsTakenSince()
     {
         var (song, later) = (Guid.CreateVersion7(), Guid.CreateVersion7());

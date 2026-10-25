@@ -354,6 +354,22 @@ public sealed partial class NormStore
             await tx.SaveAsync("revert_change");
             try
             {
+                // A song this run created takes its derived track rows with it: they aren't in
+                // the change log, the next match rebuilds them, and they would otherwise block
+                // the delete. Rulings and people's rows on it still do (the change is skipped).
+                if (change is { Op: "insert", Table: "songs" })
+                {
+                    await connection.ExecuteAsync(
+                        """
+                        DELETE FROM norm.track_songs
+                        WHERE song_uuid = (@Key::jsonb ->> 'uuid')::uuid
+                          AND basis IN ('song_name', 'alias') AND author_type NOT IN ('user', 'moderator')
+                        """,
+                        args,
+                        tx
+                    );
+                }
+
                 await connection.ExecuteAsync(
                     change.Op switch
                     {
