@@ -363,7 +363,10 @@ public static partial class VenueNormalizer
         // No comma before the state: "Phoenix AZ", "Huber Heights Ohio", "Broomfield. CO".
         if (fields.Count == 1 && TrailingRegion(fields[0]) is { } split)
         {
-            fields = [split.City, split.Region];
+            fields =
+                split.Country == null
+                    ? [split.City, split.Region]
+                    : [split.City, split.Region, split.Country];
         }
 
         // A seat, a date or a typed note is not a town ("Stand, Seat 2", "Row R, On Aisle)"),
@@ -379,15 +382,18 @@ public static partial class VenueNormalizer
             return Placeholders.Contains(Normalize(only)) ? null : new Locality(only, null, null);
         }
 
-        // "Dallas, TX USA": a region and its country in one field.
+        // "Dallas, TX USA", "Perth, WA Australia": a region and its country in one field,
+        // split in two so the country decides what the code means.
         if (
             fields.Count >= 2
             && Normalize(fields[^1]).Split(' ') is { Length: >= 2 } lastWords
-            && Countries.ContainsKey(lastWords[^1])
-            && Region(string.Join(' ', lastWords[..^1])) != null
+            && Countries.TryGetValue(lastWords[^1], out var written2)
+            && string.Join(' ', lastWords[..^1]) is var regionWords
+            && (RegionIn(regionWords, written2) ?? Region(regionWords)) != null
         )
         {
-            fields[^1] = string.Join(' ', lastWords[..^1]);
+            fields[^1] = regionWords;
+            fields.Add(lastWords[^1]);
         }
 
         // A note after the region ("Manchester, TN, Bonnaroo 2015") is not a place.
@@ -407,8 +413,9 @@ public static partial class VenueNormalizer
         string? country = region?.Country;
         if (region == null && Countries.TryGetValue(last, out var c))
         {
+            // The region as that country has it: "WA" is Western Australia beside Australia.
             country = c;
-            region = fields.Count > 2 ? Region(Normalize(fields[^2])) : null;
+            region = fields.Count > 2 ? RegionIn(Normalize(fields[^2]), c) : null;
         }
 
         // A misspelled state ("Morrison, Colorade, USA"): the one state name a typo away.
@@ -456,9 +463,12 @@ public static partial class VenueNormalizer
         // A region this table doesn't know stays as written, so two towns of one name are never
         // folded together on a guess: the last field when it isn't a country ("Tokyo, Kanto"),
         // the middle one when it is ("Richmond, NSW, Australia").
+        // A middle field that is the country again ("London, England, UK") is no region.
         var written =
             country == null ? fields[^1]
-            : fields.Count > 2 ? fields[^2]
+            : fields.Count > 2
+            && !(Countries.TryGetValue(Normalize(fields[^2]), out var again) && again == country)
+                ? fields[^2]
             : null;
         return new Locality(city, region?.Code ?? written, country);
     }
@@ -516,21 +526,28 @@ public static partial class VenueNormalizer
 
     /// "Phoenix AZ" → (Phoenix, AZ); "Huber Heights Ohio" → (Huber Heights, Ohio); "Broomfield.
     /// CO" → (Broomfield, CO). Null when the last words name no known state or province.
-    private static (string City, string Region)? TrailingRegion(string field)
+    private static (string City, string Region, string? Country)? TrailingRegion(string field)
     {
         var words = field.Replace('.', ' ').Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        // "Winnipeg Manitoba Canada": the country after the region says nothing more.
+        // "Winnipeg Manitoba Canada", "Perth WA Australia": a country after the region is kept
+        // apart, and decides what the region means.
+        string? country = null;
         if (words.Length > 2 && Countries.ContainsKey(Normalize(words[^1])))
         {
+            country = words[^1];
             words = words[..^1];
         }
 
         for (var take = Math.Min(3, words.Length - 1); take >= 1; take--)
         {
             var region = string.Join(' ', words[^take..]);
-            if (Region(Normalize(region)) != null)
+            var key = Normalize(region);
+            if (
+                (country == null ? Region(key) : RegionIn(key, Countries[Normalize(country)]))
+                != null
+            )
             {
-                return (string.Join(' ', words[..^take]), region);
+                return (string.Join(' ', words[..^take]), region, country);
             }
         }
 
@@ -556,6 +573,14 @@ public static partial class VenueNormalizer
     }
 
     /// "N.Y." is "NY".
+    /// A region of one country ("wa" in AU is Western Australia, in US Washington).
+    private static RegionInfo? RegionIn(string key, string country) =>
+        RegionsByKeyAndCountry.TryGetValue((key, country), out var region) ? region
+        : key.Length <= 3
+        && RegionsByKeyAndCountry.TryGetValue((key.Replace(" ", ""), country), out region)
+            ? region
+        : null;
+
     private static RegionInfo? Region(string key) =>
         RegionsByKey.TryGetValue(key, out var region) ? region
         : key.Length <= 3 && RegionsByKey.TryGetValue(key.Replace(" ", ""), out region) ? region
@@ -647,7 +672,7 @@ public static partial class VenueNormalizer
         ("NU", "nunavut", "CA"),
     ];
 
-    private static readonly Dictionary<string, RegionInfo> RegionsByKey = RegionTable
+    private static readonly List<(string Key, RegionInfo Info)> RegionEntries = RegionTable
         .SelectMany(r =>
             new[]
             {
@@ -676,6 +701,10 @@ public static partial class VenueNormalizer
             ("western australia", new RegionInfo("WA", "western australia", "AU")),
             ("south australia", new RegionInfo("SA", "south australia", "AU")),
             ("northern territory", new RegionInfo("NT", "northern territory", "AU")),
+            // Codes another country has first; RegionIn finds them beside their country.
+            ("wa", new RegionInfo("WA", "western australia", "AU")),
+            ("sa", new RegionInfo("SA", "south australia", "AU")),
+            ("nt", new RegionInfo("NT", "northern territory", "AU")),
             ("cal", new RegionInfo("CA", "california", "US")),
             ("tenn", new RegionInfo("TN", "tennessee", "US")),
             ("fla", new RegionInfo("FL", "florida", "US")),
@@ -705,8 +734,18 @@ public static partial class VenueNormalizer
             ("mass", new RegionInfo("MA", "massachusetts", "US")),
             ("penn", new RegionInfo("PA", "pennsylvania", "US")),
         ])
-        .GroupBy(r => r.Item1)
-        .ToDictionary(g => g.Key, g => g.First().Item2);
+        .Select(r => (r.Item1, r.Item2))
+        .ToList();
+
+    // A key alone: its first country (US, then Canada, then the rest).
+    private static readonly Dictionary<string, RegionInfo> RegionsByKey = RegionEntries
+        .GroupBy(r => r.Key)
+        .ToDictionary(g => g.Key, g => g.First().Info);
+
+    private static readonly Dictionary<(string, string), RegionInfo> RegionsByKeyAndCountry =
+        RegionEntries
+            .GroupBy(r => (r.Key, r.Info.Country))
+            .ToDictionary(g => g.Key, g => g.First().Info);
 
     private static readonly Dictionary<string, string> Countries = new()
     {

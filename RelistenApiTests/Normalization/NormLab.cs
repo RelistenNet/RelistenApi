@@ -669,16 +669,24 @@ public class NormLab
         var (chunks, input, output) = (0, 0, 0);
         while (chunks < maxChunks)
         {
+            // As the workflow does: never more calls at once than the cap has left, and a
+            // re-ask round only when it fits too.
+            var remaining = maxChunks - chunks;
+            var parallel = Math.Max(
+                1,
+                Math.Min(
+                    int.TryParse(Environment.GetEnvironmentVariable("NORM_LAB_PARALLEL"), out var p)
+                        ? p
+                        : 1,
+                    remaining
+                )
+            );
             var chunk = await llm.RunChunkAsync(
                 artists,
                 skip,
                 CancellationToken.None,
-                parallel: int.TryParse(
-                    Environment.GetEnvironmentVariable("NORM_LAB_PARALLEL"),
-                    out var p
-                )
-                    ? p
-                    : 1
+                mayRetry: remaining >= 2 * parallel,
+                parallel: parallel
             );
             if (chunk.Done)
             {

@@ -52,7 +52,7 @@ internal static class CatalogSteps
                     VenueMatchStep
                 );
             }
-            catch (ActivityFailureException e)
+            catch (ActivityFailureException e) when (!TemporalException.IsCanceledException(e))
             {
                 Workflow.Logger.LogWarning(
                     e,
@@ -68,6 +68,8 @@ internal static class CatalogSteps
         TaskQueue = IngestionQueues.Database,
         StartToCloseTimeout = TimeSpan.FromMinutes(20),
         ScheduleToCloseTimeout = TimeSpan.FromMinutes(45),
+        // As core ingestion: a canceled import waits for this step to stop.
+        CancellationType = ActivityCancellationType.WaitCancellationCompleted,
         HeartbeatTimeout = TimeSpan.FromSeconds(30),
         RetryPolicy = new RetryPolicy
         {

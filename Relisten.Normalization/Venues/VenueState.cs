@@ -482,9 +482,11 @@ public sealed partial class VenueState
 
             var main = regions[0].Sum(i => Math.Max(rows[i].Uses, 1));
             var dominant = rows[regions[0].First()].Locality;
+            // Within one country only: Manchester, England is no typo of Manchester, NH.
             foreach (
                 var i in regions
                     .Skip(1)
+                    .Where(g => rows[g.First()].Locality!.Country == dominant!.Country)
                     .Where(g => g.Sum(i => Math.Max(rows[i].Uses, 1)) * 10 <= main)
                     .SelectMany(g => g)
             )

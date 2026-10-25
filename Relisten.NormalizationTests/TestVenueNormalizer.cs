@@ -51,6 +51,12 @@ public class TestVenueNormalizer
     [TestCase("Sydney, New South Wales", "sydney|nsw|AU")]
     [TestCase("Sydney, NSW Australia", "sydney|nsw|AU")]
     [TestCase("Melbourne, Victoria", "melbourne|vic|AU")]
+    [TestCase("Perth, WA Australia", "perth|wa|AU")]
+    [TestCase("Perth, WA, Australia", "perth|wa|AU")]
+    [TestCase("Perth WA Australia", "perth|wa|AU")]
+    [TestCase("Darwin, NT Australia", "darwin|nt|AU")]
+    [TestCase("Seattle, WA", "seattle|wa|US")]
+    [TestCase("London, England, UK", "london||GB")]
     [TestCase("Montage Mountain, Scranton, PA, USA", "scranton|pa|US")]
     public void LocationsParseToALocality(string location, string expected) =>
         VenueNormalizer.ParseLocation(location)!.Key.Should().Be(expected);

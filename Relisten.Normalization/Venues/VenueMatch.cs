@@ -13,26 +13,45 @@ public sealed record VenueMatchResult(
     int RowsLeft,
     int RowsUnplaced,
     int ShowsPlaced = 0
-);
+)
+{
+    /// Another venue step held the lock and this match didn't wait (wait: false).
+    public bool Deferred { get; init; }
+}
 
 /// The deterministic venue pass (no LLM): maps legacy venue rows onto venues and creates the
 /// venues nothing is in doubt about, as one run. It starts and ends every venue catalogue run
 /// and is cheap enough to run after imports.
 public sealed class VenueMatch(INormalizationDatabase db)
 {
+    /// wait: false gives way when another venue step holds the lock (a best-effort match
+    /// after an import; the nightly run converges) instead of waiting for it.
     public async Task<VenueMatchResult> RunAsync(
         IReadOnlyCollection<Guid>? artists,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        bool wait = true
     )
     {
         await using var connection = db.CreateWriteConnection();
         await connection.OpenAsync(cancellationToken);
         await using var tx = await connection.BeginTransactionAsync(cancellationToken);
         // Venues are cross-artist: one venue run at a time.
-        await connection.ExecuteAsync(
-            "SELECT pg_advisory_xact_lock(hashtext('norm-venues'))",
-            transaction: tx
-        );
+        if (wait)
+        {
+            await connection.ExecuteAsync(
+                "SELECT pg_advisory_xact_lock(hashtext('norm-venues'))",
+                transaction: tx
+            );
+        }
+        else if (
+            !await connection.ExecuteScalarAsync<bool>(
+                "SELECT pg_try_advisory_xact_lock(hashtext('norm-venues'))",
+                transaction: tx
+            )
+        )
+        {
+            return new VenueMatchResult(0, 0, 0, 0) { Deferred = true };
+        }
 
         var state = await VenueState.LoadAsync(connection, tx, artists);
         var plan = VenueMatcher.Match(state);

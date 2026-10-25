@@ -31,7 +31,7 @@ public sealed record VenuePlan(
 ///    suburb) goes to the LLM whole.
 public static class VenueMatcher
 {
-    public const string Author = "venue-matcher@2.11.0";
+    public const string Author = "venue-matcher@2.12.0";
     public const float Exact = 0.95f;
     public const float Likely = 0.9f;
 
@@ -144,34 +144,37 @@ public static class VenueMatcher
                 && votes.Single() is var (venue, dates)
                 && dates * 2 >= state.ShowDates.GetValueOrDefault(row.Uuid, 1)
                 && state.Venues.TryGetValue(venue, out var v)
+                // The name agrees, town or not: a missing town is no licence for "Good Music
+                // and Other Stuff" to become The Orange Peel the same afternoon.
+                && plan.NamesOf(venue)
+                    .Append(VenueNormalizer.Key(v.Name))
+                    .OfType<string>()
+                    .Any(n =>
+                        VenueNormalizer.SameName(n, row.Key!)
+                        || VenueNormalizer.IsInitialsOf(row.Key!, n)
+                        || Alike(n, row.Key!)
+                        || ShareADistinctiveWord(
+                            n,
+                            row.Key!,
+                            row.Locality == null
+                                ? new HashSet<string>()
+                                : VenueNormalizer
+                                    .Normalize(row.Locality.City)
+                                    .Split(' ')
+                                    .ToHashSet()
+                        )
+                    )
                 && (
                     row.Locality is not { Trusted: true }
                     || (
-                        (
-                            v.LocalityKey == row.Locality.Key
-                            || (
-                                v.City != null
-                                && VenueNormalizer.Normalize(v.City)
-                                    == VenueNormalizer.Normalize(row.Locality.City)
-                            )
-                            || new Locality(v.City ?? "", v.Region, v.Country).RegionKey
-                                == row.Locality.RegionKey
+                        v.LocalityKey == row.Locality.Key
+                        || (
+                            v.City != null
+                            && VenueNormalizer.Normalize(v.City)
+                                == VenueNormalizer.Normalize(row.Locality.City)
                         )
-                        && plan.NamesOf(venue)
-                            .Append(VenueNormalizer.Key(v.Name))
-                            .OfType<string>()
-                            .Any(n =>
-                                VenueNormalizer.SameName(n, row.Key!)
-                                || Alike(n, row.Key!)
-                                || ShareADistinctiveWord(
-                                    n,
-                                    row.Key!,
-                                    VenueNormalizer
-                                        .Normalize(row.Locality.City)
-                                        .Split(' ')
-                                        .ToHashSet()
-                                )
-                            )
+                        || new Locality(v.City ?? "", v.Region, v.Country).RegionKey
+                            == row.Locality.RegionKey
                     )
                 )
             )

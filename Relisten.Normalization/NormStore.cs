@@ -329,13 +329,20 @@ public sealed partial class NormStore
             var keyRow = $"jsonb_populate_record(NULL::norm.{change.Table}, @Key::jsonb)";
 
             // Untouched since: the row is still exactly what this change left (or still absent).
-            var untouched = await connection.ExecuteScalarAsync<bool>(
+            // The row is locked while it's compared, so an edit committed after the check can't
+            // be reverted away: the comparison waits for it and sees it.
+            var untouched =
                 change.Op == "delete"
-                    ? $"SELECT NOT EXISTS (SELECT 1 FROM norm.{change.Table} t, {keyRow} k WHERE {match})"
-                    : $"SELECT EXISTS (SELECT 1 FROM norm.{change.Table} t, {keyRow} k WHERE {match} AND to_jsonb(t) = @After::jsonb)",
-                args,
-                tx
-            );
+                    ? await connection.ExecuteScalarAsync<bool>(
+                        $"SELECT NOT EXISTS (SELECT 1 FROM norm.{change.Table} t, {keyRow} k WHERE {match})",
+                        args,
+                        tx
+                    )
+                    : await connection.ExecuteScalarAsync<bool?>(
+                        $"SELECT to_jsonb(t) = @After::jsonb FROM norm.{change.Table} t, {keyRow} k WHERE {match} FOR UPDATE OF t",
+                        args,
+                        tx
+                    ) == true;
             if (!untouched)
             {
                 skipped++;
@@ -478,7 +485,9 @@ public sealed partial class NormStore
 
         var songs = (
             await connection.QueryAsync<(Guid Uuid, Guid Artist, string Name, Guid? MergedInto)>(
-                "SELECT uuid, artist_uuid, name, merged_into FROM norm.songs WHERE uuid = ANY(@ids)",
+                // Both songs locked, in one order, before checking: two reciprocal merges can't
+                // both see unmerged targets and commit a cycle.
+                "SELECT uuid, artist_uuid, name, merged_into FROM norm.songs WHERE uuid = ANY(@ids) ORDER BY uuid FOR UPDATE",
                 new { ids = new[] { from, into } },
                 tx
             )

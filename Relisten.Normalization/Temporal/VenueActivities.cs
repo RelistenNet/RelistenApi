@@ -65,8 +65,13 @@ public sealed class VenueMatchActivities(VenueMatch match, NormFlags flags)
             return null;
         }
 
+        // Best effort: a venue step holding the lock means defer, never keep the import open.
         using var heartbeat = new ActivityHeartbeat();
-        return await match.RunAsync([artist], ActivityExecutionContext.Current.CancellationToken);
+        return await match.RunAsync(
+            [artist],
+            ActivityExecutionContext.Current.CancellationToken,
+            wait: false
+        );
     }
 
     /// The artists whose venues are switched on, for the nightly run.

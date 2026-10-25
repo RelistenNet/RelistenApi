@@ -31,12 +31,16 @@ public sealed record ArtistEvaluation(
 )
 {
     public double ResolvedShare => Tracks == 0 ? 0 : (double)TracksResolved / Tracks;
-    public double PrecisionVsSetlist =>
+
+    /// Setlist agreement: the share of song parts on shows with a setlist whose song is on
+    /// that setlist. Not assignment precision: two songs of one show swapped still agree, and
+    /// an incomplete setlist lowers it. A rollout gate needs a labelled sample.
+    public double SetlistAgreement =>
         PartsCheckable == 0 ? double.NaN : (double)PartsAgreeing / PartsCheckable;
 
     public override string ToString() =>
         $"{Artist}: {TracksResolved}/{Tracks} tracks resolved ({ResolvedShare:P1}), {Songs} songs, "
-        + $"precision vs setlist {PrecisionVsSetlist:P1} ({PartsAgreeing}/{PartsCheckable}), "
+        + $"setlist agreement {SetlistAgreement:P1} ({PartsAgreeing}/{PartsCheckable}), "
         + $"shows resolved {ShowsResolved} vs legacy setlist shows {LegacySetlistShows}";
 }
 

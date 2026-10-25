@@ -40,15 +40,15 @@ public sealed class VenueHistory(INormalizationDatabase db, ICatalogueModel mode
         IReadOnlyCollection<Guid>? artists = null
     )
     {
-        await using var connection = db.CreateWriteConnection();
-        await connection.OpenAsync(cancellationToken);
-        await using var tx = await connection.BeginTransactionAsync(cancellationToken);
-        await connection.ExecuteAsync(
-            "SELECT pg_advisory_xact_lock(hashtext('norm-venues'))",
-            transaction: tx
-        );
+        // Selected and asked with nothing held; written in a short transaction under the
+        // venue lock (a venue another pass named meanwhile only gains fill-only names).
+        List<HistoryVenue> venues;
+        await using (var read = db.CreateWriteConnection())
+        {
+            await read.OpenAsync(cancellationToken);
+            venues = await NextVenuesAsync(read, null, minShows, artists);
+        }
 
-        var venues = await NextVenuesAsync(connection, tx, minShows, artists);
         if (venues.Count == 0)
         {
             return new VenueHistoryResult(true, 0, 0, 0, 0, 0);
@@ -65,6 +65,14 @@ public sealed class VenueHistory(INormalizationDatabase db, ICatalogueModel mode
             cancellationToken
         );
         var answers = Parse(reply.Json, ids);
+
+        await using var connection = db.CreateWriteConnection();
+        await connection.OpenAsync(cancellationToken);
+        await using var tx = await connection.BeginTransactionAsync(cancellationToken);
+        await connection.ExecuteAsync(
+            "SELECT pg_advisory_xact_lock(hashtext('norm-venues'))",
+            transaction: tx
+        );
         var named = await PersistAsync(connection, tx, venues, answers);
         await tx.CommitAsync(cancellationToken);
 
@@ -82,7 +90,7 @@ public sealed class VenueHistory(INormalizationDatabase db, ICatalogueModel mode
     /// yet (open or answered): a venue is asked once.
     private static async Task<List<HistoryVenue>> NextVenuesAsync(
         Npgsql.NpgsqlConnection connection,
-        Npgsql.NpgsqlTransaction tx,
+        Npgsql.NpgsqlTransaction? tx,
         int minShows,
         IReadOnlyCollection<Guid>? artists
     ) =>

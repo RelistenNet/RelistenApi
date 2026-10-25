@@ -541,6 +541,13 @@ public sealed partial class NormStore
             throw new InvalidOperationException("Only a person can merge venues");
         }
 
+        // Both venues locked, in one order, before checking: reciprocal merges can't commit a
+        // cycle.
+        await connection.ExecuteAsync(
+            "SELECT 1 FROM norm.venues WHERE uuid = ANY(@ids) ORDER BY uuid FOR UPDATE",
+            new { ids = new[] { from, into } },
+            tx
+        );
         var survivor = await connection.QuerySingleOrDefaultAsync<(Guid Uuid, Guid? MergedInto)?>(
             "SELECT uuid, merged_into FROM norm.venues WHERE uuid = @into",
             new { into },

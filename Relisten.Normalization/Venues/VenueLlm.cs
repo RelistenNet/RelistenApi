@@ -30,7 +30,7 @@ public sealed record VenueChunkResult(
 /// asks twice.
 public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
 {
-    public const string PromptVersion = "venue-llm@11";
+    public const string PromptVersion = "venue-llm@12";
     public const float Threshold = 0.9f;
 
     internal const string NoAnswer = "no answer";
@@ -51,17 +51,15 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
         int parallel = 1
     )
     {
-        await using var connection = db.CreateWriteConnection();
-        await connection.OpenAsync(cancellationToken);
-        await using var tx = await connection.BeginTransactionAsync(cancellationToken);
-        // Venues are cross-artist: one venue step at a time.
-        await connection.ExecuteAsync(
-            "SELECT pg_advisory_xact_lock(hashtext('norm-venues'))",
-            transaction: tx
+        // No transaction or lock is held through a model call: read, ask, then write in a
+        // short locked transaction. What changed in between is safe: writes are fill-only and
+        // the next match merges any twin.
+        var (state, chunks) = await ReadAsync(
+            artists,
+            async (connection, state) =>
+                NextChunks(await OpenSpellings(connection, null, state, skip), parallel),
+            cancellationToken
         );
-
-        var state = await VenueState.LoadAsync(connection, tx, artists);
-        var chunks = NextChunks(await OpenSpellings(connection, tx, state, skip), parallel);
         if (chunks.Count == 0)
         {
             return new VenueChunkResult(true, [], 0, 0, 0, 0, 0, 0);
@@ -69,20 +67,21 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
 
         var total = new Tally();
         var first = await Ask(state, chunks, cancellationToken);
-        var skipped = await PersistRoundAsync(connection, tx, first, total, holdBack: mayRetry);
+        var skipped = await WriteAsync(first, total, holdBack: mayRetry, cancellationToken);
         if (skipped.Count > 0)
         {
-            var again = await VenueState.LoadAsync(connection, tx, artists);
-            await PersistRoundAsync(
-                connection,
-                tx,
+            var (again, _) = await ReadAsync(
+                artists,
+                (_, _) => Task.FromResult(0),
+                cancellationToken
+            );
+            await WriteAsync(
                 await Ask(again, skipped, cancellationToken),
                 total,
-                holdBack: false
+                holdBack: false,
+                cancellationToken
             );
         }
-
-        await tx.CommitAsync(cancellationToken);
 
         return new VenueChunkResult(
             false,
@@ -95,6 +94,40 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
             total.Output,
             chunks.Count + skipped.Count
         );
+    }
+
+    /// The catalogue as it stands, read without a transaction or the venue lock.
+    private async Task<(VenueState State, T Then)> ReadAsync<T>(
+        IReadOnlyCollection<Guid>? artists,
+        Func<Npgsql.NpgsqlConnection, VenueState, Task<T>> then,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var connection = db.CreateWriteConnection();
+        await connection.OpenAsync(cancellationToken);
+        var state = await VenueState.LoadAsync(connection, null, artists);
+        return (state, await then(connection, state));
+    }
+
+    /// One round of answers written in one short transaction under the venue lock.
+    private async Task<List<List<Spelling>>> WriteAsync(
+        IReadOnlyList<Asked> round,
+        Tally total,
+        bool holdBack,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var connection = db.CreateWriteConnection();
+        await connection.OpenAsync(cancellationToken);
+        await using var tx = await connection.BeginTransactionAsync(cancellationToken);
+        // Venues are cross-artist: one venue write at a time.
+        await connection.ExecuteAsync(
+            "SELECT pg_advisory_xact_lock(hashtext('norm-venues'))",
+            transaction: tx
+        );
+        var skipped = await PersistRoundAsync(connection, tx, round, total, holdBack);
+        await tx.CommitAsync(cancellationToken);
+        return skipped;
     }
 
     private sealed class Tally
@@ -177,7 +210,7 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
     /// they wait for an expert rather than being paid for again.
     private static async Task<List<Spelling>> OpenSpellings(
         Npgsql.NpgsqlConnection connection,
-        Npgsql.NpgsqlTransaction tx,
+        Npgsql.NpgsqlTransaction? tx,
         VenueState state,
         IReadOnlyCollection<string> skip
     )
@@ -1015,9 +1048,10 @@ internal sealed class VenueRequest
         // inside rooms, or a site elsewhere, drop the room, and so on down.
         bool InASiteHere(NewVenueAnswer n, IReadOnlyList<NewVenueAnswer> proposals)
         {
+            // A site stands alone; a room without a site is no room (the schema refuses it).
             if (n.Parent == null)
             {
-                return true;
+                return n.Kind == VenueKinds.Site;
             }
 
             if (n.Parent == n.Ref)
@@ -1032,7 +1066,7 @@ internal sealed class VenueRequest
             }
 
             var site = proposals.FirstOrDefault(m => m.Ref == n.Parent);
-            return site is { Parent: null } && site.Locality == n.Locality;
+            return site is { Parent: null, Kind: VenueKinds.Site } && site.Locality == n.Locality;
         }
 
         while (true)

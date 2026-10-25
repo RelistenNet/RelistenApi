@@ -54,27 +54,37 @@ public sealed class CatalogueLlm(INormalizationDatabase db, ICatalogueModel mode
         IReadOnlyCollection<string>? only = null
     )
     {
+        // Read and asked with nothing held; written in a short transaction under the
+        // artist's catalogue lock (writes are fill-only, so a step that ran meanwhile wins).
+        CatalogueState state;
+        IReadOnlyDictionary<string, KeyInfo> keys;
+        CatalogueRequest request;
+        await using (var read = db.CreateWriteConnection())
+        {
+            await read.OpenAsync(cancellationToken);
+            state = await CatalogueState.LoadAsync(read, null, artistUuid);
+            keys = UnresolvedKeys(state);
+            var chunk = SelectChunk(keys, skip, review, only);
+            if (chunk.Count == 0)
+            {
+                return new CatalogueChunkResult(true, 0, 0, [], [], [], 0, 0, 0, 0);
+            }
+
+            request = await BuildRequest(read, null, state, chunk, keys, review);
+        }
+
+        var (answer, reply) = await AskAsync(request, cancellationToken);
+        var unsure = Review(answer, request, keys);
+
         await using var connection = db.CreateWriteConnection();
         await connection.OpenAsync(cancellationToken);
         await using var tx = await connection.BeginTransactionAsync(cancellationToken);
-        // One catalogue step per artist at a time: a step reads the artist's whole state.
+        // One catalogue write per artist at a time.
         await connection.ExecuteAsync(
             "SELECT pg_advisory_xact_lock(hashtext('norm-catalogue'), hashtext(@artist))",
             new { artist = artistUuid.ToString() },
             tx
         );
-
-        var state = await CatalogueState.LoadAsync(connection, tx, artistUuid);
-        var keys = UnresolvedKeys(state);
-        var chunk = SelectChunk(keys, skip, review, only);
-        if (chunk.Count == 0)
-        {
-            return new CatalogueChunkResult(true, 0, 0, [], [], [], 0, 0, 0, 0);
-        }
-
-        var request = await BuildRequest(connection, tx, state, chunk, keys, review);
-        var (answer, reply) = await AskAsync(request, cancellationToken);
-        var unsure = Review(answer, request, keys);
         var written = await PersistAsync(
             connection,
             tx,

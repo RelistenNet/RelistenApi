@@ -760,4 +760,44 @@ public class TestVenueMatcher
 
         plan.NewVenues.Should().ContainSingle();
     }
+
+    [Test]
+    public void ATownOfOneNameAbroadIsNoStateTypo()
+    {
+        var rows = VenueState.WithoutStateTypos([
+            Row("Palace Theatre", "Manchester, NH, USA", 100),
+            Row("Palace Theatre", "Manchester, England, UK", 1),
+        ]);
+
+        rows.Select(r => r.Locality!.Country).Should().Equal("US", "GB");
+    }
+
+    [Test]
+    public void ASameDayNameThatDisagreesStaysOutEvenWithoutATown()
+    {
+        var peel = new CatalogueVenue(
+            Guid.NewGuid(),
+            "The Orange Peel",
+            "site",
+            null,
+            "Asheville",
+            "NC",
+            "US"
+        );
+        var instore = Row("Good Music and Other Stuff", "Unknown Location");
+        var state = new VenueState
+        {
+            Unmapped = [instore],
+            Venues = new Dictionary<Guid, CatalogueVenue> { [peel.Uuid] = peel },
+            Names = new[] { ("orange peel", peel.Uuid) }.ToLookup(n => n.Item1, n => n.Item2),
+            ExternalIds = new Dictionary<(string, string), Guid>(),
+            ShowDates = new Dictionary<Guid, int> { [instore.Uuid] = 1 },
+            SameShows = new Dictionary<Guid, IReadOnlyDictionary<Guid, int>>
+            {
+                [instore.Uuid] = new Dictionary<Guid, int> { [peel.Uuid] = 1 },
+            },
+        };
+
+        VenueMatcher.Match(state).Evidence.Should().BeEmpty();
+    }
 }

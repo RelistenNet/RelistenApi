@@ -187,6 +187,43 @@ internal sealed class ScriptedHistoryModel(bool unsure = false) : ICatalogueMode
     }
 }
 
+/// The scripted venue model, checking on another connection that no one holds the venue
+/// lock while it is called.
+internal sealed class LockProbeModel(string connectionString) : ICatalogueModel
+{
+    private readonly ScriptedVenueModel inner = new();
+    public List<bool> LockFree { get; } = [];
+    public string ModelId => inner.ModelId;
+
+    public async Task<ModelReply> CompleteAsync(
+        string instructions,
+        string data,
+        string schemaName,
+        string schemaJson,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var probe = new Npgsql.NpgsqlConnection(connectionString);
+        await probe.OpenAsync(cancellationToken);
+        var free = await probe.ExecuteScalarAsync<bool>(
+            "SELECT pg_try_advisory_lock(hashtext('norm-venues'))"
+        );
+        if (free)
+        {
+            await probe.ExecuteAsync("SELECT pg_advisory_unlock(hashtext('norm-venues'))");
+        }
+
+        LockFree.Add(free);
+        return await inner.CompleteAsync(
+            instructions,
+            data,
+            schemaName,
+            schemaJson,
+            cancellationToken
+        );
+    }
+}
+
 [TestFixture, NonParallelizable, Category("LocalIngestion")]
 public class TestVenueCatalogue
 {
@@ -707,5 +744,135 @@ public class TestVenueCatalogue
         )
             .Should()
             .Equal(unsure ? "history true" : "history false");
+    }
+
+    [Test]
+    public async Task NoLockIsHeldThroughAModelCall()
+    {
+        var database = new DbServiceNormalizationDatabase(db);
+        var model = new LockProbeModel(LocalTestDatabase.ConnectionString);
+        await new VenueMatch(database).RunAsync(artists, CancellationToken.None);
+        await new VenueLlm(database, model).RunChunkAsync(artists, [], CancellationToken.None);
+
+        model.LockFree.Should().NotBeEmpty().And.OnlyContain(free => free);
+    }
+
+    [Test]
+    public async Task ABusyPostImportMatchDefers()
+    {
+        var match = new VenueMatch(new DbServiceNormalizationDatabase(db));
+        await using var holder = new Npgsql.NpgsqlConnection(LocalTestDatabase.ConnectionString);
+        await holder.OpenAsync();
+        await using (var tx = await holder.BeginTransactionAsync())
+        {
+            await holder.ExecuteAsync(
+                "SELECT pg_advisory_xact_lock(hashtext('norm-venues'))",
+                transaction: tx
+            );
+            (await match.RunAsync(artists, CancellationToken.None, wait: false))
+                .Deferred.Should()
+                .BeTrue();
+        }
+
+        var later = await match.RunAsync(artists, CancellationToken.None, wait: false);
+        later.Deferred.Should().BeFalse();
+        later.RowsMapped.Should().BeGreaterThan(0);
+    }
+
+    [Test]
+    public async Task ReciprocalMergesCannotMakeACycle()
+    {
+        var (a, b) = (Guid.CreateVersion7(), Guid.CreateVersion7());
+        await db.WithWriteConnection(async c =>
+        {
+            var connection = (Npgsql.NpgsqlConnection)c;
+            await using var tx = await connection.BeginTransactionAsync();
+            var store = await NormStore.BeginAsync(connection, tx, AuthorTypes.Moderator, "m1");
+            await store.WriteVenuesAsync([
+                new VenueRecord(a, "Venue A", City: "Albany", Region: "NY", Country: "US"),
+                new VenueRecord(b, "Venue B", City: "Albany", Region: "NY", Country: "US"),
+            ]);
+            await tx.CommitAsync();
+            return 0;
+        });
+
+        await using var first = new Npgsql.NpgsqlConnection(LocalTestDatabase.ConnectionString);
+        await using var second = new Npgsql.NpgsqlConnection(LocalTestDatabase.ConnectionString);
+        await first.OpenAsync();
+        await second.OpenAsync();
+        await using var tx1 = await first.BeginTransactionAsync();
+        await (await NormStore.BeginAsync(first, tx1, AuthorTypes.Moderator, "m1")).MergeVenueAsync(
+            a,
+            b
+        );
+
+        // B into A waits for A into B, then finds A merged: refused, no cycle.
+        var reverse = Task.Run(async () =>
+        {
+            await using var tx2 = await second.BeginTransactionAsync();
+            await (
+                await NormStore.BeginAsync(second, tx2, AuthorTypes.Moderator, "m2")
+            ).MergeVenueAsync(b, a);
+            await tx2.CommitAsync();
+        });
+        await Task.Delay(300);
+        reverse.IsCompleted.Should().BeFalse();
+        await tx1.CommitAsync();
+
+        await FluentActions
+            .Awaiting(() => reverse)
+            .Should()
+            .ThrowAsync<InvalidOperationException>();
+    }
+
+    [Test]
+    public async Task ARevertNeverUndoesAnEditCommittedDuringIt()
+    {
+        var song = Guid.CreateVersion7();
+        var run = await db.WithWriteConnection(async c =>
+        {
+            var connection = (Npgsql.NpgsqlConnection)c;
+            await using var tx = await connection.BeginTransactionAsync();
+            var store = await NormStore.BeginAsync(
+                connection,
+                tx,
+                AuthorTypes.Llm,
+                "catalogue-llm@5"
+            );
+            await store.WriteSongsAsync([
+                new SongRecord(song, artists[0], "Sugaree", Confidence: 0.95f),
+            ]);
+            await tx.CommitAsync();
+            return store.Run;
+        });
+
+        await using var editor = new Npgsql.NpgsqlConnection(LocalTestDatabase.ConnectionString);
+        await using var reverter = new Npgsql.NpgsqlConnection(LocalTestDatabase.ConnectionString);
+        await editor.OpenAsync();
+        await reverter.OpenAsync();
+        await using var edit = await editor.BeginTransactionAsync();
+        await NormStore.BeginAsync(editor, edit, AuthorTypes.Moderator, "m1");
+        await editor.ExecuteAsync(
+            "UPDATE norm.songs SET name = 'Sugaree (corrected)' WHERE uuid = @song",
+            new { song },
+            edit
+        );
+
+        var revert = Task.Run(async () =>
+        {
+            await using var tx = await reverter.BeginTransactionAsync();
+            var result = await (
+                await NormStore.BeginAsync(reverter, tx, AuthorTypes.Moderator, "m2")
+            ).RevertRunAsync(run);
+            await tx.CommitAsync();
+            return result;
+        });
+        await Task.Delay(300);
+        await edit.CommitAsync();
+
+        (await revert).Should().Be((0, 1));
+        (await Strings($"SELECT name FROM norm.songs WHERE uuid = '{song}'"))
+            .Should()
+            .Equal("Sugaree (corrected)");
     }
 }

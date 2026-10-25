@@ -381,4 +381,24 @@ public class TestVenueAnswers
             .Should()
             .Equal("The Garden");
     }
+
+    [Test]
+    public void AParentlessRoomIsNoParent()
+    {
+        var (request, _) = Request();
+        var answer = VenueRequest.Parse(
+            Answer(
+                """[{"id": "s2", "spelling_text": "The Theater at Madison Square Garden", "venue": "n2", "not_a_venue": false, "confidence": 0.95, "rationale": ""}]""",
+                """
+                [{"id": "n1", "locality": "l1", "name": "Hall", "kind": "room", "parent": null, "names": []},
+                 {"id": "n2", "locality": "l1", "name": "Balcony", "kind": "room", "parent": "n1", "names": []}]
+                """
+            ),
+            request
+        );
+
+        // A room with no site is no room, and nothing can be inside it.
+        answer.NewVenues.Should().BeEmpty();
+        answer.Spellings.Should().BeEmpty();
+    }
 }
