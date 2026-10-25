@@ -239,6 +239,24 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
             .OfType<string>()
             .ToList();
 
+    /// The names known venues may learn from an answer (their renames, their short names),
+    /// never a spelling the answer left unsure: the next match would trust the name and place
+    /// the spelling anyway, past the bar.
+    internal static IEnumerable<KnownNameAnswer> KnownNamesToLearn(
+        VenueRequest request,
+        VenueAnswer answer
+    )
+    {
+        var unsure = request
+            .Spellings.Keys.Where(key => !IsSure(answer, key))
+            .Select(key => key.Split('@')[0])
+            .ToList();
+        return answer.KnownNames.Where(k =>
+            VenueNormalizer.Key(k.Name.Name) is { } name
+            && !unsure.Any(u => VenueNormalizer.SameName(u, name))
+        );
+    }
+
     private static bool IsSure(VenueAnswer answer, string key) =>
         answer.Spellings.TryGetValue(key, out var a)
         && a.Confidence >= Threshold
@@ -482,8 +500,8 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
         }
 
         names.AddRange(
-            answer
-                .KnownNames.Where(k => refs.ContainsKey(k.Ref))
+            KnownNamesToLearn(request, answer)
+                .Where(k => refs.ContainsKey(k.Ref))
                 .Select(k => k.Name with { VenueUuid = refs[k.Ref] })
         );
         var evidence = new List<VenueEvidenceRecord>();

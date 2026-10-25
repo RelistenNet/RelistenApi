@@ -356,4 +356,29 @@ public class TestVenueAnswers
             .Data.Should()
             .Contain("\"inside\":\"Three Sisters Park\"");
     }
+
+    [Test]
+    public void AnUnsureSpellingIsNeverLearnedAsAName()
+    {
+        var (request, _) = Request();
+        var answer = VenueRequest.Parse(
+            Answer(
+                """
+                [{"id": "s1", "spelling_text": "MSG", "venue": "v1", "not_a_venue": false, "confidence": 0.6, "rationale": "unsure"}]
+                """,
+                "[]",
+                """
+                [{"venue": "v1", "name": "MSG", "kind": "short", "from": null, "to": null},
+                 {"venue": "v1", "name": "The Garden", "kind": "short", "from": null, "to": null}]
+                """
+            ),
+            request
+        );
+
+        VenueLlm
+            .KnownNamesToLearn(request, answer)
+            .Select(k => k.Name.Name)
+            .Should()
+            .Equal("The Garden");
+    }
 }
