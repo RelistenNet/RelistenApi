@@ -429,4 +429,27 @@ public class TestVenueAnswers
             .Should()
             .Equal("The Theater at Madison Square Garden");
     }
+
+    [Test]
+    public void AnUnsureSpellingNeverMatchesAProposedVenueToATwin()
+    {
+        var (request, _) = Request();
+        var answer = VenueRequest.Parse(
+            Answer(
+                """
+                [{"id": "s2", "spelling_text": "The Theater at Madison Square Garden", "venue": "n1", "not_a_venue": false, "confidence": 0.6, "rationale": "unsure"}]
+                """,
+                """
+                [{"id": "n1", "locality": "l1", "name": "Hulu Theater", "kind": "site", "parent": null,
+                  "names": [{"name": "The Theater at Madison Square Garden", "kind": "official", "from": "1991", "to": "2018"}]}]
+                """
+            ),
+            request
+        );
+
+        VenueLlm
+            .TwinNames(answer.NewVenues.Single(), VenueLlm.Learnable(request, answer))
+            .Should()
+            .Equal("hulu theater");
+    }
 }

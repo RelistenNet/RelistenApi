@@ -263,11 +263,17 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
         }
     }
 
-    private static IReadOnlyList<string> TwinNames(NewVenueAnswer n) =>
+    /// The names a proposed venue is matched to a twin by: never a spelling its answer left
+    /// unsure (it would send the venue's rows to that spelling's venue).
+    internal static IReadOnlyList<string> TwinNames(
+        NewVenueAnswer n,
+        Func<string, bool> learnable
+    ) =>
         n
             .Names.Where(m => m.Kind != VenueNameKinds.Short)
             .Select(m => m.Name)
             .Append(n.Name)
+            .Where(learnable)
             .Select(VenueNormalizer.Key)
             .OfType<string>()
             .ToList();
@@ -475,6 +481,7 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
 
         // A proposed venue that repeats a venue listed in its locality (or one proposed before
         // it there) under one of its names is that venue: the model doesn't make a twin.
+        var learnable = Learnable(request, answer);
         var refs = new Dictionary<string, Guid>(request.VenueIds);
         var created = new List<NewVenueAnswer>();
         var twins = new List<NewVenueAnswer>();
@@ -498,12 +505,12 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
                 .Select(v => v.Key)
                 .Concat(created.Where(c => placed[c.Ref] == here).Select(c => c.Ref))
                 .FirstOrDefault(r =>
-                    TwinNames(n)
+                    TwinNames(n, learnable)
                         .Any(k =>
                             (
                                 request.VenueKeys.TryGetValue(r, out var keys)
                                     ? keys
-                                    : TwinNames(created.First(c => c.Ref == r))
+                                    : TwinNames(created.First(c => c.Ref == r), learnable)
                             ).Any(other => VenueNormalizer.SameName(k, other))
                         )
                 );
@@ -540,7 +547,6 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
         );
 
         var names = new List<VenueNameRecord>();
-        var learnable = Learnable(request, answer);
         foreach (var n in created.Concat(twins))
         {
             // The proposed name is the current official name: it starts where the last dated
