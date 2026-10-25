@@ -74,32 +74,66 @@ public class VenueCatalogueWorkflow
     [WorkflowRun]
     public async Task<VenueCatalogueResult> RunAsync(BuildVenueCatalogue request)
     {
-        if (request.FlaggedOnly)
+        var artists = await ArtistsAsync(request);
+        if (artists is { Count: 0 })
         {
-            var flagged = await Workflow.ExecuteActivityAsync(
-                (VenueMatchActivities a) => a.FlaggedArtists(),
-                Step
-            );
-            if (flagged.Count == 0)
-            {
-                return new VenueCatalogueResult(0, 0, 0, 0, 0, 0);
-            }
-
-            request = request with { Artists = flagged, FlaggedOnly = false };
+            return new VenueCatalogueResult(0, 0, 0, 0, 0, 0);
         }
 
-        var first = await Workflow.ExecuteActivityAsync(
-            (VenueActivities a) => a.Match(request.Artists),
-            Step
-        );
-        var total = new VenueCatalogueResult(0, first.VenuesCreated, first.RowsMapped, 0, 0, 0);
+        request = request with { Artists = artists, FlaggedOnly = false };
+        var first = await MatchAsync(request.Artists);
+        var total = new VenueCatalogueResult(0, first.VenuesCreated, first.RowsMapped, 0, 0, 0)
+        {
+            FirstMatch = first,
+        };
+        total = await AskAboutSpellingsAsync(request, total);
+        var last = await MatchAsync(request.Artists);
+        total = total with
+        {
+            VenuesCreated = total.VenuesCreated + last.VenuesCreated,
+            RowsMapped = total.RowsMapped + last.RowsMapped,
+            LastMatch = last,
+        };
+        total = await NameVenuesAsync(request, total);
+
+        // History merges renamed twins: their shows move to the survivor.
+        return total.VenuesNamed > 0
+            ? total with
+            {
+                LastMatch = await MatchAsync(request.Artists),
+            }
+            : total;
+    }
+
+    /// The run's artists: the request's (null: every artist), or the flagged ones.
+    private static async Task<IReadOnlyList<Guid>?> ArtistsAsync(BuildVenueCatalogue request) =>
+        request.FlaggedOnly
+            ? await Workflow.ExecuteActivityAsync(
+                (VenueMatchActivities a) => a.FlaggedArtists(),
+                Step
+            )
+            : request.Artists;
+
+    private static Task<VenueMatchResult> MatchAsync(IReadOnlyList<Guid>? artists) =>
+        Workflow.ExecuteActivityAsync((VenueActivities a) => a.Match(artists), Step);
+
+    private static bool WithinBudget(BuildVenueCatalogue request, VenueCatalogueResult total) =>
+        request.MaxChunks is not { } max || total.Chunks < max;
+
+    /// The model for the spellings the match left, step by step until none is left or the
+    /// budget is spent. Each step asks up to Parallel requests at once (never more than the
+    /// budget has left) and a re-ask round only when that fits too. A failed step counts every
+    /// call it could have made; three failures in a row end the run.
+    private static async Task<VenueCatalogueResult> AskAboutSpellingsAsync(
+        BuildVenueCatalogue request,
+        VenueCatalogueResult total
+    )
+    {
         var skip = new List<string>();
         var failures = 0;
-        while (request.MaxChunks is not { } max || total.Chunks < max)
+        while (WithinBudget(request, total))
         {
-            VenueChunkResult chunk;
-            // At most the budget's remaining calls at once; a re-ask round only when it fits too.
-            var remaining = request.MaxChunks is { } max2 ? max2 - total.Chunks : int.MaxValue;
+            var remaining = request.MaxChunks is { } max ? max - total.Chunks : int.MaxValue;
             var parallel = Math.Max(1, Math.Min(request.Parallel, remaining));
             var input = new VenueChunkInput(
                 request.Artists,
@@ -107,6 +141,7 @@ public class VenueCatalogueWorkflow
                 remaining >= 2 * parallel,
                 parallel
             );
+            VenueChunkResult chunk;
             try
             {
                 chunk = await Workflow.ExecuteActivityAsync(
@@ -117,7 +152,6 @@ public class VenueCatalogueWorkflow
             }
             catch (ActivityFailureException) when (++failures < FailuresInARow)
             {
-                // A failed step may have made every call it could: all of them count.
                 total = total with
                 {
                     Chunks = total.Chunks + input.Parallel * (input.MayRetry ? 2 : 1),
@@ -142,27 +176,21 @@ public class VenueCatalogueWorkflow
             };
         }
 
-        var last = await Workflow.ExecuteActivityAsync(
-            (VenueActivities a) => a.Match(request.Artists),
-            Step
-        );
-        total = total with
-        {
-            VenuesCreated = total.VenuesCreated + last.VenuesCreated,
-            RowsMapped = total.RowsMapped + last.RowsMapped,
-            FirstMatch = first,
-            LastMatch = last,
-        };
+        return total;
+    }
 
-        // The names of the venues the model never saw, while the budget lasts.
-        failures = 0;
-        while (
-            request.HistoryMinShows > 0 && (request.MaxChunks is not { } cap || total.Chunks < cap)
-        )
+    /// Official names for the run's venues the model never saw, one request at a time while
+    /// the budget lasts (HistoryMinShows 0 skips it); failures count and end the run as above.
+    private static async Task<VenueCatalogueResult> NameVenuesAsync(
+        BuildVenueCatalogue request,
+        VenueCatalogueResult total
+    )
+    {
+        var (minShows, artists) = (request.HistoryMinShows, request.Artists);
+        var failures = 0;
+        while (minShows > 0 && WithinBudget(request, total))
         {
             VenueHistoryResult history;
-            var minShows = request.HistoryMinShows;
-            var artists = request.Artists;
             try
             {
                 history = await Workflow.ExecuteActivityAsync(
@@ -189,18 +217,6 @@ public class VenueCatalogueWorkflow
                 Unsure = total.Unsure + history.Unsure,
                 InputTokens = total.InputTokens + history.InputTokens,
                 OutputTokens = total.OutputTokens + history.OutputTokens,
-            };
-        }
-
-        // History merges renamed twins: their shows move to the survivor.
-        if (total.VenuesNamed > 0)
-        {
-            total = total with
-            {
-                LastMatch = await Workflow.ExecuteActivityAsync(
-                    (VenueActivities a) => a.Match(request.Artists),
-                    Step
-                ),
             };
         }
 
