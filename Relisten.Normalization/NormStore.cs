@@ -357,6 +357,20 @@ public sealed partial class NormStore
                 // A song this run created takes its derived track rows with it: they aren't in
                 // the change log, the next match rebuilds them, and they would otherwise block
                 // the delete. Rulings and people's rows on it still do (the change is skipped).
+                // Likewise a venue this run created and the shows derived onto it.
+                if (change is { Op: "insert", Table: "venues" })
+                {
+                    await connection.ExecuteAsync(
+                        """
+                        DELETE FROM norm.show_venues
+                        WHERE venue_uuid = (@Key::jsonb ->> 'uuid')::uuid
+                          AND basis = 'evidence' AND author_type NOT IN ('user', 'moderator')
+                        """,
+                        args,
+                        tx
+                    );
+                }
+
                 if (change is { Op: "insert", Table: "songs" })
                 {
                     await connection.ExecuteAsync(

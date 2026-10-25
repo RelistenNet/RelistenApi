@@ -294,6 +294,41 @@ public class TestNormStore
     }
 
     [Test]
+    public async Task ARevertRemovesAVenueWithItsDerivedShows()
+    {
+        var (venue, show) = (Guid.CreateVersion7(), Guid.NewGuid());
+        var run = await As(AuthorTypes.Algorithm, "venue-matcher@2");
+        await run.WriteVenuesAsync([
+            new VenueRecord(
+                venue,
+                "Red Rocks Amphitheatre",
+                City: "Morrison",
+                Region: "CO",
+                Country: "US",
+                Confidence: 0.95f
+            ),
+        ]);
+        await run.WriteShowVenuesAsync([
+            new ShowVenueRecord(show, venue, 0.95f, ShowVenueBasis.Evidence),
+        ]);
+
+        var (reverted, skipped) = await (await As(AuthorTypes.Moderator, "m1")).RevertRunAsync(
+            run.Run
+        );
+
+        (reverted, skipped).Should().Be((1, 0));
+        (
+            await db.ExecuteScalarAsync<long>(
+                "SELECT (SELECT count(*) FROM norm.venues WHERE uuid = @venue) + (SELECT count(*) FROM norm.show_venues WHERE show_uuid = @show)",
+                new { venue, show },
+                tx
+            )
+        )
+            .Should()
+            .Be(0);
+    }
+
+    [Test]
     public async Task ARevertSkipsARowWhoseSlugIsTakenSince()
     {
         var (song, later) = (Guid.CreateVersion7(), Guid.CreateVersion7());
