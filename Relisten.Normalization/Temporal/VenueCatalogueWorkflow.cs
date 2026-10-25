@@ -162,10 +162,11 @@ public class VenueCatalogueWorkflow
         {
             VenueHistoryResult history;
             var minShows = request.HistoryMinShows;
+            var artists = request.Artists;
             try
             {
                 history = await Workflow.ExecuteActivityAsync(
-                    (VenueActivities a) => a.History(minShows),
+                    (VenueActivities a) => a.History(minShows, artists),
                     ChunkStep
                 );
                 failures = 0;

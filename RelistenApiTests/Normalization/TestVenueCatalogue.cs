@@ -688,7 +688,11 @@ public class TestVenueCatalogue
         var model = new ScriptedHistoryModel(unsure);
         var history = new VenueHistory(database, model);
 
-        var first = await history.RunChunkAsync(1, CancellationToken.None);
+        // A run for other artists doesn't ask about these artists' venues.
+        (await history.RunChunkAsync(1, CancellationToken.None, [Guid.NewGuid()]))
+            .Done.Should()
+            .BeTrue();
+        var first = await history.RunChunkAsync(1, CancellationToken.None, artists);
         (await history.RunChunkAsync(1, CancellationToken.None)).Done.Should().BeTrue();
 
         first.Asked.Should().Be(1); // Red Rocks: the one venue the match created

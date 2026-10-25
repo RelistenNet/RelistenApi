@@ -20,12 +20,13 @@ public sealed record VenueChunkInput(
 public sealed class VenueActivities(VenueMatch match, VenueLlm llm, VenueHistory history)
 {
     [Activity("Venues.History")]
-    public async Task<VenueHistoryResult> History(int minShows)
+    public async Task<VenueHistoryResult> History(int minShows, IReadOnlyList<Guid>? artists)
     {
         using var heartbeat = new ActivityHeartbeat();
         return await history.RunChunkAsync(
             minShows,
-            ActivityExecutionContext.Current.CancellationToken
+            ActivityExecutionContext.Current.CancellationToken,
+            artists
         );
     }
 

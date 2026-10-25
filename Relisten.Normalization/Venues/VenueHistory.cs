@@ -31,10 +31,13 @@ public sealed class VenueHistory(INormalizationDatabase db, ICatalogueModel mode
 
     public string Author => $"{PromptVersion}+{model.ModelId}";
 
-    /// minShows: only venues with at least this many shows are worth a question.
+    /// minShows: only venues with at least this many shows are worth a question. artists:
+    /// only venues these artists played (null: every venue); a shared venue counts all its
+    /// shows.
     public async Task<VenueHistoryResult> RunChunkAsync(
         int minShows,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        IReadOnlyCollection<Guid>? artists = null
     )
     {
         await using var connection = db.CreateWriteConnection();
@@ -45,7 +48,7 @@ public sealed class VenueHistory(INormalizationDatabase db, ICatalogueModel mode
             transaction: tx
         );
 
-        var venues = await NextVenuesAsync(connection, tx, minShows);
+        var venues = await NextVenuesAsync(connection, tx, minShows, artists);
         if (venues.Count == 0)
         {
             return new VenueHistoryResult(true, 0, 0, 0, 0, 0);
@@ -80,7 +83,8 @@ public sealed class VenueHistory(INormalizationDatabase db, ICatalogueModel mode
     private static async Task<List<HistoryVenue>> NextVenuesAsync(
         Npgsql.NpgsqlConnection connection,
         Npgsql.NpgsqlTransaction tx,
-        int minShows
+        int minShows,
+        IReadOnlyCollection<Guid>? artists
     ) =>
         (
             await connection.QueryAsync<HistoryVenue>(
@@ -100,12 +104,22 @@ public sealed class VenueHistory(INormalizationDatabase db, ICatalogueModel mode
                         AND (n.valid_from > '-infinity' OR n.valid_to IS NOT NULL))
                   AND NOT EXISTS (
                       SELECT 1 FROM norm.review_items r WHERE r.subject = 'venue' AND r.key = 'history:' || v.uuid)
+                  AND (@all OR EXISTS (
+                      SELECT 1 FROM norm.show_venues mine JOIN shows ms ON ms.uuid = mine.show_uuid
+                      JOIN artists ma ON ma.id = ms.artist_id
+                      WHERE mine.venue_uuid = v.uuid AND ma.uuid = ANY(@artists)))
                 GROUP BY v.uuid, p.name
                 HAVING count(sv.show_uuid) >= @minShows
                 ORDER BY count(sv.show_uuid) DESC, v.uuid
                 LIMIT @batch
                 """,
-                new { minShows, batch = Batch },
+                new
+                {
+                    minShows,
+                    batch = Batch,
+                    all = artists == null,
+                    artists = artists?.ToArray() ?? [],
+                },
                 tx
             )
         ).ToList();
