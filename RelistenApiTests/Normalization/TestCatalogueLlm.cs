@@ -220,11 +220,28 @@ public class TestCatalogueLlm
             model
         );
 
+        var since = await db.WithWriteConnection(c =>
+            c.ExecuteScalarAsync<DateTime>("SELECT clock_timestamp()")
+        );
         var first = await llm.RunChunkAsync(artist, [], CancellationToken.None);
 
         first.Done.Should().BeFalse();
         first.SongsCreated.Should().Be(2);
         first.Unresolved.Should().Equal("unknown thing");
+        // The call's receipt: linked to the run, request and reply kept, its unsure key named.
+        (
+            await db.WithWriteConnection(c =>
+                c.QueryAsync<string>(
+                    """
+                    SELECT job || ' ' || (run_uuid IS NOT NULL)::text || ' ' || (reply IS NOT NULL)::text || ' ' || (outcome->'unresolved')::text
+                    FROM norm.model_calls WHERE called_at >= @since AND request::text LIKE '%Sugaree%'
+                    """,
+                    new { since }
+                )
+            )
+        )
+            .Should()
+            .Equal("catalogue true true [\"unknown thing\"]");
         (await Strings("SELECT name FROM norm.songs WHERE artist_uuid = @artist ORDER BY name"))
             .Should()
             .Equal("Me And My Uncle", "Sugaree");

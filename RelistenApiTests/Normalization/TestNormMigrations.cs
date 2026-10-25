@@ -22,6 +22,7 @@ public class TestNormMigrations
             .Should()
             .Equal(
                 "changes",
+                "model_calls",
                 "review_items",
                 "runs",
                 "show_venues",

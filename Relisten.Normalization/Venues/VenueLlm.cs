@@ -198,7 +198,7 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
             }
 
             var unsure = chunk.Where(s => !IsSure(answer, s.Key)).Except(again).ToList();
-            var written = await PersistAsync(connection, tx, request, answer, unsure);
+            var written = await PersistAsync(connection, tx, request, answer, unsure, reply, again);
             total.Add(written, chunk.Count - unsure.Count - again.Count, unsure.Count, reply);
         }
 
@@ -280,14 +280,22 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
         VenueAnswer answer
     )
     {
+        var learnable = Learnable(request, answer);
+        return answer.KnownNames.Where(k => learnable(k.Name.Name));
+    }
+
+    /// Whether a name may be written from this answer: not a spelling it left unsure, on a
+    /// known venue or a proposed one alike (the next match trusts names, and would place the
+    /// unsure spelling past the bar).
+    internal static Func<string, bool> Learnable(VenueRequest request, VenueAnswer answer)
+    {
         var unsure = request
             .Spellings.Keys.Where(key => !IsSure(answer, key))
             .Select(key => key.Split('@')[0])
             .ToList();
-        return answer.KnownNames.Where(k =>
-            VenueNormalizer.Key(k.Name.Name) is { } name
-            && !unsure.Any(u => VenueNormalizer.SameName(u, name))
-        );
+        return name =>
+            VenueNormalizer.Key(name) is { } key
+            && !unsure.Any(u => VenueNormalizer.SameName(u, key));
     }
 
     private static bool IsSure(VenueAnswer answer, string key) =>
@@ -302,7 +310,9 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
         Npgsql.NpgsqlTransaction tx,
         VenueRequest request,
         VenueAnswer answer,
-        IReadOnlyList<Spelling> unsure
+        IReadOnlyList<Spelling> unsure,
+        Songs.ModelReply reply,
+        IReadOnlyList<Spelling> heldBack
     )
     {
         var store = await NormStore.BeginAsync(
@@ -313,6 +323,32 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
             $"{request.Places.Count} localities"
         );
         var written = await Write(store, request, answer);
+        // The call's receipt, with what became of each spelling.
+        await ModelCalls.WriteAsync(
+            connection,
+            tx,
+            store.Run,
+            new ModelCallRecord(
+                "venues",
+                PromptVersion,
+                model.ModelId,
+                request.Data,
+                reply,
+                new System.Text.Json.Nodes.JsonObject
+                {
+                    ["accepted"] = ModelCalls.Strings(
+                        request.Spellings.Keys.Where(k => IsSure(answer, k))
+                    ),
+                    ["unsure"] = ModelCalls.Strings(unsure.Select(u => u.Key)),
+                    ["asked_again"] = ModelCalls.Strings(heldBack.Select(h => h.Key)),
+                    ["set_aside"] = new System.Text.Json.Nodes.JsonObject(
+                        answer.Dropped.Select(d =>
+                            KeyValuePair.Create(d.Key, (System.Text.Json.Nodes.JsonNode?)d.Value)
+                        )
+                    ),
+                }
+            )
+        );
         await store.WriteReviewItemsAsync(
             unsure
                 .Select(s =>
@@ -504,6 +540,7 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
         );
 
         var names = new List<VenueNameRecord>();
+        var learnable = Learnable(request, answer);
         foreach (var n in created.Concat(twins))
         {
             // The proposed name is the current official name: it starts where the last dated
@@ -513,6 +550,15 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
                 m.Kind == VenueNameKinds.Official
                 && VenueNormalizer.Key(m.Name) == VenueNormalizer.Key(n.Name)
             );
+            if (!learnable(n.Name))
+            {
+                names.AddRange(
+                    n.Names.Where(m => learnable(m.Name))
+                        .Select(m => m with { VenueUuid = refs[n.Ref] })
+                );
+                continue;
+            }
+
             names.Add(
                 listed
                     ? new VenueNameRecord(
@@ -529,7 +575,10 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
                         Confidence: Threshold
                     )
             );
-            names.AddRange(n.Names.Select(m => m with { VenueUuid = refs[n.Ref] }));
+            names.AddRange(
+                n.Names.Where(m => learnable(m.Name))
+                    .Select(m => m with { VenueUuid = refs[n.Ref] })
+            );
         }
 
         names.AddRange(

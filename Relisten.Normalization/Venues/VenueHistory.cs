@@ -73,7 +73,7 @@ public sealed class VenueHistory(INormalizationDatabase db, ICatalogueModel mode
             "SELECT pg_advisory_xact_lock(hashtext('norm-venues'))",
             transaction: tx
         );
-        var named = await PersistAsync(connection, tx, venues, answers);
+        var named = await PersistAsync(connection, tx, venues, answers, Data(ids), reply);
         await tx.CommitAsync(cancellationToken);
 
         return new VenueHistoryResult(
@@ -160,7 +160,9 @@ public sealed class VenueHistory(INormalizationDatabase db, ICatalogueModel mode
         Npgsql.NpgsqlConnection connection,
         Npgsql.NpgsqlTransaction tx,
         IReadOnlyList<HistoryVenue> venues,
-        IReadOnlyList<HistoryAnswer> answers
+        IReadOnlyList<HistoryAnswer> answers,
+        string request,
+        ModelReply reply
     )
     {
         var store = await NormStore.BeginAsync(
@@ -173,6 +175,28 @@ public sealed class VenueHistory(INormalizationDatabase db, ICatalogueModel mode
         var sure = answers
             .Where(a => a.Confidence >= VenueLlm.Threshold && a.Names.Count > 0)
             .ToList();
+        await ModelCalls.WriteAsync(
+            connection,
+            tx,
+            store.Run,
+            new ModelCallRecord(
+                "venue_history",
+                PromptVersion,
+                model.ModelId,
+                request,
+                reply,
+                new JsonObject
+                {
+                    ["named"] = ModelCalls.Strings(sure.Select(a => a.Venue.ToString())),
+                    ["unsure"] = ModelCalls.Strings(
+                        venues
+                            .Select(v => v.Uuid)
+                            .Except(sure.Select(a => a.Venue))
+                            .Select(u => u.ToString())
+                    ),
+                }
+            )
+        );
         await store.WriteVenueNamesAsync(
             sure.SelectMany(a => a.Names)
                 .OrderBy(n => n.Kind == VenueNameKinds.Spelling ? 1 : 0)

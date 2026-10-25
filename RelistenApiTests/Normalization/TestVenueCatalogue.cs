@@ -367,8 +367,21 @@ public class TestVenueCatalogue
         // Red Rocks has one spelling in Morrison; New York has three, for the model.
         first.VenuesCreated.Should().Be(1);
         first.RowsLeft.Should().Be(4);
+        var since = await db.WithWriteConnection(c =>
+            c.ExecuteScalarAsync<DateTime>("SELECT clock_timestamp()")
+        );
         var chunk = await llm.RunChunkAsync(artists, [], CancellationToken.None);
         chunk.VenuesCreated.Should().Be(2);
+        (
+            await db.WithWriteConnection(c =>
+                c.QueryAsync<string>(
+                    "SELECT job || ' ' || (run_uuid IS NOT NULL)::text || ' ' || jsonb_array_length(outcome->'accepted') FROM norm.model_calls WHERE called_at >= @since AND job = 'venues'",
+                    new { since }
+                )
+            )
+        )
+            .Should()
+            .Equal($"venues true {chunk.Resolved}");
         (await llm.RunChunkAsync(artists, chunk.Asked, CancellationToken.None))
             .Done.Should()
             .BeTrue();
@@ -733,6 +746,13 @@ public class TestVenueCatalogue
         (await history.RunChunkAsync(1, CancellationToken.None)).Done.Should().BeTrue();
 
         first.Asked.Should().Be(1); // Red Rocks: the one venue the match created
+        (
+            await Strings(
+                "SELECT (outcome ? 'named')::text || ' ' || (provider_request_id IS NULL)::text FROM norm.model_calls WHERE job = 'venue_history' ORDER BY called_at DESC LIMIT 1"
+            )
+        )
+            .Should()
+            .Equal("true true");
         model.Calls.Should().Be(1);
         (await Strings("SELECT name FROM norm.venues WHERE city = 'Morrison'"))
             .Should()

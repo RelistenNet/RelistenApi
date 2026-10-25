@@ -17,6 +17,10 @@ public sealed class NormalizationAlreadyRunning(string workflowId)
 /// Starts normalization workflows (operator commands and schedules).
 public sealed class NormalizationClient(ITemporalClient client)
 {
+    /// The one id every venue run has, manual or nightly: venues are cross-artist, so two runs
+    /// never overlap.
+    public const string VenueRunId = "norm/venues";
+
     /// The nightly venue run (10:00 UTC, after the 07:00 full ingest): the model for what the
     /// post-import matches left, for the artists whose venues are switched on, at most
     /// nightlyCalls model calls. Registration never replaces or unpauses a saved schedule.
@@ -25,7 +29,7 @@ public sealed class NormalizationClient(ITemporalClient client)
         var nightly = new BuildVenueCatalogue(null, nightlyCalls, FlaggedOnly: true);
         var schedule = new Schedule(
             ScheduleActionStartWorkflow.Create(
-                (VenueCatalogueWorkflow workflow) => workflow.RunAsync(nightly),
+                (NightlyVenueCatalogueWorkflow workflow) => workflow.RunAsync(nightly),
                 new WorkflowOptions("norm/venues/nightly", NormalizationQueues.Workflows)
                 {
                     ExecutionTimeout = TimeSpan.FromDays(1),
@@ -52,7 +56,7 @@ public sealed class NormalizationClient(ITemporalClient client)
     /// cross-artist, so venue runs never overlap: one workflow id for all of them.
     public async Task<string> BuildVenueCatalogueAsync(BuildVenueCatalogue request)
     {
-        const string workflowId = "norm/venues";
+        const string workflowId = VenueRunId;
         try
         {
             var handle = await client.StartWorkflowAsync(

@@ -1,5 +1,4 @@
 -- RelistenNet/string-theory ddl/002_norm.sql (WS-5 revision, 2026-10-24), copied verbatim.
-
 -- The catalogue: songs, and venues since 2026-10-23 (docs/catalogue.md). Revised 2026-10-19 (WS-5): plain tables are the
 -- source of truth, replacing the claims, predicate registry and projections ratified with
 -- WS-0. Every row says who set it (provenance columns), and one trigger appends every
@@ -339,6 +338,34 @@ BEGIN
 END $$;
 CREATE TRIGGER changes_immutable BEFORE UPDATE OR DELETE ON norm.changes
     FOR EACH ROW EXECUTE FUNCTION norm.changes_immutable();
+
+-- One receipt per model call (decided 2026-10-25), append-only: what was asked, what came
+-- back, and what the run did with it. With it, a wrong row can be traced to bad context, a
+-- bad answer or bad validation. The instructions are named by prompt_version (the code holds
+-- them); request is the call's data, reply the raw answer, rationales included.
+CREATE TABLE norm.model_calls (
+    uuid                uuid PRIMARY KEY,           -- uuid v7, minted in the app
+    run_uuid            uuid REFERENCES norm.runs (uuid),  -- the run that wrote its answers; null when nothing was
+    job                 text NOT NULL CHECK (job ~ '^[a-z_]+$'),  -- 'catalogue', 'venues', 'venue_history', ...
+    prompt_version      text NOT NULL,              -- 'venue-llm@12'
+    model               text NOT NULL,              -- the provider's model id
+    provider_request_id text,                       -- the provider's id for the call
+    request             jsonb NOT NULL,             -- the call's data, as sent
+    reply               jsonb,                      -- the raw answer; null when it wasn't JSON (raw_reply holds it)
+    raw_reply           text,
+    outcome             jsonb NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(outcome) = 'object'),  -- {"accepted": [...], "unsure": [...], "set_aside": {key: reason}}
+    input_tokens        integer,
+    output_tokens       integer,
+    called_at           timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX model_calls_run ON norm.model_calls (run_uuid);
+
+CREATE FUNCTION norm.model_calls_immutable() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    RAISE EXCEPTION 'norm.model_calls is append-only';
+END $$;
+CREATE TRIGGER model_calls_immutable BEFORE UPDATE OR DELETE ON norm.model_calls
+    FOR EACH ROW EXECUTE FUNCTION norm.model_calls_immutable();
 
 -- Appends one norm.changes row. Trigger arguments name the primary key columns. A derived
 -- track row (basis other than ruling, before and after) is not logged: it follows from rows

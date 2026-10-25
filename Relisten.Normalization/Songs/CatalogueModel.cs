@@ -7,7 +7,11 @@ using OpenAI.Chat;
 namespace Relisten.Normalization.Songs;
 
 /// What one model call returned: the JSON text that matched the schema, and its token counts.
-public sealed record ModelReply(string Json, int InputTokens, int OutputTokens);
+/// RequestId: the provider's id for the call, for its receipt.
+public sealed record ModelReply(string Json, int InputTokens, int OutputTokens)
+{
+    public string? RequestId { get; init; }
+}
 
 /// A structured-output language model: instructions, data, and the JSON Schema the answer must
 /// match. Tests substitute a fake.
@@ -74,6 +78,9 @@ public sealed class OpenAiCatalogueModel(IConfiguration configuration) : ICatalo
             reply.Content[0].Text,
             reply.Usage?.InputTokenCount ?? 0,
             reply.Usage?.OutputTokenCount ?? 0
-        );
+        )
+        {
+            RequestId = reply.Id,
+        };
     }
 }

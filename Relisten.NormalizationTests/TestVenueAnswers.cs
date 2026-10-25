@@ -401,4 +401,32 @@ public class TestVenueAnswers
         answer.NewVenues.Should().BeEmpty();
         answer.Spellings.Should().BeEmpty();
     }
+
+    [Test]
+    public void AnUnsureSpellingIsNoNameOfAProposedVenueEither()
+    {
+        var (request, _) = Request();
+        var answer = VenueRequest.Parse(
+            Answer(
+                """
+                [{"id": "s2", "spelling_text": "The Theater at Madison Square Garden", "venue": "n1", "not_a_venue": false, "confidence": 0.95, "rationale": ""},
+                 {"id": "s1", "spelling_text": "MSG", "venue": "n1", "not_a_venue": false, "confidence": 0.6, "rationale": "unsure"}]
+                """,
+                """
+                [{"id": "n1", "locality": "l1", "name": "Hulu Theater", "kind": "room", "parent": "v1",
+                  "names": [{"name": "MSG", "kind": "short", "from": null, "to": null},
+                            {"name": "The Theater at Madison Square Garden", "kind": "official", "from": "1991", "to": "2018"}]}]
+                """
+            ),
+            request
+        );
+
+        var learnable = VenueLlm.Learnable(request, answer);
+        answer
+            .NewVenues.Single()
+            .Names.Where(n => learnable(n.Name))
+            .Select(n => n.Name)
+            .Should()
+            .Equal("The Theater at Madison Square Garden");
+    }
 }

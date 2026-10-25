@@ -93,7 +93,8 @@ public sealed class CatalogueLlm(INormalizationDatabase db, ICatalogueModel mode
             answer,
             keys,
             unsure,
-            review
+            review,
+            reply
         );
         await tx.CommitAsync(cancellationToken);
 
@@ -183,11 +184,36 @@ public sealed class CatalogueLlm(INormalizationDatabase db, ICatalogueModel mode
         CatalogueAnswer answer,
         IReadOnlyDictionary<string, KeyInfo> keys,
         IReadOnlyList<ReviewItem> unsure,
-        bool review
+        bool review,
+        ModelReply reply
     )
     {
+        // The call's receipt: what the answer settled, what it left unresolved, and which of
+        // those became review items.
+        var accepted = answer
+            .Keys.Where(k => k.Value.Confidence >= Threshold && !k.Value.Unknown)
+            .Select(k => k.Key)
+            .ToHashSet();
+        ModelCallRecord Receipt() =>
+            new(
+                review ? "catalogue_review" : "catalogue",
+                PromptVersion,
+                model.ModelId,
+                request.Data,
+                reply,
+                new System.Text.Json.Nodes.JsonObject
+                {
+                    ["accepted"] = ModelCalls.Strings(accepted),
+                    ["unresolved"] = ModelCalls.Strings(
+                        request.KeyIds.Values.Where(k => !accepted.Contains(k))
+                    ),
+                    ["review_items"] = ModelCalls.Strings(unsure.Select(u => u.Key)),
+                }
+            );
+
         if (answer.Keys.Count == 0 && unsure.Count == 0)
         {
+            await ModelCalls.WriteAsync(connection, tx, null, Receipt());
             return (0, 0);
         }
 
@@ -200,6 +226,7 @@ public sealed class CatalogueLlm(INormalizationDatabase db, ICatalogueModel mode
         );
         var written =
             answer.Keys.Count > 0 ? await Write(store, state, answer, request, keys) : (0, 0);
+        await ModelCalls.WriteAsync(connection, tx, store.Run, Receipt());
         await store.WriteReviewItemsAsync(
             unsure
                 .Select(r => new ReviewRecord(
