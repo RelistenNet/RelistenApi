@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Relisten.Normalization.Venues;
 using Temporalio.Common;
@@ -88,7 +89,7 @@ public class VenueCatalogueWorkflow
 
         request = request with { Artists = artists, FlaggedOnly = false };
         var forgetInput =
-            (request.Reask is { Count: > 0 } || request.Rematch) && artists != null
+            request.Reask is { Count: > 0 } || request.Rematch
                 ? new VenueForgetInput(artists, request.Reask ?? [], request.Rematch)
                 : null;
         // Chosen first, then forgotten: a retried forget can't lose what it chose.
@@ -101,17 +102,34 @@ public class VenueCatalogueWorkflow
                 : null;
         if (forget is { Rows.Count: > 0 })
         {
-            await Workflow.ExecuteActivityAsync((VenueActivities a) => a.Forget(forget.Rows), Step);
+            // Re-asked rows are forgotten as a re-ask, which holds them for the model in every
+            // match from now on (VenueState.Held); the rest only need the current matcher.
+            var reasked = forget.Held;
+            var rematched = forget.Rows.Except(forget.Held).ToList();
+            if (reasked.Count > 0)
+            {
+                await Workflow.ExecuteActivityAsync(
+                    (VenueActivities a) => a.Forget(reasked, true),
+                    Step
+                );
+            }
+
+            if (rematched.Count > 0)
+            {
+                await Workflow.ExecuteActivityAsync(
+                    (VenueActivities a) => a.Forget(rematched, false),
+                    Step
+                );
+            }
         }
 
-        var held = forget?.Held is { Count: > 0 } h ? h : null;
-        var first = await MatchAsync(request.Artists, held);
+        var first = await MatchAsync(request.Artists);
         var total = new VenueCatalogueResult(0, first.VenuesCreated, first.RowsMapped, 0, 0, 0)
         {
             FirstMatch = first,
         };
-        total = await AskAboutSpellingsAsync(request, total, held);
-        var last = await MatchAsync(request.Artists, held);
+        total = await AskAboutSpellingsAsync(request, total);
+        var last = await MatchAsync(request.Artists);
         total = total with
         {
             VenuesCreated = total.VenuesCreated + last.VenuesCreated,
@@ -123,7 +141,7 @@ public class VenueCatalogueWorkflow
         // History merges renamed twins: their shows move to the survivor.
         if (total.VenuesNamed > 0)
         {
-            total = total with { LastMatch = await MatchAsync(request.Artists, held) };
+            total = total with { LastMatch = await MatchAsync(request.Artists) };
         }
 
         if (forget == null)
@@ -153,10 +171,8 @@ public class VenueCatalogueWorkflow
             )
             : request.Artists;
 
-    private static Task<VenueMatchResult> MatchAsync(
-        IReadOnlyList<Guid>? artists,
-        IReadOnlyList<Guid>? held
-    ) => Workflow.ExecuteActivityAsync((VenueActivities a) => a.Match(artists, held), Step);
+    private static Task<VenueMatchResult> MatchAsync(IReadOnlyList<Guid>? artists) =>
+        Workflow.ExecuteActivityAsync((VenueActivities a) => a.Match(artists), Step);
 
     private static bool WithinBudget(BuildVenueCatalogue request, VenueCatalogueResult total) =>
         request.MaxChunks is not { } max || total.Chunks < max;
@@ -167,8 +183,7 @@ public class VenueCatalogueWorkflow
     /// call it could have made; three failures in a row end the run.
     private static async Task<VenueCatalogueResult> AskAboutSpellingsAsync(
         BuildVenueCatalogue request,
-        VenueCatalogueResult total,
-        IReadOnlyList<Guid>? held
+        VenueCatalogueResult total
     )
     {
         var skip = new List<string>();
@@ -181,8 +196,7 @@ public class VenueCatalogueWorkflow
                 request.Artists,
                 skip,
                 remaining >= 2 * parallel,
-                parallel,
-                held
+                parallel
             );
             VenueChunkResult chunk;
             try

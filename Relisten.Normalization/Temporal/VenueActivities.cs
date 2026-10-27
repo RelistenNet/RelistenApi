@@ -12,12 +12,11 @@ public sealed record VenueChunkInput(
     IReadOnlyList<Guid>? Artists,
     IReadOnlyList<string> Skip,
     bool MayRetry = true,
-    int Parallel = 1,
-    IReadOnlyList<Guid>? Held = null
+    int Parallel = 1
 );
 
 public sealed record VenueForgetInput(
-    IReadOnlyList<Guid> Artists,
+    IReadOnlyList<Guid>? Artists,
     IReadOnlyList<string> Reask,
     bool Rematch
 );
@@ -38,17 +37,10 @@ public sealed class VenueActivities(VenueMatch match, VenueLlm llm, VenueHistory
     }
 
     [Activity("Venues.Match")]
-    public async Task<VenueMatchResult> Match(
-        IReadOnlyList<Guid>? artists,
-        IReadOnlyList<Guid>? held = null
-    )
+    public async Task<VenueMatchResult> Match(IReadOnlyList<Guid>? artists)
     {
         using var heartbeat = new ActivityHeartbeat();
-        return await match.RunAsync(
-            artists,
-            ActivityExecutionContext.Current.CancellationToken,
-            held: held
-        );
+        return await match.RunAsync(artists, ActivityExecutionContext.Current.CancellationToken);
     }
 
     /// A re-ask or rematch run's first step: choose the placements to forget (reads only).
@@ -64,12 +56,16 @@ public sealed class VenueActivities(VenueMatch match, VenueLlm llm, VenueHistory
         );
     }
 
-    /// Its second: forget them (a retry forgets nothing more).
+    /// Its second: forget them, the re-asked ones as a re-ask (a retry forgets nothing more).
     [Activity("Venues.Forget")]
-    public async Task<int> Forget(IReadOnlyList<Guid> rows)
+    public async Task<int> Forget(IReadOnlyList<Guid> rows, bool reask)
     {
         using var heartbeat = new ActivityHeartbeat();
-        return await match.ForgetAsync(rows, ActivityExecutionContext.Current.CancellationToken);
+        return await match.ForgetAsync(
+            rows,
+            reask,
+            ActivityExecutionContext.Current.CancellationToken
+        );
     }
 
     /// Its last: the venues the forgotten rows left with nothing.
@@ -89,8 +85,7 @@ public sealed class VenueActivities(VenueMatch match, VenueLlm llm, VenueHistory
             input.Skip,
             ActivityExecutionContext.Current.CancellationToken,
             input.MayRetry,
-            input.Parallel,
-            input.Held
+            input.Parallel
         );
     }
 }

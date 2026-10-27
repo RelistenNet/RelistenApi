@@ -664,9 +664,9 @@ public class TestVenueCatalogue
             rematch: true,
             CancellationToken.None
         );
-        (await match.ForgetAsync(forget.Rows, CancellationToken.None)).Should().Be(1);
+        (await match.ForgetAsync(forget.Rows, reask: false, CancellationToken.None)).Should().Be(1);
         // A retried forget changes nothing; the plan it ran from still names the row.
-        (await match.ForgetAsync(forget.Rows, CancellationToken.None))
+        (await match.ForgetAsync(forget.Rows, reask: false, CancellationToken.None))
             .Should()
             .Be(0);
         await match.RunAsync(artists, CancellationToken.None);
@@ -694,7 +694,7 @@ public class TestVenueCatalogue
     }
 
     [Test]
-    public async Task AReaskedRowIsLeftToTheModel()
+    public async Task AReaskedRowIsLeftToTheModelByEveryMatch()
     {
         var database = new DbServiceNormalizationDatabase(db);
         var match = new VenueMatch(database);
@@ -708,13 +708,26 @@ public class TestVenueCatalogue
             rematch: false,
             CancellationToken.None
         );
-        (await match.ForgetAsync(forget.Rows, CancellationToken.None)).Should().Be(1);
+        forget.Rows.Should().Equal(row);
         forget.Held.Should().Equal(row);
         forget.Venues.Should().Equal(redRocks!.Value);
+        // Every artist's rows (no list) plan the same.
+        (
+            await match.PlanForgetAsync(
+                null,
+                ["red rocks amphitheater@morrison, colorado"],
+                rematch: false,
+                CancellationToken.None
+            )
+        )
+            .Rows.Should()
+            .Equal(row);
+        (await match.ForgetAsync(forget.Rows, reask: true, CancellationToken.None)).Should().Be(1);
 
-        // Held, the matcher leaves it (and its show) to the model; without the hold, the
-        // matcher would place it again.
-        await match.RunAsync(artists, CancellationToken.None, held: forget.Held);
+        // The hold is kept in norm, not by the run: a later match (one after an import, which
+        // doesn't wait for the lock, included) leaves the row and its show to the model.
+        await match.RunAsync(artists, CancellationToken.None);
+        await match.RunAsync(artists, CancellationToken.None, wait: false);
         (await PlacedOn(row)).Should().BeNull();
         (
             await Strings(
@@ -724,8 +737,6 @@ public class TestVenueCatalogue
             .Should()
             .BeEmpty();
         (await match.RetireAsync(forget.Venues, CancellationToken.None)).Should().Be(0);
-        await match.RunAsync(artists, CancellationToken.None);
-        (await PlacedOn(row)).Should().Be(redRocks);
     }
 
     [Test]

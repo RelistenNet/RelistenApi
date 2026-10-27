@@ -47,8 +47,9 @@ public sealed partial class VenueState
 {
     public required IReadOnlyList<LegacyVenue> Unmapped { get; init; }
 
-    /// Rows a person asked about again (--reask): the model's to place, never the matcher's,
-    /// which would only repeat what was forgotten.
+    /// Rows a person asked about again (--reask) that nothing has placed since: the model's to
+    /// place, never the matcher's, which would only repeat what was forgotten. Read from
+    /// norm.changes, so every match keeps it (after an import too), not just the re-ask's run.
     public IReadOnlySet<Guid> Held { get; init; } = new HashSet<Guid>();
     public required IReadOnlyDictionary<Guid, CatalogueVenue> Venues { get; init; }
 
@@ -90,12 +91,11 @@ public sealed partial class VenueState
     private ILookup<string, CatalogueVenue>? byLocality;
 
     /// artists: only these artists' legacy rows (null: every artist). Venues are cross-artist,
-    /// so the catalogue side is always whole. held: rows left to the model (Held).
+    /// so the catalogue side is always whole.
     public static async Task<VenueState> LoadAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction? tx,
-        IReadOnlyCollection<Guid>? artists = null,
-        IReadOnlyCollection<Guid>? held = null
+        IReadOnlyCollection<Guid>? artists = null
     )
     {
         var rows = await connection.QueryAsync<(
@@ -233,7 +233,18 @@ public sealed partial class VenueState
 
         return new VenueState
         {
-            Held = held?.ToHashSet() ?? [],
+            Held = (
+                await connection.QueryAsync<Guid>(
+                    $"""
+                    SELECT DISTINCT r.uuid FROM unnest(@rows) AS r(uuid)
+                    JOIN norm.changes c ON c.table_name = 'venue_evidence'
+                     AND c.row_key = jsonb_build_object('legacy_venue_uuid', r.uuid::text)
+                    WHERE c.op = 'delete' AND c.author_ref = '{VenueReask.Author}'
+                    """,
+                    new { rows = legacy.Select(r => r.Uuid).ToArray() },
+                    tx
+                )
+            ).ToHashSet(),
             Unmapped = WithoutLoneTowns(
                 WithoutPlacesInTowns(
                     WithoutStateTypos(

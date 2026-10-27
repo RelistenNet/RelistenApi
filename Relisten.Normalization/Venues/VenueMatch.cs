@@ -20,14 +20,21 @@ public sealed record VenueMatchResult(
 }
 
 /// What a re-ask or rematch forgets, chosen before anything is deleted (so a retried step
-/// gets the same answer): Rows to forget; Held, the rows a re-ask named, left to the model for
-/// the rest of the run; Venues, those the rows are placed on, retired at the end when nothing
-/// points at them.
+/// gets the same answer): Rows to forget; Held, the rows a re-ask named, forgotten as a
+/// re-ask so they are left to the model (VenueState.Held); Venues, those the rows are placed
+/// on, retired at the end when nothing points at them.
 public sealed record VenueForgetPlan(
     IReadOnlyList<Guid> Rows,
     IReadOnlyList<Guid> Held,
     IReadOnlyList<Guid> Venues
 );
+
+/// A re-ask's forget is its own author: the rows it forgot are held for the model until
+/// something places them (VenueState.Held).
+public static class VenueReask
+{
+    public const string Author = "venue-reask@1";
+}
 
 /// A row a person asks about again: "Name@Location" (that town as written) or "Name" (any
 /// town), compared by the venue key, so case and "The" don't matter.
@@ -58,8 +65,7 @@ public sealed class VenueMatch(INormalizationDatabase db)
     public async Task<VenueMatchResult> RunAsync(
         IReadOnlyCollection<Guid>? artists,
         CancellationToken cancellationToken,
-        bool wait = true,
-        IReadOnlyCollection<Guid>? held = null
+        bool wait = true
     )
     {
         await using var connection = db.CreateWriteConnection();
@@ -83,7 +89,7 @@ public sealed class VenueMatch(INormalizationDatabase db)
             return new VenueMatchResult(0, 0, 0, 0) { Deferred = true };
         }
 
-        var state = await VenueState.LoadAsync(connection, tx, artists, held);
+        var state = await VenueState.LoadAsync(connection, tx, artists);
         var plan = VenueMatcher.Match(state);
         var store = await NormStore.BeginAsync(
             connection,
@@ -129,7 +135,7 @@ public sealed class VenueMatch(INormalizationDatabase db)
     /// places it again, and a row placed right lands on the venue it had). People's
     /// placements are never chosen. Reads only.
     public async Task<VenueForgetPlan> PlanForgetAsync(
-        IReadOnlyCollection<Guid> artists,
+        IReadOnlyCollection<Guid>? artists,
         IReadOnlyCollection<string> reask,
         bool rematch,
         CancellationToken cancellationToken
@@ -149,9 +155,9 @@ public sealed class VenueMatch(INormalizationDatabase db)
                 SELECT v.uuid, v.name, v.location, e.author_ref, e.venue_uuid
                 FROM norm.venue_evidence e JOIN venues v ON v.uuid = e.legacy_venue_uuid
                 JOIN artists a ON a.id = v.artist_id
-                WHERE a.uuid = ANY(@artists) AND e.author_type NOT IN ('user', 'moderator')
+                WHERE (@all OR a.uuid = ANY(@artists)) AND e.author_type NOT IN ('user', 'moderator')
                 """,
-                new { artists = artists.ToArray() }
+                new { all = artists == null, artists = artists?.ToArray() ?? [] }
             )
         ).ToList();
         var asked = reask.Select(ReaskSpec.Parse).ToList();
@@ -171,9 +177,11 @@ public sealed class VenueMatch(INormalizationDatabase db)
     }
 
     /// Forgets the machine's placements of these rows (PlanForgetAsync), so the run places
-    /// them again. A row already forgotten is skipped: a retry changes nothing.
+    /// them again; reask: as a re-ask, which holds them for the model. A row already
+    /// forgotten is skipped: a retry changes nothing.
     public async Task<int> ForgetAsync(
         IReadOnlyCollection<Guid> rows,
+        bool reask,
         CancellationToken cancellationToken
     )
     {
@@ -188,8 +196,10 @@ public sealed class VenueMatch(INormalizationDatabase db)
             connection,
             tx,
             AuthorTypes.Algorithm,
-            VenueMatcher.Author,
-            $"forget {rows.Count} placements to make again"
+            reask ? VenueReask.Author : VenueMatcher.Author,
+            reask
+                ? $"re-ask: forget {rows.Count} placements"
+                : $"rematch: forget {rows.Count} placements"
         );
         var forgotten = await store.ForgetVenueRowsAsync(rows);
         await store.FinishAsync();
