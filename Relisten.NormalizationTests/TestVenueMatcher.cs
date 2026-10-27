@@ -687,6 +687,29 @@ public class TestVenueMatcher
     }
 
     [Test]
+    public void ALoneTownOtherArtistsFileVenuesUnderIsATown()
+    {
+        // One artist's rows: Redlands and Dorchester each have one venue here, but the whole
+        // catalogue files several there. "Worcestor" is nobody else's: a typo of Worcester.
+        var towns = new HashSet<string> { "Redlands, CA", "Dorchester, MA" };
+        var rows = VenueState.WithoutLoneTowns(
+            [
+                Row("Greek Theatre", "Los Angeles, CA", 5),
+                Row("The Greek Theatre", "Redlands, CA", 1),
+                Row("The Strand Theater", "Worcester, MA", 4),
+                Row("Worcester Memorial Auditorium", "Worcester, MA", 6),
+                Row("The Strand Theater", "Dorchester, MA", 1),
+                Row("Worcester Memorial Auditorium", "Worcestor, MA", 1),
+            ],
+            r => towns.Contains(r.Location!)
+        );
+
+        rows.Select(r => r.Locality!.City)
+            .Should()
+            .Equal("Los Angeles", "Redlands", "Worcester", "Worcester", "Dorchester", "Worcester");
+    }
+
+    [Test]
     public void ALoneTownWithAnotherProviderIdIsAnotherBuilding()
     {
         var rows = VenueState.WithoutLoneTowns([
