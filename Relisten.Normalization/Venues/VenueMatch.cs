@@ -207,7 +207,8 @@ public sealed class VenueMatch(INormalizationDatabase db)
         return forgotten;
     }
 
-    /// After a forget's run: the venues its rows left that nothing points at any more.
+    /// After a forget's run: the spellings its rows took elsewhere, then the venues they left
+    /// that nothing points at any more.
     public async Task<int> RetireAsync(
         IReadOnlyCollection<Guid> venues,
         CancellationToken cancellationToken
@@ -225,8 +226,9 @@ public sealed class VenueMatch(INormalizationDatabase db)
             tx,
             AuthorTypes.Algorithm,
             VenueMatcher.Author,
-            "retire venues a forget left empty"
+            "after a forget: prune moved spellings, retire empty venues"
         );
+        await store.PruneVenueSpellingsAsync(venues);
         var retired = await store.RetireEmptyVenuesAsync(venues);
         await store.FinishAsync();
         await tx.CommitAsync(cancellationToken);

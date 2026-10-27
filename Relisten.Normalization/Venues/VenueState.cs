@@ -253,7 +253,8 @@ public sealed partial class VenueState
                                 CountryCodes(
                                     FillCountries(FillRegions(legacy, catalogue), catalogue),
                                     catalogue
-                                )
+                                ),
+                                IsTown
                             )
                         )
                     ),
@@ -453,8 +454,12 @@ public sealed partial class VenueState
 
     /// A rarely used spelling of a town folds into a far more used one a typo away in the same
     /// state ("brommfield" → Broomfield, "Chilcothe" → Chillicothe): three times the uses, and
-    /// one edit (two for long names) apart.
-    internal static List<LegacyVenue> FoldCities(IReadOnlyList<LegacyVenue> rows)
+    /// one edit (two for long names) apart. A town other artists file several venues under
+    /// (isTown) is a town: Dorchester is not a typo of Worcester.
+    internal static List<LegacyVenue> FoldCities(
+        IReadOnlyList<LegacyVenue> rows,
+        Func<LegacyVenue, bool>? isTown = null
+    )
     {
         var uses = rows.Where(r => r.Locality is { Trusted: true })
             .GroupBy(r =>
@@ -484,6 +489,7 @@ public sealed partial class VenueState
 
         return rows.Select(r =>
                 r.Locality is { Trusted: true } l
+                && isTown?.Invoke(r) != true
                 && folded.TryGetValue(
                     (l.RegionKey!, VenueNormalizer.Normalize(l.City)),
                     out var city
