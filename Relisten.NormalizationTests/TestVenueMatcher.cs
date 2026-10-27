@@ -218,6 +218,26 @@ public class TestVenueMatcher
         rows.Select(r => r.Locality!.City).Should().Equal("Broomfield", "Broomfield", "Boulder");
     }
 
+    [Test]
+    public void ATownOtherArtistsFileVenuesUnderIsNoTypo()
+    {
+        // Dorchester is two letters from Worcester, which one artist uses far more; the whole
+        // catalogue files several venues in Dorchester. "Worcestor" is nobody else's.
+        var rows = VenueState.FoldCities(
+            [
+                Row("Worcester Memorial Auditorium", "Worcester, MA", 6),
+                Row("The Centrum", "Worcester, MA", 9),
+                Row("The Strand Theater", "Dorchester, MA", 1),
+                Row("Clark University Pub", "Worcestor, MA", 1),
+            ],
+            r => r.Location == "Dorchester, MA"
+        );
+
+        rows.Select(r => r.Locality!.City)
+            .Should()
+            .Equal("Worcester", "Worcester", "Dorchester", "Worcester");
+    }
+
     [TestCase("msg", "madison square garden", true)]
     [TestCase("tweeter center", "tweeter center at the waterfront", true)]
     [TestCase("hammerstien ballroom", "hammerstein ballroom", true)]

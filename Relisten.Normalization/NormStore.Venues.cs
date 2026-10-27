@@ -579,10 +579,12 @@ public sealed partial class NormStore
     }
 
     /// Forgets a machine's placements of these legacy venue rows so they are placed again:
-    /// their evidence (their shows follow at the next match), and the spelling and provider
-    /// id each taught its venue when no row still placed there carries it (an id the matcher
-    /// trusts first would put the row straight back). People's rows are kept. A row already
-    /// forgotten is skipped, so a retry changes nothing. Returns how many were forgotten.
+    /// their evidence (their shows follow at the next match), and the provider id each taught
+    /// its venue when no row still placed there carries it (the matcher trusts an id first,
+    /// so it would put the row straight back). Spellings stay until the run is over
+    /// (PruneVenueSpellingsAsync): they are how a row placed right finds its venue again.
+    /// People's rows are kept. A row already forgotten is skipped, so a retry changes
+    /// nothing. Returns how many were forgotten.
     public async Task<int> ForgetVenueRowsAsync(IReadOnlyCollection<Guid> rows)
     {
         var gone = (
@@ -617,25 +619,6 @@ public sealed partial class NormStore
                 tx
             )
         ).ToList();
-        var keptKeys = kept.Select(k => (k.Venue, Key: VenueNormalizer.Key(k.Name))).ToHashSet();
-        var spellings = gone.Select(g => (g.Venue, Key: VenueNormalizer.Key(g.Name)))
-            .Where(g => g.Key != null && !keptKeys.Contains(g))
-            .Distinct()
-            .ToList();
-        await connection.ExecuteAsync(
-            """
-            DELETE FROM norm.venue_names n USING unnest(@venues, @keys) AS x(venue, normalized)
-            WHERE n.venue_uuid = x.venue AND n.normalized = x.normalized
-              AND n.kind = 'spelling' AND n.author_type NOT IN ('user', 'moderator')
-            """,
-            new
-            {
-                venues = spellings.Select(s => s.Venue).ToArray(),
-                keys = spellings.Select(s => s.Key).ToArray(),
-            },
-            tx
-        );
-
         var keptIds = kept.Select(k => (k.Venue, Id: VenueState.ParseExternalId(k.Upstream)))
             .ToHashSet();
         var ids = gone.Select(g => (g.Venue, Id: VenueState.ParseExternalId(g.Upstream)))
@@ -658,6 +641,55 @@ public sealed partial class NormStore
             tx
         );
         return gone.Count;
+    }
+
+    /// After a forget's run: the machine's plain spellings of these venues that no row placed
+    /// there is written as any more (a row that moved took its spelling with it). The venue's
+    /// own name and people's names stay.
+    public async Task<int> PruneVenueSpellingsAsync(IReadOnlyCollection<Guid> venues)
+    {
+        var spellings = (
+            await connection.QueryAsync<(Guid Venue, string Normalized, string Name)>(
+                """
+                SELECT n.venue_uuid, n.normalized, v.name FROM norm.venue_names n
+                JOIN norm.venues v ON v.uuid = n.venue_uuid
+                WHERE n.venue_uuid = ANY(@venues) AND n.kind = 'spelling'
+                  AND n.author_type NOT IN ('user', 'moderator')
+                """,
+                new { venues = venues.ToArray() },
+                tx
+            )
+        ).ToList();
+        var placed = (
+            await connection.QueryAsync<(Guid Venue, string Name)>(
+                """
+                SELECT e.venue_uuid, lv.name FROM norm.venue_evidence e
+                JOIN venues lv ON lv.uuid = e.legacy_venue_uuid
+                WHERE e.venue_uuid = ANY(@venues)
+                """,
+                new { venues = venues.ToArray() },
+                tx
+            )
+        ).Select(p => (p.Venue, Key: VenueNormalizer.Key(p.Name))).ToHashSet();
+        var stale = spellings
+            .Where(s =>
+                !placed.Contains((s.Venue, s.Normalized))
+                && VenueNormalizer.Key(s.Name) != s.Normalized
+            )
+            .ToList();
+        return await connection.ExecuteAsync(
+            """
+            DELETE FROM norm.venue_names n USING unnest(@venues, @keys) AS x(venue, normalized)
+            WHERE n.venue_uuid = x.venue AND n.normalized = x.normalized
+              AND n.kind = 'spelling' AND n.author_type NOT IN ('user', 'moderator')
+            """,
+            new
+            {
+                venues = stale.Select(s => s.Venue).ToArray(),
+                keys = stale.Select(s => s.Normalized).ToArray(),
+            },
+            tx
+        );
     }
 
     /// Retires machine venues of these that nothing points at any more (no rows, shows,

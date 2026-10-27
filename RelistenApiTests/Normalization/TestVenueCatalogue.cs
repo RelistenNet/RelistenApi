@@ -694,6 +694,56 @@ public class TestVenueCatalogue
     }
 
     [Test]
+    public async Task ARematchOfEveryRowKeepsEveryVenue()
+    {
+        var database = new DbServiceNormalizationDatabase(db);
+        var match = new VenueMatch(database);
+        await match.RunAsync(artists, CancellationToken.None);
+        const string placements = """
+            SELECT e.legacy_venue_uuid::text || '>' || e.venue_uuid::text FROM norm.venue_evidence e
+            JOIN venues v ON v.uuid = e.legacy_venue_uuid JOIN artists a ON a.id = v.artist_id
+            WHERE a.uuid = ANY(@artists) ORDER BY 1
+            """;
+        var before = (await Strings(placements)).ToList();
+        var venues = (await Strings("SELECT uuid::text FROM norm.venues ORDER BY 1")).ToList();
+        before.Should().NotBeEmpty();
+
+        // Every placement as an older matcher's, so a rematch forgets them all: each venue
+        // loses every row at once and must still be found again by its names.
+        await db.WithWriteConnection(c =>
+            c.ExecuteAsync(
+                """
+                DO $$
+                DECLARE r uuid := gen_random_uuid();
+                BEGIN
+                    INSERT INTO norm.runs(uuid, author_type, author_ref) VALUES (r, 'algorithm', 'venue-matcher@2.12.0');
+                    PERFORM set_config('norm.author_type', 'algorithm', true),
+                            set_config('norm.author_ref', 'venue-matcher@2.12.0', true),
+                            set_config('norm.run_uuid', r::text, true);
+                    UPDATE norm.venue_evidence SET author_ref = 'venue-matcher@2.12.0', run_uuid = r;
+                END $$
+                """
+            )
+        );
+        var forget = await match.PlanForgetAsync(
+            artists,
+            [],
+            rematch: true,
+            CancellationToken.None
+        );
+        forget.Rows.Should().HaveCount(before.Count);
+        await match.ForgetAsync(forget.Rows, reask: false, CancellationToken.None);
+        await match.RunAsync(artists, CancellationToken.None);
+        (await match.RetireAsync(forget.Venues, CancellationToken.None)).Should().Be(0);
+
+        (await Strings(placements)).Should().Equal(before);
+        (await Strings("SELECT uuid::text FROM norm.venues ORDER BY 1")).Should().Equal(venues);
+        (await Strings("SELECT uuid::text FROM norm.venues WHERE merged_into IS NOT NULL"))
+            .Should()
+            .BeEmpty();
+    }
+
+    [Test]
     public async Task AReaskedRowIsLeftToTheModelByEveryMatch()
     {
         var database = new DbServiceNormalizationDatabase(db);
