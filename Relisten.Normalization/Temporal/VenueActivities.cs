@@ -51,17 +51,25 @@ public sealed class VenueActivities(VenueMatch match, VenueLlm llm, VenueHistory
         );
     }
 
-    /// A re-ask or rematch run's first step: forget the placements it names.
-    [Activity("Venues.Forget")]
-    public async Task<VenueForgetResult> Forget(VenueForgetInput input)
+    /// A re-ask or rematch run's first step: choose the placements to forget (reads only).
+    [Activity("Venues.PlanForget")]
+    public async Task<VenueForgetPlan> PlanForget(VenueForgetInput input)
     {
         using var heartbeat = new ActivityHeartbeat();
-        return await match.ForgetAsync(
+        return await match.PlanForgetAsync(
             input.Artists,
             input.Reask,
             input.Rematch,
             ActivityExecutionContext.Current.CancellationToken
         );
+    }
+
+    /// Its second: forget them (a retry forgets nothing more).
+    [Activity("Venues.Forget")]
+    public async Task<int> Forget(IReadOnlyList<Guid> rows)
+    {
+        using var heartbeat = new ActivityHeartbeat();
+        return await match.ForgetAsync(rows, ActivityExecutionContext.Current.CancellationToken);
     }
 
     /// Its last: the venues the forgotten rows left with nothing.

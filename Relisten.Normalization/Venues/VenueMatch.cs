@@ -19,11 +19,12 @@ public sealed record VenueMatchResult(
     public bool Deferred { get; init; }
 }
 
-/// Rows: how many placements were forgotten. Held: the rows a re-ask named, left to the model
-/// for the rest of the run. Venues: those the forgotten rows were placed on, retired at the
-/// end when nothing points at them.
-public sealed record VenueForgetResult(
-    int Rows,
+/// What a re-ask or rematch forgets, chosen before anything is deleted (so a retried step
+/// gets the same answer): Rows to forget; Held, the rows a re-ask named, left to the model for
+/// the rest of the run; Venues, those the rows are placed on, retired at the end when nothing
+/// points at them.
+public sealed record VenueForgetPlan(
+    IReadOnlyList<Guid> Rows,
     IReadOnlyList<Guid> Held,
     IReadOnlyList<Guid> Venues
 );
@@ -122,15 +123,57 @@ public sealed class VenueMatch(INormalizationDatabase db)
         );
     }
 
-    /// Forgets the machine's placements of these artists' rows so the run places them again:
+    /// The machine's placements of these artists' rows a run should forget and make again:
     /// the rows a re-ask names ("The Greek Theatre@Redlands, CA", or a name in any town), and
     /// with rematch every row an older matcher placed (a rule fixed since: the current one
     /// places it again, and a row placed right lands on the venue it had). People's
-    /// placements stay.
-    public async Task<VenueForgetResult> ForgetAsync(
+    /// placements are never chosen. Reads only.
+    public async Task<VenueForgetPlan> PlanForgetAsync(
         IReadOnlyCollection<Guid> artists,
         IReadOnlyCollection<string> reask,
         bool rematch,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var connection = db.CreateWriteConnection();
+        await connection.OpenAsync(cancellationToken);
+        var placed = (
+            await connection.QueryAsync<(
+                Guid Row,
+                string Name,
+                string? Location,
+                string AuthorRef,
+                Guid Venue
+            )>(
+                """
+                SELECT v.uuid, v.name, v.location, e.author_ref, e.venue_uuid
+                FROM norm.venue_evidence e JOIN venues v ON v.uuid = e.legacy_venue_uuid
+                JOIN artists a ON a.id = v.artist_id
+                WHERE a.uuid = ANY(@artists) AND e.author_type NOT IN ('user', 'moderator')
+                """,
+                new { artists = artists.ToArray() }
+            )
+        ).ToList();
+        var asked = reask.Select(ReaskSpec.Parse).ToList();
+        var reasked = placed.Where(p => asked.Any(a => a.Matches(p.Name, p.Location))).ToList();
+        var stale = rematch
+            ? placed.Where(p =>
+                p.AuthorRef.StartsWith("venue-matcher@", StringComparison.Ordinal)
+                && p.AuthorRef != VenueMatcher.Author
+            )
+            : [];
+        var rows = reasked.Concat(stale).DistinctBy(p => p.Row).ToList();
+        return new VenueForgetPlan(
+            rows.Select(p => p.Row).ToList(),
+            reasked.Select(p => p.Row).ToList(),
+            rows.Select(p => p.Venue).Distinct().ToList()
+        );
+    }
+
+    /// Forgets the machine's placements of these rows (PlanForgetAsync), so the run places
+    /// them again. A row already forgotten is skipped: a retry changes nothing.
+    public async Task<int> ForgetAsync(
+        IReadOnlyCollection<Guid> rows,
         CancellationToken cancellationToken
     )
     {
@@ -141,52 +184,17 @@ public sealed class VenueMatch(INormalizationDatabase db)
             "SELECT pg_advisory_xact_lock(hashtext('norm-venues'))",
             transaction: tx
         );
-        var placed = await connection.QueryAsync<(
-            Guid Row,
-            string Name,
-            string? Location,
-            string AuthorRef
-        )>(
-            """
-            SELECT v.uuid, v.name, v.location, e.author_ref
-            FROM norm.venue_evidence e JOIN venues v ON v.uuid = e.legacy_venue_uuid
-            JOIN artists a ON a.id = v.artist_id
-            WHERE a.uuid = ANY(@artists) AND e.author_type NOT IN ('user', 'moderator')
-            """,
-            new { artists = artists.ToArray() },
-            tx
-        );
-        var asked = reask.Select(ReaskSpec.Parse).ToList();
-        var reasked = placed
-            .Where(p => asked.Any(a => a.Matches(p.Name, p.Location)))
-            .Select(p => p.Row)
-            .ToList();
-        var stale = rematch
-            ? placed
-                .Where(p =>
-                    p.AuthorRef.StartsWith("venue-matcher@", StringComparison.Ordinal)
-                    && p.AuthorRef != VenueMatcher.Author
-                )
-                .Select(p => p.Row)
-                .ToList()
-            : [];
-        var rows = reasked.Concat(stale).Distinct().ToList();
-        if (rows.Count == 0)
-        {
-            return new VenueForgetResult(0, [], []);
-        }
-
         var store = await NormStore.BeginAsync(
             connection,
             tx,
             AuthorTypes.Algorithm,
             VenueMatcher.Author,
-            $"forget {rows.Count} rows ({reasked.Count} asked again, {stale.Count} placed by older matchers)"
+            $"forget {rows.Count} placements to make again"
         );
-        var venues = await store.ForgetVenueRowsAsync(rows);
+        var forgotten = await store.ForgetVenueRowsAsync(rows);
         await store.FinishAsync();
         await tx.CommitAsync(cancellationToken);
-        return new VenueForgetResult(rows.Count, reasked, venues);
+        return forgotten;
     }
 
     /// After a forget's run: the venues its rows left that nothing points at any more.

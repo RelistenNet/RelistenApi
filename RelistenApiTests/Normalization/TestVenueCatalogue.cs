@@ -618,11 +618,16 @@ public class TestVenueCatalogue
         var row = await Row("Red Rocks Amphitheater", "Morrison, Colorado");
         var redRocks = (await PlacedOn(row))!.Value;
 
-        // An older matcher put the row on a venue of its own in the wrong town.
+        // An older matcher put the row on a venue of its own in the wrong town, and pinned the
+        // row's provider id there (the matcher trusts an id before anything else).
         var denver = Guid.CreateVersion7();
         await db.WithWriteConnection(async c =>
         {
             var connection = (Npgsql.NpgsqlConnection)c;
+            await c.ExecuteAsync(
+                "UPDATE venues SET upstream_identifier = 'setlistfm:6bd6ca6e' WHERE uuid = @row",
+                new { row }
+            );
             await using var tx = await connection.BeginTransactionAsync();
             var old = await NormStore.BeginAsync(
                 connection,
@@ -643,6 +648,9 @@ public class TestVenueCatalogue
             await old.WriteVenueNamesAsync([
                 new VenueNameRecord(denver, "Red Rocks Amphitheater", Confidence: 0.95f),
             ]);
+            await old.WriteVenueExternalIdsAsync([
+                new VenueExternalIdRecord("setlistfm", "6bd6ca6e", denver, 0.95f),
+            ]);
             await old.WriteVenueEvidenceAsync([new VenueEvidenceRecord(row, denver, 0.95f)]);
             await old.FinishAsync();
             await tx.CommitAsync();
@@ -650,14 +658,26 @@ public class TestVenueCatalogue
         });
         await match.RunAsync(artists, CancellationToken.None);
 
-        var forget = await match.ForgetAsync(artists, [], rematch: true, CancellationToken.None);
+        var forget = await match.PlanForgetAsync(
+            artists,
+            [],
+            rematch: true,
+            CancellationToken.None
+        );
+        (await match.ForgetAsync(forget.Rows, CancellationToken.None)).Should().Be(1);
+        // A retried forget changes nothing; the plan it ran from still names the row.
+        (await match.ForgetAsync(forget.Rows, CancellationToken.None))
+            .Should()
+            .Be(0);
         await match.RunAsync(artists, CancellationToken.None);
         var retired = await match.RetireAsync(forget.Venues, CancellationToken.None);
 
-        // Only the older matcher's row was forgotten; it is back on the venue it had, its show
-        // with it, and the venue it left is gone. The current matcher's rows stayed put.
-        forget.Rows.Should().Be(1);
+        // Only the older matcher's row was forgotten; it is back on the venue it had (its id
+        // went with the forget), its show with it, and the venue it left is gone. The current
+        // matcher's rows stayed put.
+        forget.Rows.Should().Equal(row);
         forget.Held.Should().BeEmpty();
+        forget.Venues.Should().Equal(denver);
         (await PlacedOn(row)).Should().Be(redRocks);
         retired.Should().Be(1);
         (await Strings("SELECT city FROM norm.venues WHERE name LIKE 'Red Rocks%'"))
@@ -682,12 +702,13 @@ public class TestVenueCatalogue
         var row = await Row("Red Rocks Amphitheater", "Morrison, Colorado");
         var redRocks = await PlacedOn(row);
 
-        var forget = await match.ForgetAsync(
+        var forget = await match.PlanForgetAsync(
             artists,
             ["red rocks amphitheater@morrison, colorado", "Nowhere Hall"],
             rematch: false,
             CancellationToken.None
         );
+        (await match.ForgetAsync(forget.Rows, CancellationToken.None)).Should().Be(1);
         forget.Held.Should().Equal(row);
         forget.Venues.Should().Equal(redRocks!.Value);
 

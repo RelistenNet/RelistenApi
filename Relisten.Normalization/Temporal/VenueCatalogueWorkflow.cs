@@ -91,13 +91,19 @@ public class VenueCatalogueWorkflow
             (request.Reask is { Count: > 0 } || request.Rematch) && artists != null
                 ? new VenueForgetInput(artists, request.Reask ?? [], request.Rematch)
                 : null;
+        // Chosen first, then forgotten: a retried forget can't lose what it chose.
         var forget =
             forgetInput != null
                 ? await Workflow.ExecuteActivityAsync(
-                    (VenueActivities a) => a.Forget(forgetInput),
+                    (VenueActivities a) => a.PlanForget(forgetInput),
                     Step
                 )
                 : null;
+        if (forget is { Rows.Count: > 0 })
+        {
+            await Workflow.ExecuteActivityAsync((VenueActivities a) => a.Forget(forget.Rows), Step);
+        }
+
         var held = forget?.Held is { Count: > 0 } h ? h : null;
         var first = await MatchAsync(request.Artists, held);
         var total = new VenueCatalogueResult(0, first.VenuesCreated, first.RowsMapped, 0, 0, 0)
@@ -127,7 +133,7 @@ public class VenueCatalogueWorkflow
 
         return total with
         {
-            RowsForgotten = forget.Rows,
+            RowsForgotten = forget.Rows.Count,
             VenuesRetired =
                 forget.Venues.Count > 0
                     ? await Workflow.ExecuteActivityAsync(

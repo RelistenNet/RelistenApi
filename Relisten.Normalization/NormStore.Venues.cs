@@ -579,20 +579,22 @@ public sealed partial class NormStore
     }
 
     /// Forgets a machine's placements of these legacy venue rows so they are placed again:
-    /// their evidence (their shows follow at the next match), and the spellings they taught
-    /// their venue when no row still placed there is written that way. People's rows are
-    /// kept. Returns the venues that lost rows, for RetireEmptyVenuesAsync.
-    public async Task<IReadOnlyList<Guid>> ForgetVenueRowsAsync(IReadOnlyCollection<Guid> rows)
+    /// their evidence (their shows follow at the next match), and the spelling and provider
+    /// id each taught its venue when no row still placed there carries it (an id the matcher
+    /// trusts first would put the row straight back). People's rows are kept. A row already
+    /// forgotten is skipped, so a retry changes nothing. Returns how many were forgotten.
+    public async Task<int> ForgetVenueRowsAsync(IReadOnlyCollection<Guid> rows)
     {
         var gone = (
-            await connection.QueryAsync<(Guid Venue, string Name)>(
+            await connection.QueryAsync<(Guid Venue, string Name, string? Upstream)>(
                 """
                 WITH gone AS (
                     DELETE FROM norm.venue_evidence e
                     WHERE e.legacy_venue_uuid = ANY(@rows) AND e.author_type NOT IN ('user', 'moderator')
                     RETURNING e.legacy_venue_uuid, e.venue_uuid
                 )
-                SELECT g.venue_uuid, v.name FROM gone g JOIN venues v ON v.uuid = g.legacy_venue_uuid
+                SELECT g.venue_uuid, v.name, v.upstream_identifier
+                FROM gone g JOIN venues v ON v.uuid = g.legacy_venue_uuid
                 """,
                 new { rows = rows.ToArray() },
                 tx
@@ -601,22 +603,23 @@ public sealed partial class NormStore
         var venues = gone.Select(g => g.Venue).Distinct().ToArray();
         if (venues.Length == 0)
         {
-            return [];
+            return 0;
         }
 
         var kept = (
-            await connection.QueryAsync<(Guid Venue, string Name)>(
+            await connection.QueryAsync<(Guid Venue, string Name, string? Upstream)>(
                 """
-                SELECT e.venue_uuid, v.name FROM norm.venue_evidence e
+                SELECT e.venue_uuid, v.name, v.upstream_identifier FROM norm.venue_evidence e
                 JOIN venues v ON v.uuid = e.legacy_venue_uuid
                 WHERE e.venue_uuid = ANY(@venues)
                 """,
                 new { venues },
                 tx
             )
-        ).Select(k => (k.Venue, Key: VenueNormalizer.Key(k.Name))).ToHashSet();
+        ).ToList();
+        var keptKeys = kept.Select(k => (k.Venue, Key: VenueNormalizer.Key(k.Name))).ToHashSet();
         var spellings = gone.Select(g => (g.Venue, Key: VenueNormalizer.Key(g.Name)))
-            .Where(g => g.Key != null && !kept.Contains(g))
+            .Where(g => g.Key != null && !keptKeys.Contains(g))
             .Distinct()
             .ToList();
         await connection.ExecuteAsync(
@@ -632,7 +635,29 @@ public sealed partial class NormStore
             },
             tx
         );
-        return venues;
+
+        var keptIds = kept.Select(k => (k.Venue, Id: VenueState.ParseExternalId(k.Upstream)))
+            .ToHashSet();
+        var ids = gone.Select(g => (g.Venue, Id: VenueState.ParseExternalId(g.Upstream)))
+            .Where(g => g.Id != null && !keptIds.Contains(g))
+            .Distinct()
+            .ToList();
+        await connection.ExecuteAsync(
+            """
+            DELETE FROM norm.venue_external_ids i
+            USING unnest(@venues, @providers, @keys) AS x(venue, provider, key)
+            WHERE i.venue_uuid = x.venue AND i.provider = x.provider AND i.key = x.key
+              AND i.author_type NOT IN ('user', 'moderator')
+            """,
+            new
+            {
+                venues = ids.Select(i => i.Venue).ToArray(),
+                providers = ids.Select(i => i.Id!.Value.Provider).ToArray(),
+                keys = ids.Select(i => i.Id!.Value.Key).ToArray(),
+            },
+            tx
+        );
+        return gone.Count;
     }
 
     /// Retires machine venues of these that nothing points at any more (no rows, shows,
