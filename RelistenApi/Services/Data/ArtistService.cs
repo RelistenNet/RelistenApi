@@ -11,6 +11,22 @@ namespace Relisten.Data
 {
     public class ArtistService : RelistenDataServiceBase
     {
+        // Prepared result shapes must stay stable when migrations add internal columns.
+        // Feature id must lead its projection because Dapper splits the joined row at id.
+        private const string ArtistColumns = """
+            a.id, a.musicbrainz_id, a.created_at, a.updated_at,
+            a.name, a.featured, a.slug, a.sort_name, a.uuid
+            """;
+        private const string FeatureColumns = """
+            f.id, f.descriptions, f.eras, f.multiple_sources, f.reviews,
+            f.ratings, f.tours, f.taper_notes, f.source_information,
+            f.sets, f.per_show_venues, f.per_source_venues, f.venue_coords,
+            f.songs, f.years, f.track_md5s, f.review_titles, f.jam_charts,
+            f.setlist_data_incomplete, f.artist_id, f.track_names,
+            f.venue_past_names, f.reviews_have_ratings, f.track_durations,
+            f.can_have_flac
+            """;
+
         private static Func<Artist, Features, Artist> joiner = (Artist artist, Features features) =>
         {
             artist.features = features;
@@ -95,7 +111,7 @@ namespace Relisten.Data
                 )
 
                 SELECT
-                    a.*, show_count, source_count, f.*
+                    {ArtistColumns}, show_count, source_count, {FeatureColumns}
                 FROM
                     artists a
                     LEFT JOIN features f on f.artist_id = a.id
@@ -164,7 +180,7 @@ namespace Relisten.Data
                     con.QueryAsync(
                         $@"
                 SELECT
-                    a.*, f.*
+                    {ArtistColumns}, {FeatureColumns}
                 FROM
                     artists a
                     LEFT JOIN features f on f.artist_id = a.id
@@ -184,9 +200,9 @@ namespace Relisten.Data
         {
             var a = await db.WithConnection(con =>
                 con.QueryAsync(
-                    @"
+                    $@"
                 SELECT
-                    a.*, f.*
+                    {ArtistColumns}, {FeatureColumns}
                 FROM
                     artists a
                     LEFT JOIN features f on f.artist_id = a.id
@@ -205,9 +221,9 @@ namespace Relisten.Data
         {
             var a = await db.WithConnection(con =>
                 con.QueryAsync(
-                    @"
+                    $@"
                 SELECT
-                    a.*, f.*
+                    {ArtistColumns}, {FeatureColumns}
                 FROM
                     artists a
                     LEFT JOIN features f on f.artist_id = a.id
@@ -226,9 +242,9 @@ namespace Relisten.Data
         {
             var a = await db.WithConnection(con =>
                 con.QueryAsync(
-                    @"
+                    $@"
                 SELECT
-                    a.*, f.*
+                    {ArtistColumns}, {FeatureColumns}
                 FROM
                     shows s
                     JOIN artists a ON s.artist_id = a.id
@@ -249,9 +265,9 @@ namespace Relisten.Data
         {
             var a = await db.WithConnection(con =>
                 con.QueryAsync(
-                    @"
+                    $@"
                 SELECT
-                    a.*, f.*
+                    {ArtistColumns}, {FeatureColumns}
                 FROM
                     sources s
                     JOIN artists a ON s.artist_id = a.id
@@ -366,9 +382,9 @@ namespace Relisten.Data
         )
         {
             var baseSql =
-                @"
+                $@"
                 SELECT
-                    a.*, f.*
+                    {ArtistColumns}, {FeatureColumns}
                 FROM
                     artists a
 
@@ -444,9 +460,9 @@ namespace Relisten.Data
         {
             var artist = await db.WithConnection(con =>
                 con.QueryAsync(
-                    @"
+                    $@"
                     SELECT
-                        a.*, f.*
+                        {ArtistColumns}, {FeatureColumns}
                     FROM
                         artists a
                         JOIN artists_upstream_sources aus ON aus.artist_id = a.id

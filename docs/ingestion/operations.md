@@ -260,6 +260,33 @@ new code. Keep committed catalog changes; use a fresh import or standalone
 rebuild after correcting the failure. Stop ingestion when an error can remove
 unrelated data or overload the listener database.
 
+### Prepared statements during releases
+
+Automatic statement preparation stays enabled. Artist queries select explicit
+artist/feature columns so additive migrations do not change their prepared result
+types while old and new API pods overlap. Migrations must remain compatible with
+the running API; removing, renaming, or changing the types of selected columns
+requires a staged migration.
+
+After an API rollout passes readiness (including startup migrations), the image
+workflow runs `reconnect-database-pools.sh` once. It waits for read replicas to
+replay a WAL position captured from the primary, then sends `RECONNECT app` and
+`WAIT_CLOSE app` to every read/write PgBouncer pod. PgBouncer lets active
+transactions finish and preserves client connections while replacing server
+connections. Prepared plans rebuild on demand. A missing replica/pooler, replay
+timeout, or failed admin command fails the release step.
+
+For manual or Flux deployments, run the same helper after API readiness:
+
+```sh
+bash ./reconnect-database-pools.sh
+```
+
+The helper targets `relisten3-k3s` explicitly and uses pod-local peer
+authentication; it needs no database password. It also repairs stale caches after
+separate schema maintenance once those changes have finished. Clearing only an
+application's Npgsql connection pool does not clear PgBouncer's server plans.
+
 ## Switch from Hangfire
 
 1. Stop manual ingestion admission. Disable or remove the three saved Hangfire

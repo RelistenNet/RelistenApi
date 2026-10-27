@@ -66,8 +66,22 @@ public class TestToursController
         DbService.ReadOnlyConnStr = DbService.ConnStr;
         await connection.ExecuteAsync(
             """
-            CREATE TABLE artists (id int PRIMARY KEY, uuid uuid, slug text);
-            CREATE TABLE features (id int, artist_id int, tours bool);
+            CREATE TABLE artists (
+                id int PRIMARY KEY, musicbrainz_id text, created_at timestamptz DEFAULT now(),
+                updated_at timestamptz, name text, featured int DEFAULT 0, slug text,
+                sort_name text, uuid uuid
+            );
+            CREATE TABLE features (
+                id int, artist_id int, descriptions bool DEFAULT false, eras bool DEFAULT false,
+                multiple_sources bool DEFAULT false, reviews bool DEFAULT false, ratings bool DEFAULT false,
+                tours bool DEFAULT false, taper_notes bool DEFAULT false, source_information bool DEFAULT false,
+                sets bool DEFAULT false, per_show_venues bool DEFAULT false, per_source_venues bool DEFAULT false,
+                venue_coords bool DEFAULT false, songs bool DEFAULT false, years bool DEFAULT true,
+                track_md5s bool DEFAULT false, review_titles bool DEFAULT false, jam_charts bool DEFAULT false,
+                setlist_data_incomplete bool DEFAULT false, track_names bool DEFAULT false,
+                venue_past_names bool DEFAULT false, reviews_have_ratings bool DEFAULT false,
+                track_durations bool DEFAULT true, can_have_flac bool DEFAULT false
+            );
             CREATE TABLE artists_upstream_sources (id int, artist_id int, upstream_source_id int);
             CREATE TABLE upstream_sources (id int);
             CREATE TABLE tours (id int PRIMARY KEY, artist_id int, uuid uuid, slug text,
@@ -81,10 +95,10 @@ public class TestToursController
             CREATE TABLE show_source_information (show_id int, max_updated_at timestamp,
                 source_count int, has_soundboard_source bool, has_flac bool);
             CREATE TABLE venue_show_counts (id int, shows_at_venue int);
-            INSERT INTO artists VALUES
-                (1, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'fugazi'),
-                (2, 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'other');
-            INSERT INTO features VALUES (1, 1, true), (2, 2, true);
+            INSERT INTO artists (id, uuid, slug, name, updated_at) VALUES
+                (1, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'fugazi', 'Fugazi', now()),
+                (2, 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'other', 'Other', now());
+            INSERT INTO features (id, artist_id, tours) VALUES (1, 1, true), (2, 2, true);
             """
         );
         var tours = new TourService(db, new ShowService(db, null!, null!));

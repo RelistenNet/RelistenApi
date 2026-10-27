@@ -67,12 +67,14 @@ public class TestImportHttpAdapters
         DbService.ReadOnlyConnStr = DbService.ConnStr;
         await connection.ExecuteAsync(
             """
-            CREATE TABLE artists (id int PRIMARY KEY, uuid uuid, slug text);
-            CREATE TABLE features (id int, artist_id int);
+            CREATE TABLE artists (LIKE public.artists INCLUDING DEFAULTS);
+            CREATE TABLE features (LIKE public.features INCLUDING DEFAULTS);
             CREATE TABLE artists_upstream_sources (id int, artist_id int, upstream_source_id int);
             CREATE TABLE upstream_sources (id int);
-            INSERT INTO artists VALUES (1, @artistUuid, 'phish'), (2, @unsupportedUuid, 'unsupported');
-            INSERT INTO features VALUES (1, 1), (2, 2);
+            INSERT INTO artists (id, uuid, slug, name, updated_at) VALUES
+                (1, @artistUuid, 'phish', 'Phish', now()),
+                (2, @unsupportedUuid, 'unsupported', 'Unsupported', now());
+            INSERT INTO features (id, artist_id) VALUES (1, 1), (2, 2);
             """,
             new { artistUuid, unsupportedUuid }
         );

@@ -200,3 +200,7 @@ jobs:
               kubectl -n default rollout status "deployment/$deployment" --timeout=10m
             fi
           done
+
+      - name: Rebuild catalog prepared statement caches
+        if: ${{ inputs.deploy && inputs.component == 'api' }}
+        run: bash ./reconnect-database-pools.sh
