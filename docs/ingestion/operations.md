@@ -81,6 +81,17 @@ dotnet run --project RelistenIngestionWorker -- --import=grateful-dead --year=20
 dotnet run --project RelistenIngestionWorker -- --rebuild-artist=grateful-dead
 dotnet run --project RelistenIngestionWorker -- --repair-jerry-venues=grateful-dead
 
+# Build or extend an artist's norm song catalogue with the LLM, then match its tracks
+# (workflow norm/songs/ARTIST_UUID). Needs OpenAI:Model and OpenAI:ApiKey on the worker.
+# Only titles nothing resolves yet are sent; existing rows are never changed. --max-chunks
+# caps the model calls of one run (about 50 title groups each).
+dotnet run --project RelistenIngestionWorker -- --norm-songs=phish --max-chunks=5
+
+# Ask again about titles whose answers look wrong (an expert's list): their machine
+# decisions are forgotten first (people's edits stay), and only they are asked.
+dotnet run --project RelistenIngestionWorker -- --norm-songs=phish --reask="Let Me Lie|Mellow Mood"
+dotnet run --project RelistenIngestionWorker -- --norm-songs=phish --reask-file=titles.txt
+
 # Batch values: full, thin, rebuild, discover.
 dotnet run --project RelistenIngestionWorker -- --batch=full
 

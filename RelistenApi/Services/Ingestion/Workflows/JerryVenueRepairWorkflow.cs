@@ -37,11 +37,11 @@ public class JerryVenueRepairWorkflow
         {
             // Repairs commit before provider finalization. Publish those venue changes
             // to derived shows and cached responses even when finalization fails.
-            await CatalogSteps.RebuildArtist(request.Artist, execution);
+            await CatalogSteps.RebuildArtist(request.Artist, execution, matchVenues: true);
             throw;
         }
 
-        await CatalogSteps.RebuildArtist(request.Artist, execution);
+        await CatalogSteps.RebuildArtist(request.Artist, execution, matchVenues: true);
 
         return new ArtistImportResult(
             request.Artist,

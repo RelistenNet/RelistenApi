@@ -13,3 +13,5 @@ docker compose -f "$script_dir/local-dev/docker-compose.yml" \
 # Temporal tests start temporary SDK-managed servers; no worker or schedule is started.
 RELISTEN_LOCAL_INGESTION_TESTS=1 dotnet test \
   "$script_dir/RelistenApiTests/RelistenApiTests.csproj" "$@"
+# Normalization's tests that need no database.
+dotnet test "$script_dir/Relisten.NormalizationTests/Relisten.NormalizationTests.csproj" "$@"

@@ -107,8 +107,8 @@ public sealed record ArtistImportPlan(ArtistId Artist, UpstreamProvider[] Provid
 /// <summary>Provider activity queues retain independent concurrency and rate limits.</summary>
 public static class IngestionQueues
 {
-    public const string Workflows = "ingest-workflows";
-    public const string Database = "ingest-db";
+    public const string Workflows = Relisten.Normalization.Temporal.NormalizationQueues.Workflows;
+    public const string Database = Relisten.Normalization.Temporal.NormalizationQueues.Database;
     public static readonly IReadOnlyDictionary<UpstreamProvider, string> Providers = new Dictionary<
         UpstreamProvider,
         string

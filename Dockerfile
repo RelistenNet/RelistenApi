@@ -3,9 +3,11 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 COPY RelistenApi/RelistenApi.csproj RelistenApi/
+COPY Relisten.Normalization/Relisten.Normalization.csproj Relisten.Normalization/
 RUN dotnet restore RelistenApi/RelistenApi.csproj
 
 COPY RelistenApi/ RelistenApi/
+COPY Relisten.Normalization/ Relisten.Normalization/
 RUN dotnet publish RelistenApi/RelistenApi.csproj -c Release -o /app/publish --no-restore
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime

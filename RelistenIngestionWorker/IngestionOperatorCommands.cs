@@ -3,6 +3,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Relisten.Api.Models;
 using Relisten.Data;
 using Relisten.Ingestion;
+using Relisten.Ingestion.Workflows;
+using Relisten.Normalization;
+using Relisten.Normalization.Temporal;
 using Temporalio.Client;
 
 namespace RelistenIngestionWorker;
@@ -11,6 +14,7 @@ namespace RelistenIngestionWorker;
 // It returns a printable result; Program owns process lifetime and error reporting.
 internal sealed class IngestionOperatorCommands(
     TemporalIngestionClient imports,
+    NormalizationClient normalization,
     ITemporalClient temporal,
     IServiceScopeFactory scopeFactory,
     IConfiguration configuration
@@ -28,6 +32,38 @@ internal sealed class IngestionOperatorCommands(
             return await StartBatchAsync(configuration[operation]!);
         }
 
+        // Venues run only for the artists switched on (features.norm_venues): --norm-venues=all
+        // is every one of them; one artist must be switched on first.
+        if (operation == "norm-venues")
+        {
+            var scope = configuration[operation]!;
+            if (scope == "all")
+            {
+                return await normalization.BuildVenueCatalogueAsync(
+                    new BuildVenueCatalogue(null, MaxChunks(), FlaggedOnly: true)
+                );
+            }
+
+            var artist = (await ResolveArtistAsync(scope)).Value;
+            using (var flagScope = scopeFactory.CreateScope())
+            {
+                if (
+                    !await flagScope
+                        .ServiceProvider.GetRequiredService<NormFlags>()
+                        .VenuesOnAsync(artist)
+                )
+                {
+                    throw new InvalidOperationException(
+                        $"Venues are off for {scope}: switch features.norm_venues on first"
+                    );
+                }
+            }
+
+            return await normalization.BuildVenueCatalogueAsync(
+                new BuildVenueCatalogue([artist], MaxChunks())
+            );
+        }
+
         var artistId = await ResolveArtistAsync(configuration[operation]!);
 
         return operation switch
@@ -35,12 +71,42 @@ internal sealed class IngestionOperatorCommands(
             "rebuild-artist" => (
                 await imports.RebuildArtistCatalogAsync(new RebuildArtistCatalog(artistId))
             ).WorkflowId,
+            "norm-songs" => await normalization.BuildSongCatalogueAsync(
+                new BuildSongCatalogue(artistId.Value, MaxChunks(), ReaskTitles())
+            ),
             "repair-jerry-venues" => (
                 await imports.RepairJerryVenuesAsync(new RepairJerryVenues(artistId))
             ).WorkflowId,
             "import" => await ImportArtistAsync(artistId),
             _ => throw new InvalidOperationException($"Unknown operator command: {operation}"),
         };
+    }
+
+    /// --max-chunks caps a run's model calls; a value that isn't a positive number is an error,
+    /// never an uncapped run.
+    private int? MaxChunks()
+    {
+        var value = configuration["max-chunks"];
+        if (value == null)
+        {
+            return null;
+        }
+
+        return int.TryParse(value, out var max) && max > 0
+            ? max
+            : throw new InvalidImportRequest(
+                $"--max-chunks must be a positive number, not '{value}'."
+            );
+    }
+
+    /// --reask="A|B" or --reask-file=path (one title per line): titles to ask about again.
+    private IReadOnlyList<string>? ReaskTitles()
+    {
+        var titles = configuration["reask-file"] is { } file
+            ? File.ReadAllLines(file)
+            : (configuration["reask"] ?? "").Split('|');
+        var list = titles.Select(t => t.Trim()).Where(t => t.Length > 0).ToList();
+        return list.Count == 0 ? null : list;
     }
 
     private async Task<ArtistId> ResolveArtistAsync(string identifier)

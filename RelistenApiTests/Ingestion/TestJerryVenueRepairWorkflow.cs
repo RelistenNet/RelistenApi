@@ -35,7 +35,9 @@ public class TestJerryVenueRepairWorkflow
             {
                 await AssertFinalizationFailure(handle, "VenueCleanupUnavailable");
 
-                activities.Events.Should().Equal("repair", "finish", "shows", "years", "cache");
+                activities
+                    .Events.Should()
+                    .Equal("repair", "finish", "shows", "years", "cache", "venues");
                 var replayer = new WorkflowReplayer(
                     new WorkflowReplayerOptions().AddWorkflow<JerryVenueRepairWorkflow>()
                 );
@@ -103,7 +105,9 @@ public class TestJerryVenueRepairWorkflow
                 result.SkippedItems.Should().Be(skip ? 1 : 0);
                 result.FailedItems.Should().Be(skip ? 0 : 1);
                 activities.RemoveOrphans.Should().BeFalse();
-                activities.Events.Should().Equal("repair", "finish", "shows", "years", "cache");
+                activities
+                    .Events.Should()
+                    .Equal("repair", "finish", "shows", "years", "cache", "venues");
             }
         );
     }
@@ -121,7 +125,7 @@ public class TestJerryVenueRepairWorkflow
                 result.CompletedItems.Should().Be(0);
                 result.Status.Should().Be(ImportStatus.Completed);
                 activities.RemoveOrphans.Should().BeTrue();
-                activities.Events.Should().Equal("finish", "shows", "years", "cache");
+                activities.Events.Should().Equal("finish", "shows", "years", "cache", "venues");
             }
         );
     }
@@ -279,5 +283,12 @@ public class TestJerryVenueRepairWorkflow
         [Activity("Catalog.InvalidateArtistCache")]
         public void InvalidateArtistCache(ProviderWorkflowContext context) =>
             Events.Enqueue("cache");
+
+        [Activity("Venues.MatchArtist")]
+        public Relisten.Normalization.Venues.VenueMatchResult? MatchArtist(Guid artist)
+        {
+            Events.Enqueue("venues");
+            return null;
+        }
     }
 }

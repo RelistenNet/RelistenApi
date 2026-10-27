@@ -22,7 +22,16 @@ var sentryOptions = WorkerLogging.Configure(builder);
 using var sentry = sentryOptions == null ? null : SentrySdk.Init(sentryOptions);
 using var host = builder.Build();
 
-var operations = new[] { "import", "batch", "cancel", "rebuild-artist", "repair-jerry-venues" }
+var operations = new[]
+{
+    "import",
+    "batch",
+    "cancel",
+    "rebuild-artist",
+    "norm-songs",
+    "norm-venues",
+    "repair-jerry-venues",
+}
     .Where(key => builder.Configuration[key] != null)
     .ToArray();
 
@@ -42,6 +51,11 @@ if (migrate)
 if (registerSchedules)
 {
     await host.Services.GetRequiredService<TemporalIngestionClient>().RegisterSchedulesAsync();
+    await host
+        .Services.GetRequiredService<Relisten.Normalization.Temporal.NormalizationClient>()
+        .RegisterSchedulesAsync(
+            builder.Configuration.GetValue("Normalization:NightlyVenueCalls", 60)
+        );
     return;
 }
 
@@ -60,15 +74,20 @@ try
 catch (Exception error)
     when (error
             is ImportAlreadyRunning
+                or Relisten.Normalization.Temporal.NormalizationAlreadyRunning
                 or InvalidImportRequest
                 or UnsupportedImportOperation
                 or ArtistNotFound
     )
 {
     Console.Error.WriteLine(
-        error is ImportAlreadyRunning conflict
-            ? $"{conflict.Message} Active workflow: {conflict.WorkflowId}"
-            : error.Message
+        error switch
+        {
+            ImportAlreadyRunning conflict =>
+                $"{conflict.Message} Active workflow: {conflict.WorkflowId}",
+            Relisten.Normalization.Temporal.NormalizationAlreadyRunning running => running.Message,
+            _ => error.Message,
+        }
     );
     Environment.ExitCode = 1;
 }

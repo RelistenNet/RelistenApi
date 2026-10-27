@@ -43,12 +43,12 @@ public class ArtistRefreshWorkflow
             // A provider can fail after it or an earlier provider committed sources.
             // Restore their show/year associations before reporting the failed import;
             // another provider's outage must not hide already imported recordings.
-            await CatalogSteps.RebuildArtist(request.Artist, execution);
+            await CatalogSteps.RebuildArtist(request.Artist, execution, matchVenues: true);
             throw;
         }
 
         // Partial and empty imports also repair derived data left by earlier failed work.
-        await CatalogSteps.RebuildArtist(request.Artist, execution);
+        await CatalogSteps.RebuildArtist(request.Artist, execution, matchVenues: true);
 
         return result;
     }
