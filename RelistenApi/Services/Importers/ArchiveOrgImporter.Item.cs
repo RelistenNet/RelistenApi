@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Hangfire.Console;
@@ -245,16 +246,7 @@ public partial class ArchiveOrgImporter
             );
         }
 
-        var message =
-            $"🛑 Archive.org deletion guard blocked {candidates.Count} source "
-            + $"deletions for {artist.name} ({artist.slug}); threshold is "
-            + $"{MaxSourcesDeletedPerSync}. No sources were deleted.";
-
-        var jobId = ctx?.BackgroundJob.Id;
-        if (jobId != null)
-        {
-            message += $"\n\nHangfire job: /relisten-admin/hangfire/jobs/details/{jobId}";
-        }
+        var message = BuildDeletionGuardMessage(artist, candidates, ctx?.BackgroundJob.Id);
 
         ImportProgress.WriteLine(log, ctx, message);
         log.LogWarning(
@@ -274,5 +266,55 @@ public partial class ArchiveOrgImporter
         {
             log.LogWarning(error, "Could not send Archive deletion guard notification.");
         }
+    }
+
+    // Discord rejects webhook content over 2000 characters. A small guard trip is worth
+    // eyeballing source by source; a mass trip (e.g. an upstream search outage) is not, so
+    // only a sample is listed and the per-identifier warnings above carry the full set.
+    internal const int MaxDeletionGuardSourcesListed = 10;
+    private const int DeletionGuardMessageBudget = 1900;
+
+    internal static string BuildDeletionGuardMessage(
+        Artist artist,
+        IReadOnlyCollection<string> candidates,
+        string? hangfireJobId
+    )
+    {
+        var summary =
+            $"🛑 Archive.org deletion guard blocked {candidates.Count} source "
+            + $"deletions for {artist.name} ({artist.slug}); threshold is "
+            + $"{MaxSourcesDeletedPerSync}. No sources were deleted.";
+
+        var footer =
+            hangfireJobId == null
+                ? ""
+                : $"\n\nHangfire job: /relisten-admin/hangfire/jobs/details/{hangfireJobId}";
+
+        var lines = new List<string>();
+        var length = summary.Length + footer.Length;
+        foreach (var identifier in candidates.Order(StringComparer.Ordinal))
+        {
+            // Angle brackets keep Discord from unfurling an embed per link.
+            var line = $"\n- [{identifier}](<https://archive.org/details/{identifier}>)";
+            if (
+                lines.Count == MaxDeletionGuardSourcesListed
+                || length + line.Length > DeletionGuardMessageBudget
+            )
+            {
+                break;
+            }
+
+            lines.Add(line);
+            length += line.Length;
+        }
+
+        var listing = lines.Count == 0 ? "" : "\n" + string.Concat(lines);
+        var remaining = candidates.Count - lines.Count;
+        if (lines.Count > 0 && remaining > 0)
+        {
+            listing += $"\n…and {remaining} more (see worker logs for the full list)";
+        }
+
+        return summary + listing + footer;
     }
 }
