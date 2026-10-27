@@ -15,6 +15,12 @@ public sealed record VenueChunkInput(
     int Parallel = 1
 );
 
+public sealed record VenueForgetInput(
+    IReadOnlyList<Guid>? Artists,
+    IReadOnlyList<string> Reask,
+    bool Rematch
+);
+
 /// The venue catalogue's steps. Each reads the catalogue fresh, so a resumed run continues
 /// from what earlier steps committed.
 public sealed class VenueActivities(VenueMatch match, VenueLlm llm, VenueHistory history)
@@ -35,6 +41,39 @@ public sealed class VenueActivities(VenueMatch match, VenueLlm llm, VenueHistory
     {
         using var heartbeat = new ActivityHeartbeat();
         return await match.RunAsync(artists, ActivityExecutionContext.Current.CancellationToken);
+    }
+
+    /// A re-ask or rematch run's first step: choose the placements to forget (reads only).
+    [Activity("Venues.PlanForget")]
+    public async Task<VenueForgetPlan> PlanForget(VenueForgetInput input)
+    {
+        using var heartbeat = new ActivityHeartbeat();
+        return await match.PlanForgetAsync(
+            input.Artists,
+            input.Reask,
+            input.Rematch,
+            ActivityExecutionContext.Current.CancellationToken
+        );
+    }
+
+    /// Its second: forget them, the re-asked ones as a re-ask (a retry forgets nothing more).
+    [Activity("Venues.Forget")]
+    public async Task<int> Forget(IReadOnlyList<Guid> rows, bool reask)
+    {
+        using var heartbeat = new ActivityHeartbeat();
+        return await match.ForgetAsync(
+            rows,
+            reask,
+            ActivityExecutionContext.Current.CancellationToken
+        );
+    }
+
+    /// Its last: the venues the forgotten rows left with nothing.
+    [Activity("Venues.Retire")]
+    public async Task<int> Retire(IReadOnlyList<Guid> venues)
+    {
+        using var heartbeat = new ActivityHeartbeat();
+        return await match.RetireAsync(venues, ActivityExecutionContext.Current.CancellationToken);
     }
 
     [Activity("Venues.Chunk")]

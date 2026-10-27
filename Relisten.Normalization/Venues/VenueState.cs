@@ -46,6 +46,11 @@ public sealed record CatalogueVenue(
 public sealed partial class VenueState
 {
     public required IReadOnlyList<LegacyVenue> Unmapped { get; init; }
+
+    /// Rows a person asked about again (--reask) that nothing has placed since: the model's to
+    /// place, never the matcher's, which would only repeat what was forgotten. Read from
+    /// norm.changes, so every match keeps it (after an import too), not just the re-ask's run.
+    public IReadOnlySet<Guid> Held { get; init; } = new HashSet<Guid>();
     public required IReadOnlyDictionary<Guid, CatalogueVenue> Venues { get; init; }
 
     /// Normalised name → venues that carry it (resolved to survivors).
@@ -203,8 +208,43 @@ public sealed partial class VenueState
             .Where(v => v.MergedInto == null && v.City != null)
             .Select(v => new Locality(v.City!, v.Region, v.Country));
 
+        // A location other venues are filed under, by any artist, is a town: a run scoped to
+        // a few artists may see one venue in Redlands, where the whole catalogue has four.
+        // Venues, not spellings: two spellings of one building in "Worcestor" are one venue.
+        var namesAt = (
+            await connection.QueryAsync<(string Location, string Name)>(
+                """
+                SELECT DISTINCT location, name FROM venues
+                WHERE location = ANY(@locations) AND name IS NOT NULL
+                """,
+                new
+                {
+                    locations = legacy
+                        .Select(r => r.Location)
+                        .OfType<string>()
+                        .Distinct()
+                        .ToArray(),
+                },
+                tx
+            )
+        ).GroupBy(l => l.Location).ToDictionary(g => g.Key, g => VenuesAmong(g.Select(l => l.Name)));
+        bool IsTown(LegacyVenue r) =>
+            r.Location != null && namesAt.GetValueOrDefault(r.Location) > 1;
+
         return new VenueState
         {
+            Held = (
+                await connection.QueryAsync<Guid>(
+                    $"""
+                    SELECT DISTINCT r.uuid FROM unnest(@rows) AS r(uuid)
+                    JOIN norm.changes c ON c.table_name = 'venue_evidence'
+                     AND c.row_key = jsonb_build_object('legacy_venue_uuid', r.uuid::text)
+                    WHERE c.op = 'delete' AND c.author_ref = '{VenueReask.Author}'
+                    """,
+                    new { rows = legacy.Select(r => r.Uuid).ToArray() },
+                    tx
+                )
+            ).ToHashSet(),
             Unmapped = WithoutLoneTowns(
                 WithoutPlacesInTowns(
                     WithoutStateTypos(
@@ -216,8 +256,10 @@ public sealed partial class VenueState
                                 )
                             )
                         )
-                    )
-                )
+                    ),
+                    IsTown
+                ),
+                IsTown
             ),
             Venues = venues
                 .Where(v => v.MergedInto == null)
@@ -542,11 +584,25 @@ public sealed partial class VenueState
             .ToList();
     }
 
+    /// How many venues these names are, by the identity the town rules use: "The Worcester
+    /// Memorial Auditorium" and "Worcester Memorial Auditorium" are one.
+    internal static int VenuesAmong(IEnumerable<string> names) =>
+        names
+            .Select(VenueNormalizer.Key)
+            .OfType<string>()
+            .Select(k => VenueNormalizer.Identities(k)[0])
+            .Distinct()
+            .Count();
+
     /// "The Sherman Theater Stroudsburg, PA": a town no other venue is filed under that ends
     /// with another town of the state ("stroudsburg") is that town, with the venue's name in
     /// front. West Palm Beach and South Burlington are towns of their own: a direction or
-    /// another town prefix in front never counts, nor does a town other venues use.
-    internal static List<LegacyVenue> WithoutPlacesInTowns(IReadOnlyList<LegacyVenue> rows)
+    /// another town prefix in front never counts, nor does a town other venues use (isTown:
+    /// what other artists file there).
+    internal static List<LegacyVenue> WithoutPlacesInTowns(
+        IReadOnlyList<LegacyVenue> rows,
+        Func<LegacyVenue, bool>? isTown = null
+    )
     {
         var names = rows.Where(r => r.Key != null && r.Locality is { Trusted: true })
             .GroupBy(r => r.Locality!.Key)
@@ -564,7 +620,11 @@ public sealed partial class VenueState
             );
         return rows.Select(r =>
             {
-                if (r.Locality is not { Trusted: true } l || names.GetValueOrDefault(l.Key) > 1)
+                if (
+                    r.Locality is not { Trusted: true } l
+                    || names.GetValueOrDefault(l.Key) > 1
+                    || isTown?.Invoke(r) == true
+                )
                 {
                     return r;
                 }
@@ -626,8 +686,13 @@ public sealed partial class VenueState
 
     /// A "town" no other venue name is ever filed under is usually not a town ("Days Inn St
     /// Joseph", "The Sherman Theater Stroudsburg", "Bonnaroo"): when the same name is used at
-    /// least twice as much in one other town of the state, its rows take that town.
-    internal static List<LegacyVenue> WithoutLoneTowns(IReadOnlyList<LegacyVenue> rows)
+    /// least twice as much in one other town of the state, its rows take that town. A town
+    /// other artists file several venues under (isTown) is a town: The Greek Theatre in
+    /// Redlands is not the one in Los Angeles.
+    internal static List<LegacyVenue> WithoutLoneTowns(
+        IReadOnlyList<LegacyVenue> rows,
+        Func<LegacyVenue, bool>? isTown = null
+    )
     {
         var trusted = rows.Where(r => r.Key != null && r.Locality is { Trusted: true }).ToList();
         var idsByTownName = trusted
@@ -660,6 +725,7 @@ public sealed partial class VenueState
                     r.Key == null
                     || r.Locality is not { Trusted: true } l
                     || namesInTown[l.Key] > 1
+                    || isTown?.Invoke(r) == true
                 )
                 {
                     return r;

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Relisten.Normalization.Venues;
 using Temporalio.Common;
@@ -15,13 +16,17 @@ namespace Relisten.Normalization.Temporal;
 /// read when the run starts; the nightly schedule's run. HistoryMinShows: after the match,
 /// the official names of venues with at least this many shows that have none (VenueHistory),
 /// within the same budget; 0 skips it. Parallel: model requests asked at once, each about
-/// different states or countries.
+/// different states or countries. Reask ("Name@Location" or "Name") and Rematch (every row an
+/// older matcher placed) first forget those placements of the run's artists, so the run
+/// places them again; re-asked rows go to the model.
 public sealed record BuildVenueCatalogue(
     IReadOnlyList<Guid>? Artists = null,
     int? MaxChunks = null,
     bool FlaggedOnly = false,
     int HistoryMinShows = 5,
-    int Parallel = 6
+    int Parallel = 6,
+    IReadOnlyList<string>? Reask = null,
+    bool Rematch = false
 );
 
 public sealed record VenueCatalogueResult(
@@ -36,6 +41,8 @@ public sealed record VenueCatalogueResult(
     public VenueMatchResult? FirstMatch { get; init; }
     public VenueMatchResult? LastMatch { get; init; }
     public int VenuesNamed { get; init; }
+    public int RowsForgotten { get; init; }
+    public int VenuesRetired { get; init; }
 }
 
 /// Builds or extends the venue catalogue (string-theory docs/matching.md T3): the
@@ -81,6 +88,41 @@ public class VenueCatalogueWorkflow
         }
 
         request = request with { Artists = artists, FlaggedOnly = false };
+        var forgetInput =
+            request.Reask is { Count: > 0 } || request.Rematch
+                ? new VenueForgetInput(artists, request.Reask ?? [], request.Rematch)
+                : null;
+        // Chosen first, then forgotten: a retried forget can't lose what it chose.
+        var forget =
+            forgetInput != null
+                ? await Workflow.ExecuteActivityAsync(
+                    (VenueActivities a) => a.PlanForget(forgetInput),
+                    Step
+                )
+                : null;
+        if (forget is { Rows.Count: > 0 })
+        {
+            // Re-asked rows are forgotten as a re-ask, which holds them for the model in every
+            // match from now on (VenueState.Held); the rest only need the current matcher.
+            var reasked = forget.Held;
+            var rematched = forget.Rows.Except(forget.Held).ToList();
+            if (reasked.Count > 0)
+            {
+                await Workflow.ExecuteActivityAsync(
+                    (VenueActivities a) => a.Forget(reasked, true),
+                    Step
+                );
+            }
+
+            if (rematched.Count > 0)
+            {
+                await Workflow.ExecuteActivityAsync(
+                    (VenueActivities a) => a.Forget(rematched, false),
+                    Step
+                );
+            }
+        }
+
         var first = await MatchAsync(request.Artists);
         var total = new VenueCatalogueResult(0, first.VenuesCreated, first.RowsMapped, 0, 0, 0)
         {
@@ -97,12 +139,27 @@ public class VenueCatalogueWorkflow
         total = await NameVenuesAsync(request, total);
 
         // History merges renamed twins: their shows move to the survivor.
-        return total.VenuesNamed > 0
-            ? total with
-            {
-                LastMatch = await MatchAsync(request.Artists),
-            }
-            : total;
+        if (total.VenuesNamed > 0)
+        {
+            total = total with { LastMatch = await MatchAsync(request.Artists) };
+        }
+
+        if (forget == null)
+        {
+            return total;
+        }
+
+        return total with
+        {
+            RowsForgotten = forget.Rows.Count,
+            VenuesRetired =
+                forget.Venues.Count > 0
+                    ? await Workflow.ExecuteActivityAsync(
+                        (VenueActivities a) => a.Retire(forget.Venues),
+                        Step
+                    )
+                    : 0,
+        };
     }
 
     /// The run's artists: the request's (null: every artist), or the flagged ones.

@@ -40,7 +40,13 @@ internal sealed class IngestionOperatorCommands(
             if (scope == "all")
             {
                 return await normalization.BuildVenueCatalogueAsync(
-                    new BuildVenueCatalogue(null, MaxChunks(), FlaggedOnly: true)
+                    new BuildVenueCatalogue(
+                        null,
+                        MaxChunks(),
+                        FlaggedOnly: true,
+                        Reask: ReaskTitles(),
+                        Rematch: Rematch()
+                    )
                 );
             }
 
@@ -60,7 +66,12 @@ internal sealed class IngestionOperatorCommands(
             }
 
             return await normalization.BuildVenueCatalogueAsync(
-                new BuildVenueCatalogue([artist], MaxChunks())
+                new BuildVenueCatalogue(
+                    [artist],
+                    MaxChunks(),
+                    Reask: ReaskTitles(),
+                    Rematch: Rematch()
+                )
             );
         }
 
@@ -99,7 +110,11 @@ internal sealed class IngestionOperatorCommands(
             );
     }
 
-    /// --reask="A|B" or --reask-file=path (one title per line): titles to ask about again.
+    /// --rematch (venues): place again every row an older matcher placed.
+    private bool Rematch() => configuration["rematch"] is { } value && value != "false";
+
+    /// --reask="A|B" or --reask-file=path (one per line): titles to ask about again, or for
+    /// venues "Name@Location" rows ("The Greek Theatre@Redlands, CA"; a bare name is any town).
     private IReadOnlyList<string>? ReaskTitles()
     {
         var titles = configuration["reask-file"] is { } file

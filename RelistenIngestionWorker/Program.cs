@@ -97,6 +97,8 @@ static HostApplicationBuilder CreateWorkerBuilder(string[] arguments)
     var builder = Host.CreateApplicationBuilder(
         arguments
             .Where(argument => argument != "--register-schedules" && argument != "--migrate")
+            // A bare flag has no value for configuration: --rematch reads as --rematch=true.
+            .Select(argument => argument == "--rematch" ? "--rematch=true" : argument)
             .ToArray()
     );
     SqlMapper.AddTypeHandler(new PersistentIdentifierHandler());

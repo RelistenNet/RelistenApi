@@ -19,6 +19,42 @@ public sealed record VenueMatchResult(
     public bool Deferred { get; init; }
 }
 
+/// What a re-ask or rematch forgets, chosen before anything is deleted (so a retried step
+/// gets the same answer): Rows to forget; Held, the rows a re-ask named, forgotten as a
+/// re-ask so they are left to the model (VenueState.Held); Venues, those the rows are placed
+/// on, retired at the end when nothing points at them.
+public sealed record VenueForgetPlan(
+    IReadOnlyList<Guid> Rows,
+    IReadOnlyList<Guid> Held,
+    IReadOnlyList<Guid> Venues
+);
+
+/// A re-ask's forget is its own author: the rows it forgot are held for the model until
+/// something places them (VenueState.Held).
+public static class VenueReask
+{
+    public const string Author = "venue-reask@1";
+}
+
+/// A row a person asks about again: "Name@Location" (that town as written) or "Name" (any
+/// town), compared by the venue key, so case and "The" don't matter.
+public sealed record ReaskSpec(string Key, string? Location)
+{
+    public static ReaskSpec Parse(string spec)
+    {
+        var at = spec.LastIndexOf('@');
+        var (name, location) = at < 0 ? (spec, null) : (spec[..at], spec[(at + 1)..].Trim());
+        return new ReaskSpec(VenueNormalizer.Key(name) ?? name.Trim().ToLowerInvariant(), location);
+    }
+
+    public bool Matches(string name, string? location) =>
+        VenueNormalizer.Key(name) == Key
+        && (
+            Location == null
+            || string.Equals(location?.Trim(), Location, StringComparison.OrdinalIgnoreCase)
+        );
+}
+
 /// The deterministic venue pass (no LLM): maps legacy venue rows onto venues and creates the
 /// venues nothing is in doubt about, as one run. It starts and ends every venue catalogue run
 /// and is cheap enough to run after imports.
@@ -91,6 +127,110 @@ public sealed class VenueMatch(INormalizationDatabase db)
             plan.Unplaced.Count,
             shows
         );
+    }
+
+    /// The machine's placements of these artists' rows a run should forget and make again:
+    /// the rows a re-ask names ("The Greek Theatre@Redlands, CA", or a name in any town), and
+    /// with rematch every row an older matcher placed (a rule fixed since: the current one
+    /// places it again, and a row placed right lands on the venue it had). People's
+    /// placements are never chosen. Reads only.
+    public async Task<VenueForgetPlan> PlanForgetAsync(
+        IReadOnlyCollection<Guid>? artists,
+        IReadOnlyCollection<string> reask,
+        bool rematch,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var connection = db.CreateWriteConnection();
+        await connection.OpenAsync(cancellationToken);
+        var placed = (
+            await connection.QueryAsync<(
+                Guid Row,
+                string Name,
+                string? Location,
+                string AuthorRef,
+                Guid Venue
+            )>(
+                """
+                SELECT v.uuid, v.name, v.location, e.author_ref, e.venue_uuid
+                FROM norm.venue_evidence e JOIN venues v ON v.uuid = e.legacy_venue_uuid
+                JOIN artists a ON a.id = v.artist_id
+                WHERE (@all OR a.uuid = ANY(@artists)) AND e.author_type NOT IN ('user', 'moderator')
+                """,
+                new { all = artists == null, artists = artists?.ToArray() ?? [] }
+            )
+        ).ToList();
+        var asked = reask.Select(ReaskSpec.Parse).ToList();
+        var reasked = placed.Where(p => asked.Any(a => a.Matches(p.Name, p.Location))).ToList();
+        var stale = rematch
+            ? placed.Where(p =>
+                p.AuthorRef.StartsWith("venue-matcher@", StringComparison.Ordinal)
+                && p.AuthorRef != VenueMatcher.Author
+            )
+            : [];
+        var rows = reasked.Concat(stale).DistinctBy(p => p.Row).ToList();
+        return new VenueForgetPlan(
+            rows.Select(p => p.Row).ToList(),
+            reasked.Select(p => p.Row).ToList(),
+            rows.Select(p => p.Venue).Distinct().ToList()
+        );
+    }
+
+    /// Forgets the machine's placements of these rows (PlanForgetAsync), so the run places
+    /// them again; reask: as a re-ask, which holds them for the model. A row already
+    /// forgotten is skipped: a retry changes nothing.
+    public async Task<int> ForgetAsync(
+        IReadOnlyCollection<Guid> rows,
+        bool reask,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var connection = db.CreateWriteConnection();
+        await connection.OpenAsync(cancellationToken);
+        await using var tx = await connection.BeginTransactionAsync(cancellationToken);
+        await connection.ExecuteAsync(
+            "SELECT pg_advisory_xact_lock(hashtext('norm-venues'))",
+            transaction: tx
+        );
+        var store = await NormStore.BeginAsync(
+            connection,
+            tx,
+            AuthorTypes.Algorithm,
+            reask ? VenueReask.Author : VenueMatcher.Author,
+            reask
+                ? $"re-ask: forget {rows.Count} placements"
+                : $"rematch: forget {rows.Count} placements"
+        );
+        var forgotten = await store.ForgetVenueRowsAsync(rows);
+        await store.FinishAsync();
+        await tx.CommitAsync(cancellationToken);
+        return forgotten;
+    }
+
+    /// After a forget's run: the venues its rows left that nothing points at any more.
+    public async Task<int> RetireAsync(
+        IReadOnlyCollection<Guid> venues,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var connection = db.CreateWriteConnection();
+        await connection.OpenAsync(cancellationToken);
+        await using var tx = await connection.BeginTransactionAsync(cancellationToken);
+        await connection.ExecuteAsync(
+            "SELECT pg_advisory_xact_lock(hashtext('norm-venues'))",
+            transaction: tx
+        );
+        var store = await NormStore.BeginAsync(
+            connection,
+            tx,
+            AuthorTypes.Algorithm,
+            VenueMatcher.Author,
+            "retire venues a forget left empty"
+        );
+        var retired = await store.RetireEmptyVenuesAsync(venues);
+        await store.FinishAsync();
+        await tx.CommitAsync(cancellationToken);
+        return retired;
     }
 
     /// One name in two towns of one state is a suburb, a move or two places, and one name twice

@@ -31,7 +31,7 @@ public sealed record VenuePlan(
 ///    suburb) goes to the LLM whole.
 public static class VenueMatcher
 {
-    public const string Author = "venue-matcher@2.12.0";
+    public const string Author = "venue-matcher@2.13.0";
     public const float Exact = 0.95f;
     public const float Likely = 0.9f;
 
@@ -58,6 +58,13 @@ public static class VenueMatcher
             }
         }
 
+        // Rows asked about again go to the model as they are, one family per spelling.
+        plan.Left.AddRange(
+            state
+                .Unmapped.Where(r => state.Held.Contains(r.Uuid))
+                .GroupBy(VenueKeys.Of)
+                .Select(g => g.ToList())
+        );
         return plan.Build();
     }
 
@@ -65,7 +72,7 @@ public static class VenueMatcher
     private static List<LegacyVenue> PlaceOnKnown(VenueState state, PlanBuilder plan)
     {
         var open = new List<LegacyVenue>();
-        foreach (var row in state.Unmapped)
+        foreach (var row in state.Unmapped.Where(r => !state.Held.Contains(r.Uuid)))
         {
             if (row.ExternalId is { } id && state.ExternalIds.TryGetValue(id, out var byId))
             {
