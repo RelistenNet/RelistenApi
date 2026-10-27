@@ -92,6 +92,15 @@ dotnet run --project RelistenIngestionWorker -- --norm-songs=phish --max-chunks=
 dotnet run --project RelistenIngestionWorker -- --norm-songs=phish --reask="Let Me Lie|Mellow Mood"
 dotnet run --project RelistenIngestionWorker -- --norm-songs=phish --reask-file=titles.txt
 
+# Venues (switched-on artists only; --norm-venues=all is every one of them). Place again
+# every row an older matcher placed, after a matcher fix: rows placed right land on the
+# venue they had, and venues left with nothing are retired. People's placements stay.
+dotnet run --project RelistenIngestionWorker -- --norm-venues=phish --rematch
+
+# Forget the machine's placement of specific rows and leave them to the model this run:
+# "Name@Location" as the row writes its town, or a bare name for any town.
+dotnet run --project RelistenIngestionWorker -- --norm-venues=phish --reask="The Greek Theatre@Redlands, CA"
+
 # Batch values: full, thin, rebuild, discover.
 dotnet run --project RelistenIngestionWorker -- --batch=full
 

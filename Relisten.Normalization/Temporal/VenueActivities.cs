@@ -12,7 +12,14 @@ public sealed record VenueChunkInput(
     IReadOnlyList<Guid>? Artists,
     IReadOnlyList<string> Skip,
     bool MayRetry = true,
-    int Parallel = 1
+    int Parallel = 1,
+    IReadOnlyList<Guid>? Held = null
+);
+
+public sealed record VenueForgetInput(
+    IReadOnlyList<Guid> Artists,
+    IReadOnlyList<string> Reask,
+    bool Rematch
 );
 
 /// The venue catalogue's steps. Each reads the catalogue fresh, so a resumed run continues
@@ -31,10 +38,38 @@ public sealed class VenueActivities(VenueMatch match, VenueLlm llm, VenueHistory
     }
 
     [Activity("Venues.Match")]
-    public async Task<VenueMatchResult> Match(IReadOnlyList<Guid>? artists)
+    public async Task<VenueMatchResult> Match(
+        IReadOnlyList<Guid>? artists,
+        IReadOnlyList<Guid>? held = null
+    )
     {
         using var heartbeat = new ActivityHeartbeat();
-        return await match.RunAsync(artists, ActivityExecutionContext.Current.CancellationToken);
+        return await match.RunAsync(
+            artists,
+            ActivityExecutionContext.Current.CancellationToken,
+            held: held
+        );
+    }
+
+    /// A re-ask or rematch run's first step: forget the placements it names.
+    [Activity("Venues.Forget")]
+    public async Task<VenueForgetResult> Forget(VenueForgetInput input)
+    {
+        using var heartbeat = new ActivityHeartbeat();
+        return await match.ForgetAsync(
+            input.Artists,
+            input.Reask,
+            input.Rematch,
+            ActivityExecutionContext.Current.CancellationToken
+        );
+    }
+
+    /// Its last: the venues the forgotten rows left with nothing.
+    [Activity("Venues.Retire")]
+    public async Task<int> Retire(IReadOnlyList<Guid> venues)
+    {
+        using var heartbeat = new ActivityHeartbeat();
+        return await match.RetireAsync(venues, ActivityExecutionContext.Current.CancellationToken);
     }
 
     [Activity("Venues.Chunk")]
@@ -46,7 +81,8 @@ public sealed class VenueActivities(VenueMatch match, VenueLlm llm, VenueHistory
             input.Skip,
             ActivityExecutionContext.Current.CancellationToken,
             input.MayRetry,
-            input.Parallel
+            input.Parallel,
+            input.Held
         );
     }
 }

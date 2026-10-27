@@ -19,6 +19,34 @@ public sealed record VenueMatchResult(
     public bool Deferred { get; init; }
 }
 
+/// Rows: how many placements were forgotten. Held: the rows a re-ask named, left to the model
+/// for the rest of the run. Venues: those the forgotten rows were placed on, retired at the
+/// end when nothing points at them.
+public sealed record VenueForgetResult(
+    int Rows,
+    IReadOnlyList<Guid> Held,
+    IReadOnlyList<Guid> Venues
+);
+
+/// A row a person asks about again: "Name@Location" (that town as written) or "Name" (any
+/// town), compared by the venue key, so case and "The" don't matter.
+public sealed record ReaskSpec(string Key, string? Location)
+{
+    public static ReaskSpec Parse(string spec)
+    {
+        var at = spec.LastIndexOf('@');
+        var (name, location) = at < 0 ? (spec, null) : (spec[..at], spec[(at + 1)..].Trim());
+        return new ReaskSpec(VenueNormalizer.Key(name) ?? name.Trim().ToLowerInvariant(), location);
+    }
+
+    public bool Matches(string name, string? location) =>
+        VenueNormalizer.Key(name) == Key
+        && (
+            Location == null
+            || string.Equals(location?.Trim(), Location, StringComparison.OrdinalIgnoreCase)
+        );
+}
+
 /// The deterministic venue pass (no LLM): maps legacy venue rows onto venues and creates the
 /// venues nothing is in doubt about, as one run. It starts and ends every venue catalogue run
 /// and is cheap enough to run after imports.
@@ -29,7 +57,8 @@ public sealed class VenueMatch(INormalizationDatabase db)
     public async Task<VenueMatchResult> RunAsync(
         IReadOnlyCollection<Guid>? artists,
         CancellationToken cancellationToken,
-        bool wait = true
+        bool wait = true,
+        IReadOnlyCollection<Guid>? held = null
     )
     {
         await using var connection = db.CreateWriteConnection();
@@ -53,7 +82,7 @@ public sealed class VenueMatch(INormalizationDatabase db)
             return new VenueMatchResult(0, 0, 0, 0) { Deferred = true };
         }
 
-        var state = await VenueState.LoadAsync(connection, tx, artists);
+        var state = await VenueState.LoadAsync(connection, tx, artists, held);
         var plan = VenueMatcher.Match(state);
         var store = await NormStore.BeginAsync(
             connection,
@@ -91,6 +120,99 @@ public sealed class VenueMatch(INormalizationDatabase db)
             plan.Unplaced.Count,
             shows
         );
+    }
+
+    /// Forgets the machine's placements of these artists' rows so the run places them again:
+    /// the rows a re-ask names ("The Greek Theatre@Redlands, CA", or a name in any town), and
+    /// with rematch every row an older matcher placed (a rule fixed since: the current one
+    /// places it again, and a row placed right lands on the venue it had). People's
+    /// placements stay.
+    public async Task<VenueForgetResult> ForgetAsync(
+        IReadOnlyCollection<Guid> artists,
+        IReadOnlyCollection<string> reask,
+        bool rematch,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var connection = db.CreateWriteConnection();
+        await connection.OpenAsync(cancellationToken);
+        await using var tx = await connection.BeginTransactionAsync(cancellationToken);
+        await connection.ExecuteAsync(
+            "SELECT pg_advisory_xact_lock(hashtext('norm-venues'))",
+            transaction: tx
+        );
+        var placed = await connection.QueryAsync<(
+            Guid Row,
+            string Name,
+            string? Location,
+            string AuthorRef
+        )>(
+            """
+            SELECT v.uuid, v.name, v.location, e.author_ref
+            FROM norm.venue_evidence e JOIN venues v ON v.uuid = e.legacy_venue_uuid
+            JOIN artists a ON a.id = v.artist_id
+            WHERE a.uuid = ANY(@artists) AND e.author_type NOT IN ('user', 'moderator')
+            """,
+            new { artists = artists.ToArray() },
+            tx
+        );
+        var asked = reask.Select(ReaskSpec.Parse).ToList();
+        var reasked = placed
+            .Where(p => asked.Any(a => a.Matches(p.Name, p.Location)))
+            .Select(p => p.Row)
+            .ToList();
+        var stale = rematch
+            ? placed
+                .Where(p =>
+                    p.AuthorRef.StartsWith("venue-matcher@", StringComparison.Ordinal)
+                    && p.AuthorRef != VenueMatcher.Author
+                )
+                .Select(p => p.Row)
+                .ToList()
+            : [];
+        var rows = reasked.Concat(stale).Distinct().ToList();
+        if (rows.Count == 0)
+        {
+            return new VenueForgetResult(0, [], []);
+        }
+
+        var store = await NormStore.BeginAsync(
+            connection,
+            tx,
+            AuthorTypes.Algorithm,
+            VenueMatcher.Author,
+            $"forget {rows.Count} rows ({reasked.Count} asked again, {stale.Count} placed by older matchers)"
+        );
+        var venues = await store.ForgetVenueRowsAsync(rows);
+        await store.FinishAsync();
+        await tx.CommitAsync(cancellationToken);
+        return new VenueForgetResult(rows.Count, reasked, venues);
+    }
+
+    /// After a forget's run: the venues its rows left that nothing points at any more.
+    public async Task<int> RetireAsync(
+        IReadOnlyCollection<Guid> venues,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var connection = db.CreateWriteConnection();
+        await connection.OpenAsync(cancellationToken);
+        await using var tx = await connection.BeginTransactionAsync(cancellationToken);
+        await connection.ExecuteAsync(
+            "SELECT pg_advisory_xact_lock(hashtext('norm-venues'))",
+            transaction: tx
+        );
+        var store = await NormStore.BeginAsync(
+            connection,
+            tx,
+            AuthorTypes.Algorithm,
+            VenueMatcher.Author,
+            "retire venues a forget left empty"
+        );
+        var retired = await store.RetireEmptyVenuesAsync(venues);
+        await store.FinishAsync();
+        await tx.CommitAsync(cancellationToken);
+        return retired;
     }
 
     /// One name in two towns of one state is a suburb, a move or two places, and one name twice

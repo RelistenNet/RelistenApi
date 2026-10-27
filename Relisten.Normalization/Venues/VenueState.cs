@@ -46,6 +46,10 @@ public sealed record CatalogueVenue(
 public sealed partial class VenueState
 {
     public required IReadOnlyList<LegacyVenue> Unmapped { get; init; }
+
+    /// Rows a person asked about again (--reask): the model's to place, never the matcher's,
+    /// which would only repeat what was forgotten.
+    public IReadOnlySet<Guid> Held { get; init; } = new HashSet<Guid>();
     public required IReadOnlyDictionary<Guid, CatalogueVenue> Venues { get; init; }
 
     /// Normalised name → venues that carry it (resolved to survivors).
@@ -86,11 +90,12 @@ public sealed partial class VenueState
     private ILookup<string, CatalogueVenue>? byLocality;
 
     /// artists: only these artists' legacy rows (null: every artist). Venues are cross-artist,
-    /// so the catalogue side is always whole.
+    /// so the catalogue side is always whole. held: rows left to the model (Held).
     public static async Task<VenueState> LoadAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction? tx,
-        IReadOnlyCollection<Guid>? artists = null
+        IReadOnlyCollection<Guid>? artists = null,
+        IReadOnlyCollection<Guid>? held = null
     )
     {
         var rows = await connection.QueryAsync<(
@@ -228,6 +233,7 @@ public sealed partial class VenueState
 
         return new VenueState
         {
+            Held = held?.ToHashSet() ?? [],
             Unmapped = WithoutLoneTowns(
                 WithoutPlacesInTowns(
                     WithoutStateTypos(

@@ -58,6 +58,13 @@ public static class VenueMatcher
             }
         }
 
+        // Rows asked about again go to the model as they are, one family per spelling.
+        plan.Left.AddRange(
+            state
+                .Unmapped.Where(r => state.Held.Contains(r.Uuid))
+                .GroupBy(VenueKeys.Of)
+                .Select(g => g.ToList())
+        );
         return plan.Build();
     }
 
@@ -65,7 +72,7 @@ public static class VenueMatcher
     private static List<LegacyVenue> PlaceOnKnown(VenueState state, PlanBuilder plan)
     {
         var open = new List<LegacyVenue>();
-        foreach (var row in state.Unmapped)
+        foreach (var row in state.Unmapped.Where(r => !state.Held.Contains(r.Uuid)))
         {
             if (row.ExternalId is { } id && state.ExternalIds.TryGetValue(id, out var byId))
             {

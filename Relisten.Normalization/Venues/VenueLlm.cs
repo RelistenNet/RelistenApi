@@ -48,7 +48,8 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
         IReadOnlyCollection<string> skip,
         CancellationToken cancellationToken,
         bool mayRetry = true,
-        int parallel = 1
+        int parallel = 1,
+        IReadOnlyCollection<Guid>? held = null
     )
     {
         // No transaction or lock is held through a model call: read, ask, then write in a
@@ -56,6 +57,7 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
         // the next match merges any twin.
         var (state, chunks) = await ReadAsync(
             artists,
+            held,
             async (connection, state) =>
                 NextChunks(await OpenSpellings(connection, null, state, skip), parallel),
             cancellationToken
@@ -72,6 +74,7 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
         {
             var (again, _) = await ReadAsync(
                 artists,
+                held,
                 (_, _) => Task.FromResult(0),
                 cancellationToken
             );
@@ -99,13 +102,14 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
     /// The catalogue as it stands, read without a transaction or the venue lock.
     private async Task<(VenueState State, T Then)> ReadAsync<T>(
         IReadOnlyCollection<Guid>? artists,
+        IReadOnlyCollection<Guid>? held,
         Func<Npgsql.NpgsqlConnection, VenueState, Task<T>> then,
         CancellationToken cancellationToken
     )
     {
         await using var connection = db.CreateWriteConnection();
         await connection.OpenAsync(cancellationToken);
-        var state = await VenueState.LoadAsync(connection, null, artists);
+        var state = await VenueState.LoadAsync(connection, null, artists, held);
         return (state, await then(connection, state));
     }
 

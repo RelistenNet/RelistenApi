@@ -15,13 +15,17 @@ namespace Relisten.Normalization.Temporal;
 /// read when the run starts; the nightly schedule's run. HistoryMinShows: after the match,
 /// the official names of venues with at least this many shows that have none (VenueHistory),
 /// within the same budget; 0 skips it. Parallel: model requests asked at once, each about
-/// different states or countries.
+/// different states or countries. Reask ("Name@Location" or "Name") and Rematch (every row an
+/// older matcher placed) first forget those placements of the run's artists, so the run
+/// places them again; re-asked rows go to the model.
 public sealed record BuildVenueCatalogue(
     IReadOnlyList<Guid>? Artists = null,
     int? MaxChunks = null,
     bool FlaggedOnly = false,
     int HistoryMinShows = 5,
-    int Parallel = 6
+    int Parallel = 6,
+    IReadOnlyList<string>? Reask = null,
+    bool Rematch = false
 );
 
 public sealed record VenueCatalogueResult(
@@ -36,6 +40,8 @@ public sealed record VenueCatalogueResult(
     public VenueMatchResult? FirstMatch { get; init; }
     public VenueMatchResult? LastMatch { get; init; }
     public int VenuesNamed { get; init; }
+    public int RowsForgotten { get; init; }
+    public int VenuesRetired { get; init; }
 }
 
 /// Builds or extends the venue catalogue (string-theory docs/matching.md T3): the
@@ -81,13 +87,25 @@ public class VenueCatalogueWorkflow
         }
 
         request = request with { Artists = artists, FlaggedOnly = false };
-        var first = await MatchAsync(request.Artists);
+        var forgetInput =
+            (request.Reask is { Count: > 0 } || request.Rematch) && artists != null
+                ? new VenueForgetInput(artists, request.Reask ?? [], request.Rematch)
+                : null;
+        var forget =
+            forgetInput != null
+                ? await Workflow.ExecuteActivityAsync(
+                    (VenueActivities a) => a.Forget(forgetInput),
+                    Step
+                )
+                : null;
+        var held = forget?.Held is { Count: > 0 } h ? h : null;
+        var first = await MatchAsync(request.Artists, held);
         var total = new VenueCatalogueResult(0, first.VenuesCreated, first.RowsMapped, 0, 0, 0)
         {
             FirstMatch = first,
         };
-        total = await AskAboutSpellingsAsync(request, total);
-        var last = await MatchAsync(request.Artists);
+        total = await AskAboutSpellingsAsync(request, total, held);
+        var last = await MatchAsync(request.Artists, held);
         total = total with
         {
             VenuesCreated = total.VenuesCreated + last.VenuesCreated,
@@ -97,12 +115,27 @@ public class VenueCatalogueWorkflow
         total = await NameVenuesAsync(request, total);
 
         // History merges renamed twins: their shows move to the survivor.
-        return total.VenuesNamed > 0
-            ? total with
-            {
-                LastMatch = await MatchAsync(request.Artists),
-            }
-            : total;
+        if (total.VenuesNamed > 0)
+        {
+            total = total with { LastMatch = await MatchAsync(request.Artists, held) };
+        }
+
+        if (forget == null)
+        {
+            return total;
+        }
+
+        return total with
+        {
+            RowsForgotten = forget.Rows,
+            VenuesRetired =
+                forget.Venues.Count > 0
+                    ? await Workflow.ExecuteActivityAsync(
+                        (VenueActivities a) => a.Retire(forget.Venues),
+                        Step
+                    )
+                    : 0,
+        };
     }
 
     /// The run's artists: the request's (null: every artist), or the flagged ones.
@@ -114,8 +147,10 @@ public class VenueCatalogueWorkflow
             )
             : request.Artists;
 
-    private static Task<VenueMatchResult> MatchAsync(IReadOnlyList<Guid>? artists) =>
-        Workflow.ExecuteActivityAsync((VenueActivities a) => a.Match(artists), Step);
+    private static Task<VenueMatchResult> MatchAsync(
+        IReadOnlyList<Guid>? artists,
+        IReadOnlyList<Guid>? held
+    ) => Workflow.ExecuteActivityAsync((VenueActivities a) => a.Match(artists, held), Step);
 
     private static bool WithinBudget(BuildVenueCatalogue request, VenueCatalogueResult total) =>
         request.MaxChunks is not { } max || total.Chunks < max;
@@ -126,7 +161,8 @@ public class VenueCatalogueWorkflow
     /// call it could have made; three failures in a row end the run.
     private static async Task<VenueCatalogueResult> AskAboutSpellingsAsync(
         BuildVenueCatalogue request,
-        VenueCatalogueResult total
+        VenueCatalogueResult total,
+        IReadOnlyList<Guid>? held
     )
     {
         var skip = new List<string>();
@@ -139,7 +175,8 @@ public class VenueCatalogueWorkflow
                 request.Artists,
                 skip,
                 remaining >= 2 * parallel,
-                parallel
+                parallel,
+                held
             );
             VenueChunkResult chunk;
             try

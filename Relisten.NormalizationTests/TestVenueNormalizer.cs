@@ -86,4 +86,16 @@ public class TestVenueNormalizer
     [TestCase("Ballroom, U. of Co.", null)]
     public void ARowWithoutALocationCanCarryItInItsName(string name, string? expected) =>
         (VenueNormalizer.LocationInName(name)?.Key).Should().Be(expected);
+
+    [TestCase("The Greek Theatre@Redlands, CA", "Greek Theatre", "redlands, ca", true)]
+    [TestCase("greek theatre@Redlands, CA", "The Greek Theatre", "Redlands, CA", true)]
+    [TestCase("The Greek Theatre@Redlands, CA", "The Greek Theatre", "Los Angeles, CA", false)]
+    [TestCase("The Greek Theatre", "The Greek Theatre", "Los Angeles, CA", true)]
+    [TestCase("The Greek Theatre", "Hollywood Bowl", "Los Angeles, CA", false)]
+    public void AReaskNamesARowByItsNameAndTown(
+        string spec,
+        string name,
+        string location,
+        bool expected
+    ) => ReaskSpec.Parse(spec).Matches(name, location).Should().Be(expected);
 }

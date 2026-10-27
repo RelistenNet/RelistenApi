@@ -577,4 +577,101 @@ public sealed partial class NormStore
             tx
         );
     }
+
+    /// Forgets a machine's placements of these legacy venue rows so they are placed again:
+    /// their evidence (their shows follow at the next match), and the spellings they taught
+    /// their venue when no row still placed there is written that way. People's rows are
+    /// kept. Returns the venues that lost rows, for RetireEmptyVenuesAsync.
+    public async Task<IReadOnlyList<Guid>> ForgetVenueRowsAsync(IReadOnlyCollection<Guid> rows)
+    {
+        var gone = (
+            await connection.QueryAsync<(Guid Venue, string Name)>(
+                """
+                WITH gone AS (
+                    DELETE FROM norm.venue_evidence e
+                    WHERE e.legacy_venue_uuid = ANY(@rows) AND e.author_type NOT IN ('user', 'moderator')
+                    RETURNING e.legacy_venue_uuid, e.venue_uuid
+                )
+                SELECT g.venue_uuid, v.name FROM gone g JOIN venues v ON v.uuid = g.legacy_venue_uuid
+                """,
+                new { rows = rows.ToArray() },
+                tx
+            )
+        ).ToList();
+        var venues = gone.Select(g => g.Venue).Distinct().ToArray();
+        if (venues.Length == 0)
+        {
+            return [];
+        }
+
+        var kept = (
+            await connection.QueryAsync<(Guid Venue, string Name)>(
+                """
+                SELECT e.venue_uuid, v.name FROM norm.venue_evidence e
+                JOIN venues v ON v.uuid = e.legacy_venue_uuid
+                WHERE e.venue_uuid = ANY(@venues)
+                """,
+                new { venues },
+                tx
+            )
+        ).Select(k => (k.Venue, Key: VenueNormalizer.Key(k.Name))).ToHashSet();
+        var spellings = gone.Select(g => (g.Venue, Key: VenueNormalizer.Key(g.Name)))
+            .Where(g => g.Key != null && !kept.Contains(g))
+            .Distinct()
+            .ToList();
+        await connection.ExecuteAsync(
+            """
+            DELETE FROM norm.venue_names n USING unnest(@venues, @keys) AS x(venue, normalized)
+            WHERE n.venue_uuid = x.venue AND n.normalized = x.normalized
+              AND n.kind = 'spelling' AND n.author_type NOT IN ('user', 'moderator')
+            """,
+            new
+            {
+                venues = spellings.Select(s => s.Venue).ToArray(),
+                keys = spellings.Select(s => s.Key).ToArray(),
+            },
+            tx
+        );
+        return venues;
+    }
+
+    /// Retires machine venues of these that nothing points at any more (no rows, shows,
+    /// rooms, merges or questions, no names or ids from people): a venue made for a row
+    /// that was forgotten and placed elsewhere. Their machine names and ids go with them.
+    public async Task<int> RetireEmptyVenuesAsync(IReadOnlyCollection<Guid> venues)
+    {
+        var empty = (
+            await connection.QueryAsync<Guid>(
+                """
+                SELECT v.uuid FROM norm.venues v
+                WHERE v.uuid = ANY(@venues) AND v.author_type NOT IN ('user', 'moderator')
+                  AND v.merged_into IS NULL
+                  AND NOT EXISTS (SELECT 1 FROM norm.venue_evidence e WHERE e.venue_uuid = v.uuid)
+                  AND NOT EXISTS (SELECT 1 FROM norm.show_venues s WHERE s.venue_uuid = v.uuid)
+                  AND NOT EXISTS (SELECT 1 FROM norm.venues o WHERE o.parent_uuid = v.uuid OR o.merged_into = v.uuid)
+                  AND NOT EXISTS (SELECT 1 FROM norm.review_items r WHERE r.venue_uuid = v.uuid)
+                  AND NOT EXISTS (SELECT 1 FROM norm.venue_names n WHERE n.venue_uuid = v.uuid AND n.author_type IN ('user', 'moderator'))
+                  AND NOT EXISTS (SELECT 1 FROM norm.venue_external_ids i WHERE i.venue_uuid = v.uuid AND i.author_type IN ('user', 'moderator'))
+                FOR UPDATE
+                """,
+                new { venues = venues.ToArray() },
+                tx
+            )
+        ).ToArray();
+        if (empty.Length == 0)
+        {
+            return 0;
+        }
+
+        await connection.ExecuteAsync(
+            """
+            DELETE FROM norm.venue_names WHERE venue_uuid = ANY(@empty);
+            DELETE FROM norm.venue_external_ids WHERE venue_uuid = ANY(@empty);
+            DELETE FROM norm.venues WHERE uuid = ANY(@empty);
+            """,
+            new { empty },
+            tx
+        );
+        return empty.Length;
+    }
 }

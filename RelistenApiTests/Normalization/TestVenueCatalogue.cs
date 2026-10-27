@@ -585,6 +585,128 @@ public class TestVenueCatalogue
             .Equal("Main Stage in Beacon Theatre", "Main Stage in Madison Square Garden");
     }
 
+    private Task<Guid> Row(string name, string location) =>
+        db.WithWriteConnection(c =>
+            c.QuerySingleAsync<Guid>(
+                """
+                SELECT v.uuid FROM venues v JOIN artists a ON a.id = v.artist_id
+                WHERE a.uuid = ANY(@artists) AND v.name = @name AND v.location = @location
+                """,
+                new
+                {
+                    artists = artists.ToArray(),
+                    name,
+                    location,
+                }
+            )
+        );
+
+    private Task<Guid?> PlacedOn(Guid row) =>
+        db.WithWriteConnection(c =>
+            c.QuerySingleOrDefaultAsync<Guid?>(
+                "SELECT venue_uuid FROM norm.venue_evidence WHERE legacy_venue_uuid = @row",
+                new { row }
+            )
+        );
+
+    [Test]
+    public async Task ARematchPlacesAnOlderMatchersRowsAgainAndRetiresWhatTheyLeft()
+    {
+        var database = new DbServiceNormalizationDatabase(db);
+        var match = new VenueMatch(database);
+        await match.RunAsync(artists, CancellationToken.None);
+        var row = await Row("Red Rocks Amphitheater", "Morrison, Colorado");
+        var redRocks = (await PlacedOn(row))!.Value;
+
+        // An older matcher put the row on a venue of its own in the wrong town.
+        var denver = Guid.CreateVersion7();
+        await db.WithWriteConnection(async c =>
+        {
+            var connection = (Npgsql.NpgsqlConnection)c;
+            await using var tx = await connection.BeginTransactionAsync();
+            var old = await NormStore.BeginAsync(
+                connection,
+                tx,
+                AuthorTypes.Algorithm,
+                "venue-matcher@2.12.0"
+            );
+            await old.WriteVenuesAsync([
+                new VenueRecord(
+                    denver,
+                    "Red Rocks Amphitheater",
+                    City: "Denver",
+                    Region: "CO",
+                    Country: "US",
+                    Confidence: 0.95f
+                ),
+            ]);
+            await old.WriteVenueNamesAsync([
+                new VenueNameRecord(denver, "Red Rocks Amphitheater", Confidence: 0.95f),
+            ]);
+            await old.WriteVenueEvidenceAsync([new VenueEvidenceRecord(row, denver, 0.95f)]);
+            await old.FinishAsync();
+            await tx.CommitAsync();
+            return 0;
+        });
+        await match.RunAsync(artists, CancellationToken.None);
+
+        var forget = await match.ForgetAsync(artists, [], rematch: true, CancellationToken.None);
+        await match.RunAsync(artists, CancellationToken.None);
+        var retired = await match.RetireAsync(forget.Venues, CancellationToken.None);
+
+        // Only the older matcher's row was forgotten; it is back on the venue it had, its show
+        // with it, and the venue it left is gone. The current matcher's rows stayed put.
+        forget.Rows.Should().Be(1);
+        forget.Held.Should().BeEmpty();
+        (await PlacedOn(row)).Should().Be(redRocks);
+        retired.Should().Be(1);
+        (await Strings("SELECT city FROM norm.venues WHERE name LIKE 'Red Rocks%'"))
+            .Should()
+            .Equal("Morrison");
+        (
+            await Strings(
+                """
+                SELECT sv.venue_uuid::text FROM norm.show_venues sv JOIN shows s ON s.uuid = sv.show_uuid
+                WHERE s.date = '2004-06-25'
+                """
+            )
+        ).Should().Equal(redRocks.ToString());
+    }
+
+    [Test]
+    public async Task AReaskedRowIsLeftToTheModel()
+    {
+        var database = new DbServiceNormalizationDatabase(db);
+        var match = new VenueMatch(database);
+        await match.RunAsync(artists, CancellationToken.None);
+        var row = await Row("Red Rocks Amphitheater", "Morrison, Colorado");
+        var redRocks = await PlacedOn(row);
+
+        var forget = await match.ForgetAsync(
+            artists,
+            ["red rocks amphitheater@morrison, colorado", "Nowhere Hall"],
+            rematch: false,
+            CancellationToken.None
+        );
+        forget.Held.Should().Equal(row);
+        forget.Venues.Should().Equal(redRocks!.Value);
+
+        // Held, the matcher leaves it (and its show) to the model; without the hold, the
+        // matcher would place it again.
+        await match.RunAsync(artists, CancellationToken.None, held: forget.Held);
+        (await PlacedOn(row)).Should().BeNull();
+        (
+            await Strings(
+                "SELECT show_uuid::text FROM norm.show_venues sv JOIN shows s ON s.uuid = sv.show_uuid WHERE s.date = '2004-06-25'"
+            )
+        )
+            .Should()
+            .BeEmpty();
+        (await match.RetireAsync(forget.Venues, CancellationToken.None)).Should().Be(0);
+        await match.RunAsync(artists, CancellationToken.None);
+        (await PlacedOn(row)).Should().Be(redRocks);
+    }
+
     [Test]
     public async Task ANamesakeInAnotherTownIsNoTwin()
     {
