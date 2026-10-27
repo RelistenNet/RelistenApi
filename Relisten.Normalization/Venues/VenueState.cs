@@ -205,11 +205,12 @@ public sealed partial class VenueState
 
         // A location other venues are filed under, by any artist, is a town: a run scoped to
         // a few artists may see one venue in Redlands, where the whole catalogue has four.
+        // Venues, not spellings: two spellings of one building in "Worcestor" are one venue.
         var namesAt = (
-            await connection.QueryAsync<(string Location, int Names)>(
+            await connection.QueryAsync<(string Location, string Name)>(
                 """
-                SELECT location, count(DISTINCT lower(name))::int FROM venues
-                WHERE location = ANY(@locations) GROUP BY location
+                SELECT DISTINCT location, name FROM venues
+                WHERE location = ANY(@locations) AND name IS NOT NULL
                 """,
                 new
                 {
@@ -221,7 +222,7 @@ public sealed partial class VenueState
                 },
                 tx
             )
-        ).ToDictionary(l => l.Location, l => l.Names);
+        ).GroupBy(l => l.Location).ToDictionary(g => g.Key, g => VenuesAmong(g.Select(l => l.Name)));
         bool IsTown(LegacyVenue r) =>
             r.Location != null && namesAt.GetValueOrDefault(r.Location) > 1;
 
@@ -565,6 +566,16 @@ public sealed partial class VenueState
             })
             .ToList();
     }
+
+    /// How many venues these names are, by the identity the town rules use: "The Worcester
+    /// Memorial Auditorium" and "Worcester Memorial Auditorium" are one.
+    internal static int VenuesAmong(IEnumerable<string> names) =>
+        names
+            .Select(VenueNormalizer.Key)
+            .OfType<string>()
+            .Select(k => VenueNormalizer.Identities(k)[0])
+            .Distinct()
+            .Count();
 
     /// "The Sherman Theater Stroudsburg, PA": a town no other venue is filed under that ends
     /// with another town of the state ("stroudsburg") is that town, with the venue's name in

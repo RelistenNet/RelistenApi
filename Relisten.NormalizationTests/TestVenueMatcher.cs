@@ -710,6 +710,16 @@ public class TestVenueMatcher
     }
 
     [Test]
+    public void TwoSpellingsOfOneBuildingAreOneVenueOfATown()
+    {
+        VenueState
+            .VenuesAmong(["Worcester Memorial Auditorium", "The Worcester Memorial Auditorium"])
+            .Should()
+            .Be(1);
+        VenueState.VenuesAmong(["The Greek Theatre", "Redlands Bowl"]).Should().Be(2);
+    }
+
+    [Test]
     public void ALoneTownWithAnotherProviderIdIsAnotherBuilding()
     {
         var rows = VenueState.WithoutLoneTowns([
