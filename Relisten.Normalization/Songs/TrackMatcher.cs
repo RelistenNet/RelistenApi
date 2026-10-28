@@ -39,7 +39,7 @@ public sealed record MatchResult(
 /// track.
 public static class TrackMatcher
 {
-    public const string Author = "title-matcher@2.0.0";
+    public const string Author = "title-matcher@2.1.0";
     public const float Threshold = 0.9f;
     private const float Exact = 0.95f;
 
@@ -119,6 +119,7 @@ public static class TrackMatcher
             }
 
             var (rulings, byPosition) = Rulings(track);
+            var title = TitleNormalizer.Normalize(track.Title.Raw);
             // When the parse has as many parts as the written rows (the text moved under a newer
             // parser), a ruling no text matches is kept at its position.
             var aligned = byPosition.Count == track.Title.Parts.Count;
@@ -131,11 +132,14 @@ public static class TrackMatcher
                             rulings.TryGetValue(p.Key, out var queue) && queue.Count > 0
                                 ? queue.Dequeue()
                             // Kept by position only while its text still names this part
-                            // ("12 - nebraska" for "nebraska"): a retitled track ("Foo" now
-                            // "Bar") isn't the decision it was.
+                            // ("12 - nebraska" for "nebraska") and is still in the title: a
+                            // newer parser reads the same title differently, but a retitled
+                            // track ("Foo" now "Bar", "Foo Bar" now "Bar") isn't the decision
+                            // it was.
                             : aligned
                             && byPosition[i] is { Text: { } was }
                             && $" {was} ".Contains($" {p.Key} ")
+                            && $" {title} ".Contains($" {was} ")
                                 ? byPosition[i]
                             : null;
                         // An exact name or alias decides a part over a ruling; a guess doesn't.
@@ -268,7 +272,15 @@ public static class TrackMatcher
             var key = run[0].Text == null ? "" : KeyOf(run[0].Text!);
             var times =
                 parsedRuns.TryGetValue(key, out var runs) && runs.Count > 0 ? runs.Dequeue() : 1;
+            // One ruling gives every occurrence of a text the same songs, so the rows split
+            // into occurrences only when each holds the same songs ("A B A B" for "Foo > Foo").
+            // "A B" under "Foo > Foo" is one Foo ruled to two songs and since retitled: it
+            // stays one decision, and the other Foo is asked again.
             var size = times > 1 && run.Count % times == 0 ? run.Count / times : run.Count;
+            if (run.Where((p, k) => p.SongUuid != run[k % size].SongUuid).Any())
+            {
+                size = run.Count;
+            }
             for (var k = 0; k < run.Count; k += size)
             {
                 written.Add((key, run.Skip(k).Take(size).ToList()));
