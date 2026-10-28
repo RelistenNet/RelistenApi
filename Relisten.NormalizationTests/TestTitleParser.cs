@@ -368,9 +368,16 @@ public class TestTrackMatcher
     [TestCase("Chalk Dust Torture Reprise >", "Chalk Dust Torture Reprise")]
     [TestCase("Chalk Dust Torture Reprise", "Chalk Dust Torture Reprise")]
     [TestCase("Chalkdust Torture reprise", "Chalk Dust Torture [reprise]")]
+    [TestCase("Sweet Emotion Jam", "Sweet Emotion [jam]")]
     public void ATrailingQualifierIsLiftedUnlessTheWholeNameIsASong(string title, string expected)
     {
-        var songs = new[] { "Amazing Grace", "Chalk Dust Torture", "Chalk Dust Torture Reprise" }
+        var songs = new[]
+        {
+            "Amazing Grace",
+            "Chalk Dust Torture",
+            "Chalk Dust Torture Reprise",
+            "Sweet Emotion",
+        }
             .Select(n => new CatalogueSong(Guid.NewGuid(), n, "song"))
             .ToList();
         var state = new CatalogueState
@@ -378,7 +385,12 @@ public class TestTrackMatcher
             ArtistUuid = Guid.NewGuid(),
             ArtistName = "Phish",
             Songs = songs,
-            Aliases = new Dictionary<string, Guid> { ["chalkdust torture"] = songs[1].Uuid },
+            // A person answered "sweet emotion jam" with its song: still a jam on Sweet Emotion.
+            Aliases = new Dictionary<string, Guid>
+            {
+                ["chalkdust torture"] = songs[1].Uuid,
+                ["sweet emotion jam"] = songs[3].Uuid,
+            },
             UnmappedSetlistSongs = [],
             Tracks = [new CatalogueTrack(Guid.NewGuid(), 1, TitleParser.Parse(title, 1))],
         };

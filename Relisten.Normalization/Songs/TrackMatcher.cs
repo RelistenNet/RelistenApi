@@ -39,7 +39,7 @@ public sealed record MatchResult(
 /// track.
 public static class TrackMatcher
 {
-    public const string Author = "title-matcher@2.1.0";
+    public const string Author = "title-matcher@2.2.0";
     public const float Threshold = 0.9f;
     private const float Exact = 0.95f;
 
@@ -86,9 +86,19 @@ public static class TrackMatcher
                 return cached;
             }
 
-            var decision =
-                Lookup(part.Key, null)
-                ?? (part.Bare != null ? Lookup(part.Bare, part.BareQualifier) : null);
+            var bare = part.Bare != null ? Lookup(part.Bare, part.BareQualifier) : null;
+            var decision = Lookup(part.Key, null) ?? bare;
+            // An alias that is its song's name and a qualifier word ("sweet emotion jam" for
+            // Sweet Emotion) is that song played that way: it keeps the word, as the bare
+            // name would have. A song's own name ("Tweezer Reprise") keeps none.
+            if (
+                decision is { Basis: TrackBasis.Alias, Qualifier: null }
+                && bare != null
+                && bare.Songs.SequenceEqual(decision.Songs)
+            )
+            {
+                decision = decision with { Qualifier = bare.Qualifier };
+            }
             if (decision == null && part.Hint == PartHint.Noise)
             {
                 decision = new PartDecision([], Exact, TrackBasis.Noise);
