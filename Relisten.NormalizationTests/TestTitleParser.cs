@@ -483,6 +483,86 @@ public class TestTrackMatcher
     }
 
     [Test]
+    public void AdjacentRepeatsOfAPartNamingTwoSongsKeepOneRulingEach()
+    {
+        var (a, b) = (Guid.NewGuid(), Guid.NewGuid());
+        var state = OneTrack(
+            "Foo > Foo",
+            new ExistingPart("Foo", a, true, 0.95f, SegueAfter: true),
+            new ExistingPart("Foo", b, true, 0.95f, SegueAfter: true),
+            new ExistingPart("Foo", a, true, 0.95f, SegueAfter: true),
+            new ExistingPart("Foo", b, true, 0.95f)
+        );
+
+        TrackMatcher
+            .Match(state)
+            .Records.Select(r =>
+                r.SongUuid == a ? "A"
+                : r.SongUuid == b ? "B"
+                : "open"
+            )
+            .Should()
+            .Equal("A", "B", "A", "B");
+    }
+
+    [Test]
+    public void APartNamingTwoSongsRetitledToARepeatIsOneRulingNotTwo()
+    {
+        // "Foo" was ruled to songs A and B; the source now says "Foo > Foo". Splitting the two
+        // rows would place both Foos, one song each, which no one decided.
+        var (a, b) = (Guid.NewGuid(), Guid.NewGuid());
+        var state = OneTrack(
+            "Foo > Foo",
+            new ExistingPart("Foo", a, true, 0.95f, SegueAfter: true),
+            new ExistingPart("Foo", b, true, 0.95f)
+        );
+
+        TrackMatcher
+            .Match(state)
+            .Records.Select(r =>
+                r.SongUuid == a ? "A"
+                : r.SongUuid == b ? "B"
+                : r.Basis
+            )
+            .Should()
+            .Equal("A", "B", "open");
+    }
+
+    [Test]
+    public void AnOpenRepeatAfterAPartNamingTwoSongsStaysOpen()
+    {
+        var (a, b) = (Guid.NewGuid(), Guid.NewGuid());
+        var state = OneTrack(
+            "Foo > Foo",
+            new ExistingPart("Foo", a, true, 0.95f, SegueAfter: true),
+            new ExistingPart("Foo", b, true, 0.95f, SegueAfter: true),
+            new ExistingPart("Foo", null, false, 0.9f, "open")
+        );
+
+        TrackMatcher
+            .Match(state)
+            .Records.Select(r =>
+                r.SongUuid == a ? "A"
+                : r.SongUuid == b ? "B"
+                : r.Basis
+            )
+            .Should()
+            .Equal("A", "B", "open");
+    }
+
+    [Test]
+    public void ATrackRetitledToPartOfItsOldTitleDropsTheRuling()
+    {
+        // Kept by position is for a newer parser reading the same title, not a shorter title.
+        var state = OneTrack("Bar", new ExistingPart("Foo Bar", Guid.NewGuid(), true, 0.95f));
+
+        var match = TrackMatcher.Match(state);
+
+        match.Records.Should().BeEmpty();
+        match.Cleared.Should().Equal(state.Tracks[0].Uuid);
+    }
+
+    [Test]
     public void APartNamingTwoSongsIsOnePlacement()
     {
         // "Foo" was ruled to two songs; the title names Foo again after X, unplaced.

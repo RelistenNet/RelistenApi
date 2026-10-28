@@ -378,6 +378,62 @@ public class NormLab
         );
     }
 
+    /// The song rollout gate: each artist's catalogue scored against a labelled sample of its
+    /// tracks (NORM_LAB_GOLD, a tab-separated file kept outside the repo; SongGate.Read gives
+    /// its shape). Lists every wrong and hidden track, and labelled names no song carries.
+    /// Reads only, so NORM_LAB_DATABASE_URL may point at a read-only production connection.
+    [Test, Explicit("Prints the song gate; run deliberately")]
+    public async Task Gate()
+    {
+        var path = Environment.GetEnvironmentVariable("NORM_LAB_GOLD");
+        if (string.IsNullOrEmpty(path))
+        {
+            Assert.Ignore("NORM_LAB_GOLD is needed");
+        }
+
+        var gold = SongGate.Read(path);
+        await using var connection = await Open(Db(labUrl));
+        foreach (var (slug, _) in await Artists(connection))
+        {
+            if (gold.All(g => g.Artist != slug))
+            {
+                continue;
+            }
+
+            var result = await SongGate.ScoreAsync(connection, slug, gold);
+            TestContext.Out.WriteLine(result.ToString());
+            foreach (
+                var t in result.Tracks.Where(t =>
+                    t.Verdict is GateVerdict.Wrong or GateVerdict.Hidden
+                )
+            )
+            {
+                TestContext.Out.WriteLine(
+                    $"    {t.Verdict.ToString().ToLowerInvariant()}: \"{t.Gold.Title}\" is {string.Join(" > ", t.Gold.Parts.Select(p => string.Join(" | ", p)))}, got {t.Got} ({t.Gold.TrackUuid})"
+                );
+            }
+
+            foreach (
+                var t in result.Tracks.Where(t =>
+                    t.Verdict is GateVerdict.Partial or GateVerdict.Open
+                )
+            )
+            {
+                TestContext.Out.WriteLine(
+                    $"    {t.Verdict.ToString().ToLowerInvariant()}: \"{t.Gold.Title}\", got {t.Got}"
+                );
+            }
+
+            if (result.NotInCatalogue.Count > 0)
+            {
+                TestContext.Out.WriteLine(
+                    "    labelled but in no song or alias: "
+                        + string.Join("; ", result.NotInCatalogue)
+                );
+            }
+        }
+    }
+
     /// What an LLM catalogue run would ask, before it runs (docs/llm.md rule 6): unresolved
     /// keys, groups and chunks for the first pass, and the recurring keys a review pass would
     /// see. No model call, no writes.
