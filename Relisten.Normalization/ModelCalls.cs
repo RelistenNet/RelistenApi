@@ -1,6 +1,7 @@
 using System;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Dapper;
 using Npgsql;
@@ -22,7 +23,7 @@ public sealed record ModelCallRecord(
 
 /// Writes model-call receipts, append-only, in the transaction that writes the call's answers
 /// (run: that run, or null when the answer wrote nothing).
-public static class ModelCalls
+public static partial class ModelCalls
 {
     public static Task WriteAsync(
         NpgsqlConnection connection,
@@ -31,7 +32,10 @@ public static class ModelCalls
         ModelCallRecord call
     )
     {
-        var json = IsJson(call.Reply.Json);
+        // Postgres text and jsonb hold no NUL, and a model can still send one ("\u0000"); the
+        // receipt keeps everything else it said rather than failing the chunk it records.
+        var reply = WithoutNul(call.Reply.Json);
+        var json = IsJson(reply);
         return connection.ExecuteAsync(
             """
             INSERT INTO norm.model_calls (uuid, run_uuid, job, prompt_version, model, provider_request_id,
@@ -47,16 +51,24 @@ public static class ModelCalls
                 prompt = call.PromptVersion,
                 model = call.Model,
                 requestId = call.Reply.RequestId,
-                request = call.Request,
-                reply = json ? call.Reply.Json : null,
-                raw = json ? null : call.Reply.Json,
-                outcome = call.Outcome.ToJsonString(),
+                request = WithoutNul(call.Request),
+                reply = json ? reply : null,
+                raw = json ? null : reply,
+                outcome = WithoutNul(call.Outcome.ToJsonString()),
                 input = call.Reply.InputTokens,
                 output = call.Reply.OutputTokens,
             },
             tx
         );
     }
+
+    /// The text with every NUL replaced by U+FFFD, as a character and as a JSON escape. An
+    /// escaped backslash before "u0000" is literal text and stays.
+    internal static string WithoutNul(string text) =>
+        NulEscape().Replace(text.Replace('\0', '\uFFFD'), m => m.Groups[1].Value + "\\uFFFD");
+
+    [GeneratedRegex(@"(?<!\\)((?:\\\\)*)\\u0000", RegexOptions.IgnoreCase)]
+    private static partial Regex NulEscape();
 
     private static bool IsJson(string text)
     {
