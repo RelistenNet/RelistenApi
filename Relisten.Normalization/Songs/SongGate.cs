@@ -44,7 +44,8 @@ public sealed record GateTrack(GoldTrack Gold, GateVerdict Verdict, string Got);
 /// the artist's evaluation sample). Unlike setlist agreement it is assignment precision: a
 /// link is right only when the labelled track names that song.
 /// - Precision: links to the song the label names, of all links written.
-/// - Coverage: labelled songs linked right, of all labelled songs.
+/// - Coverage: labelled songs linked right, of the parts labelled as songs (a part that may be
+///   stage talk, "Audience Chess Move | -", counts towards precision only).
 /// NotInCatalogue lists labelled names no song or alias carries: a song the catalogue lacks,
 /// or one it names differently (then the label gets the catalogue's spelling as an
 /// alternative; names are a convention, identity is what is measured).
@@ -54,18 +55,20 @@ public sealed record GateResult(
     int Links,
     int LinksRight,
     int LabelledSongs,
+    int SongsCovered,
     IReadOnlyList<string> NotInCatalogue
 )
 {
     public double Precision => Links == 0 ? double.NaN : (double)LinksRight / Links;
 
-    public double Coverage => LabelledSongs == 0 ? double.NaN : (double)LinksRight / LabelledSongs;
+    public double Coverage =>
+        LabelledSongs == 0 ? double.NaN : (double)SongsCovered / LabelledSongs;
 
     public int Count(GateVerdict verdict) => Tracks.Count(t => t.Verdict == verdict);
 
     public override string ToString() =>
         $"{Artist}: precision {Precision:P1} ({LinksRight}/{Links} links), coverage {Coverage:P1} "
-        + $"of {LabelledSongs} labelled songs; {Tracks.Count} tracks: "
+        + $"({SongsCovered}/{LabelledSongs} labelled songs); {Tracks.Count} tracks: "
         + string.Join(
             ", ",
             Enum.GetValues<GateVerdict>()
@@ -142,7 +145,7 @@ public static class SongGate
     )
     {
         var known = songKeys.Values.SelectMany(k => k).ToHashSet();
-        var (links, right, labelled) = (0, 0, 0);
+        var (links, right, labelled, covered) = (0, 0, 0, 0);
         var missing = new SortedSet<string>();
         var tracks = new List<GateTrack>();
         foreach (var track in gold)
@@ -167,40 +170,48 @@ public static class SongGate
             var rows = written.GetValueOrDefault(track.TrackUuid) ?? [];
             var used = new bool[parts.Count];
             var (wrong, hidden, placed) = (false, false, false);
-            // Links first, each to the first unplaced part that names its song, so a link isn't
-            // spent on a part a not-a-song row could take.
+            // The first unplaced part that takes a row, preferred ones first: a link fills a part
+            // that must be a song before one that may be stage talk ("Fire | - > Fire").
+            int Place(Func<int, bool> takes, Func<int, bool> preferred)
+            {
+                var free = Enumerable
+                    .Range(0, parts.Count)
+                    .Where(i => !used[i] && takes(i))
+                    .ToList();
+                var at = free.Where(preferred).Concat(free).FirstOrDefault(-1);
+                if (at >= 0)
+                {
+                    used[at] = true;
+                    placed = true;
+                }
+
+                return at;
+            }
+
+            // Links first, so a link isn't spent on a part a not-a-song row could take.
             foreach (var row in rows.Where(r => r.Resolved && r.Song != null))
             {
                 links++;
                 var keys = songKeys.GetValueOrDefault(row.Song!.Value) ?? new HashSet<string>();
-                var at = Enumerable
-                    .Range(0, parts.Count)
-                    .FirstOrDefault(i => !used[i] && parts[i].Songs.Overlaps(keys), -1);
+                var at = Place(i => parts[i].Songs.Overlaps(keys), i => !parts[i].MayBeNone);
                 if (at < 0)
                 {
                     wrong = true;
                     continue;
                 }
 
-                used[at] = true;
-                placed = true;
+                // A link the label accepts is right, even on a part that might have been talk.
+                right++;
                 if (!parts[at].MayBeNone)
                 {
-                    right++;
+                    covered++;
                 }
             }
 
             foreach (var row in rows.Where(r => r.Resolved && r.Song == null))
             {
-                var at = Enumerable
-                    .Range(0, parts.Count)
-                    .FirstOrDefault(i => !used[i] && parts[i].MayBeNone, -1);
-                if (at >= 0)
-                {
-                    used[at] = true;
-                    placed = true;
-                }
-                else if (Enumerable.Range(0, parts.Count).Any(i => !used[i]))
+                var at = Place(i => parts[i].MayBeNone, _ => true);
+                if (at < 0 && Enumerable.Range(0, parts.Count).Any(i => !used[i]))
                 {
                     // A song the title names, written as stage talk: the listener never sees it.
                     hidden = true;
@@ -227,7 +238,7 @@ public static class SongGate
             tracks.Add(new GateTrack(track, verdict, got));
         }
 
-        return new GateResult(artist, tracks, links, right, labelled, missing.ToList());
+        return new GateResult(artist, tracks, links, right, labelled, covered, missing.ToList());
     }
 
     /// The gate for one artist on a catalogue database (the lab, or production read-only):

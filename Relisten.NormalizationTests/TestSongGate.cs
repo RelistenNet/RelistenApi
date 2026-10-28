@@ -53,7 +53,9 @@ public class TestSongGate
         var result = Score("Scarlet Begonias > Fire on the Mountain", Link(Scarlet), Link(Fire));
 
         result.Tracks.Single().Verdict.Should().Be(GateVerdict.Right);
-        (result.Links, result.LinksRight, result.LabelledSongs).Should().Be((2, 2, 2));
+        (result.Links, result.LinksRight, result.SongsCovered, result.LabelledSongs)
+            .Should()
+            .Be((2, 2, 2, 2));
     }
 
     [Test]
@@ -111,6 +113,28 @@ public class TestSongGate
             .Tracks.Single()
             .Verdict.Should()
             .Be(GateVerdict.Right);
+    }
+
+    [Test]
+    public void ALinkTheLabelAcceptsCountsTowardsPrecision()
+    {
+        var result = Score("Fire on the Mountain | -", Link(Fire));
+
+        result.Tracks.Single().Verdict.Should().Be(GateVerdict.Right);
+        result.Precision.Should().Be(1);
+        // A part that may be stage talk isn't a song the catalogue had to find.
+        result.LabelledSongs.Should().Be(0);
+    }
+
+    [Test]
+    public void ALinkFillsAPartThatMustBeASongFirst()
+    {
+        // The link could take either part; on the optional one, the not-a-song row would leave
+        // the second Fire unplaced and the track hidden.
+        var result = Score("Fire on the Mountain | - > Fire on the Mountain", None, Link(Fire));
+
+        result.Tracks.Single().Verdict.Should().Be(GateVerdict.Right);
+        (result.SongsCovered, result.LabelledSongs).Should().Be((1, 1));
     }
 
     [Test]
