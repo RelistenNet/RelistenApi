@@ -155,6 +155,38 @@ public class TestSongGate
     }
 
     [Test]
+    public void EachTrackCarriesItsShareAndTheArtistIsTheirSum()
+    {
+        var (one, two) = (Guid.NewGuid(), Guid.NewGuid());
+        var gold = SongGate.Parse([
+            "artist\ttrack_uuid\ttitle\tsongs",
+            $"grateful-dead\t{one}\tScarlet > Fire\tScarlet Begonias > Fire on the Mountain",
+            $"grateful-dead\t{two}\tPITB\tPlaying in the Band",
+        ]);
+
+        var result = SongGate.Score(
+            "grateful-dead",
+            gold,
+            new Dictionary<Guid, IReadOnlyList<GatePart>>
+            {
+                [one] = [Link(Scarlet), Open],
+                [two] = [Link(Fire)],
+            },
+            Keys,
+            Names
+        );
+
+        result
+            .Tracks.Select(t => (t.Verdict, t.Links, t.LinksRight, t.SongsCovered, t.LabelledSongs))
+            .Should()
+            .Equal((GateVerdict.Partial, 1, 1, 1, 2), (GateVerdict.Wrong, 1, 0, 0, 1));
+        (result.Links, result.LinksRight, result.SongsCovered, result.LabelledSongs)
+            .Should()
+            .Be((2, 1, 1, 3));
+        result.Tracks[0].Got.Should().Be("Scarlet Begonias > open");
+    }
+
+    [Test]
     public void AnUnreadableLabelIsLeftOutAndAnUnknownNameIsListed()
     {
         SongGate

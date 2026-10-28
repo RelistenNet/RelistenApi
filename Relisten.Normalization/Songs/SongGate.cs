@@ -38,7 +38,14 @@ public enum GateVerdict
     Open,
 }
 
-public sealed record GateTrack(GoldTrack Gold, GateVerdict Verdict, string Got);
+/// One labelled track's verdict, what was written for it, and its share of the counts.
+public sealed record GateTrack(GoldTrack Gold, GateVerdict Verdict, string Got)
+{
+    public int Links { get; init; }
+    public int LinksRight { get; init; }
+    public int LabelledSongs { get; init; }
+    public int SongsCovered { get; init; }
+}
 
 /// The song rollout gate (string-theory docs/catalogue.md §Rollout: title→song precision on
 /// the artist's evaluation sample). Unlike setlist agreement it is assignment precision: a
@@ -144,102 +151,126 @@ public static class SongGate
         IReadOnlyDictionary<Guid, string> songNames
     )
     {
-        var known = songKeys.Values.SelectMany(k => k).ToHashSet();
-        var (links, right, labelled, covered) = (0, 0, 0, 0);
-        var missing = new SortedSet<string>();
-        var tracks = new List<GateTrack>();
-        foreach (var track in gold)
-        {
-            var parts = track
-                .Parts.Select(p =>
-                    (
-                        Songs: p.Where(a => a != GoldTrack.NotASong).Select(Key).ToHashSet(),
-                        MayBeNone: p.Contains(GoldTrack.NotASong)
-                    )
+        var tracks = gold.Select(track =>
+            {
+                var rows = written.GetValueOrDefault(track.TrackUuid) ?? [];
+                return Evaluate(track, rows, songKeys) with { Got = Describe(rows, songNames) };
+            })
+            .ToList();
+
+        return new GateResult(
+            artist,
+            tracks,
+            tracks.Sum(t => t.Links),
+            tracks.Sum(t => t.LinksRight),
+            tracks.Sum(t => t.LabelledSongs),
+            tracks.Sum(t => t.SongsCovered),
+            Missing(gold, songKeys)
+        );
+    }
+
+    /// One track's verdict and its share of the counts. Each written row takes one labelled
+    /// part: links first, so a link isn't spent on a part a not-a-song row could take, then
+    /// the not-a-song rows. Open rows take nothing.
+    internal static GateTrack Evaluate(
+        GoldTrack track,
+        IReadOnlyList<GatePart> rows,
+        IReadOnlyDictionary<Guid, IReadOnlySet<string>> songKeys
+    )
+    {
+        var parts = track
+            .Parts.Select(p =>
+                (
+                    Songs: p.Where(a => a != GoldTrack.NotASong).Select(Key).ToHashSet(),
+                    MayBeNone: p.Contains(GoldTrack.NotASong)
                 )
-                .ToList();
-            foreach (var p in track.Parts.Where(p => !p.Contains(GoldTrack.NotASong)))
+            )
+            .ToList();
+        var used = new bool[parts.Count];
+
+        // The first free part that takes a row, preferred ones first: a link fills a part that
+        // must be a song before one that may be stage talk ("Fire | - > Fire").
+        int Place(Func<int, bool> takes, Func<int, bool> preferred)
+        {
+            var free = Enumerable.Range(0, parts.Count).Where(i => !used[i] && takes(i)).ToList();
+            var at = free.Where(preferred).Concat(free).FirstOrDefault(-1);
+            if (at >= 0)
             {
-                labelled++;
-                if (!p.Any(a => known.Contains(Key(a))))
-                {
-                    missing.Add(string.Join(" | ", p));
-                }
+                used[at] = true;
             }
 
-            var rows = written.GetValueOrDefault(track.TrackUuid) ?? [];
-            var used = new bool[parts.Count];
-            var (wrong, hidden, placed) = (false, false, false);
-            // The first unplaced part that takes a row, preferred ones first: a link fills a part
-            // that must be a song before one that may be stage talk ("Fire | - > Fire").
-            int Place(Func<int, bool> takes, Func<int, bool> preferred)
-            {
-                var free = Enumerable
-                    .Range(0, parts.Count)
-                    .Where(i => !used[i] && takes(i))
-                    .ToList();
-                var at = free.Where(preferred).Concat(free).FirstOrDefault(-1);
-                if (at >= 0)
-                {
-                    used[at] = true;
-                    placed = true;
-                }
-
-                return at;
-            }
-
-            // Links first, so a link isn't spent on a part a not-a-song row could take.
-            foreach (var row in rows.Where(r => r.Resolved && r.Song != null))
-            {
-                links++;
-                var keys = songKeys.GetValueOrDefault(row.Song!.Value) ?? new HashSet<string>();
-                var at = Place(i => parts[i].Songs.Overlaps(keys), i => !parts[i].MayBeNone);
-                if (at < 0)
-                {
-                    wrong = true;
-                    continue;
-                }
-
-                // A link the label accepts is right, even on a part that might have been talk.
-                right++;
-                if (!parts[at].MayBeNone)
-                {
-                    covered++;
-                }
-            }
-
-            foreach (var row in rows.Where(r => r.Resolved && r.Song == null))
-            {
-                var at = Place(i => parts[i].MayBeNone, _ => true);
-                if (at < 0 && Enumerable.Range(0, parts.Count).Any(i => !used[i]))
-                {
-                    // A song the title names, written as stage talk: the listener never sees it.
-                    hidden = true;
-                }
-            }
-
-            var verdict =
-                wrong ? GateVerdict.Wrong
-                : hidden ? GateVerdict.Hidden
-                : used.All(u => u) ? GateVerdict.Right
-                : placed ? GateVerdict.Partial
-                : GateVerdict.Open;
-            var got =
-                rows.Count == 0
-                    ? "nothing"
-                    : string.Join(
-                        " > ",
-                        rows.Select(r =>
-                            !r.Resolved ? "open"
-                            : r.Song == null ? GoldTrack.NotASong
-                            : songNames.GetValueOrDefault(r.Song.Value, r.Song.Value.ToString())
-                        )
-                    );
-            tracks.Add(new GateTrack(track, verdict, got));
+            return at;
         }
 
-        return new GateResult(artist, tracks, links, right, labelled, covered, missing.ToList());
+        var (links, right, covered, wrong) = (0, 0, 0, false);
+        foreach (var row in rows.Where(r => r.Resolved && r.Song != null))
+        {
+            links++;
+            var keys = songKeys.GetValueOrDefault(row.Song!.Value) ?? new HashSet<string>();
+            var at = Place(i => parts[i].Songs.Overlaps(keys), i => !parts[i].MayBeNone);
+            if (at < 0)
+            {
+                wrong = true;
+                continue;
+            }
+
+            // A link the label accepts is right, even on a part that might have been talk.
+            right++;
+            covered += parts[at].MayBeNone ? 0 : 1;
+        }
+
+        // A song the title names, written as stage talk: the listener never sees it.
+        var hidden = false;
+        foreach (var row in rows.Where(r => r.Resolved && r.Song == null))
+        {
+            hidden |= Place(i => parts[i].MayBeNone, _ => true) < 0 && used.Contains(false);
+        }
+
+        var verdict =
+            wrong ? GateVerdict.Wrong
+            : hidden ? GateVerdict.Hidden
+            : !used.Contains(false) ? GateVerdict.Right
+            : used.Contains(true) ? GateVerdict.Partial
+            : GateVerdict.Open;
+        return new GateTrack(track, verdict, "")
+        {
+            Links = links,
+            LinksRight = right,
+            LabelledSongs = parts.Count(p => !p.MayBeNone),
+            SongsCovered = covered,
+        };
     }
+
+    /// Labelled names no song or alias carries, for the label review.
+    private static List<string> Missing(
+        IReadOnlyList<GoldTrack> gold,
+        IReadOnlyDictionary<Guid, IReadOnlySet<string>> songKeys
+    )
+    {
+        var known = songKeys.Values.SelectMany(k => k).ToHashSet();
+        return gold.SelectMany(t => t.Parts)
+            .Where(p => !p.Contains(GoldTrack.NotASong) && !p.Any(a => known.Contains(Key(a))))
+            .Select(p => string.Join(" | ", p))
+            .Distinct()
+            .Order(StringComparer.Ordinal)
+            .ToList();
+    }
+
+    /// What was written, for the report: song names, "-" for not a song, "open".
+    private static string Describe(
+        IReadOnlyList<GatePart> rows,
+        IReadOnlyDictionary<Guid, string> songNames
+    ) =>
+        rows.Count == 0
+            ? "nothing"
+            : string.Join(
+                " > ",
+                rows.Select(r =>
+                    !r.Resolved ? "open"
+                    : r.Song == null ? GoldTrack.NotASong
+                    : songNames.GetValueOrDefault(r.Song.Value, r.Song.Value.ToString())
+                )
+            );
 
     /// The gate for one artist on a catalogue database (the lab, or production read-only):
     /// only reads.
