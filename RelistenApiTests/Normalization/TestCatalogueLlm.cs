@@ -746,7 +746,7 @@ public class TestCatalogueLlm
             .Equal("ruling");
         (
             await Strings(
-                "SELECT r.tracks_rebuilt::text FROM norm.runs r WHERE r.author_ref = 'title-matcher@2.1.0' ORDER BY r.started_at DESC LIMIT 1"
+                "SELECT r.tracks_rebuilt::text FROM norm.runs r WHERE r.author_ref = 'title-matcher@2.2.0' ORDER BY r.started_at DESC LIMIT 1"
             )
         )
             .Should()
