@@ -420,7 +420,7 @@ namespace Relisten.Import
                         track_position = localTrackPosition,
                         slug = SlugifyTrack(track.tags.title),
                         mp3_url =
-                            $"https://audio.relisten.net/{src.upstream_identifier}/{fullShow.dir}/{track.mp3}",
+                            $"https://audio.relisten.net/{Uri.EscapeDataString(src.upstream_identifier)}/{Uri.EscapeDataString(fullShow.dir)}/{Uri.EscapeDataString(track.mp3)}",
                         updated_at = dbSource.updated_at,
                         artist_id = artist.id,
                     };
