@@ -1,0 +1,413 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Text.Json.Nodes;
+using Dapper;
+using FluentAssertions;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Hosting.Server.Features;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Hosting.Internal;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.OpenApi;
+using Relisten;
+using Relisten.Controllers.V4;
+using Relisten.Identifiers;
+
+namespace RelistenApiTests.V4;
+
+/// <summary>
+/// Exercises the native catalog through real HTTP, production controllers and SQL.
+/// Synthetic edge cases run only in a disposable test database; no upstream calls run.
+/// </summary>
+[TestFixture, NonParallelizable, Category("LocalIngestion")]
+public sealed class TestV4CatalogHttp
+{
+    private WebApplication app = null!;
+    private HttpClient http = null!;
+    private string previousPrimary = null!;
+    private string previousReplica = null!;
+
+    [OneTimeSetUp]
+    public async Task Start()
+    {
+        MigratedTestDatabase.RequireLocalDatabase();
+        await using var connection = await MigratedTestDatabase.OpenAsync();
+        await V4CatalogFixture.EnsureLoaded(connection);
+        previousPrimary = DbService.ConnStr;
+        previousReplica = DbService.ReadOnlyConnStr;
+        var db = new DbService(
+            LocalTestDatabase.DatabaseUrl,
+            null,
+            null,
+            new HostingEnvironment { EnvironmentName = Environments.Production },
+            NullLogger<DbService>.Instance
+        );
+        var builder = WebApplication.CreateBuilder();
+        builder.WebHost.ConfigureKestrel(server => server.Listen(IPAddress.Loopback, 0));
+        builder.Services.AddSingleton(db);
+        builder
+            .Services.AddControllers(options => options.EnableEndpointRouting = false)
+            .AddApplicationPart(typeof(CatalogReadController).Assembly)
+            .AddNewtonsoftJson();
+        builder.Services.AddV4Catalog();
+        builder.Services.AddResponseCompression(options => options.EnableForHttps = true);
+        builder.Services.AddSwaggerGen(options =>
+        {
+            options.SwaggerDoc("v2", new OpenApiInfo { Title = "Legacy", Version = "v2" });
+            options.SwaggerDoc("v3", new OpenApiInfo { Title = "Legacy", Version = "v3" });
+        });
+        builder.Services.AddSwaggerGenNewtonsoftSupport();
+        app = builder.Build();
+        app.UseDeveloperExceptionPage();
+        app.UseResponseCompression();
+        app.UseV4CatalogCors();
+        app.UseCors(policy =>
+            policy.WithMethods("GET", "POST", "OPTIONS", "HEAD").WithOrigins("*").AllowAnyMethod()
+        );
+        app.UseMvc();
+        app.UseSwagger(options => options.RouteTemplate = "api-docs/{documentName}/swagger.json");
+        await app.StartAsync();
+        var address = app
+            .Services.GetRequiredService<IServer>()
+            .Features.Get<IServerAddressesFeature>()!
+            .Addresses.Single();
+        http = new HttpClient { BaseAddress = new Uri(address) };
+    }
+
+    [OneTimeTearDown]
+    public async Task Stop()
+    {
+        http?.Dispose();
+        if (app is not null)
+        {
+            await app.DisposeAsync();
+        }
+        DbService.ConnStr = previousPrimary;
+        DbService.ReadOnlyConnStr = previousReplica;
+    }
+
+    [TestCase(1, "unavailable", "disabled")]
+    [TestCase(2, "unavailable", "disabled")]
+    [TestCase(3, "partial", null)]
+    [TestCase(4, "interpreted", null)]
+    public async Task Track_and_nested_show_preserve_playback_and_publish_the_same_interpretation(
+        int scenario,
+        string state,
+        string? reason
+    )
+    {
+        var track = await GetJson(TrackPath(scenario));
+        var show = await GetJson(ShowPath(scenario));
+        track["id"]!.GetValue<string>().Should().Be(TrackId(scenario));
+        track["source_id"]!.GetValue<string>().Should().StartWith("source_");
+        track["show_id"]!.GetValue<string>().Should().Be(ShowId(scenario));
+        track["title"]!.GetValue<string>().Should().Be("Scarlet Begonias > Fire on the Mountain");
+        track["mp3_url"]!.GetValue<string>().Should().EndWith($"/{scenario}.mp3");
+        track["normalization"]!["state"]!.GetValue<string>().Should().Be(state);
+        (track["normalization"]!["reason"]?.GetValue<string>()).Should().Be(reason);
+        var nested = show["sources"]![0]!["sets"]![0]!["tracks"]![0]!;
+        JsonNode.DeepEquals(track, nested).Should().BeTrue();
+        show.AsObject().ContainsKey("meta").Should().BeFalse();
+        if (scenario >= 3)
+        {
+            show["venue_display"]!["name"]!.GetValue<string>().Should().Be("Historical Arena");
+            var parts = track["normalization"]!["parts"]!.AsArray();
+            parts.Should().HaveCount(2);
+            parts[0]!["song"]!["id"]!.GetValue<string>().Should().StartWith("song_");
+            parts[1]!["state"]!
+                .GetValue<string>()
+                .Should()
+                .Be(scenario == 3 ? "unresolved" : "matched");
+        }
+        else
+        {
+            show["normalized_venue"].Should().BeNull();
+            show["venue_display"]!["name"]!.GetValue<string>().Should().Be("Imported Civic Center");
+            track["normalization"]!["parts"]!.AsArray().Should().BeEmpty();
+        }
+    }
+
+    [Test]
+    public async Task Conditional_reads_detect_normalization_only_changes_and_work_with_compression_and_Cors()
+    {
+        using var initial = await http.GetAsync(ShowPath(4));
+        initial
+            .StatusCode.Should()
+            .Be(HttpStatusCode.OK, await initial.Content.ReadAsStringAsync());
+        var etag = initial.Headers.ETag!;
+        etag.IsWeak.Should().BeTrue();
+        var before = JsonNode.Parse(await initial.Content.ReadAsStringAsync())!;
+        using var unchanged = await Conditional(ShowPath(4), etag.ToString());
+        unchanged.StatusCode.Should().Be(HttpStatusCode.NotModified);
+        (await unchanged.Content.ReadAsByteArrayAsync()).Should().BeEmpty();
+        unchanged.Headers.ETag.Should().Be(etag);
+        await using var connection = await MigratedTestDatabase.OpenAsync();
+        try
+        {
+            await ChangeNormalization(
+                connection,
+                "UPDATE norm.track_songs SET notes=ARRAY['Reviewed normalization correction'] WHERE track_uuid='00000000-0000-0000-0000-000000000044' AND part=1"
+            );
+            using var changed = await Conditional(ShowPath(4), etag.ToString());
+            changed.StatusCode.Should().Be(HttpStatusCode.OK);
+            changed.Headers.ETag.Should().NotBe(etag);
+            var after = JsonNode.Parse(await changed.Content.ReadAsStringAsync())!;
+            after["updated_at"]!.ToJsonString().Should().Be(before["updated_at"]!.ToJsonString());
+            after["sources"]![0]!["sets"]![0]!["tracks"]![0]!["normalization"]!["parts"]![0]![
+                "notes"
+            ]![0]!
+                .GetValue<string>()
+                .Should()
+                .Be("Reviewed normalization correction");
+            using var compressed = new HttpRequestMessage(HttpMethod.Get, ShowPath(4));
+            compressed.Headers.AcceptEncoding.Add(new StringWithQualityHeaderValue("gzip"));
+            compressed.Headers.Add("Origin", "https://review.example");
+            using var response = await http.SendAsync(compressed);
+            response.StatusCode.Should().Be(HttpStatusCode.OK);
+            response.Headers.ETag.Should().Be(changed.Headers.ETag);
+            response.Content.Headers.ContentEncoding.Should().Contain("gzip");
+            response.Headers.Vary.Should().Contain("Accept-Encoding");
+            response
+                .Headers.GetValues("Access-Control-Expose-Headers")
+                .Should()
+                .Contain(value => value.Contains("ETag", StringComparison.OrdinalIgnoreCase));
+            using var gzipConditional = await Conditional(
+                ShowPath(4),
+                changed.Headers.ETag!.ToString(),
+                gzip: true
+            );
+            gzipConditional.StatusCode.Should().Be(HttpStatusCode.NotModified);
+        }
+        finally
+        {
+            await ChangeNormalization(
+                connection,
+                "UPDATE norm.track_songs SET notes='{}'::text[] WHERE track_uuid='00000000-0000-0000-0000-000000000044' AND part=1"
+            );
+        }
+    }
+
+    [Test]
+    public async Task Canonical_merges_follow_survivors_without_rewriting_imported_playback_titles()
+    {
+        await using var connection = await MigratedTestDatabase.OpenAsync();
+        try
+        {
+            await ChangeNormalization(
+                connection,
+                """
+                INSERT INTO norm.venues (id,name,slug,author_type,author_ref,run_uuid)
+                VALUES ('venue_00000002','Survivor Arena','survivor-review-arena','importer','v4-review','00000000-0000-0000-0000-000000000099');
+                UPDATE norm.venues SET merged_into='venue_00000002' WHERE id='venue_00000001';
+                UPDATE norm.songs SET merged_into='song_00000004' WHERE id='song_00000003';
+                """
+            );
+            var show = await GetJson(ShowPath(4));
+            show["normalized_venue"]!["id"]!.GetValue<string>().Should().Be("venue_00000002");
+            show["venue_display"]!["name"]!.GetValue<string>().Should().Be("Historical Arena");
+            var track = await GetJson(TrackPath(4));
+            track["title"]!
+                .GetValue<string>()
+                .Should()
+                .Be("Scarlet Begonias > Fire on the Mountain");
+            track["normalization"]!["parts"]![0]!["song"]!["id"]!
+                .GetValue<string>()
+                .Should()
+                .Be("song_00000004");
+        }
+        finally
+        {
+            await ChangeNormalization(
+                connection,
+                """
+                UPDATE norm.songs SET merged_into=NULL WHERE id='song_00000003';
+                UPDATE norm.venues SET merged_into=NULL WHERE id='venue_00000001';
+                DELETE FROM norm.venues WHERE id='venue_00000002';
+                """
+            );
+        }
+    }
+
+    [Test]
+    public async Task Resolved_non_song_and_uninterpreted_tracks_remain_distinct()
+    {
+        var nonSong = await GetJson(TrackPath(5));
+        nonSong["normalization"]!["state"]!.GetValue<string>().Should().Be("interpreted");
+        var part = nonSong["normalization"]!["parts"]![0]!;
+        part["state"]!.GetValue<string>().Should().Be("non_song");
+        part["song"].Should().BeNull();
+        var unknown = await GetJson(TrackPath(6));
+        unknown["normalization"]!["state"]!.GetValue<string>().Should().Be("unavailable");
+        unknown["normalization"]!["reason"]!.GetValue<string>().Should().Be("not_interpreted");
+        unknown["normalization"]!["parts"]!.AsArray().Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task Database_failure_returns_a_retryable_problem_instead_of_partial_data()
+    {
+        var primary = DbService.ConnStr;
+        try
+        {
+            DbService.ConnStr =
+                "Host=127.0.0.1;Port=1;Database=unavailable;Username=relisten;Timeout=1";
+            using var response = await http.GetAsync(ShowPath(4));
+            response.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+            var problem = JsonNode.Parse(await response.Content.ReadAsStringAsync())!;
+            problem["code"]!.GetValue<string>().Should().Be("catalog_unavailable");
+            response.Headers.CacheControl!.NoStore.Should().BeTrue();
+        }
+        finally
+        {
+            DbService.ConnStr = primary;
+        }
+        (await GetJson(ShowPath(4)))["id"]!.GetValue<string>().Should().Be(ShowId(4));
+    }
+
+    [Test]
+    public async Task Invalid_kind_and_unknown_resource_have_distinct_problem_responses()
+    {
+        using var invalid = await http.GetAsync("/api/v4/source-tracks/" + ShowId(4));
+        invalid.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        JsonNode.Parse(await invalid.Content.ReadAsStringAsync())!["code"]!
+            .GetValue<string>()
+            .Should()
+            .Be("invalid_id");
+        invalid.Headers.CacheControl!.NoStore.Should().BeTrue();
+        using var missing = await http.GetAsync(
+            "/api/v4/shows/"
+                + UuidTypeId.Format("show", Guid.Parse("00000000-0000-0000-0000-000000000009"))
+        );
+        missing.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        JsonNode.Parse(await missing.Content.ReadAsStringAsync())!["code"]!
+            .GetValue<string>()
+            .Should()
+            .Be("not_found");
+    }
+
+    [Test]
+    public async Task Nullable_resource_references_serialize_as_strings_or_null()
+    {
+        var show = await GetJson(ShowPath(4));
+        show["year_id"]!.GetValue<string>().Should().StartWith("year_");
+        show["tour_id"]!.GetValue<string>().Should().StartWith("tour_");
+        show["normalized_venue"]!["parent_id"]!.GetValue<string>().Should().Be("venue_00000003");
+        var withoutTour = await GetJson(ShowPath(1));
+        withoutTour["tour_id"].Should().BeNull();
+        withoutTour["normalized_venue"].Should().BeNull();
+    }
+
+    [Test]
+    public async Task Browser_preflight_permits_conditional_catalog_reads()
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Options, ShowPath(4));
+        request.Headers.Add("Origin", "https://review.example");
+        request.Headers.Add("Access-Control-Request-Method", "GET");
+        request.Headers.Add("Access-Control-Request-Headers", "if-none-match");
+        using var response = await http.SendAsync(request);
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        response
+            .Headers.GetValues("Access-Control-Allow-Headers")
+            .Should()
+            .Contain(value => value.Contains("if-none-match", StringComparison.OrdinalIgnoreCase));
+        response.Headers.GetValues("Access-Control-Allow-Methods").Should().Contain("GET");
+    }
+
+    [Test]
+    public async Task Openapi_property_names_and_id_types_match_the_actual_json()
+    {
+        var document = await GetJson("/api-docs/v4/swagger.json");
+        var show = await GetJson(ShowPath(4));
+        var track = await GetJson(TrackPath(4));
+        AssertSchemaFields(document, "ShowResource", show);
+        AssertSchemaFields(document, "TrackResource", track);
+        AssertSchemaFields(document, "TrackNormalizationResource", track["normalization"]!);
+        AssertSchemaFields(document, "TrackPartResource", track["normalization"]!["parts"]![0]!);
+        AssertSchemaFields(
+            document,
+            "NormalizedSongResource",
+            track["normalization"]!["parts"]![0]!["song"]!
+        );
+        var trackProperties = document["components"]!["schemas"]!["TrackResource"]!["properties"]!;
+        foreach (var field in new[] { "id", "artist_id", "show_id", "source_id", "source_set_id" })
+        {
+            trackProperties[field]!["type"]!.GetValue<string>().Should().Be("string");
+            trackProperties[field]!["format"]?.GetValue<string>().Should().NotBe("uuid");
+        }
+    }
+
+    private static void AssertSchemaFields(JsonNode document, string schema, JsonNode response)
+    {
+        var properties = document["components"]!["schemas"]![schema]!["properties"]!.AsObject();
+        properties
+            .Select(field => field.Key)
+            .Should()
+            .BeEquivalentTo(response.AsObject().Select(field => field.Key));
+    }
+
+    [Test]
+    public async Task V4_openapi_exposes_only_the_two_checkpoint_reads()
+    {
+        var document = await GetJson("/api-docs/v4/swagger.json");
+        var paths = document["paths"]!.AsObject();
+        paths
+            .Select(entry => entry.Key)
+            .Should()
+            .BeEquivalentTo("/api/v4/shows/{showId}", "/api/v4/source-tracks/{sourceTrackId}");
+        var legacy = await GetJson("/api-docs/v3/swagger.json");
+        legacy["paths"]!
+            .AsObject()
+            .Select(entry => entry.Key)
+            .Should()
+            .NotContain(path => path.StartsWith("/api/v4/"));
+    }
+
+    private async Task<JsonNode> GetJson(string path)
+    {
+        using var response = await http.GetAsync(path);
+        var body = await response.Content.ReadAsStringAsync();
+        response.StatusCode.Should().Be(HttpStatusCode.OK, body);
+        return JsonNode.Parse(body)!;
+    }
+
+    private async Task<HttpResponseMessage> Conditional(string path, string etag, bool gzip = false)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, path);
+        request.Headers.TryAddWithoutValidation("If-None-Match", etag);
+        if (gzip)
+        {
+            request.Headers.AcceptEncoding.Add(new StringWithQualityHeaderValue("gzip"));
+        }
+        return await http.SendAsync(request);
+    }
+
+    private static async Task ChangeNormalization(Npgsql.NpgsqlConnection connection, string sql)
+    {
+        await using var transaction = await connection.BeginTransactionAsync();
+        await connection.ExecuteAsync(
+            """
+            SET LOCAL norm.author_type='importer';
+            SET LOCAL norm.author_ref='v4-review';
+            SET LOCAL norm.run_uuid='00000000-0000-0000-0000-000000000099';
+            """,
+            transaction: transaction
+        );
+        await connection.ExecuteAsync(sql, transaction: transaction);
+        await transaction.CommitAsync();
+    }
+
+    private static string ShowId(int scenario) =>
+        UuidTypeId.Format("show", Guid.Parse($"00000000-0000-0000-0000-{scenario:000000000000}"));
+
+    private static string TrackId(int scenario) =>
+        UuidTypeId.Format(
+            "track",
+            Guid.Parse($"00000000-0000-0000-0000-{40 + scenario:000000000000}")
+        );
+
+    private static string ShowPath(int scenario) => "/api/v4/shows/" + ShowId(scenario);
+
+    private static string TrackPath(int scenario) => "/api/v4/source-tracks/" + TrackId(scenario);
+}
