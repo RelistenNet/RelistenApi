@@ -3,6 +3,24 @@
 ### OpenAPI
 GET {{base}}/api-docs/v4/swagger.json
 
+### Browse: artists
+GET {{base}}/api/v4/artists
+
+### Browse: artist
+GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj
+
+### Browse: years
+GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/years
+
+### Browse: year-by-number
+GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/years/by-number/1985
+
+### Browse: year-by-id
+GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/years/year_59t8nz8n0m6e4c2ej2aq9dbkb9
+
+### Browse: artist-shows
+GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/shows
+
 ### raw: Grateful Dead — Intro
 GET {{base}}/api/v4/source-tracks/track_37vdexm28htz4xmsdbp491ekt9
 

@@ -182,3 +182,19 @@ Existing package advisory and importer-nullability build warnings remain outside
 this change. Live restored-record checks separately verify full/partial shows,
 parent identity, historical names, gzip, 304s and CORS. No production capacity
 claim follows from these local results.
+
+## Expanded C1 browsing checkpoint
+
+Alec asked to inspect core artist/year/show navigation before auth. Six browse
+reads now join the original show/track reads, with typed parents, direct lists,
+artist ownership checks and explicit show summaries. Shared batch metadata reads
+keep historical venue display consistent without a query per show. Artist counts
+and Grateful Dead's 31 year rows agree with 2,081 shows and 18,226 sources in
+the restored snapshot; 1985 has 73 shows. This is local evidence, not a load test.
+
+Fresh review found nullable nested-object schema references did not admit actual
+nulls; the v4-only filter now handles nullable objects as well as enums while
+leaving shared definitions and required references unchanged. It also found a
+real imported year label `0023`: calendar lookup now pads its numeric argument
+so `/by-number/23` and the typed-year route identify the same resource. No
+production data, account/auth code or mobile state changed.

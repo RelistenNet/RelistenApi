@@ -40,8 +40,9 @@ caching; exact-target favorites keep merge behavior small.
 
 ## C1 — Inspect the first real HTTP responses
 
-Implement packages 1 and 2 only as far as needed for show detail and direct
-track reads. Cover raw, normalization-disabled, partial and fully interpreted
+Implement packages 1 and 2 for artist/year/show-list navigation, show detail
+and direct track reads. Alec expanded C1 to review these together before auth.
+Cover raw, normalization-disabled, partial and fully interpreted
 fixtures. Alec accepts these responses before broad route work or mobile work.
 
 Deliver a repeatable local review setup using the real development API,
@@ -162,4 +163,4 @@ outcome in the existing plan; no additional approval workflow is needed.
 The [plan overview](README.md) maps these checkpoints to implementation packages.
 [Contracts](contracts.md) defines behavior; [verification](verification.md)
 defines tests, migration and release evidence. Start with C1. If its responses
-need revision, fix them while only show/track code depends on them.
+need revision, fix them before account and mobile work depends on them.

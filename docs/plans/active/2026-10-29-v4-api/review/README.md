@@ -10,7 +10,25 @@ The sample payloads in [responses](responses/) were captured from the restored
 normalization results; they are not hand-built responses. Full shows and headers
 are captured locally in `local-dev/v4-review/.output/`.
 
-Review these questions before we expand route families or mobile storage:
+## Review navigation first
+
+Alec expanded this checkpoint before account/auth work. Follow the first six
+requests in the collection: artist list → Grateful Dead → years → 1985 by number
+or typed year ID → show summaries. Then use a summary's show ID to retrieve its
+sources and playable tracks. Swagger now exposes eight routes.
+
+The captured [artist response](responses/artist.json) and [year list](responses/years.json)
+show the typed navigation IDs. The restored catalog's Grateful Dead responses agree on 2,081 shows and 18,226
+sources across 31 years. The 1985 detail includes 73 show summaries. Summaries
+omit `sources`; full show detail owns the recording hierarchy. Historical venue
+labels follow the same rule in both responses. These observations validate the
+local snapshot, not production performance.
+
+Artist capabilities and provider metadata are included. Popularity augmentation,
+other route families, account migration and mobile remain later work. Auth stays
+on hold until Alec has reviewed this expanded browsing contract.
+
+Review these questions before proceeding:
 
 1. Does the [resolved medley](responses/matched-track.json) clearly preserve one
    playable file and its original title while exposing two normalized songs?
@@ -26,8 +44,9 @@ Review these questions before we expand route families or mobile storage:
 The local flags are enabled for all 12 artists with normalized data, as Alec
 requested. Production had none enabled. No normalization results were changed.
 
-Verification: solution build passed; 35 focused tests passed, zero skipped
-(15 identifier, 15 HTTP, 3 snapshot/session, 2 legacy Swagger). Tests cover
+Verification: solution build passed; 47 focused tests passed, zero skipped
+(including the core browsing journey, typed IDs, snapshot/session behavior and
+legacy Swagger). Tests cover
 normalization corrections with unchanged imported timestamps, merges, failure
 and recovery, nullable IDs, schema agreement, gzip/304 and browser preflight.
 Live requests separately checked real full/partial shows, exact parent links,
@@ -41,3 +60,7 @@ C1 feedback: closed categorical fields now have typed string enums in OpenAPI,
 including normalization/part states, unavailable reasons, kinds, precision, FLAC
 type and qualifier items. JSON spellings and null values are unchanged. The
 HTTP tests compare advertised enum values with actual responses.
+
+Expanded browsing review also corrected nullable nested-object schemas. Missing
+venues/eras and unresolved song links now admit null without making shared
+resource definitions or required objects nullable.

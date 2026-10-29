@@ -158,6 +158,39 @@ and 503 for disabled service/read timeout/dependency failure. Authorization
 keeps its current 401/403 semantics. Resolver item unavailability is data in a
 200 batch response. No partial successful collection is returned after SQL failure.
 
+## Core browsing before account work
+
+Alec expanded C1 to review navigation before auth or mobile work. These reads
+are now part of the local checkpoint:
+
+- `GET /api/v4/artists` and `/artists/{artistId}` return artist identity,
+  counts, capabilities and provider assignments. `capabilities.normalization`
+  means approved normalized reads; it does not claim complete coverage. Provider
+  names stay open strings, including unknown imported providers. Numeric feature
+  and provider-row IDs are not public identities. `featured` retains the imported
+  bitmask (1 = featured, 2 = autocreated; bits can combine).
+- Artist listing keeps featured/name order with ID tie-breakers. The default
+  `include_autocreated=false` excludes autocreated artists. `true` includes
+  artists with shows or sources, matching the existing filter semantics.
+- `GET /artists/{artistId}/years` returns chronological year resources. A year
+  has a typed `year_` ID; its existing `year` label remains a string.
+- `GET /artists/{artistId}/years/{yearId}` and `/years/by-number/{year}` return
+  the same flat year fields plus `shows`. Calendar lookup accepts integers from
+  1 through 9999. Both lookups enforce artist ownership.
+- `GET /artists/{artistId}/shows` and a year's `shows` return chronological
+  `ShowSummaryResource` rows. They contain typed parents and the same venue
+  metadata/display policy as full show detail, with no `sources` field. Follow
+  the show ID to retrieve the complete recording hierarchy. Lists never claim
+  to have fetched an empty source collection.
+
+Unknown artists/years return 404. Existing artists with no years/shows return
+`[]`. Counts come from the server catalog; full collections are unpaginated.
+All reads use the same snapshot and ETag rules as other v4 reads. Metadata for
+show lists is batched, including normalized/historical venue overlays. Legacy
+routes remain unchanged. Redis popularity augmentation and the remaining route
+families are still C4 work; these local preview routes do not claim complete
+legacy capability coverage yet.
+
 ## Artist approval, show venues and raw fallback
 
 For artist-specific reads, check `features.norm_catalogue` in the same snapshot.

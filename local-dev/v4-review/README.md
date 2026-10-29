@@ -29,8 +29,13 @@ provides Try it out too. Start with the matched and partial tracks, compare
 their full shows, then inspect the historical venue example. Playback URLs and
 titles are imported values; normalized parts describe the file without replacing it.
 
-C1 implements only:
+The expanded C1 browse checkpoint implements:
 
+- `GET /api/v4/artists` and `/api/v4/artists/{artistId}`: artist list/detail,
+  counts, capabilities and provider metadata.
+- `GET /api/v4/artists/{artistId}/years`: year list; append `/{yearId}` or
+  `/by-number/{year}` for year detail with show summaries.
+- `GET /api/v4/artists/{artistId}/shows`: the complete artist show-summary list.
 - `GET /api/v4/shows/{showId}`: full show with sources, sets, tracks, imported
   venue observations, historical venue display and approved normalization.
 - `GET /api/v4/source-tracks/{sourceTrackId}`: that same track resource directly,
