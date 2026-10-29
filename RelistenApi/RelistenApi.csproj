@@ -60,6 +60,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Relisten.Normalization\Relisten.Normalization.csproj" />
+    <ProjectReference Include="..\Relisten.Identifiers\Relisten.Identifiers.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Content Update="appsettings.json">
