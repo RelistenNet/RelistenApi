@@ -4,7 +4,7 @@ Status: C1 ready for response review, 2026-10-29. The local API reads the
 restored production catalog; no production deployment or account migration occurred. This is a living ExecPlan: update Progress,
 Discoveries, Decision Log, and Outcomes as work proceeds.
 
-Build and review this in stages. First deliver a running show/track API that
+Build and review this in stages. First deliver a running browse and playback API that
 Alec can inspect directly. Settle its responses before expanding route families.
 Test the breaking account/auth cutover against the existing v3 catalog, then
 prove a small normalized mobile journey before completing the remaining API/UI.
@@ -147,8 +147,9 @@ Implement mobile's actual queries, not a generic interpreter of all server route
 - [x] Finish contract/migration/verification documents and fresh plan review;
   resolve feasibility, bootstrap, compatibility and rollback findings.
 - [x] Start C1 on `codex/v4-api-c1`; shared ID codec passes 15 focused tests.
-- [x] Implement C1, pass 33 focused tests and validate the live real-data host.
-- [ ] Alec reviews the [actual C1 responses](review/README.md) before expansion.
+- [x] Implement the expanded C1 browsing journey and validate the live real-data host.
+- [ ] Alec reviews the [expanded C1 browsing and playback responses](review/README.md)
+  before account/auth work.
 - [ ] C2–C5 remain unstarted pending the C1 response review.
 
 ## Discoveries and changes from the exploration
@@ -167,8 +168,8 @@ apply entrypoint, not only DTO renaming. The in-place account change retains
 ## Implementation sequence
 
 The numbers below identify components, not a single deployment. Follow the
-[five review checkpoints](review-guide.md): packages 1/2 produce real HTTP
-responses first (C1); package 4 plus mobile account work proves typed auth/library
+[five review checkpoints](review-guide.md): packages 1/2 produce real browsing and playback HTTP
+responses first (expanded C1); package 4 plus mobile account work proves typed auth/library
 against v3 (C2); the minimum of package 5 proves raw/normalized show playback
 (C3); package 3 completes route families and their legacy adapters (C4); remaining
 mobile/UI work and release checks finish the change (C5).
@@ -321,6 +322,9 @@ by accepting this plan.
   and legacy adapters by family. Five review checkpoints govern dependent work.
 - 2026-10-29, HTTP correction: use weak payload ETags for conditional GET so
   compression does not require another validator-generation mechanism.
+
+- 2026-10-29, Alec: expand C1 to artist/year/show-list navigation before auth.
+  Keep the full plan, but review these public contracts together first.
 
 ## Outcomes and retrospective
 

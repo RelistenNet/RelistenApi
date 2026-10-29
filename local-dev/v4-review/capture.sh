@@ -5,7 +5,7 @@ repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 cd "$repo_dir"
 export PGPASSWORD=local_dev_password
 python3 - <<'PY'
-import json, os, subprocess, uuid
+import json, subprocess, uuid
 from pathlib import Path
 out = Path('local-dev/v4-review/.output')
 out.mkdir(parents=True, exist_ok=True)
@@ -33,6 +33,22 @@ LEFT JOIN features f ON f.artist_id=a.id WHERE NOT COALESCE(f.norm_catalogue,fal
 AND NOT st.is_orphaned LIMIT 1''')
 requests = ['@base = http://127.0.0.1:43823', '', '### OpenAPI', 'GET {{base}}/api-docs/v4/swagger.json', '']
 scenarios = []
+# Walk the same typed references a client uses; no legacy lookup parameters.
+artist_uuid = query("SELECT a.uuid FROM artists a JOIN sources src ON src.artist_id=a.id JOIN source_tracks st ON st.source_id=src.id WHERE st.uuid='790f8388-13ca-ea8f-5bf0-61e4cc13ac0d'")
+artist_id = typed('artist', artist_uuid)
+browse = [('artists', '/artists'), ('artist', '/artists/' + artist_id),
+          ('years', '/artists/' + artist_id + '/years'),
+          ('year-by-number', '/artists/' + artist_id + '/years/by-number/1985')]
+for name, path in browse:
+    subprocess.run(['curl', '--fail', '--silent', '--show-error', '--max-time', '45', '-D', str(out / (name + '.headers')),
+                    'http://127.0.0.1:43823/api/v4' + path, '-o', str(out / (name + '.json'))], check=True)
+    requests += ['### Browse: ' + name, 'GET {{base}}/api/v4' + path, '']
+year = json.loads((out / 'year-by-number.json').read_text())
+for name, path in [('year-by-id', '/artists/' + artist_id + '/years/' + year['id']),
+                   ('artist-shows', '/artists/' + artist_id + '/shows')]:
+    subprocess.run(['curl', '--fail', '--silent', '--show-error', '--max-time', '45', '-D', str(out / (name + '.headers')),
+                    'http://127.0.0.1:43823/api/v4' + path, '-o', str(out / (name + '.json'))], check=True)
+    requests += ['### Browse: ' + name, 'GET {{base}}/api/v4' + path, '']
 for name, raw in samples.items():
     row = json.loads(query(f'''SELECT row_to_json(x) FROM (SELECT st.title,a.name artist,sh.uuid show_uuid
     FROM source_tracks st JOIN sources src ON src.id=st.source_id JOIN shows sh ON sh.id=src.show_id
