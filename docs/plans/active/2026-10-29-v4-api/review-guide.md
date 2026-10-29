@@ -3,8 +3,9 @@
 Build one maintained catalog core, prove its responses first, then connect mobile.
 Keep the account/auth conversion as a separate deployment. Each checkpoint gives
 Alec something running to inspect before the next dependent work expands.
-This is a review guide for Alec and Switz; no implementation or runtime checks
-described here have run yet.
+This is a review guide for Alec and Switz. C1 is now implemented for local review;
+start with the [real response examples and running API](review/README.md).
+C2–C5 remain unimplemented.
 
 ## The simplification to preserve
 
@@ -44,9 +45,9 @@ track reads. Cover raw, normalization-disabled, partial and fully interpreted
 fixtures. Alec accepts these responses before broad route work or mobile work.
 
 Deliver a repeatable local review setup using the real development API,
-controllers, serializers and readers. Use a small dedicated disposable review
-database with the same fixture builder used by HTTP tests. Fixture reset must
-refuse other database targets. Preserve the existing local and seed databases.
+controllers, serializers and readers. Alec required real data, so manual review now uses a freshly restored production
+catalog in the standard local database. Synthetic fixtures remain confined to
+disposable regression-test databases. Review startup never resets catalog data.
 Run no provider imports or background workers to populate review data.
 
 The planned review outputs are:
@@ -60,7 +61,7 @@ The planned review outputs are:
   documented launch/reset command. Captures record evidence; DTOs and tests
   remain the contract source. Do not build a separate demonstration API.
 
-Those paths are planned deliverables, not links to files that exist today.
+The request collection and response captures are now available for C1.
 Default requests are reads. Operator command examples stay in a separate
 collection exercised against inert test dependencies; they start no imports.
 

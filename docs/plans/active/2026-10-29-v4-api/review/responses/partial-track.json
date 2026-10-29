@@ -1,0 +1,60 @@
+{
+  "id": "track_7b6v6pgvzqfvhd0s7avr18bdw5",
+  "source_id": "source_7n13sy256d5dq8617cv3mftem5",
+  "source_set_id": "source_set_4cdswh2agwg9afgwedmz9m8ven",
+  "show_id": "show_67xxr3g58g2y59tctv16a0s8kw",
+  "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+  "track_position": 15,
+  "duration": 93,
+  "title": "Beat/It/On/Down/The/Line#",
+  "slug": "beat-it-on-down-the-line",
+  "mp3_url": "https://archive.org/download/gd1970-05-15.136575.late.aud.cooper.berger.flac16/gd70-05-15b.s2t05.mp3",
+  "mp3_md5": "c2622fe7ad1387cff85124d5fa7da0f5",
+  "flac_url": "https://archive.org/download/gd1970-05-15.136575.late.aud.cooper.berger.flac16/gd70-05-15b.s2t05.flac",
+  "flac_md5": "5d7eddcee08009235d6a5fa0fb587e7f",
+  "created_at": "2017-12-16T09:18:23.002671Z",
+  "updated_at": "2016-07-31T21:08:09Z",
+  "normalization": {
+    "state": "partial",
+    "reason": null,
+    "parts": [
+      {
+        "ordinal": 1,
+        "text": "Beat/It/On/Down",
+        "qualifiers": [],
+        "notes": [],
+        "segue_after": false,
+        "song": {
+          "id": "song_5scc3zaz",
+          "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+          "name": "Beat It On Down The Line",
+          "kind": "song"
+        },
+        "state": "matched"
+      },
+      {
+        "ordinal": 2,
+        "text": "The",
+        "qualifiers": [],
+        "notes": [],
+        "segue_after": false,
+        "song": null,
+        "state": "unresolved"
+      },
+      {
+        "ordinal": 3,
+        "text": "Line",
+        "qualifiers": [],
+        "notes": [],
+        "segue_after": false,
+        "song": {
+          "id": "song_5scc3zaz",
+          "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+          "name": "Beat It On Down The Line",
+          "kind": "song"
+        },
+        "state": "matched"
+      }
+    ]
+  }
+}

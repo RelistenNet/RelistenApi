@@ -164,3 +164,21 @@ explains the content-encoding distinction. Verification now covers gzip/identity
 This pass changes sequencing and removes implementation machinery. It does not
 add a service, public release version, catalog identity migration or product scope.
 Runtime qualification and Alec's five implementation reviews remain unperformed.
+
+## C1 execution against real data
+
+Alec paused implementation for a fresh production catalog snapshot and approved
+enabling local `norm_catalogue` for every artist with normalized data. The
+restored snapshot has migration 14, 5,071,877 tracks and 756,587 normalized parts;
+all 12 qualifying artists were enabled locally. The archive remains unchanged.
+Original flags and restore SQL are saved with ignored local captures. The
+[real-data review](review/README.md) links the runnable host and actual payloads.
+
+The fresh code review exposed three integration errors, now fixed and covered:
+Swagger used camelCase while JSON used snake_case; nullable typed IDs serialized
+as objects; legacy global CORS blocked browser conditional-read preflight.
+Full solution build and 33 focused ID/HTTP/session/legacy Swagger tests pass.
+Existing package advisory and importer-nullability build warnings remain outside
+this change. Live restored-record checks separately verify full/partial shows,
+parent identity, historical names, gzip, 304s and CORS. No production capacity
+claim follows from these local results.

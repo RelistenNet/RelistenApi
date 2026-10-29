@@ -1,48 +1,53 @@
-# Synthetic C1 catalog on the dedicated review host. Run local-dev/v4-review/run.sh first.
 @base = http://127.0.0.1:43823
-@rawShow = show_00000000000000000000000001
-@rawTrack = track_00000000000000000000000021
-@disabledShow = show_00000000000000000000000002
-@disabledTrack = track_00000000000000000000000022
-@partialShow = show_00000000000000000000000003
-@partialTrack = track_00000000000000000000000023
-@matchedShow = show_00000000000000000000000004
-@matchedTrack = track_00000000000000000000000024
 
-### Raw show — full source/set/track hierarchy
-GET {{base}}/api/v4/shows/{{rawShow}}
+### OpenAPI
+GET {{base}}/api-docs/v4/swagger.json
 
-### Raw playable file
-GET {{base}}/api/v4/source-tracks/{{rawTrack}}
+### raw: Grateful Dead — Intro
+GET {{base}}/api/v4/source-tracks/track_37vdexm28htz4xmsdbp491ekt9
 
-### Disabled show — full source/set/track hierarchy
-GET {{base}}/api/v4/shows/{{disabledShow}}
+### Full show for raw
+GET {{base}}/api/v4/shows/show_7rz6wynx51ss549v31vvpn99an
 
-### Disabled playable file
-GET {{base}}/api/v4/source-tracks/{{disabledTrack}}
+### matched: Grateful Dead — Mama Tried -> Me And My Uncle
+GET {{base}}/api/v4/source-tracks/track_3s1y1rg4yaxa7nqw31wk617b0d
 
-### Partial show — full source/set/track hierarchy
-GET {{base}}/api/v4/shows/{{partialShow}}
+### Full show for matched
+GET {{base}}/api/v4/shows/show_2jn80dqf5ntfxmmkwx11j27gdk
 
-### Partial playable file
-GET {{base}}/api/v4/source-tracks/{{partialTrack}}
+### partial: Grateful Dead — Beat/It/On/Down/The/Line#
+GET {{base}}/api/v4/source-tracks/track_7b6v6pgvzqfvhd0s7avr18bdw5
 
-### Matched show — full source/set/track hierarchy
-GET {{base}}/api/v4/shows/{{matchedShow}}
+### Full show for partial
+GET {{base}}/api/v4/shows/show_67xxr3g58g2y59tctv16a0s8kw
 
-### Matched playable file
-GET {{base}}/api/v4/source-tracks/{{matchedTrack}}
+### long-medley: Joe Russo's Almost Dead — Cumberland Blues Jam * -> Big River Jam I + -> Cumberland Blues -> Big River Jam II + -> Cumberland Blues -> Big River Refrain I + -> Cumberland Blues -> Big River Refrain + II -> Cumberland Blues Reprise @@
+GET {{base}}/api/v4/source-tracks/track_1g992kg61eh3k8yk6f85wfbmsp
 
-### Paste the complete ETag from the matched show response (including W/ and quotes).
-GET {{base}}/api/v4/shows/{{matchedShow}}
-If-None-Match: W/"replace-with-returned-hash"
+### Full show for long-medley
+GET {{base}}/api/v4/shows/show_0vrf1add2t4192cdqaf8bgmxe1
 
-### Wrong resource prefix: expect 422
-GET {{base}}/api/v4/source-tracks/{{matchedShow}}
+### partial-medley: Joe Russo's Almost Dead — Slipknot! -> Wilson Jam / Chant * -> Feel Like a Stranger Jam -> Slipknot! -> Wilson Jam / Chant * -> Slipknot! ->
+GET {{base}}/api/v4/source-tracks/track_1h6z9r284h9vgmc616h3jpma6z
 
-### Well-formed missing show: expect 404
-GET {{base}}/api/v4/shows/show_00000000000000000000000009
+### Full show for partial-medley
+GET {{base}}/api/v4/shows/show_1yqzwefqaphk26cdr8ke37z8q1
 
-### Compressed response
-GET {{base}}/api/v4/shows/{{matchedShow}}
-Accept-Encoding: gzip
+### disabled: The Higgs — Make You Mine
+GET {{base}}/api/v4/source-tracks/track_4qt7bmm86zca756k4t9xh39ebh
+
+### Full show for disabled
+GET {{base}}/api/v4/shows/show_40cz6xz6yhr1mh5fafmgjkt3tk
+
+### Revalidate captured matched track (304 unless data changed)
+GET {{base}}/api/v4/source-tracks/track_3s1y1rg4yaxa7nqw31wk617b0d
+If-None-Match: W/"ccd4e6875feba1cb46ca7c57b56d6a1b43da70e564cba3d71f158ac8639a218f"
+
+### Historical venue: The Crown on 1998-11-14
+GET {{base}}/api/v4/shows/show_1vxn1nx36jes73mc3p9e1e04mr
+
+### Wrong resource kind (422)
+GET {{base}}/api/v4/source-tracks/show_1vxn1nx36jes73mc3p9e1e04mr
+
+### Valid unknown identity (404)
+GET {{base}}/api/v4/shows/show_00000000000000000000000000

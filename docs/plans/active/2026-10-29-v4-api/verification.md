@@ -1,7 +1,8 @@
 # Verification, migration, rollout and recovery
 
-This is a future execution checklist. Planning has not run migrations, modified
-the applications, deployed services, or qualified runtime behavior.
+C1 has local runtime evidence in the [response review](review/README.md).
+The remaining sections are the full-plan execution checklist, not claims that
+C2–C5 or production rollout have passed. No account migration or deployment occurred.
 
 Follow [C1–C5 in the review guide](review-guide.md) for Alec's checkpoints.
 Automated checks support those reviews; a green test run does not approve the
@@ -53,15 +54,15 @@ relative to `/Users/alecgorge/code/relisten/relisten-mobile`.
 
 C1 delivers a repeatable local review setup, not only an automated test result.
 Use the existing Development API host, controllers and serializer/Swagger
-registration. Reuse the deterministic data builder from HTTP integration tests.
+registration. Manual review uses the restored real catalog, as Alec requested;
+deterministic synthetic fixtures remain in disposable regression-test databases.
 Add one setup/run command, a `.http` request collection with fixture variables,
 and captured actual JSON/headers. Proposed paths and scenarios are in the
 [review guide](review-guide.md).
 
-The command creates/resets only a dedicated disposable review database; it must
-not clear the normal seed/development catalog. Label the database and listening
-URLs. Migrations/normalization fixtures run locally with no import workers,
-schedules or upstream calls. Leave the host running for manual edits/requests.
+The review command uses the restored standard local catalog and never resets it. Label the database and listening
+URLs. Startup runs the checkout migrations as usual; C1 adds none. No import workers,
+schedules or upstream calls run to populate review data. Leave the host running for manual edits/requests.
 Use the same fixture builder for HTTP tests; do not maintain a mock response
 service, alternate DTO schema or custom review UI.
 
