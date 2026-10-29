@@ -1,0 +1,337 @@
+# Deliver the complete v4 catalog and mobile adapter
+
+Status: C1 implementation in progress, 2026-10-29. Runtime code is being
+implemented locally; no production deployment or account migration has occurred. This is a living ExecPlan: update Progress,
+Discoveries, Decision Log, and Outcomes as work proceeds.
+
+Build and review this in stages. First deliver a running show/track API that
+Alec can inspect directly. Settle its responses before expanding route families.
+Test the breaking account/auth cutover against the existing v3 catalog, then
+prove a small normalized mobile journey before completing the remaining API/UI.
+The [review guide](review-guide.md) defines five checkpoints and what Alec sees.
+
+## Outcome and readers
+
+Deliver v4 coverage for every existing catalog, discovery, playback, and operator
+API capability. Return typed catalog IDs, normalized venue overlays, and one
+`normalization` object on every returned track. Mobile keeps its listening
+navigation, imported playback titles, downloads, queue, and history. Global venue
+favorites work across artists in a separate My Library Venues section. V4 is
+the maintained catalog API. V2/v3 become compatibility adapters over the same
+catalog application logic, not a second long-lived implementation.
+
+Alec decides product behavior. Alec and Switz implement/review the work; both
+know Relisten. This plan supplies the new contracts and cross-component rules
+without requiring this conversation. Other readers need no normalization internals
+beyond the definitions below. Work spans this repository and the sibling
+`/Users/alecgorge/code/relisten/relisten-mobile` checkout.
+
+Start with the [review guide](review-guide.md) for the build/review sequence.
+Read this overview for component work, [contracts](contracts.md) for exact behavior,
+[verification and rollout](verification.md) for release evidence, and
+[endpoints.json](endpoints.json) for the executable route baseline. The linked
+[assumptions and fresh review](assumptions-and-review.md) explain changes from
+the exploration and constraints rechecked in current code. The linked
+[design](../../../design/2026-10-29-v4-api/README.md),
+[coverage tables](../../../design/2026-10-29-v4-api/routes.md), and
+[approved prefixes](../../../design/2026-10-29-v4-api/prefixes.md) retain the
+reasoning and source references. This plan takes precedence where it resolves
+an earlier design proposal.
+
+## Scope and decisions
+
+- Keep artist → show → source → set → playable track. A source is a selectable
+  recording; a normalized song part is metadata about a file, not a new file.
+- Keep imported UUIDs and database join keys. Public UUID-backed IDs encode the
+  same 128 bits in lowercase Crockford base32. Prefixes are `artist_`, `show_`,
+  `source_`, `source_set_`, `track_`, `year_`, `tour_`, `imported_venue_`,
+  `imported_song_`, `setlist_show_`, `source_review_`; normalized `venue_` and
+  `song_` keep their existing eight-character suffixes. Eras stay embedded.
+- Preserve every existing capability; duplicate aliases may consolidate. Admin
+  HTML, health, OAuth, profile, and session protocols retain their own paths.
+- Honor `features.norm_catalogue`. Missing/disabled normalization preserves
+  imported browsing and playback. The separate `norm_venues` switch controls
+  maintenance, not permission to read an artist's normalization.
+- Normalized song matches identify exact show, source, track, and matching parts.
+  Imported setlist evidence cannot establish a recording/track match. Preserve
+  imported song/show behavior for artists without normalization and unresolved
+  imported entries for partial coverage.
+- Show venue label: date-appropriate normalized name, then canonical current
+  name, then imported label. Track playback title remains imported.
+- “Recently updated” retains its imported recording-update meaning. A normalized
+  correction still refreshes metadata; it does not move the show into that list.
+- Global venue favorites do not implicitly favorite their shows or add all those
+  shows to existing artist/year library groups. Keep exact stored targets after
+  merges; no special favorite consolidation or migration is required.
+- Change `/v1/library` in place. Account/auth user, session, favorite, mutation,
+  library-change and command IDs are canonical prefixed strings in application
+  storage and APIs. Preserve logical identities by encoding their UUID bits.
+- Coordinate the private-alpha account/auth migration and require tester sign-in
+  again. Preserve users, provider links and memberships; revoke old sessions/token
+  families. No dual old-ID credential support or parallel library route version.
+
+## Current code and constraints
+
+Rechecked API `3fb0e0fc1` and mobile `676ecd6`. The
+[source observations and review](assumptions-and-review.md) explain the evidence.
+Current readers open separate connections; normalization changes can leave imported
+timestamps unchanged; mobile's cache can suppress those changes. V4 therefore
+needs explicit snapshot reads and authoritative apply. Imported UUIDs also identify
+mobile downloads/queues/history, so they remain stored behind the API adapter.
+
+Production schema, primary capacity, replica topology and deployed migration mode
+remain unverified. They are rollout checks, not assumptions this plan treats as facts.
+
+## Data flow and ownership
+
+```mermaid
+flowchart TD
+    Imported[Imported catalog and recording facts] --> Read[Common catalog readers and explicit read sessions]
+    Imported --> Jobs[Existing normalization jobs]
+    Jobs --> Norm[Norm songs, venues and interpretations]
+    Norm --> Read
+    Read --> HTTP[Native v4 DTOs and payload ETags]
+    Read --> Legacy[V2 and V3 imported compatibility projections]
+    HTTP --> Adapter[Mobile ID adapter and transactional apply]
+    Adapter --> Realm[Imported rows plus normalized overlays]
+    Realm --> Player[Existing player and offline files]
+    Library[Account library exact membership] --> Hydrate[Mobile resolves catalog targets]
+    Hydrate --> Adapter
+    Library --> VenueUI[My Library Venues section]
+```
+
+Ingestion owns imported facts. Normalization owns interpretations, corrections,
+and canonical merge relationships. API readers own public projections and query
+counts. Accounts own exact favorite membership and replay. Mobile owns cached
+query results and presentation. Reads never invoke model calls or workflows.
+PostgreSQL consistency applies to one read request, not an entire asynchronous
+normalization workflow. Redis popularity rankings remain separately maintained
+inputs; read each required map once and do not claim transactional ranking updates.
+
+## Maintainability and readability acceptance
+
+V4 owns the future public contract. Shared catalog application code owns queries,
+identity relationships, normalization policy and command behavior. Legacy adapters
+own only old input parsing, output shape, and version-specific cache/transport
+policy. Core code must not depend on legacy controllers, DTOs or `Identifier`.
+Imported data is a domain requirement for v4 fallback, not a legacy-only feature.
+
+Use explicit result models and a small number of cohesive readers/handlers.
+Reuse resource projections across route families; do not build a reader/DTO stack
+for each route or mirror every model through redundant intermediate types.
+Do not introduce a generic endpoint pipeline, universal repository, field-bag
+model, or API-version switch spread across services. Keep controller entrypoints
+at one level: validate/resolve inputs, execute the query/command, project, respond.
+Keep SQL batching, ordered track-part construction and fallback decisions in
+named methods with clear ownership. Comments explain snapshot lifetime, retries,
+publication and compatibility policy rather than narrating assignments.
+
+Each implementation slice needs a fresh correctness/readability pass tracing a
+normalized success, raw/partial result and failure/recovery path from its public
+entrypoint. Passing a formatter or tests does not establish source readability.
+Reviewers must be able to locate the relevant rule once without mentally merging
+old and new service implementations. Routine helper names/layout remain local
+implementation choices; these dependency and ownership rules do not.
+
+Mobile keeps one Realm model and repository set. Transport selection belongs in
+the API adapter; screens, playback and favorite kinds do not branch on API version.
+V4 has one authoritative apply coordinator with explicit resource, owner and query
+updates. Keep legacy cache/timestamp behavior in the legacy transport/update entrypoint.
+Implement mobile's actual queries, not a generic interpreter of all server routes.
+
+## Progress
+
+- [x] Revalidate code, audience, prefixes, and complete route coverage.
+- [x] Resolve song-match precision, fallback, venue names, update semantics,
+  rollout flag, favorite scope, and My Library behavior with Alec.
+- [x] Finish contract/migration/verification documents and fresh plan review;
+  resolve feasibility, bootstrap, compatibility and rollback findings.
+- [x] Start C1 on `codex/v4-api-c1`; shared ID codec passes 15 focused tests.
+- [ ] Complete and review C1 HTTP/database behavior and the local review host.
+- [ ] C2–C5 remain unstarted pending the C1 response review.
+
+## Discoveries and changes from the exploration
+
+The proposed global normalization epoch is replaced by snapshot-derived HTTP
+ETags for the first release. The change log omits derived links and cannot
+act as a revision. A writer counter adds broad mutation obligations and possible
+contention to intentionally concurrent imports. Use primary read-only snapshots
+and no v4 Redis response cache initially. This is simpler but costs database
+reads even for a 304; representative load results are a release gate.
+
+The mobile ETag/apply issue requires a dedicated v4 transport and authoritative
+apply entrypoint, not only DTO renaming. The in-place account change retains
+`/v1/library` browser protections; verify those protections without adding routes.
+
+## Implementation sequence
+
+The numbers below identify components, not a single deployment. Follow the
+[five review checkpoints](review-guide.md): packages 1/2 produce real HTTP
+responses first (C1); package 4 plus mobile account work proves typed auth/library
+against v3 (C2); the minimum of package 5 proves raw/normalized show playback
+(C3); package 3 completes route families and their legacy adapters (C4); remaining
+mobile/UI work and release checks finish the change (C5).
+
+Use small PRs with one reviewable outcome. Account/auth and catalog work can be
+developed independently after C1, but deploy the breaking account cutover and
+activate normalized catalog reads separately. C2 does not require normalized
+Realm tables or the full v4 resolver. Keep all 62 routes and global venue favorites
+as first-release requirements; an early developer checkpoint is not that release.
+
+```mermaid
+flowchart TD
+    IDs[1 IDs and DTOs] --> Reads[2 Snapshot readers]
+    Reads --> HTTP[C1 Review running HTTP responses]
+    HTTP --> Accounts[4 Account and auth cutover on v3]
+    Accounts --> Pilot[5a Mobile show and track pilot]
+    Pilot --> API[3 Complete route families]
+    API --> Mobile[5b Complete mobile adapter and storage]
+    Accounts --> Mobile
+    Mobile --> UI[6 Browsing and global favorites]
+    UI --> Release[7 Verify and release]
+```
+
+### 1. Shared IDs and the first response models
+
+Add dependency-free `Relisten.Identifiers/` with the approved codec/registries,
+UUID-backed catalog types and string-backed account types. Keep normalization's
+existing `VenueId`/`SongId` and Temporal strings. Hosts own serializer/binding
+adapters; C# and TypeScript share known vectors.
+
+Add `Models/Api/V4/` and `Controllers/V4/`, independently of the legacy base
+controller's formatting/cache policy. Start with full show and direct track reads.
+Core results are independent of legacy DTOs; reuse resource projections across
+routes. Publish OpenAPI from actual DTOs. No legacy extraction or broad mobile
+storage work belongs in this first response change.
+
+### 2. Snapshot readers and C1 HTTP acceptance
+
+Add `Services/Catalog/CatalogReadSession` and the first cohesive reader. Use one
+primary read-only REPEATABLE READ transaction, explicit connection/transaction,
+batched SQL, cancellation and a 30-second command timeout. Materialize before
+serialization. Preserve legacy cache/routing and Npgsql auto-prepare.
+
+Implement approved-read gating, partial track parts, raw fallback, historical
+venue names, canonical redirects and the ID reservation migration in
+[contracts](contracts.md#canonical-redirects-and-retirement). Generate payload
+ETags without writer counters. Deliver C1's running local Swagger/request setup:
+normalization-only edits must change JSON/ETag despite unchanged imported times.
+Alec reviews complete responses before their design spreads through the code.
+
+### 3. Complete API families and legacy adapters for C4
+
+After C3, implement the rest of `endpoints.json` by resource family. Each family
+gets native v4 routes, common query/results, legacy projections, response fixtures
+and measured compatibility in one coherent change. Complete the pilot family's
+legacy conversion here too. Imported/approved read views and primary/prefer-replica
+targets remain explicit internal choices. Check legacy caches before expensive
+materialization. Remove duplicated SQL after auditing non-HTTP callers.
+
+Share operator handlers over existing ingestion clients/stores. Preserve current
+admission, engine selection and job handles; v4 artist PUT uses route identity
+and atomically updates artist/features/upstream assignments. Commands do not
+become anonymous. Isolate v4 Swagger while preserving mixed legacy operation sets.
+
+C4 requires all 62 operations, every returned track's common normalization DTO,
+accepted browse/discovery/resolver examples, legacy compatibility and a fresh
+source-readability review. All existing capabilities remain first-release scope.
+
+### 4. Isolated account/auth migration for C2
+
+Change `/v1/library` and `/v1/me` in place. Convert owned user/session/favorite/
+mutation/change/command PKs/FKs and catalog favorite targets to canonical typed
+strings, preserving identity bits and stored data. Convert first-party `sub`/`sid`,
+codecs/cursors and mobile credential/profile/scope comparisons together. Keep
+OpenIddict-private keys, external provider values and reviewed browser protections.
+
+Follow the [coordinated migration contract](contracts.md#coordinated-alpha-migration-and-re-sign-in):
+stop old writes, preserve users/provider links/favorites, revoke old first-party
+credentials and require tester sign-in. No dual credential or parallel route version.
+
+Prove the mobile account-only upgrade on v3 catalog. The catalog adapter maps typed
+imported targets to the existing v3 resolver; account storage/sync stay typed.
+Short normalized memberships survive unavailable metadata. This checkpoint needs
+no normalized Realm tables or full v4 resolver. Review preservation, fresh login,
+mutation replay, restartable upgrade and whole-account rollback before live cutover.
+
+### 5. One mobile store and authoritative v4 apply
+
+After C1/C2, add only the show/track adapter and storage needed for C3. Prove
+raw/normalized playback, correction refresh, failed-apply retry and offline recovery
+before route expansion. Complete the remaining mobile reads after C4.
+
+Add `relisten/api/v4/` and additive Realm normalized venue/song rows, embedded
+track interpretation, show display/browse fields and applied-query state. Keep
+one repository/model set and existing imported UUID/file keys. Account IDs/targets
+remain typed; the projection adapter bridges catalog records to account targets.
+
+Apply resources, owned associations, query results and ETag in one Realm transaction,
+using each endpoint's replacement rule. Bypass legacy timestamp guards for v4;
+preserve richer detail when shallow related objects arrive. Discard superseded
+query/account/transport generations. Failed apply commits no validator or cursor.
+Test direct schema-15 upgrades and staged account-only then catalog upgrades.
+
+### 6. Complete browsing and global favorites for C5
+
+Use server-counted canonical-or-imported venue/song entries with existing artist
+navigation. Song matches identify exact show/source/track; imported fallback
+retains its setlist meaning. Centralize historical venue display. Preserve imported
+title, playback URLs, source/set order and offline identity.
+
+Add global venue detail and a separate My Library Venues section using existing
+styles. Venue favorites span artists without implicit show favorites. Keep simple
+exact-target merge behavior. Normalized song favorites contribute their owning
+artist, without adding all matching shows to the library.
+
+### 7. Qualify and release separately
+
+Follow [verification](verification.md): HTTP/coverage and compatibility evidence,
+migration invariants, mobile/device/offline journeys, measured primary/legacy
+performance and pinned rollback builds. Deploy server contracts before catalog
+activation. The account/auth cutover is a separate event from catalog activation.
+
+Use v3 catalog fallback only in a schema-compatible mobile build. A shared-core
+regression needs server rollback; a converted account schema needs compatible
+code/forward repair. Measure and agree capacity budgets before traffic expansion.
+No migration, deployment, session revocation or public release is authorized merely
+by accepting this plan.
+
+## Decision Log
+
+- 2026-10-29, Alec: approved 13 prefixes with `track_`, embedded eras, and
+  functional coverage with duplicate-alias consolidation.
+- 2026-10-29, Alec: normalized information belongs on every track, entirely
+  under `normalization`; keep imported playback titles and raw artist support.
+- 2026-10-29, Alec: exact show/source/track information from normalization;
+  historical venue-name fallback; recording-only recent updates; honor read flag.
+- 2026-10-29, Alec: separate global Venues library section; simplest merge
+  favorite behavior is acceptable, including re-favoriting; alpha sync may break.
+- 2026-10-29, Alec: ordinary responses are direct resources/lists; use HTTP
+  ETags and endpoint-specific sync rules, without generic response metadata.
+- 2026-10-29, Alec: v4 is the future; prioritize maintainability/readability and
+  make old APIs legacy compatibility shims over common catalog logic.
+- 2026-10-29, Alec: approved six account prefixes, in-place `/v1/library`, native
+  stored typed account/auth IDs and coordinated tester re-sign-in. OpenIddict
+  private keys stay opaque; user/provider-link/favorite data is preserved.
+- 2026-10-29, plan recommendation: keep imported Realm UUID keys; use primary
+  snapshots/payload ETags rather than writer epochs; prove capacity before expansion.
+- 2026-10-29, simplification review: inspect real HTTP responses before broad work;
+  prove account/auth on v3 separately; keep one mobile repository set; expand v4
+  and legacy adapters by family. Five review checkpoints govern dependent work.
+- 2026-10-29, HTTP correction: use weak payload ETags for conditional GET so
+  compression does not require another validator-generation mechanism.
+
+## Outcomes and retrospective
+
+Planning is complete. Independent feasibility and mobile/account reviewers
+confirmed the corrected plan has no remaining blockers in their reviewed areas.
+The handoff includes 62 catalog/operator endpoints, three in-place library
+endpoints, two profile actions, contracts, five personal review checkpoints,
+migration/rollback steps and verification. The full thread was reread during the
+simplification pass; later decisions supersede the exploration's old epoch,
+generic metadata, library versioning and UUID-backed account-storage proposals.
+
+Runtime implementation, migrations, HTTP tests, mobile schema upgrades, load
+measurements and deployment remain unperformed. Primary capacity and deployment
+configuration are execution gates, not assumed facts. Record implementation
+results here as milestones are completed.
