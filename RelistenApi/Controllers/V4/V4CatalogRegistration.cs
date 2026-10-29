@@ -59,6 +59,7 @@ public static class V4CatalogRegistration
         MapId<SourceReviewId>(options);
         options.MapType<Relisten.Normalization.VenueId>(() => ShortId("venue"));
         options.MapType<Relisten.Normalization.SongId>(() => ShortId("song"));
+        options.SchemaFilter<NullableCatalogEnumSchemaFilter>();
     }
 
     private static void MapId<T>(SwaggerGenOptions options)

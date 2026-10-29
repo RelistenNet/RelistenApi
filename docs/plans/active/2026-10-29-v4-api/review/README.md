@@ -26,8 +26,8 @@ Review these questions before we expand route families or mobile storage:
 The local flags are enabled for all 12 artists with normalized data, as Alec
 requested. Production had none enabled. No normalization results were changed.
 
-Verification: solution build passed; 33 focused tests passed, zero skipped
-(15 identifier, 13 HTTP, 3 snapshot/session, 2 legacy Swagger). Tests cover
+Verification: solution build passed; 35 focused tests passed, zero skipped
+(15 identifier, 15 HTTP, 3 snapshot/session, 2 legacy Swagger). Tests cover
 normalization corrections with unchanged imported timestamps, merges, failure
 and recovery, nullable IDs, schema agreement, gzip/304 and browser preflight.
 Live requests separately checked real full/partial shows, exact parent links,
@@ -36,3 +36,8 @@ Swagger naming, nullable ID serialization and legacy CORS integration issues.
 
 This qualifies the local C1 response review. It does not qualify production
 capacity, the remaining v4 routes, account migration or mobile rollout.
+
+C1 feedback: closed categorical fields now have typed string enums in OpenAPI,
+including normalization/part states, unavailable reasons, kinds, precision, FLAC
+type and qualifier items. JSON spellings and null values are unchanged. The
+HTTP tests compare advertised enum values with actual responses.

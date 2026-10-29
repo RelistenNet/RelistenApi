@@ -56,7 +56,7 @@ public sealed class SourceResource
     public string? Taper { get; init; }
     public string? Transferrer { get; init; }
     public string? Lineage { get; init; }
-    public string FlacType { get; init; } = null!;
+    public SourceFlacType FlacType { get; init; }
     public int ReviewCount { get; init; }
     public DateTime CreatedAt { get; init; }
     public DateTime UpdatedAt { get; init; }
@@ -143,7 +143,7 @@ public sealed class NormalizedSongResource
     public SongId Id { get; init; }
     public ArtistId ArtistId { get; init; }
     public string Name { get; init; } = null!;
-    public string? Kind { get; init; }
+    public NormalizedSongKind? Kind { get; init; }
 }
 
 [JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
@@ -151,14 +151,14 @@ public sealed class NormalizedVenueResource
 {
     public VenueId Id { get; init; }
     public string Name { get; init; } = null!;
-    public string Kind { get; init; } = null!;
+    public NormalizedVenueKind Kind { get; init; }
     public VenueId? ParentId { get; init; }
     public string? City { get; init; }
     public string? Region { get; init; }
     public string? Country { get; init; }
     public double? Latitude { get; init; }
     public double? Longitude { get; init; }
-    public string? CoordinatePrecision { get; init; }
+    public VenueCoordinatePrecision? CoordinatePrecision { get; init; }
 }
 
 [JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
@@ -166,11 +166,11 @@ public sealed class TrackPartResource
 {
     public int Ordinal { get; init; }
     public string? Text { get; init; }
-    public IReadOnlyList<string> Qualifiers { get; init; } = [];
+    public IReadOnlyList<TrackQualifier> Qualifiers { get; init; } = [];
     public IReadOnlyList<string> Notes { get; init; } = [];
     public bool SegueAfter { get; init; }
     public NormalizedSongResource? Song { get; init; }
-    public string State { get; init; } = null!;
+    public TrackPartState State { get; init; }
 }
 
 [JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
@@ -178,8 +178,8 @@ public sealed record VenueDisplayResource(string? Name, string? Location);
 
 [JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
 public sealed record TrackNormalizationResource(
-    string State,
-    string? Reason,
+    TrackNormalizationState State,
+    TrackNormalizationUnavailableReason? Reason,
     IReadOnlyList<TrackPartResource> Parts
 );
 

@@ -338,6 +338,177 @@ public sealed class TestV4CatalogHttp
         }
     }
 
+    [Test]
+    public async Task Openapi_closed_vocabularies_admit_the_unchanged_wire_strings()
+    {
+        var document = await GetJson("/api-docs/v4/swagger.json");
+        EnumValues(document, "TrackNormalizationResource", "state")
+            .Should()
+            .BeEquivalentTo("unavailable", "partial", "interpreted");
+        EnumValues(document, "TrackNormalizationResource", "reason")
+            .Should()
+            .BeEquivalentTo("disabled", "not_interpreted", "inconsistent");
+        EnumValues(document, "TrackPartResource", "state")
+            .Should()
+            .BeEquivalentTo("matched", "non_song", "unresolved");
+        EnumValues(document, "NormalizedSongResource", "kind")
+            .Should()
+            .BeEquivalentTo("song", "jam", "segment", "tuning", "banter", "other");
+        EnumValues(document, "NormalizedVenueResource", "kind")
+            .Should()
+            .BeEquivalentTo("site", "room");
+        EnumValues(document, "NormalizedVenueResource", "coordinate_precision")
+            .Should()
+            .BeEquivalentTo("venue", "city");
+        EnumValues(document, "SourceResource", "flac_type")
+            .Should()
+            .BeEquivalentTo("NoFlac", "Flac16Bit", "Flac24Bit", "NoPlayableFlac", "Unknown");
+        EnumValues(document, "TrackPartResource", "qualifiers", arrayItems: true)
+            .Should()
+            .BeEquivalentTo(
+                "reprise",
+                "partial",
+                "unfinished",
+                "instrumental",
+                "acoustic",
+                "with_guest",
+                "continued",
+                "tape_flip",
+                "soundcheck",
+                "tease",
+                "intro",
+                "outro",
+                "jam"
+            );
+
+        foreach (var scenario in new[] { 1, 3, 4, 5, 6 })
+        {
+            var track = await GetJson(TrackPath(scenario));
+            var normalization = track["normalization"]!;
+            EnumValues(document, "TrackNormalizationResource", "state")
+                .Should()
+                .Contain(normalization["state"]!.GetValue<string>());
+            if (normalization["reason"] is { } reason)
+            {
+                EnumValues(document, "TrackNormalizationResource", "reason")
+                    .Should()
+                    .Contain(reason.GetValue<string>());
+            }
+            foreach (var part in normalization["parts"]!.AsArray())
+            {
+                EnumValues(document, "TrackPartResource", "state")
+                    .Should()
+                    .Contain(part!["state"]!.GetValue<string>());
+                if (part["song"] is { } song)
+                {
+                    EnumValues(document, "NormalizedSongResource", "kind")
+                        .Should()
+                        .Contain(song["kind"]!.GetValue<string>());
+                }
+            }
+        }
+        var show = await GetJson(ShowPath(4));
+        EnumValues(document, "NormalizedVenueResource", "kind")
+            .Should()
+            .Contain(show["normalized_venue"]!["kind"]!.GetValue<string>());
+        EnumValues(document, "SourceResource", "flac_type")
+            .Should()
+            .Contain(show["sources"]![0]!["flac_type"]!.GetValue<string>());
+        show["normalized_venue"]!["coordinate_precision"].Should().BeNull();
+    }
+
+    [Test]
+    public async Task Nullable_categories_remain_null_and_qualifiers_preserve_underscores()
+    {
+        await using var connection = await MigratedTestDatabase.OpenAsync();
+        try
+        {
+            await ChangeNormalization(
+                connection,
+                """
+                UPDATE norm.songs SET kind=NULL WHERE id='song_00000003';
+                UPDATE norm.track_songs SET qualifiers=ARRAY['with_guest','tape_flip']
+                WHERE track_uuid='00000000-0000-0000-0000-000000000044' AND part=1;
+                """
+            );
+            var track = await GetJson(TrackPath(4));
+            var normalization = track["normalization"]!;
+            normalization["reason"].Should().BeNull();
+            var part = normalization["parts"]![0]!;
+            part["song"]!["kind"].Should().BeNull();
+            var qualifiers = part["qualifiers"]!
+                .AsArray()
+                .Select(value => value!.GetValue<string>())
+                .ToArray();
+            qualifiers.Should().Equal("with_guest", "tape_flip");
+            var document = await GetJson("/api-docs/v4/swagger.json");
+            EnumValues(document, "TrackPartResource", "qualifiers", arrayItems: true)
+                .Should()
+                .Contain(qualifiers);
+            var show = await GetJson(ShowPath(4));
+            show["normalized_venue"]!["coordinate_precision"].Should().BeNull();
+            foreach (
+                var (resource, property) in new[]
+                {
+                    ("TrackNormalizationResource", "reason"),
+                    ("NormalizedSongResource", "kind"),
+                    ("NormalizedVenueResource", "coordinate_precision"),
+                }
+            )
+            {
+                var schema = document["components"]!["schemas"]![resource]!["properties"]![
+                    property
+                ]!;
+                // OpenAPI 3.0 must permit null both through its type flag and enum.
+                schema["nullable"]!
+                    .GetValue<bool>()
+                    .Should()
+                    .BeTrue($"{resource}.{property} returns null");
+                schema["enum"]!.AsArray().Should().Contain(value => value == null);
+            }
+        }
+        finally
+        {
+            await ChangeNormalization(
+                connection,
+                """
+                UPDATE norm.songs SET kind='song' WHERE id='song_00000003';
+                UPDATE norm.track_songs SET qualifiers='{}'::text[]
+                WHERE track_uuid='00000000-0000-0000-0000-000000000044' AND part=1;
+                """
+            );
+        }
+    }
+
+    private static string[] EnumValues(
+        JsonNode document,
+        string resource,
+        string property,
+        bool arrayItems = false
+    )
+    {
+        var schema = document["components"]!["schemas"]![resource]!["properties"]![property]!;
+        if (arrayItems)
+        {
+            schema = schema["items"]!;
+        }
+        // Nullable references can wrap the enum schema; follow the public OpenAPI graph.
+        while (schema["$ref"] is not null || schema["allOf"] is not null)
+        {
+            schema = schema["$ref"] is { } reference
+                ? document["components"]!["schemas"]![
+                    reference.GetValue<string>().Split('/').Last()
+                ]!
+                : schema["allOf"]![0]!;
+        }
+        schema["type"]!.GetValue<string>().Should().Be("string");
+        return schema["enum"]!
+            .AsArray()
+            .Where(value => value is not null)
+            .Select(value => value!.GetValue<string>())
+            .ToArray();
+    }
+
     private static void AssertSchemaFields(JsonNode document, string schema, JsonNode response)
     {
         var properties = document["components"]!["schemas"]![schema]!["properties"]!.AsObject();

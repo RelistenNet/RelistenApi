@@ -238,6 +238,12 @@ part is resolved, not that the inference is infallible. Unavailable reason is
 `disabled`, `not_interpreted`, or `inconsistent` for a corrupt canonical link;
 absence of rows does not prove a job never ran.
 
+V4 uses typed string enums for the closed state/reason, part-state, qualifier,
+song/venue-kind, coordinate-precision and FLAC vocabularies. OpenAPI lists their
+allowed values from the same types used to serialize responses. Nullable values
+remain null; notes and provider labels remain open text. Enum declarations live
+in [CatalogEnums.cs](../../../../RelistenApi/Models/Api/V4/CatalogEnums.cs).
+
 Part state is `matched` for a resolved canonical song link, `non_song` for
 resolved content with no song, or `unresolved` when `resolved=false`. Unresolved
 links do not establish playable song matches. Preserve part text, qualifiers,

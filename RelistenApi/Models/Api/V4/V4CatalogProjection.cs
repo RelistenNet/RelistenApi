@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using Relisten.Catalog;
 using Relisten.Identifiers;
@@ -58,11 +59,11 @@ public static class V4CatalogProjection
             Lineage = value.lineage,
             FlacType = value.flac_type switch
             {
-                0 => "NoFlac",
-                1 => "Flac16Bit",
-                2 => "Flac24Bit",
-                3 => "NoPlayableFlac",
-                _ => "Unknown",
+                0 => SourceFlacType.NoFlac,
+                1 => SourceFlacType.Flac16Bit,
+                2 => SourceFlacType.Flac24Bit,
+                3 => SourceFlacType.NoPlayableFlac,
+                _ => SourceFlacType.Unknown,
             },
             ReviewCount = value.review_count,
             CreatedAt = value.created_at,
@@ -105,8 +106,25 @@ public static class V4CatalogProjection
             CreatedAt = value.created_at,
             UpdatedAt = value.updated_at,
             Normalization = new(
-                value.Normalization.State,
-                value.Normalization.Reason,
+                value.Normalization.State switch
+                {
+                    "unavailable" => TrackNormalizationState.Unavailable,
+                    "partial" => TrackNormalizationState.Partial,
+                    "interpreted" => TrackNormalizationState.Interpreted,
+                    _ => throw new InvalidOperationException(
+                        "Unsupported track normalization state."
+                    ),
+                },
+                value.Normalization.Reason switch
+                {
+                    "disabled" => TrackNormalizationUnavailableReason.Disabled,
+                    "not_interpreted" => TrackNormalizationUnavailableReason.NotInterpreted,
+                    "inconsistent" => TrackNormalizationUnavailableReason.Inconsistent,
+                    null => null,
+                    _ => throw new InvalidOperationException(
+                        "Unsupported track normalization reason."
+                    ),
+                },
                 value.Normalization.Parts.Select(Part).ToArray()
             ),
         };
@@ -150,7 +168,17 @@ public static class V4CatalogProjection
             Id = SongId.Parse(value.id),
             ArtistId = new(value.artist_uuid),
             Name = value.name,
-            Kind = value.kind,
+            Kind = value.kind switch
+            {
+                "song" => NormalizedSongKind.Song,
+                "jam" => NormalizedSongKind.Jam,
+                "segment" => NormalizedSongKind.Segment,
+                "tuning" => NormalizedSongKind.Tuning,
+                "banter" => NormalizedSongKind.Banter,
+                "other" => NormalizedSongKind.Other,
+                null => null,
+                _ => throw new InvalidOperationException("Unsupported NormalizedSongKind value."),
+            },
         };
 
     public static NormalizedVenueResource Venue(CatalogVenue value) =>
@@ -158,14 +186,27 @@ public static class V4CatalogProjection
         {
             Id = VenueId.Parse(value.id),
             Name = value.name,
-            Kind = value.kind,
+            Kind = value.kind switch
+            {
+                "site" => NormalizedVenueKind.Site,
+                "room" => NormalizedVenueKind.Room,
+                _ => throw new InvalidOperationException("Unsupported NormalizedVenueKind value."),
+            },
             ParentId = value.parent_id is { } parent ? VenueId.Parse(parent) : null,
             City = value.city,
             Region = value.region,
             Country = value.country,
             Latitude = value.latitude,
             Longitude = value.longitude,
-            CoordinatePrecision = value.coordinate_precision,
+            CoordinatePrecision = value.coordinate_precision switch
+            {
+                "venue" => VenueCoordinatePrecision.Venue,
+                "city" => VenueCoordinatePrecision.City,
+                null => null,
+                _ => throw new InvalidOperationException(
+                    "Unsupported VenueCoordinatePrecision value."
+                ),
+            },
         };
 
     public static TrackPartResource Part(CatalogPart value) =>
@@ -173,14 +214,33 @@ public static class V4CatalogProjection
         {
             Ordinal = value.part,
             Text = value.text,
-            Qualifiers = value.qualifiers,
+            Qualifiers = value.qualifiers.Select(Qualifier).ToArray(),
             Notes = value.notes,
             SegueAfter = value.segue_after,
             Song = value.Song is { } song ? Song(song) : null,
             State =
-                !value.resolved ? "unresolved"
-                : value.Song is not null ? "matched"
-                : "non_song",
+                !value.resolved ? TrackPartState.Unresolved
+                : value.Song is not null ? TrackPartState.Matched
+                : TrackPartState.NonSong,
+        };
+
+    private static TrackQualifier Qualifier(string value) =>
+        value switch
+        {
+            "reprise" => TrackQualifier.Reprise,
+            "partial" => TrackQualifier.Partial,
+            "unfinished" => TrackQualifier.Unfinished,
+            "instrumental" => TrackQualifier.Instrumental,
+            "acoustic" => TrackQualifier.Acoustic,
+            "with_guest" => TrackQualifier.WithGuest,
+            "continued" => TrackQualifier.Continued,
+            "tape_flip" => TrackQualifier.TapeFlip,
+            "soundcheck" => TrackQualifier.Soundcheck,
+            "tease" => TrackQualifier.Tease,
+            "intro" => TrackQualifier.Intro,
+            "outro" => TrackQualifier.Outro,
+            "jam" => TrackQualifier.Jam,
+            _ => throw new InvalidOperationException("Unsupported track qualifier."),
         };
 
     public static YearResource Year(CatalogYear value) =>
