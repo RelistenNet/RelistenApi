@@ -316,6 +316,206 @@ public sealed class TestV4CatalogHttp
     }
 
     [Test]
+    public async Task Artist_listing_and_detail_preserve_provider_identity_without_internal_keys()
+    {
+        var artists = (await GetJson("/api/v4/artists")).AsArray();
+        artists
+            .Select(artist => artist!["name"]!.GetValue<string>())
+            .Should()
+            .Equal("Raw Artist", "Matched Artist", "Partial Artist");
+        var listed = artists.Single(artist => artist!["id"]!.GetValue<string>() == BrowseArtistId)!;
+        var detail = await GetJson(BrowseArtistPath);
+        JsonNode.DeepEquals(listed, detail).Should().BeTrue();
+        detail["show_count"]!.GetValue<int>().Should().Be(2);
+        detail["source_count"]!.GetValue<int>().Should().Be(2);
+        detail["capabilities"]!["normalization"]!.GetValue<bool>().Should().BeTrue();
+        detail["capabilities"]!.AsObject().ContainsKey("id").Should().BeFalse();
+        var assignment = detail["upstream_sources"]![0]!;
+        assignment["provider"]!.GetValue<string>().Should().Be("review.provider");
+        assignment["upstream_identifier"]!.GetValue<string>().Should().Be("matched-upstream");
+        assignment.AsObject().ContainsKey("upstream_source_id").Should().BeFalse();
+        assignment.AsObject().ContainsKey("artist_id").Should().BeFalse();
+
+        var includingAutoCreated = (
+            await GetJson("/api/v4/artists?include_autocreated=true")
+        ).AsArray();
+        includingAutoCreated
+            .Select(artist => artist!["name"]!.GetValue<string>())
+            .Should()
+            .Equal("Disabled Artist", "Raw Artist", "Matched Artist", "Partial Artist");
+    }
+
+    [Test]
+    public async Task Artist_year_show_and_track_resources_form_one_navigable_catalog()
+    {
+        var years = (await GetJson(BrowseArtistPath + "/years")).AsArray();
+        years.Select(year => year!["year"]!.GetValue<string>()).Should().Equal("1994", "1995");
+        foreach (var year in years)
+        {
+            year!["artist_id"]!.GetValue<string>().Should().Be(BrowseArtistId);
+            var yearId = year["id"]!.GetValue<string>();
+            yearId.Should().StartWith("year_");
+            var byId = await GetJson(BrowseArtistPath + "/years/" + yearId);
+            var byNumber = await GetJson(
+                BrowseArtistPath + "/years/by-number/" + year["year"]!.GetValue<string>()
+            );
+            JsonNode.DeepEquals(byId, byNumber).Should().BeTrue();
+            foreach (var property in year.AsObject())
+            {
+                JsonNode
+                    .DeepEquals(property.Value, byId[property.Key])
+                    .Should()
+                    .BeTrue(property.Key);
+            }
+            var shows = byId["shows"]!.AsArray();
+            shows.Should().HaveCount(year["show_count"]!.GetValue<int>());
+            foreach (var summary in shows)
+            {
+                summary!["artist_id"]!.GetValue<string>().Should().Be(BrowseArtistId);
+                summary["year_id"]!.GetValue<string>().Should().Be(yearId);
+                summary.AsObject().ContainsKey("sources").Should().BeFalse();
+                var full = await GetJson("/api/v4/shows/" + summary["id"]!.GetValue<string>());
+                foreach (var property in summary.AsObject())
+                {
+                    JsonNode
+                        .DeepEquals(property.Value, full[property.Key])
+                        .Should()
+                        .BeTrue(property.Key);
+                }
+                var track = full["sources"]![0]!["sets"]![0]!["tracks"]![0]!;
+                var direct = await GetJson(
+                    "/api/v4/source-tracks/" + track["id"]!.GetValue<string>()
+                );
+                JsonNode.DeepEquals(track, direct).Should().BeTrue();
+            }
+        }
+
+        var allShows = (await GetJson(BrowseArtistPath + "/shows")).AsArray();
+        allShows
+            .Select(show => show!["display_date"]!.GetValue<string>())
+            .Should()
+            .Equal("1994-07-01", "1995-12-31");
+        allShows[0]!["venue_display"]!["name"]!
+            .GetValue<string>()
+            .Should()
+            .Be("Imported Civic Center");
+        allShows[1]!["venue_display"]!["name"]!.GetValue<string>().Should().Be("Historical Arena");
+    }
+
+    [Test]
+    public async Task Calendar_year_lookup_preserves_imported_leading_zero_labels()
+    {
+        var artistPath = "/api/v4/artists/" + CatalogId("artist", 11);
+        var byId = await GetJson(artistPath + "/years/" + CatalogId("year", 23));
+        var byNumber = await GetJson(artistPath + "/years/by-number/23");
+        var byPaddedNumber = await GetJson(artistPath + "/years/by-number/0023");
+        byId["year"]!.GetValue<string>().Should().Be("0023");
+        byId["shows"]!.AsArray().Should().BeEmpty();
+        JsonNode.DeepEquals(byId, byNumber).Should().BeTrue();
+        JsonNode.DeepEquals(byId, byPaddedNumber).Should().BeTrue();
+    }
+
+    [Test]
+    public async Task Known_empty_artist_collections_are_arrays_and_unknown_artists_are_not_found()
+    {
+        var emptyPath = "/api/v4/artists/" + CatalogId("artist", 20);
+        (await GetJson(emptyPath))["show_count"]!.GetValue<int>().Should().Be(0);
+        foreach (var collection in new[] { "/years", "/shows" })
+        {
+            (await GetJson(emptyPath + collection)).AsArray().Should().BeEmpty();
+            using var unknown = await http.GetAsync(
+                "/api/v4/artists/" + CatalogId("artist", 99) + collection
+            );
+            unknown.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        }
+    }
+
+    [TestCase("years/show_00000000000000000000000000", HttpStatusCode.UnprocessableEntity)]
+    [TestCase("years/by-number/0", HttpStatusCode.UnprocessableEntity)]
+    [TestCase("years/by-number/10000", HttpStatusCode.UnprocessableEntity)]
+    [TestCase("years/by-number/not-a-year", HttpStatusCode.UnprocessableEntity)]
+    public async Task Browse_routes_reject_malformed_year_identity_and_calendar_values(
+        string suffix,
+        HttpStatusCode status
+    )
+    {
+        using var response = await http.GetAsync(BrowseArtistPath + "/" + suffix);
+        response.StatusCode.Should().Be(status);
+        response.Headers.CacheControl!.NoStore.Should().BeTrue();
+    }
+
+    [Test]
+    public async Task Artist_listing_rejects_invalid_boolean_filters()
+    {
+        using var response = await http.GetAsync("/api/v4/artists?include_autocreated=maybe");
+        response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        response.Headers.CacheControl!.NoStore.Should().BeTrue();
+    }
+
+    [Test]
+    public async Task Year_lookup_does_not_cross_artist_ownership()
+    {
+        using var foreignYear = await http.GetAsync(
+            BrowseArtistPath + "/years/" + CatalogId("year", 61)
+        );
+        foreignYear.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        using var unknownYear = await http.GetAsync(
+            BrowseArtistPath + "/years/" + CatalogId("year", 99)
+        );
+        unknownYear.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        using var missingCalendarYear = await http.GetAsync(
+            BrowseArtistPath + "/years/by-number/1993"
+        );
+        missingCalendarYear.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        using var malformedArtist = await http.GetAsync("/api/v4/artists/" + ShowId(4) + "/years");
+        malformedArtist.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+    }
+
+    [Test]
+    public async Task Show_list_revalidation_detects_historical_venue_corrections_without_recording_updates()
+    {
+        using var initial = await http.GetAsync(BrowseArtistPath + "/shows");
+        initial.StatusCode.Should().Be(HttpStatusCode.OK);
+        var before = JsonNode.Parse(await initial.Content.ReadAsStringAsync())!.AsArray();
+        var etag = initial.Headers.ETag!.ToString();
+        using var unchanged = await Conditional(BrowseArtistPath + "/shows", etag);
+        unchanged.StatusCode.Should().Be(HttpStatusCode.NotModified);
+        await using var connection = await MigratedTestDatabase.OpenAsync();
+        try
+        {
+            await ChangeNormalization(
+                connection,
+                "UPDATE norm.venue_names SET name='Reviewed Historical Arena' WHERE venue_id='venue_00000001' AND normalized='historical-arena'"
+            );
+            using var changed = await Conditional(BrowseArtistPath + "/shows", etag);
+            changed.StatusCode.Should().Be(HttpStatusCode.OK);
+            changed.Headers.ETag!.ToString().Should().NotBe(etag);
+            var after = JsonNode.Parse(await changed.Content.ReadAsStringAsync())!.AsArray();
+            after[1]!["venue_display"]!["name"]!
+                .GetValue<string>()
+                .Should()
+                .Be("Reviewed Historical Arena");
+            after[1]!["updated_at"]!
+                .ToJsonString()
+                .Should()
+                .Be(before[1]!["updated_at"]!.ToJsonString());
+        }
+        finally
+        {
+            await ChangeNormalization(
+                connection,
+                "UPDATE norm.venue_names SET name='Historical Arena' WHERE venue_id='venue_00000001' AND normalized='historical-arena'"
+            );
+        }
+    }
+
+    private static string BrowseArtistId => CatalogId("artist", 14);
+    private static string BrowseArtistPath => "/api/v4/artists/" + BrowseArtistId;
+
+    private static string CatalogId(string prefix, int suffix) =>
+        UuidTypeId.Format(prefix, Guid.Parse($"00000000-0000-0000-0000-{suffix:000000000000}"));
+
+    [Test]
     public async Task Openapi_property_names_and_id_types_match_the_actual_json()
     {
         var document = await GetJson("/api-docs/v4/swagger.json");
@@ -335,6 +535,60 @@ public sealed class TestV4CatalogHttp
         {
             trackProperties[field]!["type"]!.GetValue<string>().Should().Be("string");
             trackProperties[field]!["format"]?.GetValue<string>().Should().NotBe("uuid");
+        }
+    }
+
+    [Test]
+    public async Task Openapi_nullable_object_references_match_raw_and_partial_responses()
+    {
+        var document = await GetJson("/api-docs/v4/swagger.json");
+        var raw = await GetJson(ShowPath(1));
+        raw["normalized_venue"].Should().BeNull();
+        raw["era"].Should().BeNull();
+        var partial = await GetJson(TrackPath(3));
+        partial["normalization"]!["parts"]![1]!["song"].Should().BeNull();
+        foreach (
+            var (resource, property) in new[]
+            {
+                ("ShowResource", "normalized_venue"),
+                ("ShowResource", "era"),
+                ("ShowSummaryResource", "normalized_venue"),
+                ("ShowSummaryResource", "era"),
+                ("TrackPartResource", "song"),
+            }
+        )
+        {
+            var schema = document["components"]!["schemas"]![resource]!["properties"]![property]!;
+            schema["type"]!.GetValue<string>().Should().Be("object");
+            schema["nullable"]!.GetValue<bool>().Should().BeTrue();
+            schema["$ref"]
+                .Should()
+                .BeNull("nullable reference siblings are ignored in OpenAPI 3.0");
+        }
+        foreach (
+            var (resource, property) in new[]
+            {
+                ("TrackResource", "normalization"),
+                ("ArtistResource", "capabilities"),
+                ("ShowResource", "venue_display"),
+            }
+        )
+        {
+            var schema = document["components"]!["schemas"]![resource]!["properties"]![property]!;
+            if (schema["$ref"] is { } reference)
+            {
+                schema = document["components"]!["schemas"]![
+                    reference.GetValue<string>().Split('/').Last()
+                ]!;
+            }
+            (schema["nullable"]?.GetValue<bool>() ?? false).Should().BeFalse();
+        }
+        foreach (
+            var name in new[] { "NormalizedVenueResource", "EraResource", "NormalizedSongResource" }
+        )
+        {
+            var definition = document["components"]!["schemas"]![name]!;
+            (definition["nullable"]?.GetValue<bool>() ?? false).Should().BeFalse();
         }
     }
 
@@ -519,14 +773,23 @@ public sealed class TestV4CatalogHttp
     }
 
     [Test]
-    public async Task V4_openapi_exposes_only_the_two_checkpoint_reads()
+    public async Task V4_openapi_exposes_the_checkpoint_browse_and_playback_reads()
     {
         var document = await GetJson("/api-docs/v4/swagger.json");
         var paths = document["paths"]!.AsObject();
         paths
             .Select(entry => entry.Key)
             .Should()
-            .BeEquivalentTo("/api/v4/shows/{showId}", "/api/v4/source-tracks/{sourceTrackId}");
+            .BeEquivalentTo(
+                "/api/v4/artists",
+                "/api/v4/artists/{artistId}",
+                "/api/v4/artists/{artistId}/years",
+                "/api/v4/artists/{artistId}/years/{yearId}",
+                "/api/v4/artists/{artistId}/years/by-number/{year}",
+                "/api/v4/artists/{artistId}/shows",
+                "/api/v4/shows/{showId}",
+                "/api/v4/source-tracks/{sourceTrackId}"
+            );
         var legacy = await GetJson("/api-docs/v3/swagger.json");
         legacy["paths"]!
             .AsObject()

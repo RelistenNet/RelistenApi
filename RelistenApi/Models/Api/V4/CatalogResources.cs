@@ -9,7 +9,7 @@ namespace Relisten.Api.Models.Api.V4;
 
 // Wire resources for v4. Imported playback facts stay intact; normalized interpretation is an overlay.
 [JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
-public sealed class ShowResource
+public record ShowSummaryResource
 {
     public ShowId Id { get; init; }
     public ArtistId ArtistId { get; init; }
@@ -31,6 +31,11 @@ public sealed class ShowResource
     public YearResource? Year { get; init; }
     public TourResource? Tour { get; init; }
     public EraResource? Era { get; init; }
+}
+
+[JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
+public sealed record ShowResource : ShowSummaryResource
+{
     public IReadOnlyList<SourceResource> Sources { get; init; } = [];
 }
 
@@ -184,7 +189,7 @@ public sealed record TrackNormalizationResource(
 );
 
 [JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
-public sealed class YearResource
+public record YearResource
 {
     public YearId Id { get; init; }
     public ArtistId ArtistId { get; init; }
