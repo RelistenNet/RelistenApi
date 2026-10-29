@@ -10,10 +10,10 @@ public class TestVenueAnswers
         new(Guid.NewGuid(), Guid.NewGuid(), name, location, uses, 1990, 2000);
 
     // l1 New York with Madison Square Garden known (v1); l2 Philadelphia.
-    private static (VenueRequest Request, Guid Garden) Request()
+    private static (VenueRequest Request, VenueId Garden) Request()
     {
         var garden = new CatalogueVenue(
-            Guid.NewGuid(),
+            VenueId.New(),
             "Madison Square Garden",
             "site",
             null,
@@ -24,12 +24,12 @@ public class TestVenueAnswers
         var state = new VenueState
         {
             Unmapped = [],
-            Venues = new Dictionary<Guid, CatalogueVenue> { [garden.Uuid] = garden },
-            Names = new[] { ("madison square garden", garden.Uuid) }.ToLookup(
+            Venues = new Dictionary<VenueId, CatalogueVenue> { [garden.Id] = garden },
+            Names = new[] { ("madison square garden", garden.Id) }.ToLookup(
                 n => n.Item1,
                 n => n.Item2
             ),
-            ExternalIds = new Dictionary<(string, string), Guid>(),
+            ExternalIds = new Dictionary<(string, string), VenueId>(),
         };
         var rows = new[]
         {
@@ -40,7 +40,7 @@ public class TestVenueAnswers
         var spellings = rows.GroupBy(VenueKeys.Of)
             .Select(g => new Spelling(g.Key!, g.ToList()))
             .ToList();
-        return (VenueRequest.Build(state, spellings), garden.Uuid);
+        return (VenueRequest.Build(state, spellings), garden.Id);
     }
 
     private static string Answer(string spellings, string newVenues = "[]", string known = "[]") =>
@@ -143,7 +143,7 @@ public class TestVenueAnswers
         // The Garden is listed for New York's spellings (its own town) only.
         request.Data.Should().NotContain("\"town\":\"New York");
         var oakland = new CatalogueVenue(
-            Guid.NewGuid(),
+            VenueId.New(),
             "Fox Theatre",
             "site",
             null,
@@ -154,9 +154,9 @@ public class TestVenueAnswers
         var state = new VenueState
         {
             Unmapped = [],
-            Venues = new Dictionary<Guid, CatalogueVenue> { [oakland.Uuid] = oakland },
-            Names = new[] { ("fox theater", oakland.Uuid) }.ToLookup(n => n.Item1, n => n.Item2),
-            ExternalIds = new Dictionary<(string, string), Guid>(),
+            Venues = new Dictionary<VenueId, CatalogueVenue> { [oakland.Id] = oakland },
+            Names = new[] { ("fox theater", oakland.Id) }.ToLookup(n => n.Item1, n => n.Item2),
+            ExternalIds = new Dictionary<(string, string), VenueId>(),
         };
         var row = Row("Fox Theatre", "Redwood City, CA");
         var redwood = VenueRequest.Build(state, [new Spelling(VenueKeys.Of(row)!, [row])]);
@@ -274,7 +274,7 @@ public class TestVenueAnswers
     public void ARoomOfAKnownSiteElsewhereIsDropped()
     {
         var oakland = new CatalogueVenue(
-            Guid.NewGuid(),
+            VenueId.New(),
             "Fox Theatre",
             "site",
             null,
@@ -285,13 +285,13 @@ public class TestVenueAnswers
         var state = new VenueState
         {
             Unmapped = [],
-            Venues = new Dictionary<Guid, CatalogueVenue> { [oakland.Uuid] = oakland },
-            Names = new[] { ("fox theater", oakland.Uuid) }.ToLookup(n => n.Item1, n => n.Item2),
-            ExternalIds = new Dictionary<(string, string), Guid>(),
+            Venues = new Dictionary<VenueId, CatalogueVenue> { [oakland.Id] = oakland },
+            Names = new[] { ("fox theater", oakland.Id) }.ToLookup(n => n.Item1, n => n.Item2),
+            ExternalIds = new Dictionary<(string, string), VenueId>(),
         };
         var row = Row("Fox Theatre", "Redwood City, CA");
         var request = VenueRequest.Build(state, [new Spelling(VenueKeys.Of(row)!, [row])]);
-        var fox = request.VenueIds.Single(v => v.Value == oakland.Uuid).Key;
+        var fox = request.VenueIds.Single(v => v.Value == oakland.Id).Key;
 
         var answer = VenueRequest.Parse(
             Answer(
@@ -310,18 +310,18 @@ public class TestVenueAnswers
         var node = System.Text.Json.Nodes.JsonNode.Parse(
             """{"name": "Spectrum", "kind": "official", "from": "2010", "to": "2010"}"""
         )!;
-        VenueRequest.Name(Guid.NewGuid(), node).Should().BeNull();
+        VenueRequest.Name(VenueId.New(), node).Should().BeNull();
         var shortName = System.Text.Json.Nodes.JsonNode.Parse(
             """{"name": "MSG", "kind": "short", "from": "1968", "to": null}"""
         )!;
-        VenueRequest.Name(Guid.NewGuid(), shortName)!.ValidFrom.Should().BeNull();
+        VenueRequest.Name(VenueId.New(), shortName)!.ValidFrom.Should().BeNull();
     }
 
     [Test]
     public void AKnownRoomSaysWhichSiteItIsIn()
     {
         var site = new CatalogueVenue(
-            Guid.NewGuid(),
+            VenueId.New(),
             "Three Sisters Park",
             "site",
             null,
@@ -330,10 +330,10 @@ public class TestVenueAnswers
             "US"
         );
         var room = new CatalogueVenue(
-            Guid.NewGuid(),
+            VenueId.New(),
             "Main Stage",
             "room",
-            site.Uuid,
+            site.Id,
             "Chillicothe",
             "IL",
             "US"
@@ -341,13 +341,9 @@ public class TestVenueAnswers
         var state = new VenueState
         {
             Unmapped = [],
-            Venues = new Dictionary<Guid, CatalogueVenue>
-            {
-                [site.Uuid] = site,
-                [room.Uuid] = room,
-            },
-            Names = new[] { ("main stage", room.Uuid) }.ToLookup(n => n.Item1, n => n.Item2),
-            ExternalIds = new Dictionary<(string, string), Guid>(),
+            Venues = new Dictionary<VenueId, CatalogueVenue> { [site.Id] = site, [room.Id] = room },
+            Names = new[] { ("main stage", room.Id) }.ToLookup(n => n.Item1, n => n.Item2),
+            ExternalIds = new Dictionary<(string, string), VenueId>(),
         };
         var row = Row("Main Stage", "Chillicothe, IL");
 

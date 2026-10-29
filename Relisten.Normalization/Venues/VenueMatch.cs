@@ -26,7 +26,7 @@ public sealed record VenueMatchResult(
 public sealed record VenueForgetPlan(
     IReadOnlyList<Guid> Rows,
     IReadOnlyList<Guid> Held,
-    IReadOnlyList<Guid> Venues
+    IReadOnlyList<VenueId> Venues
 );
 
 /// A re-ask's forget is its own author: the rows it forgot are held for the model until
@@ -98,7 +98,7 @@ public sealed class VenueMatch(INormalizationDatabase db)
             VenueMatcher.Author,
             $"{plan.Evidence.Count} rows"
         );
-        await store.WriteVenuesAsync(plan.NewVenues, NormWriteMode.FillOnly);
+        await store.CreateVenuesAsync(plan.NewVenues);
         await store.WriteVenueNamesAsync(plan.Names, NormWriteMode.FillOnly);
         await store.WriteVenueExternalIdsAsync(plan.ExternalIds, NormWriteMode.FillOnly);
         await store.WriteVenueEvidenceAsync(plan.Evidence, NormWriteMode.FillOnly);
@@ -149,10 +149,10 @@ public sealed class VenueMatch(INormalizationDatabase db)
                 string Name,
                 string? Location,
                 string AuthorRef,
-                Guid Venue
+                VenueId Venue
             )>(
                 """
-                SELECT v.uuid, v.name, v.location, e.author_ref, e.venue_uuid
+                SELECT v.uuid, v.name, v.location, e.author_ref, e.venue_id
                 FROM norm.venue_evidence e JOIN venues v ON v.uuid = e.legacy_venue_uuid
                 JOIN artists a ON a.id = v.artist_id
                 WHERE (@all OR a.uuid = ANY(@artists)) AND e.author_type NOT IN ('user', 'moderator')
@@ -210,7 +210,7 @@ public sealed class VenueMatch(INormalizationDatabase db)
     /// After a forget's run: the spellings its rows took elsewhere, then the venues they left
     /// that nothing points at any more.
     public async Task<int> RetireAsync(
-        IReadOnlyCollection<Guid> venues,
+        IReadOnlyCollection<VenueId> venues,
         CancellationToken cancellationToken
     )
     {
@@ -247,7 +247,7 @@ public sealed class VenueMatch(INormalizationDatabase db)
     {
         var venues = (
             await connection.QueryAsync<(
-                Guid Uuid,
+                VenueId Id,
                 string Name,
                 string Kind,
                 string? Parent,
@@ -260,16 +260,16 @@ public sealed class VenueMatch(INormalizationDatabase db)
                 int[] ShowYears
             )>(
                 """
-                SELECT v.uuid, v.name, v.kind, p.name, v.city, v.region, v.country,
-                       (SELECT count(*) FROM norm.venue_evidence e WHERE e.venue_uuid = v.uuid)::int,
+                SELECT v.id, v.name, v.kind, p.name, v.city, v.region, v.country,
+                       (SELECT count(*) FROM norm.venue_evidence e WHERE e.venue_id = v.id)::int,
                        y.first, y.last, coalesce(y.years, '{}')
-                FROM norm.venues v LEFT JOIN norm.venues p ON p.uuid = v.parent_uuid
+                FROM norm.venues v LEFT JOIN norm.venues p ON p.id = v.parent_id
                 LEFT JOIN LATERAL (
                     SELECT extract(year FROM min(sh.date))::int AS first,
                            extract(year FROM max(sh.date))::int AS last,
                            array_agg(extract(year FROM sh.date)::int) AS years
                     FROM norm.show_venues sv JOIN shows sh ON sh.uuid = sv.show_uuid
-                    WHERE sv.venue_uuid = v.uuid
+                    WHERE sv.venue_id = v.id
                 ) y ON true
                 WHERE v.merged_into IS NULL AND v.city IS NOT NULL AND v.country IS NOT NULL
                 """,
@@ -286,7 +286,7 @@ public sealed class VenueMatch(INormalizationDatabase db)
             string key,
             string title,
             string note,
-            IReadOnlyList<Guid> uuids
+            IReadOnlyList<VenueId> venueIds
         ) =>
             new(
                 null,
@@ -294,12 +294,12 @@ public sealed class VenueMatch(INormalizationDatabase db)
                 key,
                 note,
                 Subject: ReviewSubjects.Venue,
-                VenueUuid: uuids[0],
+                VenueId: venueIds[0],
                 Question: question,
                 Refs: new System.Text.Json.Nodes.JsonObject
                 {
                     ["venues"] = new System.Text.Json.Nodes.JsonArray(
-                        uuids.Select(u => (System.Text.Json.Nodes.JsonNode)u.ToString()).ToArray()
+                        venueIds.Select(v => (System.Text.Json.Nodes.JsonNode)v.Value).ToArray()
                     ),
                 }
             );
@@ -323,7 +323,7 @@ public sealed class VenueMatch(INormalizationDatabase db)
                         ),
                     "One name in two towns of one state: one place under a neighbouring town, a club that moved (two venues), or two places?"
                         + YearsNote(list.Select(v => v.Venue.ShowYears).ToList()),
-                    list.Select(v => v.Venue.Uuid).ToList()
+                    list.Select(v => v.Venue.Id).ToList()
                 );
             })
             .ToList();
@@ -351,7 +351,7 @@ public sealed class VenueMatch(INormalizationDatabase db)
                                 )
                             ),
                         "One name twice in one town: one place filed as two (merge, or move the room), or two places?",
-                        list.Select(v => v.Venue.Uuid).ToList()
+                        list.Select(v => v.Venue.Id).ToList()
                     );
                 })
         );
@@ -418,21 +418,26 @@ public sealed class VenueMatch(INormalizationDatabase db)
     )
     {
         var rows = (
-            await connection.QueryAsync<(Guid Show, Guid? Venue, string? Basis, Guid? Current)>(
+            await connection.QueryAsync<(
+                Guid Show,
+                VenueId? Venue,
+                string? Basis,
+                VenueId? Current
+            )>(
                 """
                 WITH RECURSIVE survivor AS (
-                    SELECT uuid AS venue, uuid, merged_into, 0 AS depth FROM norm.venues
+                    SELECT id AS venue, id, merged_into, 0 AS depth FROM norm.venues
                     UNION ALL
-                    SELECT s.venue, m.uuid, m.merged_into, s.depth + 1
-                    FROM survivor s JOIN norm.venues m ON m.uuid = s.merged_into
+                    SELECT s.venue, m.id, m.merged_into, s.depth + 1
+                    FROM survivor s JOIN norm.venues m ON m.id = s.merged_into
                     WHERE s.depth < 20
                 )
-                SELECT sh.uuid, v.uuid, sv.basis, sv.venue_uuid
+                SELECT sh.uuid, v.id, sv.basis, sv.venue_id
                 FROM shows sh JOIN artists a ON a.id = sh.artist_id
                 -- A show whose legacy venue is gone keeps no derived venue (a ruling stays).
                 LEFT JOIN venues lv ON lv.id = sh.venue_id
                 LEFT JOIN norm.venue_evidence e ON e.legacy_venue_uuid = lv.uuid
-                LEFT JOIN survivor v ON v.venue = e.venue_uuid AND v.merged_into IS NULL
+                LEFT JOIN survivor v ON v.venue = e.venue_id AND v.merged_into IS NULL
                 LEFT JOIN norm.show_venues sv ON sv.show_uuid = sh.uuid
                 WHERE (@all OR a.uuid = ANY(@artists))
                 """,

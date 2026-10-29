@@ -70,7 +70,7 @@ public sealed class VenueActivities(VenueMatch match, VenueLlm llm, VenueHistory
 
     /// Its last: the venues the forgotten rows left with nothing.
     [Activity("Venues.Retire")]
-    public async Task<int> Retire(IReadOnlyList<Guid> venues)
+    public async Task<int> Retire(IReadOnlyList<VenueId> venues)
     {
         using var heartbeat = new ActivityHeartbeat();
         return await match.RetireAsync(venues, ActivityExecutionContext.Current.CancellationToken);

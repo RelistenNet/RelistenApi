@@ -240,13 +240,13 @@ public class TestTrackMatcher
     [Test]
     public void ARulingWrittenUnderAnEarlierParseStillMatches()
     {
-        var (jam, track) = (Guid.NewGuid(), Guid.NewGuid());
+        var (jam, track) = (SongId.New(), Guid.NewGuid());
         var state = new Relisten.Normalization.Songs.CatalogueState
         {
             ArtistUuid = Guid.NewGuid(),
             ArtistName = "Phish",
             Songs = [],
-            Aliases = new Dictionary<string, Guid>(),
+            Aliases = new Dictionary<string, SongId>(),
             UnmappedSetlistSongs = [],
             Tracks =
             [
@@ -263,7 +263,7 @@ public class TestTrackMatcher
 
         TrackMatcher
             .Match(state)
-            .Records.Select(r => $"{r.SongUuid == jam}:{r.Basis}:{string.Join(",", r.Qualifiers!)}")
+            .Records.Select(r => $"{r.SongId == jam}:{r.Basis}:{string.Join(",", r.Qualifiers!)}")
             .Should()
             .Equal("True:ruling:soundcheck");
     }
@@ -271,13 +271,13 @@ public class TestTrackMatcher
     [Test]
     public void ASoundcheckCoversEverySongItsTitleNames()
     {
-        var (wrangler, walkin, track) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        var (wrangler, walkin, track) = (SongId.New(), SongId.New(), Guid.NewGuid());
         var state = new Relisten.Normalization.Songs.CatalogueState
         {
             ArtistUuid = Guid.NewGuid(),
             ArtistName = "Widespread Panic",
             Songs = [],
-            Aliases = new Dictionary<string, Guid>(),
+            Aliases = new Dictionary<string, SongId>(),
             UnmappedSetlistSongs = [],
             Tracks =
             [
@@ -316,13 +316,13 @@ public class TestTrackMatcher
     )]
     public void ARulingWhoseTextMovedIsKeptAtItsPosition(string title, string written)
     {
-        var (song, track) = (Guid.NewGuid(), Guid.NewGuid());
+        var (song, track) = (SongId.New(), Guid.NewGuid());
         var state = new Relisten.Normalization.Songs.CatalogueState
         {
             ArtistUuid = Guid.NewGuid(),
             ArtistName = "moe.",
             Songs = [],
-            Aliases = new Dictionary<string, Guid>(),
+            Aliases = new Dictionary<string, SongId>(),
             UnmappedSetlistSongs = [],
             Tracks =
             [
@@ -337,7 +337,7 @@ public class TestTrackMatcher
             ],
         };
 
-        TrackMatcher.Match(state).Records.Select(r => r.SongUuid == song).Should().Equal(true);
+        TrackMatcher.Match(state).Records.Select(r => r.SongId == song).Should().Equal(true);
     }
 
     private static Relisten.Normalization.Songs.CatalogueState OneTrack(
@@ -349,7 +349,7 @@ public class TestTrackMatcher
             ArtistUuid = Guid.NewGuid(),
             ArtistName = "moe.",
             Songs = [],
-            Aliases = new Dictionary<string, Guid>(),
+            Aliases = new Dictionary<string, SongId>(),
             UnmappedSetlistSongs = [],
             Tracks =
             [
@@ -378,7 +378,7 @@ public class TestTrackMatcher
             "Chalk Dust Torture Reprise",
             "Sweet Emotion",
         }
-            .Select(n => new CatalogueSong(Guid.NewGuid(), n, "song"))
+            .Select(n => new CatalogueSong(SongId.New(), n, "song"))
             .ToList();
         var state = new CatalogueState
         {
@@ -386,10 +386,10 @@ public class TestTrackMatcher
             ArtistName = "Phish",
             Songs = songs,
             // A person answered "sweet emotion jam" with its song: still a jam on Sweet Emotion.
-            Aliases = new Dictionary<string, Guid>
+            Aliases = new Dictionary<string, SongId>
             {
-                ["chalkdust torture"] = songs[1].Uuid,
-                ["sweet emotion jam"] = songs[3].Uuid,
+                ["chalkdust torture"] = songs[1].Id,
+                ["sweet emotion jam"] = songs[3].Id,
             },
             UnmappedSetlistSongs = [],
             Tracks = [new CatalogueTrack(Guid.NewGuid(), 1, TitleParser.Parse(title, 1))],
@@ -398,7 +398,7 @@ public class TestTrackMatcher
         TrackMatcher
             .Match(state)
             .Records.Select(r =>
-                songs.Single(s => s.Uuid == r.SongUuid).Name
+                songs.Single(s => s.Id == r.SongId).Name
                 + (r.Qualifiers is { Count: > 0 } q ? $" [{string.Join(",", q)}]" : "")
             )
             .Should()
@@ -408,7 +408,7 @@ public class TestTrackMatcher
     [Test]
     public void ARetitledTrackDropsTheRulingItsOldTitleHad()
     {
-        var state = OneTrack("Bar", new ExistingPart("Foo", Guid.NewGuid(), true, 0.95f));
+        var state = OneTrack("Bar", new ExistingPart("Foo", SongId.New(), true, 0.95f));
 
         var match = Relisten.Normalization.Songs.TrackMatcher.Match(state);
 
@@ -421,7 +421,7 @@ public class TestTrackMatcher
     {
         var state = OneTrack(
             "wsp2007-07-13d2t02",
-            new ExistingPart("Foo", Guid.NewGuid(), true, 0.95f)
+            new ExistingPart("Foo", SongId.New(), true, 0.95f)
         );
 
         TrackMatcher.Match(state).Cleared.Should().Equal(state.Tracks[0].Uuid);
@@ -432,7 +432,7 @@ public class TestTrackMatcher
     {
         var state = OneTrack(
             "Foo > Unknown Thing > Foo",
-            new ExistingPart("Foo", Guid.NewGuid(), true, 0.95f, SegueAfter: true),
+            new ExistingPart("Foo", SongId.New(), true, 0.95f, SegueAfter: true),
             new ExistingPart("Unknown Thing", null, false, 0.9f, "open")
         );
 
@@ -470,7 +470,7 @@ public class TestTrackMatcher
     {
         var state = OneTrack(
             "Uncle Song > Unknown Thing",
-            new ExistingPart("Uncle Song", Guid.NewGuid(), true, 0.95f, SegueAfter: true),
+            new ExistingPart("Uncle Song", SongId.New(), true, 0.95f, SegueAfter: true),
             new ExistingPart("Unknown Thing", null, false, 0.9f, "open")
         );
 
@@ -480,24 +480,20 @@ public class TestTrackMatcher
     [Test]
     public void AdjacentRepeatsKeepOneRulingEach()
     {
-        var song = Guid.NewGuid();
+        var song = SongId.New();
         var state = OneTrack(
             "Rebula > Rebula",
             new ExistingPart("Rebula", song, true, 0.95f, SegueAfter: true),
             new ExistingPart("Rebula", song, true, 0.95f)
         );
 
-        TrackMatcher
-            .Match(state)
-            .Records.Select(r => r.SongUuid == song)
-            .Should()
-            .Equal(true, true);
+        TrackMatcher.Match(state).Records.Select(r => r.SongId == song).Should().Equal(true, true);
     }
 
     [Test]
     public void AdjacentRepeatsOfAPartNamingTwoSongsKeepOneRulingEach()
     {
-        var (a, b) = (Guid.NewGuid(), Guid.NewGuid());
+        var (a, b) = (SongId.New(), SongId.New());
         var state = OneTrack(
             "Foo > Foo",
             new ExistingPart("Foo", a, true, 0.95f, SegueAfter: true),
@@ -509,8 +505,8 @@ public class TestTrackMatcher
         TrackMatcher
             .Match(state)
             .Records.Select(r =>
-                r.SongUuid == a ? "A"
-                : r.SongUuid == b ? "B"
+                r.SongId == a ? "A"
+                : r.SongId == b ? "B"
                 : "open"
             )
             .Should()
@@ -522,7 +518,7 @@ public class TestTrackMatcher
     {
         // "Foo" was ruled to songs A and B; the source now says "Foo > Foo". Splitting the two
         // rows would place both Foos, one song each, which no one decided.
-        var (a, b) = (Guid.NewGuid(), Guid.NewGuid());
+        var (a, b) = (SongId.New(), SongId.New());
         var state = OneTrack(
             "Foo > Foo",
             new ExistingPart("Foo", a, true, 0.95f, SegueAfter: true),
@@ -532,8 +528,8 @@ public class TestTrackMatcher
         TrackMatcher
             .Match(state)
             .Records.Select(r =>
-                r.SongUuid == a ? "A"
-                : r.SongUuid == b ? "B"
+                r.SongId == a ? "A"
+                : r.SongId == b ? "B"
                 : r.Basis
             )
             .Should()
@@ -543,7 +539,7 @@ public class TestTrackMatcher
     [Test]
     public void AnOpenRepeatAfterAPartNamingTwoSongsStaysOpen()
     {
-        var (a, b) = (Guid.NewGuid(), Guid.NewGuid());
+        var (a, b) = (SongId.New(), SongId.New());
         var state = OneTrack(
             "Foo > Foo",
             new ExistingPart("Foo", a, true, 0.95f, SegueAfter: true),
@@ -554,8 +550,8 @@ public class TestTrackMatcher
         TrackMatcher
             .Match(state)
             .Records.Select(r =>
-                r.SongUuid == a ? "A"
-                : r.SongUuid == b ? "B"
+                r.SongId == a ? "A"
+                : r.SongId == b ? "B"
                 : r.Basis
             )
             .Should()
@@ -566,7 +562,7 @@ public class TestTrackMatcher
     public void ATrackRetitledToPartOfItsOldTitleDropsTheRuling()
     {
         // Kept by position is for a newer parser reading the same title, not a shorter title.
-        var state = OneTrack("Bar", new ExistingPart("Foo Bar", Guid.NewGuid(), true, 0.95f));
+        var state = OneTrack("Bar", new ExistingPart("Foo Bar", SongId.New(), true, 0.95f));
 
         var match = TrackMatcher.Match(state);
 
@@ -580,8 +576,8 @@ public class TestTrackMatcher
         // "Foo" was ruled to two songs; the title names Foo again after X, unplaced.
         var state = OneTrack(
             "Foo > X > Foo",
-            new ExistingPart("Foo", Guid.NewGuid(), true, 0.95f, SegueAfter: true),
-            new ExistingPart("Foo", Guid.NewGuid(), true, 0.95f, SegueAfter: true),
+            new ExistingPart("Foo", SongId.New(), true, 0.95f, SegueAfter: true),
+            new ExistingPart("Foo", SongId.New(), true, 0.95f, SegueAfter: true),
             new ExistingPart("X", null, false, 0.9f, "open", SegueAfter: true),
             new ExistingPart("Foo", null, false, 0.9f, "open")
         );
@@ -592,7 +588,7 @@ public class TestTrackMatcher
     [Test]
     public void ASandwichKeepsOneRulingPerOccurrence()
     {
-        var (rebubula, dragon, track) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        var (rebubula, dragon, track) = (SongId.New(), SongId.New(), Guid.NewGuid());
         var state = new Relisten.Normalization.Songs.CatalogueState
         {
             ArtistUuid = Guid.NewGuid(),
@@ -602,7 +598,7 @@ public class TestTrackMatcher
                 new Relisten.Normalization.Songs.CatalogueSong(rebubula, "Rebubula", "song"),
                 new Relisten.Normalization.Songs.CatalogueSong(dragon, "Paper Dragon", "song"),
             ],
-            Aliases = new Dictionary<string, Guid>(),
+            Aliases = new Dictionary<string, SongId>(),
             UnmappedSetlistSongs = [],
             Tracks =
             [
@@ -629,7 +625,7 @@ public class TestTrackMatcher
 
         records
             .Select(r =>
-                $"{r.Part}:{(r.SongUuid == rebubula ? "Rebubula" : "Paper Dragon")}:{r.Basis}"
+                $"{r.Part}:{(r.SongId == rebubula ? "Rebubula" : "Paper Dragon")}:{r.Basis}"
             )
             .Should()
             .Equal("1:Rebubula:ruling", "2:Paper Dragon:song_name", "3:Rebubula:ruling");

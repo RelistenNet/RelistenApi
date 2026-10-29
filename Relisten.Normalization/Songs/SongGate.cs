@@ -22,7 +22,7 @@ public sealed record GoldTrack(
 }
 
 /// One norm.track_songs row of a labelled track, its song followed to the survivor of merges.
-public sealed record GatePart(Guid? Song, bool Resolved);
+public sealed record GatePart(SongId? Song, bool Resolved);
 
 /// - Right: every labelled part is placed and nothing is placed wrong.
 /// - Wrong: a part is linked to a song the label doesn't name (a placeholder linked counts).
@@ -147,8 +147,8 @@ public static class SongGate
         string artist,
         IReadOnlyList<GoldTrack> gold,
         IReadOnlyDictionary<Guid, IReadOnlyList<GatePart>> written,
-        IReadOnlyDictionary<Guid, IReadOnlySet<string>> songKeys,
-        IReadOnlyDictionary<Guid, string> songNames
+        IReadOnlyDictionary<SongId, IReadOnlySet<string>> songKeys,
+        IReadOnlyDictionary<SongId, string> songNames
     )
     {
         var tracks = gold.Select(track =>
@@ -175,7 +175,7 @@ public static class SongGate
     internal static GateTrack Evaluate(
         GoldTrack track,
         IReadOnlyList<GatePart> rows,
-        IReadOnlyDictionary<Guid, IReadOnlySet<string>> songKeys
+        IReadOnlyDictionary<SongId, IReadOnlySet<string>> songKeys
     )
     {
         var parts = track
@@ -244,7 +244,7 @@ public static class SongGate
     /// Labelled names no song or alias carries, for the label review.
     private static List<string> Missing(
         IReadOnlyList<GoldTrack> gold,
-        IReadOnlyDictionary<Guid, IReadOnlySet<string>> songKeys
+        IReadOnlyDictionary<SongId, IReadOnlySet<string>> songKeys
     )
     {
         var known = songKeys.Values.SelectMany(k => k).ToHashSet();
@@ -259,7 +259,7 @@ public static class SongGate
     /// What was written, for the report: song names, "-" for not a song, "open".
     private static string Describe(
         IReadOnlyList<GatePart> rows,
-        IReadOnlyDictionary<Guid, string> songNames
+        IReadOnlyDictionary<SongId, string> songNames
     ) =>
         rows.Count == 0
             ? "nothing"
@@ -286,18 +286,18 @@ public static class SongGate
             new { artistSlug }
         );
         var songs = (
-            await connection.QueryAsync<(Guid Uuid, string Name, Guid? MergedInto)>(
-                "SELECT uuid, name, merged_into FROM norm.songs WHERE artist_uuid = @artist",
+            await connection.QueryAsync<(SongId Id, string Name, SongId? MergedInto)>(
+                "SELECT id, name, merged_into FROM norm.songs WHERE artist_uuid = @artist",
                 new { artist }
             )
-        ).ToDictionary(s => s.Uuid);
-        var aliases = await connection.QueryAsync<(Guid Song, string Alias)>(
-            "SELECT song_uuid, alias FROM norm.song_aliases WHERE artist_uuid = @artist",
+        ).ToDictionary(s => s.Id);
+        var aliases = await connection.QueryAsync<(SongId Song, string Alias)>(
+            "SELECT song_id, alias FROM norm.song_aliases WHERE artist_uuid = @artist",
             new { artist }
         );
 
         // A merged song is read as its survivor, as readers do.
-        Guid Survivor(Guid song)
+        SongId Survivor(SongId song)
         {
             for (var depth = 0; depth < 20 && songs[song].MergedInto is { } next; depth++)
             {
@@ -307,8 +307,8 @@ public static class SongGate
             return song;
         }
 
-        var keys = new Dictionary<Guid, HashSet<string>>();
-        void Add(Guid song, string name)
+        var keys = new Dictionary<SongId, HashSet<string>>();
+        void Add(SongId song, string name)
         {
             var survivor = Survivor(song);
             if (!keys.TryGetValue(survivor, out var set))
@@ -321,7 +321,7 @@ public static class SongGate
 
         foreach (var s in songs.Values)
         {
-            Add(s.Uuid, s.Name);
+            Add(s.Id, s.Name);
         }
 
         foreach (var a in aliases.Where(a => songs.ContainsKey(a.Song)))
@@ -329,9 +329,9 @@ public static class SongGate
             Add(a.Song, a.Alias);
         }
 
-        var rows = await connection.QueryAsync<(Guid Track, Guid? Song, bool Resolved)>(
+        var rows = await connection.QueryAsync<(Guid Track, SongId? Song, bool Resolved)>(
             """
-            SELECT track_uuid, song_uuid, resolved FROM norm.track_songs
+            SELECT track_uuid, song_id, resolved FROM norm.track_songs
             WHERE track_uuid = ANY(@tracks) ORDER BY track_uuid, part
             """,
             new { tracks = gold.Select(g => g.TrackUuid).ToArray() }
@@ -353,7 +353,7 @@ public static class SongGate
             gold,
             written,
             keys.ToDictionary(k => k.Key, k => (IReadOnlySet<string>)k.Value),
-            songs.Values.ToDictionary(s => s.Uuid, s => s.Name)
+            songs.Values.ToDictionary(s => s.Id, s => s.Name)
         );
     }
 }

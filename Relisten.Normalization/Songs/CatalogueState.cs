@@ -32,7 +32,7 @@ public sealed record CatalogueTrack(
 
 public sealed record ExistingPart(
     string? Text,
-    Guid? SongUuid,
+    SongId? SongId,
     bool Resolved,
     float? Confidence,
     string Basis = TrackBasis.Ruling,
@@ -42,7 +42,7 @@ public sealed record ExistingPart(
 
 public sealed record CatalogueSetlistSong(Guid Uuid, string Name, string Key, int Plays);
 
-public sealed record CatalogueSong(Guid Uuid, string Name, string? Kind);
+public sealed record CatalogueSong(SongId Id, string Name, string? Kind);
 
 /// One artist's catalogue as it stands: its tracks (only the unresolved ones unless every
 /// track is asked for, which a rebuild of derived rows needs), its unmapped upstream setlist
@@ -56,7 +56,7 @@ public sealed class CatalogueState
     public required IReadOnlyList<CatalogueTrack> Tracks { get; init; }
     public required IReadOnlyList<CatalogueSetlistSong> UnmappedSetlistSongs { get; init; }
     public required IReadOnlyList<CatalogueSong> Songs { get; init; }
-    public required IReadOnlyDictionary<string, Guid> Aliases { get; init; }
+    public required IReadOnlyDictionary<string, SongId> Aliases { get; init; }
 
     public IEnumerable<CatalogueTrack> UnresolvedTracks => Tracks.Where(t => t.Unresolved);
 
@@ -65,13 +65,13 @@ public sealed class CatalogueState
 
     /// Song names are looked up directly, so a name needs no alias. A name two songs share
     /// matches neither.
-    public IReadOnlyDictionary<string, Guid> SongNames =>
+    public IReadOnlyDictionary<string, SongId> SongNames =>
         songNames ??= Songs
             .GroupBy(s => TitleNormalizer.Normalize(s.Name))
             .Where(g => g.Key.Length > 0 && g.Count() == 1)
-            .ToDictionary(g => g.Key, g => g.Single().Uuid);
+            .ToDictionary(g => g.Key, g => g.Single().Id);
 
-    private IReadOnlyDictionary<string, Guid>? songNames;
+    private IReadOnlyDictionary<string, SongId>? songNames;
 
     public static async Task<CatalogueState> LoadAsync(
         NpgsqlConnection connection,
@@ -125,7 +125,7 @@ public sealed class CatalogueState
             await connection.QueryAsync<(
                 Guid Track,
                 string? Text,
-                Guid? Song,
+                SongId? Song,
                 bool Resolved,
                 float? Confidence,
                 string Basis,
@@ -135,16 +135,16 @@ public sealed class CatalogueState
                 """
                 -- A part naming a merged song names its survivor (readers follow merged_into).
                 WITH RECURSIVE survivor AS (
-                    SELECT uuid AS song, uuid, merged_into, 0 AS depth FROM norm.songs WHERE artist_uuid = @artistUuid
+                    SELECT id AS song, id, merged_into, 0 AS depth FROM norm.songs WHERE artist_uuid = @artistUuid
                     UNION ALL
-                    SELECT s.song, m.uuid, m.merged_into, s.depth + 1
-                    FROM survivor s JOIN norm.songs m ON m.uuid = s.merged_into
+                    SELECT s.song, m.id, m.merged_into, s.depth + 1
+                    FROM survivor s JOIN norm.songs m ON m.id = s.merged_into
                     WHERE s.depth < 20
                 )
-                SELECT ts.track_uuid, ts.text, coalesce(v.uuid, ts.song_uuid), ts.resolved, ts.confidence, ts.basis,
+                SELECT ts.track_uuid, ts.text, coalesce(v.id, ts.song_id), ts.resolved, ts.confidence, ts.basis,
                        ts.author_type, ts.segue_after
                 FROM norm.track_songs ts JOIN source_tracks t ON t.uuid = ts.track_uuid
-                LEFT JOIN survivor v ON v.song = ts.song_uuid AND v.merged_into IS NULL
+                LEFT JOIN survivor v ON v.song = ts.song_id AND v.merged_into IS NULL
                 WHERE CASE WHEN @allTracks THEN t.artist_id = @Id ELSE ts.track_uuid = ANY(@open) END
                 ORDER BY ts.track_uuid, ts.part
                 """,
@@ -184,25 +184,25 @@ public sealed class CatalogueState
 
         var songs = await connection.QueryAsync<CatalogueSong>(
             """
-            SELECT uuid, name, kind FROM norm.songs
-            WHERE artist_uuid = @artistUuid AND merged_into IS NULL ORDER BY name, uuid
+            SELECT id, name, kind FROM norm.songs
+            WHERE artist_uuid = @artistUuid AND merged_into IS NULL ORDER BY name, id
             """,
             new { artistUuid },
             tx
         );
 
         // An alias of a merged song names its survivor (readers follow merged_into).
-        var aliases = await connection.QueryAsync<(string Normalized, Guid Song)>(
+        var aliases = await connection.QueryAsync<(string Normalized, SongId Song)>(
             """
             WITH RECURSIVE survivor AS (
-                SELECT uuid AS song, uuid, merged_into, 0 AS depth FROM norm.songs WHERE artist_uuid = @artistUuid
+                SELECT id AS song, id, merged_into, 0 AS depth FROM norm.songs WHERE artist_uuid = @artistUuid
                 UNION ALL
-                SELECT s.song, m.uuid, m.merged_into, s.depth + 1
-                FROM survivor s JOIN norm.songs m ON m.uuid = s.merged_into
+                SELECT s.song, m.id, m.merged_into, s.depth + 1
+                FROM survivor s JOIN norm.songs m ON m.id = s.merged_into
                 WHERE s.depth < 20
             )
-            SELECT a.normalized, v.uuid
-            FROM norm.song_aliases a JOIN survivor v ON v.song = a.song_uuid AND v.merged_into IS NULL
+            SELECT a.normalized, v.id
+            FROM norm.song_aliases a JOIN survivor v ON v.song = a.song_id AND v.merged_into IS NULL
             WHERE a.artist_uuid = @artistUuid
             """,
             new { artistUuid },

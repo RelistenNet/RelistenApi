@@ -8,10 +8,10 @@ using Relisten.Normalization.Venues;
 namespace Relisten.Normalization;
 
 public sealed record VenueRecord(
-    Guid Uuid,
+    VenueId Id,
     string Name,
     string Kind = VenueKinds.Site,
-    Guid? ParentUuid = null,
+    VenueId? ParentId = null,
     string? City = null,
     string? Region = null,
     string? Country = null,
@@ -24,7 +24,7 @@ public sealed record VenueRecord(
 /// A venue name: official (with dates, end exclusive), short ("MSG") or a spelling seen in
 /// sources.
 public sealed record VenueNameRecord(
-    Guid VenueUuid,
+    VenueId VenueId,
     string Name,
     string Kind = VenueNameKinds.Spelling,
     DateOnly? ValidFrom = null,
@@ -35,20 +35,20 @@ public sealed record VenueNameRecord(
 public sealed record VenueExternalIdRecord(
     string Provider,
     string Key,
-    Guid VenueUuid,
+    VenueId VenueId,
     float? Confidence = null
 );
 
 public sealed record VenueEvidenceRecord(
     Guid LegacyVenueUuid,
-    Guid VenueUuid,
+    VenueId VenueId,
     float? Confidence = null
 );
 
 /// A show's venue: derived from its legacy row's mapping (basis evidence) or a ruling.
 public sealed record ShowVenueRecord(
     Guid ShowUuid,
-    Guid VenueUuid,
+    VenueId VenueId,
     float? Confidence = null,
     string Basis = ShowVenueBasis.Ruling
 );
@@ -79,22 +79,16 @@ public sealed partial class NormStore
 {
     /// Venues, with a slug unique across all artists: the name, then the city when another
     /// venue has the name ("fox-theater-oakland").
-    public async Task<int> WriteVenuesAsync(
+    public Task<int> WriteVenuesAsync(
         IReadOnlyList<VenueRecord> venues,
         NormWriteMode mode = NormWriteMode.Upsert
-    )
-    {
-        if (venues.Count == 0)
-        {
-            return 0;
-        }
-
-        var slugs = await AssignVenueSlugs(venues);
-        var update =
+    ) =>
+        InsertVenuesAsync(
+            venues,
             mode == NormWriteMode.FillOnly
-                ? "NOTHING"
+                ? "ON CONFLICT (id) DO NOTHING"
                 : $"""
-                    UPDATE SET name = EXCLUDED.name, kind = EXCLUDED.kind, parent_uuid = EXCLUDED.parent_uuid,
+                    ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, kind = EXCLUDED.kind, parent_id = EXCLUDED.parent_id,
                         city = EXCLUDED.city, region = EXCLUDED.region, country = EXCLUDED.country,
                         latitude = EXCLUDED.latitude, longitude = EXCLUDED.longitude,
                         coordinate_precision = EXCLUDED.coordinate_precision, author_type = EXCLUDED.author_type,
@@ -103,33 +97,50 @@ public sealed partial class NormStore
                     WHERE {UpdateWhen(
                         mode,
                         "norm.venues",
-                        "(norm.venues.name, norm.venues.kind, norm.venues.parent_uuid, norm.venues.city, norm.venues.region, norm.venues.country, norm.venues.latitude, norm.venues.longitude, norm.venues.coordinate_precision) IS DISTINCT FROM (EXCLUDED.name, EXCLUDED.kind, EXCLUDED.parent_uuid, EXCLUDED.city, EXCLUDED.region, EXCLUDED.country, EXCLUDED.latitude, EXCLUDED.longitude, EXCLUDED.coordinate_precision)"
+                        "(norm.venues.name, norm.venues.kind, norm.venues.parent_id, norm.venues.city, norm.venues.region, norm.venues.country, norm.venues.latitude, norm.venues.longitude, norm.venues.coordinate_precision) IS DISTINCT FROM (EXCLUDED.name, EXCLUDED.kind, EXCLUDED.parent_id, EXCLUDED.city, EXCLUDED.region, EXCLUDED.country, EXCLUDED.latitude, EXCLUDED.longitude, EXCLUDED.coordinate_precision)"
                     )}
-                    """;
+                    """
+        );
+
+    /// Venues this run just minted ids for (NormIds). There is no conflict clause: an id that
+    /// is already taken (a collision, about once in ten million mints) fails the write and the
+    /// run with it, instead of overwriting or silently skipping the venue that holds the id.
+    /// The step's retry plans again and mints fresh ids.
+    public Task<int> CreateVenuesAsync(IReadOnlyList<VenueRecord> venues) =>
+        InsertVenuesAsync(venues, onConflict: "");
+
+    private async Task<int> InsertVenuesAsync(IReadOnlyList<VenueRecord> venues, string onConflict)
+    {
+        if (venues.Count == 0)
+        {
+            return 0;
+        }
+
+        var slugs = await AssignVenueSlugs(venues);
 
         // Parents first: a room's site may be new in the same batch.
-        var ordered = venues.OrderBy(v => v.ParentUuid == null ? 0 : 1).ToList();
+        var ordered = venues.OrderBy(v => v.ParentId == null ? 0 : 1).ToList();
         return await connection.ExecuteAsync(
             $"""
-            INSERT INTO norm.venues (uuid, name, slug, kind, parent_uuid, city, region, country, latitude, longitude,
+            INSERT INTO norm.venues (id, name, slug, kind, parent_id, city, region, country, latitude, longitude,
                                    coordinate_precision, author_type, author_ref, confidence, run_uuid)
-            SELECT x.uuid, x.name, x.slug, x.kind, x.parent, x.city, x.region, x.country, x.lat, x.lng,
+            SELECT x.id, x.name, x.slug, x.kind, x.parent, x.city, x.region, x.country, x.lat, x.lng,
                    x.precision, @AuthorType, @AuthorRef, x.confidence, @Run
-            FROM unnest(@uuids, @names, @slugs, @kinds, @parents, @cities, @regions, @countries, @lats, @lngs,
+            FROM unnest(@ids, @names, @slugs, @kinds, @parents, @cities, @regions, @countries, @lats, @lngs,
                         @precisions, @confidences)
-                 AS x(uuid, name, slug, kind, parent, city, region, country, lat, lng, precision, confidence)
-            ON CONFLICT (uuid) DO {update}
+                 AS x(id, name, slug, kind, parent, city, region, country, lat, lng, precision, confidence)
+            {onConflict}
             """,
             new
             {
                 AuthorType,
                 AuthorRef,
                 Run,
-                uuids = ordered.Select(v => v.Uuid).ToArray(),
+                ids = ordered.Select(v => v.Id.Value).ToArray(),
                 names = ordered.Select(v => v.Name).ToArray(),
-                slugs = ordered.Select(v => slugs[v.Uuid]).ToArray(),
+                slugs = ordered.Select(v => slugs[v.Id]).ToArray(),
                 kinds = ordered.Select(v => v.Kind).ToArray(),
-                parents = ordered.Select(v => v.ParentUuid).ToArray(),
+                parents = ordered.Select(v => v.ParentId?.Value).ToArray(),
                 cities = ordered.Select(v => v.City).ToArray(),
                 regions = ordered.Select(v => v.Region).ToArray(),
                 countries = ordered.Select(v => v.Country).ToArray(),
@@ -142,30 +153,30 @@ public sealed partial class NormStore
         );
     }
 
-    private async Task<Dictionary<Guid, string>> AssignVenueSlugs(IReadOnlyList<VenueRecord> venues)
+    private async Task<Dictionary<VenueId, string>> AssignVenueSlugs(
+        IReadOnlyList<VenueRecord> venues
+    )
     {
         string Base(VenueRecord v) => TitleNormalizer.Slug(v.Name);
         var bases = venues.Select(Base).Distinct().ToArray();
-        var mine = venues.Select(v => v.Uuid).ToHashSet();
+        var mine = venues.Select(v => v.Id).ToHashSet();
         var taken = (
-            await connection.QueryAsync<(Guid Uuid, string Slug)>(
-                "SELECT uuid, slug FROM norm.venues WHERE slug LIKE ANY(@patterns)",
+            await connection.QueryAsync<(VenueId Id, string Slug)>(
+                "SELECT id, slug FROM norm.venues WHERE slug LIKE ANY(@patterns)",
                 new { patterns = bases.Select(b => b + "%").ToArray() },
                 tx
             )
         ).ToList();
-        var existing = taken
-            .Where(t => mine.Contains(t.Uuid))
-            .ToDictionary(t => t.Uuid, t => t.Slug);
-        var used = taken.Where(t => !mine.Contains(t.Uuid)).Select(t => t.Slug).ToHashSet();
+        var existing = taken.Where(t => mine.Contains(t.Id)).ToDictionary(t => t.Id, t => t.Slug);
+        var used = taken.Where(t => !mine.Contains(t.Id)).Select(t => t.Slug).ToHashSet();
 
-        var slugs = new Dictionary<Guid, string>();
-        foreach (var venue in venues.OrderBy(v => v.Uuid))
+        var slugs = new Dictionary<VenueId, string>();
+        foreach (var venue in venues.OrderBy(v => v.Id))
         {
             // A venue keeps its slug once it has one.
-            if (existing.TryGetValue(venue.Uuid, out var kept))
+            if (existing.TryGetValue(venue.Id, out var kept))
             {
-                slugs[venue.Uuid] = kept;
+                slugs[venue.Id] = kept;
                 used.Add(kept);
                 continue;
             }
@@ -182,7 +193,7 @@ public sealed partial class NormStore
                 slug = $"{stem}-{n}";
             }
 
-            slugs[venue.Uuid] = slug;
+            slugs[venue.Id] = slug;
         }
 
         return slugs;
@@ -196,7 +207,7 @@ public sealed partial class NormStore
         var rows = names
             .Select(n => (n, Normalized: VenueNormalizer.Key(n.Name)))
             .Where(n => n.Normalized != null)
-            .DistinctBy(n => (n.n.VenueUuid, n.Normalized, n.n.ValidFrom))
+            .DistinctBy(n => (n.n.VenueId, n.Normalized, n.n.ValidFrom))
             .ToList();
         if (rows.Count == 0)
         {
@@ -205,13 +216,13 @@ public sealed partial class NormStore
 
         return await connection.ExecuteAsync(
             $"""
-            INSERT INTO norm.venue_names (venue_uuid, normalized, name, kind, valid_from, valid_to,
+            INSERT INTO norm.venue_names (venue_id, normalized, name, kind, valid_from, valid_to,
                                         author_type, author_ref, confidence, run_uuid)
             SELECT x.venue, x.normalized, x.name, x.kind, coalesce(x.valid_from, '-infinity'::date), x.valid_to,
                    @AuthorType, @AuthorRef, x.confidence, @Run
             FROM unnest(@venues, @normalized, @names, @kinds, @froms, @tos, @confidences)
                  AS x(venue, normalized, name, kind, valid_from, valid_to, confidence)
-            ON CONFLICT (venue_uuid, normalized, valid_from) DO {(mode == NormWriteMode.FillOnly ? $"""
+            ON CONFLICT (venue_id, normalized, valid_from) DO {(mode == NormWriteMode.FillOnly ? $"""
                 -- Fill-only still lets a machine's plain spelling learn that it is an official or
                 -- short name, with its dates ("Spectrum" until 1994): nothing else changes.
                 UPDATE SET kind = EXCLUDED.kind, valid_to = EXCLUDED.valid_to,
@@ -232,7 +243,7 @@ public sealed partial class NormStore
                 AuthorType,
                 AuthorRef,
                 Run,
-                venues = rows.Select(r => r.n.VenueUuid).ToArray(),
+                venues = rows.Select(r => r.n.VenueId.Value).ToArray(),
                 normalized = rows.Select(r => r.Normalized).ToArray(),
                 names = rows.Select(r => r.n.Name.Trim()).ToArray(),
                 kinds = rows.Select(r => r.n.Kind).ToArray(),
@@ -257,14 +268,14 @@ public sealed partial class NormStore
 
         return await connection.ExecuteAsync(
             $"""
-            INSERT INTO norm.venue_external_ids (provider, key, venue_uuid, author_type, author_ref, confidence, run_uuid)
+            INSERT INTO norm.venue_external_ids (provider, key, venue_id, author_type, author_ref, confidence, run_uuid)
             SELECT x.provider, x.key, x.venue, @AuthorType, @AuthorRef, x.confidence, @Run
             FROM unnest(@providers, @keys, @venues, @confidences) AS x(provider, key, venue, confidence)
             ON CONFLICT (provider, key) DO {(mode == NormWriteMode.FillOnly ? "NOTHING" : $"""
-                UPDATE SET venue_uuid = EXCLUDED.venue_uuid, author_type = EXCLUDED.author_type,
+                UPDATE SET venue_id = EXCLUDED.venue_id, author_type = EXCLUDED.author_type,
                     author_ref = EXCLUDED.author_ref, confidence = EXCLUDED.confidence,
                     run_uuid = EXCLUDED.run_uuid, updated_at = now()
-                WHERE {UpdateWhen(mode, "norm.venue_external_ids", "norm.venue_external_ids.venue_uuid IS DISTINCT FROM EXCLUDED.venue_uuid")}
+                WHERE {UpdateWhen(mode, "norm.venue_external_ids", "norm.venue_external_ids.venue_id IS DISTINCT FROM EXCLUDED.venue_id")}
                 """)}
             """,
             new
@@ -274,7 +285,7 @@ public sealed partial class NormStore
                 Run,
                 providers = rows.Select(r => r.Provider).ToArray(),
                 keys = rows.Select(r => r.Key).ToArray(),
-                venues = rows.Select(r => r.VenueUuid).ToArray(),
+                venues = rows.Select(r => r.VenueId.Value).ToArray(),
                 confidences = rows.Select(r => r.Confidence).ToArray(),
             },
             tx
@@ -294,14 +305,14 @@ public sealed partial class NormStore
 
         return await connection.ExecuteAsync(
             $"""
-            INSERT INTO norm.venue_evidence (legacy_venue_uuid, venue_uuid, author_type, author_ref, confidence, run_uuid)
+            INSERT INTO norm.venue_evidence (legacy_venue_uuid, venue_id, author_type, author_ref, confidence, run_uuid)
             SELECT x.legacy, x.venue, @AuthorType, @AuthorRef, x.confidence, @Run
             FROM unnest(@legacy, @venues, @confidences) AS x(legacy, venue, confidence)
             ON CONFLICT (legacy_venue_uuid) DO {(mode == NormWriteMode.FillOnly ? "NOTHING" : $"""
-                UPDATE SET venue_uuid = EXCLUDED.venue_uuid, author_type = EXCLUDED.author_type,
+                UPDATE SET venue_id = EXCLUDED.venue_id, author_type = EXCLUDED.author_type,
                     author_ref = EXCLUDED.author_ref, confidence = EXCLUDED.confidence,
                     run_uuid = EXCLUDED.run_uuid, updated_at = now()
-                WHERE {UpdateWhen(mode, "norm.venue_evidence", "norm.venue_evidence.venue_uuid IS DISTINCT FROM EXCLUDED.venue_uuid")}
+                WHERE {UpdateWhen(mode, "norm.venue_evidence", "norm.venue_evidence.venue_id IS DISTINCT FROM EXCLUDED.venue_id")}
                 """)}
             """,
             new
@@ -310,7 +321,7 @@ public sealed partial class NormStore
                 AuthorRef,
                 Run,
                 legacy = rows.Select(r => r.LegacyVenueUuid).ToArray(),
-                venues = rows.Select(r => r.VenueUuid).ToArray(),
+                venues = rows.Select(r => r.VenueId.Value).ToArray(),
                 confidences = rows.Select(r => r.Confidence).ToArray(),
             },
             tx
@@ -332,14 +343,14 @@ public sealed partial class NormStore
 
         return await connection.ExecuteAsync(
             $"""
-            INSERT INTO norm.show_venues (show_uuid, venue_uuid, basis, author_type, author_ref, confidence, run_uuid)
+            INSERT INTO norm.show_venues (show_uuid, venue_id, basis, author_type, author_ref, confidence, run_uuid)
             SELECT x.show, x.venue, x.basis, @AuthorType, @AuthorRef, x.confidence, @Run
             FROM unnest(@shows, @venues, @bases, @confidences) AS x(show, venue, basis, confidence)
             ON CONFLICT (show_uuid) DO {(mode == NormWriteMode.FillOnly ? "NOTHING" : $"""
-                UPDATE SET venue_uuid = EXCLUDED.venue_uuid, basis = EXCLUDED.basis, author_type = EXCLUDED.author_type,
+                UPDATE SET venue_id = EXCLUDED.venue_id, basis = EXCLUDED.basis, author_type = EXCLUDED.author_type,
                     author_ref = EXCLUDED.author_ref, confidence = EXCLUDED.confidence,
                     run_uuid = EXCLUDED.run_uuid, updated_at = now()
-                WHERE {UpdateWhen(mode, "norm.show_venues", "(norm.show_venues.venue_uuid, norm.show_venues.basis) IS DISTINCT FROM (EXCLUDED.venue_uuid, EXCLUDED.basis)")}
+                WHERE {UpdateWhen(mode, "norm.show_venues", "(norm.show_venues.venue_id, norm.show_venues.basis) IS DISTINCT FROM (EXCLUDED.venue_id, EXCLUDED.basis)")}
                 """)}
             """,
             new
@@ -348,7 +359,7 @@ public sealed partial class NormStore
                 AuthorRef,
                 Run,
                 shows = rows.Select(r => r.ShowUuid).ToArray(),
-                venues = rows.Select(r => r.VenueUuid).ToArray(),
+                venues = rows.Select(r => r.VenueId.Value).ToArray(),
                 bases = rows.Select(r => r.Basis).ToArray(),
                 confidences = rows.Select(r => r.Confidence).ToArray(),
             },
@@ -366,14 +377,14 @@ public sealed partial class NormStore
             $"""
             UPDATE norm.venues v SET name = n.name, author_type = @AuthorType, author_ref = @AuthorRef,
                 confidence = coalesce(v.confidence, n.confidence, 0.9), run_uuid = @Run, updated_at = now()
-            FROM (SELECT DISTINCT ON (o.venue_uuid) o.venue_uuid, o.name, o.confidence
+            FROM (SELECT DISTINCT ON (o.venue_id) o.venue_id, o.name, o.confidence
                   FROM norm.venue_names o
                   WHERE o.kind = 'official'
                     AND ((o.valid_from > '-infinity' OR o.valid_to IS NOT NULL)
                          OR 1 = (SELECT count(*) FROM norm.venue_names x
-                                 WHERE x.venue_uuid = o.venue_uuid AND x.kind = 'official'))
-                  ORDER BY o.venue_uuid, (o.valid_to IS NULL) DESC, o.valid_from DESC, o.valid_to DESC) n
-            WHERE v.uuid = n.venue_uuid AND v.merged_into IS NULL AND v.name IS DISTINCT FROM n.name
+                                 WHERE x.venue_id = o.venue_id AND x.kind = 'official'))
+                  ORDER BY o.venue_id, (o.valid_to IS NULL) DESC, o.valid_from DESC, o.valid_to DESC) n
+            WHERE v.id = n.venue_id AND v.merged_into IS NULL AND v.name IS DISTINCT FROM n.name
               {(Human ? "" : "AND v.author_type NOT IN ('user', 'moderator')")}
             """,
             new
@@ -425,10 +436,10 @@ public sealed partial class NormStore
     {
         var venues = (
             await connection.QueryAsync<(
-                Guid Uuid,
+                VenueId Id,
                 string Name,
                 string Kind,
-                Guid? Parent,
+                VenueId? Parent,
                 string? City,
                 string? Region,
                 string? Country,
@@ -436,27 +447,27 @@ public sealed partial class NormStore
                 int Rows
             )>(
                 """
-                SELECT v.uuid, v.name, v.kind, v.parent_uuid, v.city, v.region, v.country, v.author_type,
-                       (SELECT count(*) FROM norm.venue_evidence e WHERE e.venue_uuid = v.uuid)::int
+                SELECT v.id, v.name, v.kind, v.parent_id, v.city, v.region, v.country, v.author_type,
+                       (SELECT count(*) FROM norm.venue_evidence e WHERE e.venue_id = v.id)::int
                 FROM norm.venues v WHERE v.merged_into IS NULL AND v.city IS NOT NULL
                 """,
                 transaction: tx
             )
         ).ToList();
         var names = (
-            await connection.QueryAsync<(Guid Venue, string Normalized)>(
-                "SELECT venue_uuid, normalized FROM norm.venue_names WHERE kind <> 'short'",
+            await connection.QueryAsync<(VenueId Venue, string Normalized)>(
+                "SELECT venue_id, normalized FROM norm.venue_names WHERE kind <> 'short'",
                 transaction: tx
             )
         ).ToLookup(n => n.Venue, n => n.Normalized);
         // Rooms compare the sites they are in now: two sites merged make their rooms' parents one.
         var mergedInto = (
-            await connection.QueryAsync<(Guid Uuid, Guid Into)>(
-                "SELECT uuid, merged_into FROM norm.venues WHERE merged_into IS NOT NULL",
+            await connection.QueryAsync<(VenueId Id, VenueId Into)>(
+                "SELECT id, merged_into FROM norm.venues WHERE merged_into IS NOT NULL",
                 transaction: tx
             )
-        ).ToDictionary(m => m.Uuid, m => m.Into);
-        Guid? Site(Guid? parent)
+        ).ToDictionary(m => m.Id, m => m.Into);
+        VenueId? Site(VenueId? parent)
         {
             for (
                 var depth = 0;
@@ -472,7 +483,7 @@ public sealed partial class NormStore
 
         venues = venues.Select(v => v with { Parent = Site(v.Parent) }).ToList();
 
-        var merged = new HashSet<Guid>();
+        var merged = new HashSet<VenueId>();
         var count = 0;
         foreach (
             var town in venues
@@ -481,21 +492,19 @@ public sealed partial class NormStore
                 .Where(g => g.Count() > 1)
         )
         {
-            var list = town.OrderByDescending(v => v.Rows).ThenBy(v => v.Uuid).ToList();
+            var list = town.OrderByDescending(v => v.Rows).ThenBy(v => v.Id).ToList();
             foreach (var keep in list)
             {
-                if (merged.Contains(keep.Uuid))
+                if (merged.Contains(keep.Id))
                 {
                     continue;
                 }
 
-                var keepNames = names[keep.Uuid]
+                var keepNames = names[keep.Id]
                     .Append(VenueNormalizer.Key(keep.Name))
                     .OfType<string>()
                     .ToList();
-                foreach (
-                    var twin in list.Where(v => v.Uuid != keep.Uuid && !merged.Contains(v.Uuid))
-                )
+                foreach (var twin in list.Where(v => v.Id != keep.Id && !merged.Contains(v.Id)))
                 {
                     var twinName = VenueNormalizer.Key(twin.Name);
                     if (
@@ -510,19 +519,19 @@ public sealed partial class NormStore
                         """
                         UPDATE norm.venues SET merged_into = @into, author_type = @AuthorType, author_ref = @AuthorRef,
                             run_uuid = @Run, updated_at = now()
-                        WHERE (uuid = @from OR merged_into = @from) AND author_type NOT IN ('user', 'moderator')
+                        WHERE (id = @from OR merged_into = @from) AND author_type NOT IN ('user', 'moderator')
                         """,
                         new
                         {
-                            from = twin.Uuid,
-                            into = keep.Uuid,
+                            from = twin.Id,
+                            into = keep.Id,
                             AuthorType,
                             AuthorRef,
                             Run,
                         },
                         tx
                     );
-                    merged.Add(twin.Uuid);
+                    merged.Add(twin.Id);
                     count++;
                 }
             }
@@ -534,7 +543,7 @@ public sealed partial class NormStore
     /// An expert's merge: venue `from` is the same place as `into`. Like songs: the old venue
     /// points at the survivor (as do venues merged into it before), and its names, external
     /// ids and evidence resolve to the survivor wherever they are read. Only a person merges.
-    public async Task MergeVenueAsync(Guid from, Guid into)
+    public async Task MergeVenueAsync(VenueId from, VenueId into)
     {
         if (!Human)
         {
@@ -544,15 +553,14 @@ public sealed partial class NormStore
         // Both venues locked, in one order, before checking: reciprocal merges can't commit a
         // cycle.
         await connection.ExecuteAsync(
-            "SELECT 1 FROM norm.venues WHERE uuid = ANY(@ids) ORDER BY uuid FOR UPDATE",
-            new { ids = new[] { from, into } },
+            "SELECT 1 FROM norm.venues WHERE id = ANY(@ids) ORDER BY id FOR UPDATE",
+            new { ids = new[] { from.Value, into.Value } },
             tx
         );
-        var survivor = await connection.QuerySingleOrDefaultAsync<(Guid Uuid, Guid? MergedInto)?>(
-            "SELECT uuid, merged_into FROM norm.venues WHERE uuid = @into",
-            new { into },
-            tx
-        );
+        var survivor = await connection.QuerySingleOrDefaultAsync<(
+            VenueId Id,
+            VenueId? MergedInto
+        )?>("SELECT id, merged_into FROM norm.venues WHERE id = @into", new { into }, tx);
         if (from == into || survivor == null || survivor.Value.MergedInto != null)
         {
             throw new InvalidOperationException(
@@ -564,7 +572,7 @@ public sealed partial class NormStore
             """
             UPDATE norm.venues SET merged_into = @into, author_type = @AuthorType, author_ref = @AuthorRef,
                 confidence = NULL, run_uuid = @Run, updated_at = now()
-            WHERE uuid = @from OR merged_into = @from
+            WHERE id = @from OR merged_into = @from
             """,
             new
             {
@@ -588,32 +596,32 @@ public sealed partial class NormStore
     public async Task<int> ForgetVenueRowsAsync(IReadOnlyCollection<Guid> rows)
     {
         var gone = (
-            await connection.QueryAsync<(Guid Venue, string Name, string? Upstream)>(
+            await connection.QueryAsync<(VenueId Venue, string Name, string? Upstream)>(
                 """
                 WITH gone AS (
                     DELETE FROM norm.venue_evidence e
                     WHERE e.legacy_venue_uuid = ANY(@rows) AND e.author_type NOT IN ('user', 'moderator')
-                    RETURNING e.legacy_venue_uuid, e.venue_uuid
+                    RETURNING e.legacy_venue_uuid, e.venue_id
                 )
-                SELECT g.venue_uuid, v.name, v.upstream_identifier
+                SELECT g.venue_id, v.name, v.upstream_identifier
                 FROM gone g JOIN venues v ON v.uuid = g.legacy_venue_uuid
                 """,
                 new { rows = rows.ToArray() },
                 tx
             )
         ).ToList();
-        var venues = gone.Select(g => g.Venue).Distinct().ToArray();
+        var venues = gone.Select(g => g.Venue.Value).Distinct().ToArray();
         if (venues.Length == 0)
         {
             return 0;
         }
 
         var kept = (
-            await connection.QueryAsync<(Guid Venue, string Name, string? Upstream)>(
+            await connection.QueryAsync<(VenueId Venue, string Name, string? Upstream)>(
                 """
-                SELECT e.venue_uuid, v.name, v.upstream_identifier FROM norm.venue_evidence e
+                SELECT e.venue_id, v.name, v.upstream_identifier FROM norm.venue_evidence e
                 JOIN venues v ON v.uuid = e.legacy_venue_uuid
-                WHERE e.venue_uuid = ANY(@venues)
+                WHERE e.venue_id = ANY(@venues)
                 """,
                 new { venues },
                 tx
@@ -629,12 +637,12 @@ public sealed partial class NormStore
             """
             DELETE FROM norm.venue_external_ids i
             USING unnest(@venues, @providers, @keys) AS x(venue, provider, key)
-            WHERE i.venue_uuid = x.venue AND i.provider = x.provider AND i.key = x.key
+            WHERE i.venue_id = x.venue AND i.provider = x.provider AND i.key = x.key
               AND i.author_type NOT IN ('user', 'moderator')
             """,
             new
             {
-                venues = ids.Select(i => i.Venue).ToArray(),
+                venues = ids.Select(i => i.Venue.Value).ToArray(),
                 providers = ids.Select(i => i.Id!.Value.Provider).ToArray(),
                 keys = ids.Select(i => i.Id!.Value.Key).ToArray(),
             },
@@ -646,28 +654,28 @@ public sealed partial class NormStore
     /// After a forget's run: the machine's plain spellings of these venues that no row placed
     /// there is written as any more (a row that moved took its spelling with it). The venue's
     /// own name and people's names stay.
-    public async Task<int> PruneVenueSpellingsAsync(IReadOnlyCollection<Guid> venues)
+    public async Task<int> PruneVenueSpellingsAsync(IReadOnlyCollection<VenueId> venues)
     {
         var spellings = (
-            await connection.QueryAsync<(Guid Venue, string Normalized, string Name)>(
+            await connection.QueryAsync<(VenueId Venue, string Normalized, string Name)>(
                 """
-                SELECT n.venue_uuid, n.normalized, v.name FROM norm.venue_names n
-                JOIN norm.venues v ON v.uuid = n.venue_uuid
-                WHERE n.venue_uuid = ANY(@venues) AND n.kind = 'spelling'
+                SELECT n.venue_id, n.normalized, v.name FROM norm.venue_names n
+                JOIN norm.venues v ON v.id = n.venue_id
+                WHERE n.venue_id = ANY(@venues) AND n.kind = 'spelling'
                   AND n.author_type NOT IN ('user', 'moderator')
                 """,
-                new { venues = venues.ToArray() },
+                new { venues = venues.Select(v => v.Value).ToArray() },
                 tx
             )
         ).ToList();
         var placed = (
-            await connection.QueryAsync<(Guid Venue, string Name)>(
+            await connection.QueryAsync<(VenueId Venue, string Name)>(
                 """
-                SELECT e.venue_uuid, lv.name FROM norm.venue_evidence e
+                SELECT e.venue_id, lv.name FROM norm.venue_evidence e
                 JOIN venues lv ON lv.uuid = e.legacy_venue_uuid
-                WHERE e.venue_uuid = ANY(@venues)
+                WHERE e.venue_id = ANY(@venues)
                 """,
-                new { venues = venues.ToArray() },
+                new { venues = venues.Select(v => v.Value).ToArray() },
                 tx
             )
         ).Select(p => (p.Venue, Key: VenueNormalizer.Key(p.Name))).ToHashSet();
@@ -680,12 +688,12 @@ public sealed partial class NormStore
         return await connection.ExecuteAsync(
             """
             DELETE FROM norm.venue_names n USING unnest(@venues, @keys) AS x(venue, normalized)
-            WHERE n.venue_uuid = x.venue AND n.normalized = x.normalized
+            WHERE n.venue_id = x.venue AND n.normalized = x.normalized
               AND n.kind = 'spelling' AND n.author_type NOT IN ('user', 'moderator')
             """,
             new
             {
-                venues = stale.Select(s => s.Venue).ToArray(),
+                venues = stale.Select(s => s.Venue.Value).ToArray(),
                 keys = stale.Select(s => s.Normalized).ToArray(),
             },
             tx
@@ -695,23 +703,23 @@ public sealed partial class NormStore
     /// Retires machine venues of these that nothing points at any more (no rows, shows,
     /// rooms, merges or questions, no names or ids from people): a venue made for a row
     /// that was forgotten and placed elsewhere. Their machine names and ids go with them.
-    public async Task<int> RetireEmptyVenuesAsync(IReadOnlyCollection<Guid> venues)
+    public async Task<int> RetireEmptyVenuesAsync(IReadOnlyCollection<VenueId> venues)
     {
         var empty = (
-            await connection.QueryAsync<Guid>(
+            await connection.QueryAsync<string>(
                 """
-                SELECT v.uuid FROM norm.venues v
-                WHERE v.uuid = ANY(@venues) AND v.author_type NOT IN ('user', 'moderator')
+                SELECT v.id FROM norm.venues v
+                WHERE v.id = ANY(@venues) AND v.author_type NOT IN ('user', 'moderator')
                   AND v.merged_into IS NULL
-                  AND NOT EXISTS (SELECT 1 FROM norm.venue_evidence e WHERE e.venue_uuid = v.uuid)
-                  AND NOT EXISTS (SELECT 1 FROM norm.show_venues s WHERE s.venue_uuid = v.uuid)
-                  AND NOT EXISTS (SELECT 1 FROM norm.venues o WHERE o.parent_uuid = v.uuid OR o.merged_into = v.uuid)
-                  AND NOT EXISTS (SELECT 1 FROM norm.review_items r WHERE r.venue_uuid = v.uuid)
-                  AND NOT EXISTS (SELECT 1 FROM norm.venue_names n WHERE n.venue_uuid = v.uuid AND n.author_type IN ('user', 'moderator'))
-                  AND NOT EXISTS (SELECT 1 FROM norm.venue_external_ids i WHERE i.venue_uuid = v.uuid AND i.author_type IN ('user', 'moderator'))
+                  AND NOT EXISTS (SELECT 1 FROM norm.venue_evidence e WHERE e.venue_id = v.id)
+                  AND NOT EXISTS (SELECT 1 FROM norm.show_venues s WHERE s.venue_id = v.id)
+                  AND NOT EXISTS (SELECT 1 FROM norm.venues o WHERE o.parent_id = v.id OR o.merged_into = v.id)
+                  AND NOT EXISTS (SELECT 1 FROM norm.review_items r WHERE r.venue_id = v.id)
+                  AND NOT EXISTS (SELECT 1 FROM norm.venue_names n WHERE n.venue_id = v.id AND n.author_type IN ('user', 'moderator'))
+                  AND NOT EXISTS (SELECT 1 FROM norm.venue_external_ids i WHERE i.venue_id = v.id AND i.author_type IN ('user', 'moderator'))
                 FOR UPDATE
                 """,
-                new { venues = venues.ToArray() },
+                new { venues = venues.Select(v => v.Value).ToArray() },
                 tx
             )
         ).ToArray();
@@ -722,9 +730,9 @@ public sealed partial class NormStore
 
         await connection.ExecuteAsync(
             """
-            DELETE FROM norm.venue_names WHERE venue_uuid = ANY(@empty);
-            DELETE FROM norm.venue_external_ids WHERE venue_uuid = ANY(@empty);
-            DELETE FROM norm.venues WHERE uuid = ANY(@empty);
+            DELETE FROM norm.venue_names WHERE venue_id = ANY(@empty);
+            DELETE FROM norm.venue_external_ids WHERE venue_id = ANY(@empty);
+            DELETE FROM norm.venues WHERE id = ANY(@empty);
             """,
             new { empty },
             tx

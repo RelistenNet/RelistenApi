@@ -10,7 +10,7 @@ namespace Relisten.Normalization.Songs;
 /// (TrackBasis). Qualifier is one the lookup lifted out of the name ("reprise" for "Plane
 /// Crash reprise"). Null = unresolved.
 public sealed record PartDecision(
-    IReadOnlyList<Guid> Songs,
+    IReadOnlyList<SongId> Songs,
     float Confidence,
     string Basis = TrackBasis.Ruling,
     string? Qualifier = null
@@ -216,8 +216,8 @@ public static class TrackMatcher
                     : [];
                 var songs =
                     decision.Songs.Count == 0
-                        ? [(Guid?)null]
-                        : decision.Songs.Select(s => (Guid?)s).ToList();
+                        ? [(SongId?)null]
+                        : decision.Songs.Select(s => (SongId?)s).ToList();
                 for (var i = 0; i < songs.Count; i++)
                 {
                     var last = i == songs.Count - 1;
@@ -287,7 +287,7 @@ public static class TrackMatcher
             // "A B" under "Foo > Foo" is one Foo ruled to two songs and since retitled: it
             // stays one decision, and the other Foo is asked again.
             var size = times > 1 && run.Count % times == 0 ? run.Count / times : run.Count;
-            if (run.Where((p, k) => p.SongUuid != run[k % size].SongUuid).Any())
+            if (run.Where((p, k) => p.SongId != run[k % size].SongId).Any())
             {
                 size = run.Count;
             }
@@ -345,7 +345,7 @@ public static class TrackMatcher
             }
 
             // A part never names one song twice in a row: repeats are a duplicated ruling.
-            var songs = rows.Select(e => e.SongUuid).OfType<Guid>().ToList();
+            var songs = rows.Select(e => e.SongId).OfType<SongId>().ToList();
             var decision = new PartDecision(
                 songs.Where((s, i) => i == 0 || s != songs[i - 1]).ToList(),
                 rows.Min(e => e.Confidence) ?? Threshold
@@ -376,7 +376,7 @@ public static class TrackMatcher
                     s.Uuid,
                     Song: state.SongNames.TryGetValue(s.Key, out var named) ? named
                     : state.Aliases.TryGetValue(s.Key, out var aliased) ? aliased
-                    : (Guid?)null
+                    : (SongId?)null
                 )
             )
             .Where(s => s.Song != null)

@@ -97,28 +97,28 @@ public sealed class VenueHistory(INormalizationDatabase db, ICatalogueModel mode
         (
             await connection.QueryAsync<HistoryVenue>(
                 """
-                SELECT v.uuid, v.name, v.kind, p.name AS parent, v.city, v.region, v.country,
+                SELECT v.id, v.name, v.kind, p.name AS parent, v.city, v.region, v.country,
                        count(sv.show_uuid)::int AS shows,
                        extract(year FROM min(sh.date))::int AS first, extract(year FROM max(sh.date))::int AS last,
                        (SELECT string_agg(n.name, '; ' ORDER BY n.name) FROM (
-                            SELECT DISTINCT n.name FROM norm.venue_names n WHERE n.venue_uuid = v.uuid LIMIT 8) n) AS spellings
+                            SELECT DISTINCT n.name FROM norm.venue_names n WHERE n.venue_id = v.id LIMIT 8) n) AS spellings
                 FROM norm.venues v
-                LEFT JOIN norm.venues p ON p.uuid = v.parent_uuid
-                JOIN norm.show_venues sv ON sv.venue_uuid = v.uuid
+                LEFT JOIN norm.venues p ON p.id = v.parent_id
+                JOIN norm.show_venues sv ON sv.venue_id = v.id
                 JOIN shows sh ON sh.uuid = sv.show_uuid
                 WHERE v.merged_into IS NULL
                   AND NOT EXISTS (
-                      SELECT 1 FROM norm.venue_names n WHERE n.venue_uuid = v.uuid AND n.kind = 'official'
+                      SELECT 1 FROM norm.venue_names n WHERE n.venue_id = v.id AND n.kind = 'official'
                         AND (n.valid_from > '-infinity' OR n.valid_to IS NOT NULL))
                   AND NOT EXISTS (
-                      SELECT 1 FROM norm.review_items r WHERE r.subject = 'venue' AND r.key = 'history:' || v.uuid)
+                      SELECT 1 FROM norm.review_items r WHERE r.subject = 'venue' AND r.key = 'history:' || v.id)
                   AND (@all OR EXISTS (
                       SELECT 1 FROM norm.show_venues mine JOIN shows ms ON ms.uuid = mine.show_uuid
                       JOIN artists ma ON ma.id = ms.artist_id
-                      WHERE mine.venue_uuid = v.uuid AND ma.uuid = ANY(@artists)))
-                GROUP BY v.uuid, p.name
+                      WHERE mine.venue_id = v.id AND ma.uuid = ANY(@artists)))
+                GROUP BY v.id, p.name
                 HAVING count(sv.show_uuid) >= @minShows
-                ORDER BY count(sv.show_uuid) DESC, v.uuid
+                ORDER BY count(sv.show_uuid) DESC, v.id
                 LIMIT @batch
                 """,
                 new
@@ -187,12 +187,12 @@ public sealed class VenueHistory(INormalizationDatabase db, ICatalogueModel mode
                 reply,
                 new JsonObject
                 {
-                    ["named"] = ModelCalls.Strings(sure.Select(a => a.Venue.ToString())),
+                    ["named"] = ModelCalls.Strings(sure.Select(a => a.Venue.Value)),
                     ["unsure"] = ModelCalls.Strings(
                         venues
-                            .Select(v => v.Uuid)
+                            .Select(v => v.Id)
                             .Except(sure.Select(a => a.Venue))
-                            .Select(u => u.ToString())
+                            .Select(v => v.Value)
                     ),
                 }
             )
@@ -213,19 +213,19 @@ public sealed class VenueHistory(INormalizationDatabase db, ICatalogueModel mode
             venues
                 .Select(v =>
                 {
-                    var a = answered.GetValueOrDefault(v.Uuid);
+                    var a = answered.GetValueOrDefault(v.Id);
                     return new ReviewRecord(
                         null,
                         $"Names of {v.Name} — {v.City}",
-                        "history:" + v.Uuid,
+                        "history:" + v.Id,
                         a?.Rationale,
                         a == null ? null : string.Join("; ", a.Names.Select(Describe)),
                         a?.Confidence,
                         v.Shows,
                         Subject: ReviewSubjects.Venue,
-                        VenueUuid: v.Uuid,
+                        VenueId: v.Id,
                         Question: ReviewQuestions.History,
-                        Refs: new JsonObject { ["venues"] = new JsonArray(v.Uuid.ToString()) }
+                        Refs: new JsonObject { ["venues"] = new JsonArray(v.Id.Value) }
                     );
                 })
                 .ToList()
@@ -249,7 +249,7 @@ public sealed class VenueHistory(INormalizationDatabase db, ICatalogueModel mode
         + (n.Kind == VenueNameKinds.Short ? " (short)" : "");
 
     internal sealed record HistoryVenue(
-        Guid Uuid,
+        VenueId Id,
         string Name,
         string Kind,
         string? Parent,
@@ -263,7 +263,7 @@ public sealed class VenueHistory(INormalizationDatabase db, ICatalogueModel mode
     );
 
     internal sealed record HistoryAnswer(
-        Guid Venue,
+        VenueId Venue,
         IReadOnlyList<VenueNameRecord> Names,
         float Confidence,
         string Rationale
@@ -294,7 +294,7 @@ public sealed class VenueHistory(INormalizationDatabase db, ICatalogueModel mode
             .Select(g =>
             {
                 var node = g.Single().Node!;
-                var venue = ids[g.Key].Uuid;
+                var venue = ids[g.Key].Id;
                 var names = (node["names"] as JsonArray ?? [])
                     .Select(m => VenueRequest.Name(venue, m!))
                     .OfType<VenueNameRecord>()
