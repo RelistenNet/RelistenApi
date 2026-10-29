@@ -1,15 +1,16 @@
 using FluentAssertions;
+using Relisten.Normalization;
 using Relisten.Normalization.Songs;
 
 namespace Relisten.NormalizationTests;
 
 public class TestSongGate
 {
-    private static readonly Guid Scarlet = Guid.NewGuid();
-    private static readonly Guid Fire = Guid.NewGuid();
-    private static readonly Guid Playing = Guid.NewGuid();
+    private static readonly SongId Scarlet = SongId.New();
+    private static readonly SongId Fire = SongId.New();
+    private static readonly SongId Playing = SongId.New();
 
-    private static readonly Dictionary<Guid, IReadOnlySet<string>> Keys = new()
+    private static readonly Dictionary<SongId, IReadOnlySet<string>> Keys = new()
     {
         [Scarlet] = Spellings("Scarlet Begonias"),
         [Fire] = Spellings("Fire on the Mountain", "Fire"),
@@ -19,7 +20,7 @@ public class TestSongGate
     private static HashSet<string> Spellings(params string[] names) =>
         names.Select(SongGate.Key).ToHashSet();
 
-    private static readonly Dictionary<Guid, string> Names = new()
+    private static readonly Dictionary<SongId, string> Names = new()
     {
         [Scarlet] = "Scarlet Begonias",
         [Fire] = "Fire on the Mountain",
@@ -42,7 +43,7 @@ public class TestSongGate
         );
     }
 
-    private static GatePart Link(Guid song) => new(song, true);
+    private static GatePart Link(SongId song) => new(song, true);
 
     private static readonly GatePart None = new(null, true);
     private static readonly GatePart Open = new(null, false);

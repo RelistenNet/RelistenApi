@@ -29,7 +29,7 @@ public enum NormWriteMode
 }
 
 public sealed record SongRecord(
-    Guid Uuid,
+    SongId Id,
     Guid ArtistUuid,
     string Name,
     string? Kind = null,
@@ -40,11 +40,11 @@ public sealed record SongRecord(
 public sealed record AliasRecord(
     Guid ArtistUuid,
     string Alias,
-    Guid SongUuid,
+    SongId SongId,
     float? Confidence = null
 );
 
-public sealed record EvidenceRecord(Guid SetlistSongUuid, Guid SongUuid, float? Confidence = null);
+public sealed record EvidenceRecord(Guid SetlistSongUuid, SongId SongId, float? Confidence = null);
 
 /// An open question for a person: about a song (a title by its normalised key, a track or a
 /// song, of one artist) or a venue (cross-artist: no artist).
@@ -57,9 +57,9 @@ public sealed record ReviewRecord(
     float? Confidence = null,
     int? Shows = null,
     Guid? TrackUuid = null,
-    Guid? SongUuid = null,
+    SongId? SongId = null,
     string Subject = ReviewSubjects.Song,
-    Guid? VenueUuid = null,
+    VenueId? VenueId = null,
     string Question = ReviewQuestions.Title,
     System.Text.Json.Nodes.JsonObject? Refs = null
 );
@@ -103,7 +103,7 @@ public static class TrackBasis
 public sealed record TrackPartRecord(
     Guid TrackUuid,
     int Part,
-    Guid? SongUuid,
+    SongId? SongId,
     string? Text,
     bool SegueAfter = false,
     IReadOnlyList<string>? Qualifiers = null,
@@ -270,13 +270,13 @@ public sealed partial class NormStore
 
     private static readonly Dictionary<string, string[]> Keys = new()
     {
-        ["songs"] = ["uuid"],
+        ["songs"] = ["id"],
         ["song_aliases"] = ["artist_uuid", "normalized"],
         ["song_evidence"] = ["setlist_song_uuid"],
         ["track_songs"] = ["track_uuid", "part"],
         ["review_items"] = ["uuid"],
-        ["venues"] = ["uuid"],
-        ["venue_names"] = ["venue_uuid", "normalized", "valid_from"],
+        ["venues"] = ["id"],
+        ["venue_names"] = ["venue_id", "normalized", "valid_from"],
         ["venue_external_ids"] = ["provider", "key"],
         ["venue_evidence"] = ["legacy_venue_uuid"],
         ["show_venues"] = ["show_uuid"],
@@ -370,7 +370,7 @@ public sealed partial class NormStore
                     await connection.ExecuteAsync(
                         """
                         DELETE FROM norm.show_venues
-                        WHERE venue_uuid = (@Key::jsonb ->> 'uuid')::uuid
+                        WHERE venue_id = @Key::jsonb ->> 'id'
                           AND basis = 'evidence' AND author_type NOT IN ('user', 'moderator')
                         """,
                         args,
@@ -383,7 +383,7 @@ public sealed partial class NormStore
                     await connection.ExecuteAsync(
                         """
                         DELETE FROM norm.track_songs
-                        WHERE song_uuid = (@Key::jsonb ->> 'uuid')::uuid
+                        WHERE song_id = @Key::jsonb ->> 'id'
                           AND basis IN ('song_name', 'alias') AND author_type NOT IN ('user', 'moderator')
                         """,
                         args,
@@ -476,7 +476,7 @@ public sealed partial class NormStore
     /// jam merged into its song, "Supplication Jam": the jam qualifier then applies). Aliases
     /// of the old song already resolve to the survivor; the next match moves every derived
     /// track. Only a person merges (docs/llm.md: merges are never the LLM's).
-    public async Task MergeSongAsync(Guid from, Guid into, bool keepNameAsAlias = true)
+    public async Task MergeSongAsync(SongId from, SongId into, bool keepNameAsAlias = true)
     {
         if (!Human)
         {
@@ -484,14 +484,14 @@ public sealed partial class NormStore
         }
 
         var songs = (
-            await connection.QueryAsync<(Guid Uuid, Guid Artist, string Name, Guid? MergedInto)>(
+            await connection.QueryAsync<(SongId Id, Guid Artist, string Name, SongId? MergedInto)>(
                 // Both songs locked, in one order, before checking: two reciprocal merges can't
                 // both see unmerged targets and commit a cycle.
-                "SELECT uuid, artist_uuid, name, merged_into FROM norm.songs WHERE uuid = ANY(@ids) ORDER BY uuid FOR UPDATE",
-                new { ids = new[] { from, into } },
+                "SELECT id, artist_uuid, name, merged_into FROM norm.songs WHERE id = ANY(@ids) ORDER BY id FOR UPDATE",
+                new { ids = new[] { from.Value, into.Value } },
                 tx
             )
-        ).ToDictionary(s => s.Uuid);
+        ).ToDictionary(s => s.Id);
         if (
             from == into
             || !songs.TryGetValue(from, out var old)
@@ -512,7 +512,7 @@ public sealed partial class NormStore
             """
             UPDATE norm.songs SET merged_into = @into, author_type = @AuthorType, author_ref = @AuthorRef,
                 confidence = NULL, run_uuid = @Run, updated_at = now()
-            WHERE uuid = @from OR merged_into = @from
+            WHERE id = @from OR merged_into = @from
             """,
             new
             {
@@ -531,22 +531,16 @@ public sealed partial class NormStore
     }
 
     /// Songs, with a slug unique per artist derived from the name.
-    public async Task<int> WriteSongsAsync(
+    public Task<int> WriteSongsAsync(
         IReadOnlyList<SongRecord> songs,
         NormWriteMode mode = NormWriteMode.Upsert
-    )
-    {
-        if (songs.Count == 0)
-        {
-            return 0;
-        }
-
-        var slugs = await AssignSlugs(songs);
-        var update =
+    ) =>
+        InsertSongsAsync(
+            songs,
             mode == NormWriteMode.FillOnly
-                ? "NOTHING"
+                ? "ON CONFLICT (id) DO NOTHING"
                 : $"""
-                    UPDATE SET name = EXCLUDED.name, slug = EXCLUDED.slug, kind = EXCLUDED.kind,
+                    ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, slug = EXCLUDED.slug, kind = EXCLUDED.kind,
                         original_artist = EXCLUDED.original_artist, author_type = EXCLUDED.author_type,
                         author_ref = EXCLUDED.author_ref, confidence = EXCLUDED.confidence,
                         run_uuid = EXCLUDED.run_uuid, updated_at = now()
@@ -555,26 +549,41 @@ public sealed partial class NormStore
                         "norm.songs",
                         "(norm.songs.name, norm.songs.kind, norm.songs.original_artist) IS DISTINCT FROM (EXCLUDED.name, EXCLUDED.kind, EXCLUDED.original_artist)"
                     )}
-                    """;
+                    """
+        );
 
+    /// Songs this run just minted ids for (NormIds). No conflict clause, as for venues
+    /// (CreateVenuesAsync): a taken id fails the write and the run, and a later attempt mints
+    /// fresh ids, rather than renaming the song that holds the id.
+    public Task<int> CreateSongsAsync(IReadOnlyList<SongRecord> songs) =>
+        InsertSongsAsync(songs, onConflict: "");
+
+    private async Task<int> InsertSongsAsync(IReadOnlyList<SongRecord> songs, string onConflict)
+    {
+        if (songs.Count == 0)
+        {
+            return 0;
+        }
+
+        var slugs = await AssignSlugs(songs);
         return await connection.ExecuteAsync(
             $"""
-            INSERT INTO norm.songs (uuid, artist_uuid, name, slug, kind, original_artist,
+            INSERT INTO norm.songs (id, artist_uuid, name, slug, kind, original_artist,
                                   author_type, author_ref, confidence, run_uuid)
-            SELECT x.uuid, x.artist, x.name, x.slug, x.kind, x.original, @AuthorType, @AuthorRef, x.confidence, @Run
-            FROM unnest(@uuids, @artists, @names, @slugs, @kinds, @originals, @confidences)
-                 AS x(uuid, artist, name, slug, kind, original, confidence)
-            ON CONFLICT (uuid) DO {update}
+            SELECT x.id, x.artist, x.name, x.slug, x.kind, x.original, @AuthorType, @AuthorRef, x.confidence, @Run
+            FROM unnest(@ids, @artists, @names, @slugs, @kinds, @originals, @confidences)
+                 AS x(id, artist, name, slug, kind, original, confidence)
+            {onConflict}
             """,
             new
             {
                 AuthorType,
                 AuthorRef,
                 Run,
-                uuids = songs.Select(s => s.Uuid).ToArray(),
+                ids = songs.Select(s => s.Id.Value).ToArray(),
                 artists = songs.Select(s => s.ArtistUuid).ToArray(),
                 names = songs.Select(s => s.Name).ToArray(),
-                slugs = songs.Select(s => slugs[s.Uuid]).ToArray(),
+                slugs = songs.Select(s => slugs[s.Id]).ToArray(),
                 kinds = songs.Select(s => s.Kind).ToArray(),
                 originals = songs.Select(s => s.OriginalArtist).ToArray(),
                 confidences = songs.Select(s => s.Confidence).ToArray(),
@@ -584,24 +593,24 @@ public sealed partial class NormStore
     }
 
     /// A song keeps the slug it has unless its name's slug changes; collisions within an
-    /// artist get -2, -3 in uuid order.
-    private async Task<Dictionary<Guid, string>> AssignSlugs(IReadOnlyList<SongRecord> songs)
+    /// artist get -2, -3 in id order.
+    private async Task<Dictionary<SongId, string>> AssignSlugs(IReadOnlyList<SongRecord> songs)
     {
         var taken = (
-            await connection.QueryAsync<(Guid Artist, Guid Song, string Slug)>(
-                "SELECT artist_uuid, uuid, slug FROM norm.songs WHERE artist_uuid = ANY(@artists)",
+            await connection.QueryAsync<(Guid Artist, SongId Song, string Slug)>(
+                "SELECT artist_uuid, id, slug FROM norm.songs WHERE artist_uuid = ANY(@artists)",
                 new { artists = songs.Select(s => s.ArtistUuid).Distinct().ToArray() },
                 tx
             )
         ).ToList();
-        var mine = songs.Select(s => s.Uuid).ToHashSet();
+        var mine = songs.Select(s => s.Id).ToHashSet();
         var used = taken
             .Where(t => !mine.Contains(t.Song))
             .Select(t => (t.Artist, t.Slug))
             .ToHashSet();
 
-        var slugs = new Dictionary<Guid, string>();
-        foreach (var song in songs.OrderBy(s => s.Uuid))
+        var slugs = new Dictionary<SongId, string>();
+        foreach (var song in songs.OrderBy(s => s.Id))
         {
             var slug = TitleNormalizer.Slug(song.Name);
             for (var n = 2; !used.Add((song.ArtistUuid, slug)); n++)
@@ -609,7 +618,7 @@ public sealed partial class NormStore
                 slug = $"{TitleNormalizer.Slug(song.Name)}-{n}";
             }
 
-            slugs[song.Uuid] = slug;
+            slugs[song.Id] = slug;
         }
 
         return slugs;
@@ -632,14 +641,14 @@ public sealed partial class NormStore
 
         return await connection.ExecuteAsync(
             $"""
-            INSERT INTO norm.song_aliases (artist_uuid, normalized, alias, song_uuid, author_type, author_ref, confidence, run_uuid)
+            INSERT INTO norm.song_aliases (artist_uuid, normalized, alias, song_id, author_type, author_ref, confidence, run_uuid)
             SELECT x.artist, x.normalized, x.alias, x.song, @AuthorType, @AuthorRef, x.confidence, @Run
             FROM unnest(@artists, @normalized, @aliases, @songs, @confidences) AS x(artist, normalized, alias, song, confidence)
             ON CONFLICT (artist_uuid, normalized) DO {(mode == NormWriteMode.FillOnly ? "NOTHING" : $"""
-                UPDATE SET song_uuid = EXCLUDED.song_uuid, author_type = EXCLUDED.author_type,
+                UPDATE SET song_id = EXCLUDED.song_id, author_type = EXCLUDED.author_type,
                     author_ref = EXCLUDED.author_ref, confidence = EXCLUDED.confidence,
                     run_uuid = EXCLUDED.run_uuid, updated_at = now()
-                WHERE {UpdateWhen(mode, "norm.song_aliases", "norm.song_aliases.song_uuid IS DISTINCT FROM EXCLUDED.song_uuid")}
+                WHERE {UpdateWhen(mode, "norm.song_aliases", "norm.song_aliases.song_id IS DISTINCT FROM EXCLUDED.song_id")}
                 """)}
             """,
             new
@@ -650,7 +659,7 @@ public sealed partial class NormStore
                 artists = rows.Select(r => r.a.ArtistUuid).ToArray(),
                 normalized = rows.Select(r => r.Normalized).ToArray(),
                 aliases = rows.Select(r => r.a.Alias.Trim()).ToArray(),
-                songs = rows.Select(r => r.a.SongUuid).ToArray(),
+                songs = rows.Select(r => r.a.SongId.Value).ToArray(),
                 confidences = rows.Select(r => r.a.Confidence).ToArray(),
             },
             tx
@@ -684,7 +693,7 @@ public sealed partial class NormStore
         var conflict = subject == ReviewSubjects.Song ? "(artist_uuid, key)" : "(key)";
         return await connection.ExecuteAsync(
             $"""
-            INSERT INTO norm.review_items (uuid, subject, artist_uuid, key, track_uuid, song_uuid, venue_uuid, title,
+            INSERT INTO norm.review_items (uuid, subject, artist_uuid, key, track_uuid, song_id, venue_id, title,
                                            note, proposal, shows, author_type, author_ref, confidence, run_uuid,
                                            question, refs)
             SELECT x.uuid, x.subject, x.artist, x.key, x.track, x.song, x.venue, x.title, x.note, x.proposal, x.shows,
@@ -714,10 +723,10 @@ public sealed partial class NormStore
                 uuids = rows.Select(_ => Guid.CreateVersion7()).ToArray(),
                 subjects = rows.Select(r => r.Subject).ToArray(),
                 artists = rows.Select(r => r.ArtistUuid).ToArray(),
-                venues = rows.Select(r => r.VenueUuid).ToArray(),
+                venues = rows.Select(r => r.VenueId?.Value).ToArray(),
                 keys = rows.Select(r => r.Key).ToArray(),
                 tracks = rows.Select(r => r.TrackUuid).ToArray(),
-                songs = rows.Select(r => r.SongUuid).ToArray(),
+                songs = rows.Select(r => r.SongId?.Value).ToArray(),
                 titles = rows.Select(r => r.Title).ToArray(),
                 notes = rows.Select(r => r.Note).ToArray(),
                 proposals = rows.Select(r => r.Proposal).ToArray(),
@@ -823,14 +832,14 @@ public sealed partial class NormStore
 
         return await connection.ExecuteAsync(
             $"""
-            INSERT INTO norm.song_evidence (setlist_song_uuid, song_uuid, author_type, author_ref, confidence, run_uuid)
+            INSERT INTO norm.song_evidence (setlist_song_uuid, song_id, author_type, author_ref, confidence, run_uuid)
             SELECT x.setlist_song, x.song, @AuthorType, @AuthorRef, x.confidence, @Run
             FROM unnest(@setlistSongs, @songs, @confidences) AS x(setlist_song, song, confidence)
             ON CONFLICT (setlist_song_uuid) DO {(mode == NormWriteMode.FillOnly ? "NOTHING" : $"""
-                UPDATE SET song_uuid = EXCLUDED.song_uuid, author_type = EXCLUDED.author_type,
+                UPDATE SET song_id = EXCLUDED.song_id, author_type = EXCLUDED.author_type,
                     author_ref = EXCLUDED.author_ref, confidence = EXCLUDED.confidence,
                     run_uuid = EXCLUDED.run_uuid, updated_at = now()
-                WHERE {UpdateWhen(mode, "norm.song_evidence", "norm.song_evidence.song_uuid IS DISTINCT FROM EXCLUDED.song_uuid")}
+                WHERE {UpdateWhen(mode, "norm.song_evidence", "norm.song_evidence.song_id IS DISTINCT FROM EXCLUDED.song_id")}
                 """)}
             """,
             new
@@ -839,7 +848,7 @@ public sealed partial class NormStore
                 AuthorRef,
                 Run,
                 setlistSongs = evidence.Select(e => e.SetlistSongUuid).ToArray(),
-                songs = evidence.Select(e => e.SongUuid).ToArray(),
+                songs = evidence.Select(e => e.SongId.Value).ToArray(),
                 confidences = evidence.Select(e => e.Confidence).ToArray(),
             },
             tx
@@ -900,7 +909,7 @@ public sealed partial class NormStore
 
         var written = await connection.QueryAsync<Guid>(
             """
-            INSERT INTO norm.track_songs (track_uuid, part, song_uuid, text, segue_after, qualifiers, notes, resolved,
+            INSERT INTO norm.track_songs (track_uuid, part, song_id, text, segue_after, qualifiers, notes, resolved,
                                         basis, author_type, author_ref, confidence, run_uuid)
             SELECT x.track, x.part, x.song, x.text, x.segue,
                    coalesce(string_to_array(nullif(x.qualifiers, ''), ','), '{}'),
@@ -908,14 +917,14 @@ public sealed partial class NormStore
                    x.basis, @AuthorType, @AuthorRef, x.confidence, @Run
             FROM unnest(@tracks, @partNumbers, @songs, @texts, @segues, @qualifiers, @notes, @resolved, @bases, @confidences)
                  AS x(track, part, song, text, segue, qualifiers, notes, resolved, basis, confidence)
-            ON CONFLICT (track_uuid, part) DO UPDATE SET song_uuid = EXCLUDED.song_uuid, text = EXCLUDED.text,
+            ON CONFLICT (track_uuid, part) DO UPDATE SET song_id = EXCLUDED.song_id, text = EXCLUDED.text,
                 segue_after = EXCLUDED.segue_after, qualifiers = EXCLUDED.qualifiers, notes = EXCLUDED.notes,
                 resolved = EXCLUDED.resolved, basis = EXCLUDED.basis,
                 author_type = EXCLUDED.author_type, author_ref = EXCLUDED.author_ref,
                 confidence = EXCLUDED.confidence, run_uuid = EXCLUDED.run_uuid, updated_at = now()
-            WHERE (norm.track_songs.song_uuid, norm.track_songs.text, norm.track_songs.segue_after, norm.track_songs.qualifiers,
+            WHERE (norm.track_songs.song_id, norm.track_songs.text, norm.track_songs.segue_after, norm.track_songs.qualifiers,
                    norm.track_songs.notes, norm.track_songs.resolved, norm.track_songs.basis)
-                  IS DISTINCT FROM (EXCLUDED.song_uuid, EXCLUDED.text, EXCLUDED.segue_after, EXCLUDED.qualifiers,
+                  IS DISTINCT FROM (EXCLUDED.song_id, EXCLUDED.text, EXCLUDED.segue_after, EXCLUDED.qualifiers,
                    EXCLUDED.notes, EXCLUDED.resolved, EXCLUDED.basis)
             RETURNING track_uuid
             """,
@@ -926,7 +935,7 @@ public sealed partial class NormStore
                 Run,
                 tracks = writable.Select(p => p.TrackUuid).ToArray(),
                 partNumbers = writable.Select(p => p.Part).ToArray(),
-                songs = writable.Select(p => p.SongUuid).ToArray(),
+                songs = writable.Select(p => p.SongId?.Value).ToArray(),
                 texts = writable.Select(p => p.Text).ToArray(),
                 resolved = writable.Select(p => p.Resolved).ToArray(),
                 segues = writable.Select(p => p.SegueAfter).ToArray(),

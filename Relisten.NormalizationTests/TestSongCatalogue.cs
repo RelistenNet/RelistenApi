@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using FluentAssertions;
+using Relisten.Normalization;
 using Relisten.Normalization.Songs;
 using Relisten.Normalization.Temporal;
 using Temporalio.Activities;
@@ -16,7 +17,7 @@ public class TestCatalogueAnswers
         new()
         {
             Data = "{}",
-            SongIds = new Dictionary<string, Guid> { ["s1"] = Guid.NewGuid() },
+            SongIds = new Dictionary<string, SongId> { ["s1"] = SongId.New() },
             SongNames = new Dictionary<string, string> { ["s1"] = "Sugaree" },
             KeyTexts = new Dictionary<string, string> { ["k1"] = "Sugaree", ["k2"] = "Tuning" },
             KeyIds = new Dictionary<string, string> { ["k1"] = "sugaree", ["k2"] = "tuning" },

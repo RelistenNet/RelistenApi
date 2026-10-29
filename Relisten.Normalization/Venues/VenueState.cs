@@ -28,10 +28,10 @@ public sealed record LegacyVenue(
 }
 
 public sealed record CatalogueVenue(
-    Guid Uuid,
+    VenueId Id,
     string Name,
     string Kind,
-    Guid? ParentUuid,
+    VenueId? ParentId,
     string? City,
     string? Region,
     string? Country
@@ -51,13 +51,13 @@ public sealed partial class VenueState
     /// place, never the matcher's, which would only repeat what was forgotten. Read from
     /// norm.changes, so every match keeps it (after an import too), not just the re-ask's run.
     public IReadOnlySet<Guid> Held { get; init; } = new HashSet<Guid>();
-    public required IReadOnlyDictionary<Guid, CatalogueVenue> Venues { get; init; }
+    public required IReadOnlyDictionary<VenueId, CatalogueVenue> Venues { get; init; }
 
     /// Normalised name → venues that carry it (resolved to survivors).
-    public required ILookup<string, Guid> Names { get; init; }
+    public required ILookup<string, VenueId> Names { get; init; }
 
     /// Name identity (VenueNormalizer.Identities) → venues: what identity compares.
-    public ILookup<string, Guid> IdentityNames =>
+    public ILookup<string, VenueId> IdentityNames =>
         identityNames ??= Names
             .SelectMany(g =>
                 VenueNormalizer
@@ -67,18 +67,18 @@ public sealed partial class VenueState
             .Distinct()
             .ToLookup(n => n.Id, n => n.Venue);
 
-    private ILookup<string, Guid>? identityNames;
+    private ILookup<string, VenueId>? identityNames;
 
     /// (provider, key) → venue (resolved to its survivor).
-    public required IReadOnlyDictionary<(string, string), Guid> ExternalIds { get; init; }
+    public required IReadOnlyDictionary<(string, string), VenueId> ExternalIds { get; init; }
 
     /// Every tape of a show was recorded at one place. For each unmapped row: how many show
     /// dates it is used on (by a show or a tape), the venues other rows of those shows are
     /// placed on (→ dates shared), and the unmapped rows it shares two shows or more with.
     public IReadOnlyDictionary<Guid, int> ShowDates { get; init; } = new Dictionary<Guid, int>();
 
-    public IReadOnlyDictionary<Guid, IReadOnlyDictionary<Guid, int>> SameShows { get; init; } =
-        new Dictionary<Guid, IReadOnlyDictionary<Guid, int>>();
+    public IReadOnlyDictionary<Guid, IReadOnlyDictionary<VenueId, int>> SameShows { get; init; } =
+        new Dictionary<Guid, IReadOnlyDictionary<VenueId, int>>();
 
     public IReadOnlyList<(Guid A, Guid B)> SameShowRows { get; init; } = [];
 
@@ -132,44 +132,44 @@ public sealed partial class VenueState
 
         var venues = (
             await connection.QueryAsync<(
-                Guid Uuid,
+                VenueId Id,
                 string Name,
                 string Kind,
-                Guid? Parent,
+                VenueId? Parent,
                 string? City,
                 string? Region,
                 string? Country,
-                Guid? MergedInto
+                VenueId? MergedInto
             )>(
-                "SELECT uuid, name, kind, parent_uuid, city, region, country, merged_into FROM norm.venues",
+                "SELECT id, name, kind, parent_id, city, region, country, merged_into FROM norm.venues",
                 transaction: tx
             )
         ).ToList();
         var mergedInto = venues
             .Where(v => v.MergedInto != null)
-            .ToDictionary(v => v.Uuid, v => v.MergedInto!.Value);
-        Guid Survivor(Guid uuid)
+            .ToDictionary(v => v.Id, v => v.MergedInto!.Value);
+        VenueId Survivor(VenueId id)
         {
-            for (var depth = 0; depth < 20 && mergedInto.TryGetValue(uuid, out var next); depth++)
+            for (var depth = 0; depth < 20 && mergedInto.TryGetValue(id, out var next); depth++)
             {
-                uuid = next;
+                id = next;
             }
 
-            return uuid;
+            return id;
         }
 
-        var names = await connection.QueryAsync<(string Normalized, Guid Venue)>(
-            "SELECT normalized, venue_uuid FROM norm.venue_names",
+        var names = await connection.QueryAsync<(string Normalized, VenueId Venue)>(
+            "SELECT normalized, venue_id FROM norm.venue_names",
             transaction: tx
         );
-        var ids = await connection.QueryAsync<(string Provider, string Key, Guid Venue)>(
-            "SELECT provider, key, venue_uuid FROM norm.venue_external_ids",
+        var ids = await connection.QueryAsync<(string Provider, string Key, VenueId Venue)>(
+            "SELECT provider, key, venue_id FROM norm.venue_external_ids",
             transaction: tx
         );
 
         // Rows of one artist on one date: the same show, so the same place.
         var together = (
-            await connection.QueryAsync<(Guid Row, string Date, Guid Other, Guid? Venue)>(
+            await connection.QueryAsync<(Guid Row, string Date, Guid Other, VenueId? Venue)>(
                 """
                 WITH uses AS (
                     SELECT v.uuid AS row_uuid, v.artist_id, sh.date FROM venues v JOIN shows sh ON sh.venue_id = v.id
@@ -181,7 +181,7 @@ public sealed partial class VenueState
                     WHERE (@all OR a.uuid = ANY(@artists))
                       AND NOT EXISTS (SELECT 1 FROM norm.venue_evidence e WHERE e.legacy_venue_uuid = u.row_uuid)
                 )
-                SELECT m.row_uuid, m.date::date::text, coalesce(o.row_uuid, m.row_uuid), e.venue_uuid
+                SELECT m.row_uuid, m.date::date::text, coalesce(o.row_uuid, m.row_uuid), e.venue_id
                 FROM mine m
                 LEFT JOIN uses o ON o.artist_id = m.artist_id AND o.date = m.date AND o.row_uuid <> m.row_uuid
                 LEFT JOIN norm.venue_evidence e ON e.legacy_venue_uuid = o.row_uuid
@@ -265,9 +265,9 @@ public sealed partial class VenueState
             Venues = venues
                 .Where(v => v.MergedInto == null)
                 .ToDictionary(
-                    v => v.Uuid,
+                    v => v.Id,
                     v => new CatalogueVenue(
-                        v.Uuid,
+                        v.Id,
                         v.Name,
                         v.Kind,
                         // A room of a merged site is a room of the site it was merged into.
@@ -295,7 +295,7 @@ public sealed partial class VenueState
                 .ToDictionary(
                     g => g.Key,
                     g =>
-                        (IReadOnlyDictionary<Guid, int>)
+                        (IReadOnlyDictionary<VenueId, int>)
                             g.GroupBy(t => Survivor(t.Venue!.Value))
                                 .ToDictionary(
                                     v => v.Key,

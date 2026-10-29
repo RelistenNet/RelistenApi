@@ -106,10 +106,10 @@ public static class VenueMatcher
                         ? state
                             .ByLocality[here.Key]
                             .Where(v =>
-                                plan.NamesOf(v.Uuid)
+                                plan.NamesOf(v.Id)
                                     .Any(n => VenueNormalizer.IsInitialsOf(row.Key, n))
                             )
-                            .Select(v => v.Uuid)
+                            .Select(v => v.Id)
                             .ToList()
                         : [];
                 if (byInitials.Count == 1)
@@ -687,9 +687,9 @@ public static class VenueMatcher
         private readonly List<VenueNameRecord> names = [];
         private readonly List<VenueExternalIdRecord> ids = [];
         private readonly List<VenueEvidenceRecord> evidence = [];
-        private readonly HashSet<(string Key, Guid Venue)> known = [];
-        private readonly Dictionary<Guid, List<string>> namesByVenue = [];
-        private readonly Dictionary<string, HashSet<Guid>> venuesByIdentity = [];
+        private readonly HashSet<(string Key, VenueId Venue)> known = [];
+        private readonly Dictionary<VenueId, List<string>> namesByVenue = [];
+        private readonly Dictionary<string, HashSet<VenueId>> venuesByIdentity = [];
         private readonly HashSet<(string, string)> idsAdded = [];
         private bool loaded;
 
@@ -698,7 +698,7 @@ public static class VenueMatcher
         public HashSet<(string, string?)> InSeveralTowns { get; set; } = [];
 
         // Indexed both ways: a scan of every known name per row is hours at production scale.
-        private bool Remember(string key, Guid venue)
+        private bool Remember(string key, VenueId venue)
         {
             if (!known.Add((key, venue)))
             {
@@ -735,7 +735,7 @@ public static class VenueMatcher
             }
         }
 
-        public IEnumerable<string> NamesOf(Guid venue)
+        public IEnumerable<string> NamesOf(VenueId venue)
         {
             Load();
             return namesByVenue.TryGetValue(venue, out var list) ? list : [];
@@ -754,12 +754,12 @@ public static class VenueMatcher
                 );
         }
 
-        private readonly Dictionary<(string, string), Guid> learned = [];
+        private readonly Dictionary<(string, string), VenueId> learned = [];
 
-        public Guid? LearnedVenue((string, string) id) =>
+        public VenueId? LearnedVenue((string, string) id) =>
             learned.TryGetValue(id, out var v) ? v : null;
 
-        public void Place(LegacyVenue row, Guid venue, float confidence)
+        public void Place(LegacyVenue row, VenueId venue, float confidence)
         {
             evidence.Add(new VenueEvidenceRecord(row.Uuid, venue, confidence));
             Load();
@@ -783,9 +783,9 @@ public static class VenueMatcher
         }
 
         /// A venue for rows of one name in one town: named by the spelling most uses carry.
-        public Guid Create(IReadOnlyList<LegacyVenue> rows)
+        public VenueId Create(IReadOnlyList<LegacyVenue> rows)
         {
-            var venue = Guid.CreateVersion7();
+            var venue = VenueId.New();
             // The town most of its rows are filed under (one stray tape's "Chicago, IL" never
             // moves a stadium out of Charleston), named by its most used spelling there.
             var home = rows.Where(r => r.Locality != null)

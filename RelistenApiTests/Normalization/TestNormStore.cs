@@ -34,9 +34,9 @@ public class TestNormStore
     private Task<NormStore> As(string authorType, string authorRef) =>
         NormStore.BeginAsync(db, tx, authorType, authorRef);
 
-    private Task<string> NameOf(Guid song) =>
+    private Task<string> NameOf(SongId song) =>
         db.QuerySingleAsync<string>(
-            "SELECT name FROM norm.songs WHERE uuid = @song",
+            "SELECT name FROM norm.songs WHERE id = @song",
             new { song },
             tx
         );
@@ -47,7 +47,7 @@ public class TestNormStore
     [Test]
     public async Task ReRunningABotChangesAndLogsNothing()
     {
-        var song = Guid.CreateVersion7();
+        var song = SongId.New();
         var setlistSong = Guid.NewGuid();
         async Task<int> Bootstrap()
         {
@@ -69,7 +69,7 @@ public class TestNormStore
     [Test]
     public async Task AMachineLeavesAPersonsEditAlone()
     {
-        var song = Guid.CreateVersion7();
+        var song = SongId.New();
         await (await As(AuthorTypes.Importer, "bootstrap@1")).WriteSongsAsync([
             new SongRecord(song, artist, "Sugaree", Confidence: 0.95f),
         ]);
@@ -88,14 +88,14 @@ public class TestNormStore
     [Test]
     public async Task TheTriggerRefusesAMachineThatBypassesTheStore()
     {
-        var song = Guid.CreateVersion7();
+        var song = SongId.New();
         await (await As(AuthorTypes.User, "u1")).WriteSongsAsync([
             new SongRecord(song, artist, "Sugaree", Confidence: 0.95f),
         ]);
         await As(AuthorTypes.Algorithm, "matcher@1");
 
         var delete = () =>
-            db.ExecuteAsync("DELETE FROM norm.songs WHERE uuid = @song", new { song }, tx);
+            db.ExecuteAsync("DELETE FROM norm.songs WHERE id = @song", new { song }, tx);
 
         await delete.Should().ThrowAsync<PostgresException>().WithMessage("*set by a person*");
     }
@@ -103,7 +103,7 @@ public class TestNormStore
     [Test]
     public async Task FillOnlyNeverChangesARow()
     {
-        var song = Guid.CreateVersion7();
+        var song = SongId.New();
         await (await As(AuthorTypes.Llm, "catalogue-llm@1")).WriteSongsAsync([
             new SongRecord(song, artist, "Sugaree", Confidence: 0.95f),
         ]);
@@ -120,7 +120,7 @@ public class TestNormStore
     [Test]
     public async Task SlugsAreUniquePerArtist()
     {
-        var (a, b) = (Guid.CreateVersion7(), Guid.CreateVersion7());
+        var (a, b) = (SongId.New(), SongId.New());
         await (await As(AuthorTypes.Importer, "bootstrap@1")).WriteSongsAsync([
             new SongRecord(a, artist, "St. Stephen", Confidence: 0.95f),
             new SongRecord(b, artist, "Saint Stephen", Confidence: 0.95f),
@@ -128,7 +128,7 @@ public class TestNormStore
 
         (
             await db.QueryAsync<string>(
-                "SELECT slug FROM norm.songs WHERE artist_uuid = @artist ORDER BY uuid",
+                "SELECT slug FROM norm.songs WHERE artist_uuid = @artist ORDER BY id",
                 new { artist },
                 tx
             )
@@ -140,7 +140,7 @@ public class TestNormStore
     [Test]
     public async Task ATracksPartsAreReplacedTogetherAndLogged()
     {
-        var (scarlet, fire, track) = (Guid.CreateVersion7(), Guid.CreateVersion7(), Guid.NewGuid());
+        var (scarlet, fire, track) = (SongId.New(), SongId.New(), Guid.NewGuid());
         var bot = await As(AuthorTypes.Algorithm, "title-matcher@1");
         await bot.WriteSongsAsync([
             new SongRecord(scarlet, artist, "Scarlet Begonias", Confidence: 0.95f),
@@ -194,7 +194,7 @@ public class TestNormStore
     [Test]
     public async Task APersonsTrackIsLeftToThem()
     {
-        var (song, track) = (Guid.CreateVersion7(), Guid.NewGuid());
+        var (song, track) = (SongId.New(), Guid.NewGuid());
         await (await As(AuthorTypes.User, "u1")).WriteSongsAsync([
             new SongRecord(song, artist, "Dark Star", Confidence: 0.95f),
         ]);
@@ -214,7 +214,7 @@ public class TestNormStore
     [Test]
     public async Task APersonCanRevertARunExactly()
     {
-        var (song, other) = (Guid.CreateVersion7(), Guid.CreateVersion7());
+        var (song, other) = (SongId.New(), SongId.New());
         await (await As(AuthorTypes.Importer, "bootstrap@1")).WriteSongsAsync([
             new SongRecord(song, artist, "Sugaree", Confidence: 0.95f),
         ]);
@@ -246,7 +246,7 @@ public class TestNormStore
     [Test]
     public async Task ARevertSkipsASongLaterWorkDependsOn()
     {
-        var song = Guid.CreateVersion7();
+        var song = SongId.New();
         var first = await As(AuthorTypes.Llm, "catalogue-llm@4");
         await first.WriteSongsAsync([new SongRecord(song, artist, "Sugaree", Confidence: 0.95f)]);
         await (await As(AuthorTypes.Llm, "catalogue-llm@5")).WriteAliasesAsync([
@@ -263,7 +263,7 @@ public class TestNormStore
     [Test]
     public async Task ARevertRemovesASongWithItsDerivedTracks()
     {
-        var (song, track) = (Guid.CreateVersion7(), Guid.NewGuid());
+        var (song, track) = (SongId.New(), Guid.NewGuid());
         var run = await As(AuthorTypes.Llm, "catalogue-llm@5");
         await run.WriteSongsAsync([new SongRecord(song, artist, "Sugaree", Confidence: 0.95f)]);
         await run.WriteTrackSongsAsync([
@@ -284,7 +284,7 @@ public class TestNormStore
         (reverted, skipped).Should().Be((1, 0));
         (
             await db.ExecuteScalarAsync<long>(
-                "SELECT (SELECT count(*) FROM norm.songs WHERE uuid = @song) + (SELECT count(*) FROM norm.track_songs WHERE track_uuid = @track)",
+                "SELECT (SELECT count(*) FROM norm.songs WHERE id = @song) + (SELECT count(*) FROM norm.track_songs WHERE track_uuid = @track)",
                 new { song, track },
                 tx
             )
@@ -296,7 +296,7 @@ public class TestNormStore
     [Test]
     public async Task ARevertRemovesAVenueWithItsDerivedShows()
     {
-        var (venue, show) = (Guid.CreateVersion7(), Guid.NewGuid());
+        var (venue, show) = (VenueId.New(), Guid.NewGuid());
         var run = await As(AuthorTypes.Algorithm, "venue-matcher@2");
         await run.WriteVenuesAsync([
             new VenueRecord(
@@ -319,7 +319,7 @@ public class TestNormStore
         (reverted, skipped).Should().Be((1, 0));
         (
             await db.ExecuteScalarAsync<long>(
-                "SELECT (SELECT count(*) FROM norm.venues WHERE uuid = @venue) + (SELECT count(*) FROM norm.show_venues WHERE show_uuid = @show)",
+                "SELECT (SELECT count(*) FROM norm.venues WHERE id = @venue) + (SELECT count(*) FROM norm.show_venues WHERE show_uuid = @show)",
                 new { venue, show },
                 tx
             )
@@ -331,7 +331,7 @@ public class TestNormStore
     [Test]
     public async Task ARevertSkipsARowWhoseSlugIsTakenSince()
     {
-        var (song, later) = (Guid.CreateVersion7(), Guid.CreateVersion7());
+        var (song, later) = (SongId.New(), SongId.New());
         await (await As(AuthorTypes.Llm, "catalogue-llm@4")).WriteSongsAsync([
             new SongRecord(song, artist, "Deal", Confidence: 0.95f),
         ]);
@@ -350,9 +350,50 @@ public class TestNormStore
     }
 
     [Test]
+    public async Task AMintedIdThatIsTakenFailsInsteadOfOverwriting()
+    {
+        var (venue, song) = (VenueId.New(), SongId.New());
+        var bot = await As(AuthorTypes.Llm, "venue-llm@11");
+        await bot.CreateVenuesAsync([
+            new VenueRecord(venue, "Red Rocks", City: "Morrison", Region: "CO", Confidence: 0.9f),
+        ]);
+        await bot.CreateSongsAsync([new SongRecord(song, artist, "Sugaree", Confidence: 0.9f)]);
+
+        async Task ShouldCollide(Func<Task> write)
+        {
+            await tx.SaveAsync("collision");
+            await FluentActions
+                .Awaiting(write)
+                .Should()
+                .ThrowAsync<PostgresException>()
+                .Where(e => e.SqlState == PostgresErrorCodes.UniqueViolation);
+            await tx.RollbackAsync("collision");
+        }
+
+        await ShouldCollide(() =>
+            bot.CreateVenuesAsync([
+                new VenueRecord(venue, "Fillmore", City: "Denver", Region: "CO", Confidence: 0.9f),
+            ])
+        );
+        await ShouldCollide(() =>
+            bot.CreateSongsAsync([new SongRecord(song, artist, "Deal", Confidence: 0.9f)])
+        );
+
+        (
+            await db.ExecuteScalarAsync<string>(
+                "SELECT (SELECT name FROM norm.venues WHERE id = @venue) || '/' || (SELECT name FROM norm.songs WHERE id = @song)",
+                new { venue, song },
+                tx
+            )
+        )
+            .Should()
+            .Be("Red Rocks/Sugaree");
+    }
+
+    [Test]
     public async Task APrecisionCorrectionIsWritten()
     {
-        var venue = Guid.CreateVersion7();
+        var venue = VenueId.New();
         var bot = await As(AuthorTypes.Algorithm, "venue-matcher@2");
         await bot.WriteVenuesAsync([
             new VenueRecord(
@@ -383,7 +424,7 @@ public class TestNormStore
 
         (
             await db.ExecuteScalarAsync<string>(
-                "SELECT coordinate_precision FROM norm.venues WHERE uuid = @venue",
+                "SELECT coordinate_precision FROM norm.venues WHERE id = @venue",
                 new { venue },
                 tx
             )
@@ -395,7 +436,7 @@ public class TestNormStore
     [Test]
     public async Task AMachinesSpellingLearnsItIsAnOfficialName()
     {
-        var venue = Guid.CreateVersion7();
+        var venue = VenueId.New();
         var bot = await As(AuthorTypes.Algorithm, "venue-matcher@2");
         await bot.WriteVenuesAsync([
             new VenueRecord(
@@ -439,7 +480,7 @@ public class TestNormStore
 
         (
             await db.QueryAsync<string>(
-                "SELECT name || ' ' || kind || ' ' || coalesce(valid_to::text, '-') FROM norm.venue_names WHERE venue_uuid = @venue ORDER BY valid_from",
+                "SELECT name || ' ' || kind || ' ' || coalesce(valid_to::text, '-') FROM norm.venue_names WHERE venue_id = @venue ORDER BY valid_from",
                 new { venue },
                 tx
             )
@@ -460,11 +501,11 @@ public class TestNormStore
     [Test]
     public async Task MachineTwinsInOneTownMergeButAPersonsVenueStays()
     {
-        Guid Venue() => Guid.CreateVersion7();
+        VenueId Venue() => VenueId.New();
         var (comcast, xfinity, other, persons) = (Venue(), Venue(), Venue(), Venue());
         var bot = await As(AuthorTypes.Algorithm, "venue-matcher@2");
-        VenueRecord At(Guid uuid, string name, string city) =>
-            new(uuid, name, City: city, Region: "MA", Country: "US", Confidence: 0.95f);
+        VenueRecord At(VenueId id, string name, string city) =>
+            new(id, name, City: city, Region: "MA", Country: "US", Confidence: 0.95f);
         await bot.WriteVenuesAsync([
             At(comcast, "Comcast Center", "Mansfield"),
             At(xfinity, "Xfinity Center", "Mansfield"),
@@ -507,8 +548,8 @@ public class TestNormStore
             .Should()
             .Be(1);
         (
-            await db.QueryAsync<Guid>(
-                "SELECT uuid FROM norm.venues WHERE merged_into = @comcast",
+            await db.QueryAsync<VenueId>(
+                "SELECT id FROM norm.venues WHERE merged_into = @comcast",
                 new { comcast },
                 tx
             )
@@ -566,7 +607,7 @@ public class TestNormStore
     [Test]
     public async Task OnlyDatedOrSingleOfficialNamesNameAVenue()
     {
-        var (spectrum, pavilion) = (Guid.CreateVersion7(), Guid.CreateVersion7());
+        var (spectrum, pavilion) = (VenueId.New(), VenueId.New());
         var bot = await As(AuthorTypes.Algorithm, "venue-matcher@2");
         await bot.WriteVenuesAsync([
             new VenueRecord(
@@ -622,8 +663,8 @@ public class TestNormStore
         // A closed venue shows its last name; undated names don't choose.
         (
             await db.QueryAsync<string>(
-                "SELECT name FROM norm.venues WHERE uuid = ANY(@ids) ORDER BY city",
-                new { ids = new[] { spectrum, pavilion } },
+                "SELECT name FROM norm.venues WHERE id = ANY(@ids) ORDER BY city",
+                new { ids = new[] { spectrum.Value, pavilion.Value } },
                 tx
             )
         )
@@ -634,15 +675,15 @@ public class TestNormStore
     [Test]
     public async Task RoomsOfMergedSitesAreTwinsToo()
     {
-        Guid Venue() => Guid.CreateVersion7();
+        VenueId Venue() => VenueId.New();
         var (site, twinSite, stage, twinStage) = (Venue(), Venue(), Venue(), Venue());
         var bot = await As(AuthorTypes.Algorithm, "venue-matcher@2");
         VenueRecord At(
-            Guid uuid,
+            VenueId id,
             string name,
             string kind = VenueKinds.Site,
-            Guid? parent = null
-        ) => new(uuid, name, kind, parent, "Chillicothe", "IL", "US", Confidence: 0.95f);
+            VenueId? parent = null
+        ) => new(id, name, kind, parent, "Chillicothe", "IL", "US", Confidence: 0.95f);
         await bot.WriteVenuesAsync([
             At(site, "Three Sisters Park"),
             At(twinSite, "Three Sisters Park"),
@@ -670,7 +711,7 @@ public class TestNormStore
     [Test]
     public async Task ARevertLeavesRowsChangedSince()
     {
-        var song = Guid.CreateVersion7();
+        var song = SongId.New();
         var bot = await As(AuthorTypes.Llm, "catalogue-llm@1");
         await bot.WriteSongsAsync([
             new SongRecord(song, artist, "Sugar Magnolia", Confidence: 0.95f),
@@ -690,7 +731,7 @@ public class TestNormStore
     private Task<string> Snapshot() =>
         db.QuerySingleAsync<string>(
             """
-            SELECT coalesce((SELECT string_agg(uuid || name, ',' ORDER BY uuid) FROM norm.songs WHERE artist_uuid = @artist), '')
+            SELECT coalesce((SELECT string_agg(id || name, ',' ORDER BY id) FROM norm.songs WHERE artist_uuid = @artist), '')
                 || '|' || coalesce((SELECT string_agg(normalized, ',') FROM norm.song_aliases WHERE artist_uuid = @artist), '')
             """,
             new { artist },
@@ -700,7 +741,7 @@ public class TestNormStore
     [Test]
     public async Task AReaskForgetsMachineDecisionsButKeepsPeoples()
     {
-        var (song, track, kept) = (Guid.CreateVersion7(), Guid.NewGuid(), Guid.NewGuid());
+        var (song, track, kept) = (SongId.New(), Guid.NewGuid(), Guid.NewGuid());
         var bot = await As(AuthorTypes.Llm, "catalogue-llm@3");
         await bot.WriteSongsAsync([new SongRecord(song, artist, "Mellow Mood", Confidence: 0.95f)]);
         await bot.WriteAliasesAsync([new AliasRecord(artist, "Let Me Lie", song, 0.95f)]);
@@ -731,7 +772,7 @@ public class TestNormStore
     [Test]
     public async Task AReaskOfANumberedSpellingForgetsTheSpellingItFoldsTo()
     {
-        var song = Guid.CreateVersion7();
+        var song = SongId.New();
         var bot = await As(AuthorTypes.Llm, "catalogue-llm@3");
         await bot.WriteSongsAsync([new SongRecord(song, artist, "Mellow Mood", Confidence: 0.95f)]);
         await bot.WriteAliasesAsync([new AliasRecord(artist, "Let Me Lie", song, 0.95f)]);
@@ -746,12 +787,7 @@ public class TestNormStore
     [Test]
     public async Task FillOnlyCompletesAnOpenTrackButNotASettledOne()
     {
-        var (a, b, open, settled) = (
-            Guid.CreateVersion7(),
-            Guid.CreateVersion7(),
-            Guid.NewGuid(),
-            Guid.NewGuid()
-        );
+        var (a, b, open, settled) = (SongId.New(), SongId.New(), Guid.NewGuid(), Guid.NewGuid());
         var first = await As(AuthorTypes.Llm, "catalogue-llm@4");
         await first.WriteSongsAsync([
             new SongRecord(a, artist, "Funky Bitch", Confidence: 0.95f),
@@ -784,17 +820,17 @@ public class TestNormStore
         );
 
         (
-            await db.QueryAsync<(Guid, int, Guid?, bool)>(
-                "SELECT track_uuid, part, song_uuid, resolved FROM norm.track_songs WHERE track_uuid IN (@open, @settled) ORDER BY track_uuid = @settled, part",
+            await db.QueryAsync<(Guid, int, SongId?, bool)>(
+                "SELECT track_uuid, part, song_id, resolved FROM norm.track_songs WHERE track_uuid IN (@open, @settled) ORDER BY track_uuid = @settled, part",
                 new { open, settled },
                 tx
             )
         )
             .Should()
             .Equal(
-                (open, 1, (Guid?)a, true),
-                (open, 2, (Guid?)b, true),
-                (settled, 1, (Guid?)a, true)
+                (open, 1, (SongId?)a, true),
+                (open, 2, (SongId?)b, true),
+                (settled, 1, (SongId?)a, true)
             );
     }
 }

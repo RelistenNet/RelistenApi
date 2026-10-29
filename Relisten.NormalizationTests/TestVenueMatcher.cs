@@ -20,14 +20,14 @@ public class TestVenueMatcher
     private static VenueState State(
         IReadOnlyList<LegacyVenue> rows,
         IReadOnlyList<CatalogueVenue>? venues = null,
-        IReadOnlyList<(string Name, Guid Venue)>? names = null
+        IReadOnlyList<(string Name, VenueId Venue)>? names = null
     ) =>
         new()
         {
             Unmapped = rows,
-            Venues = (venues ?? []).ToDictionary(v => v.Uuid),
+            Venues = (venues ?? []).ToDictionary(v => v.Id),
             Names = (names ?? []).ToLookup(n => VenueNormalizer.Key(n.Name)!, n => n.Venue),
-            ExternalIds = new Dictionary<(string, string), Guid>(),
+            ExternalIds = new Dictionary<(string, string), VenueId>(),
         };
 
     [Test]
@@ -43,7 +43,7 @@ public class TestVenueMatcher
         var plan = VenueMatcher.Match(State(rows));
 
         plan.NewVenues.Should().ContainSingle().Which.Name.Should().Be("Red Rocks Amphitheatre");
-        plan.Evidence.Select(e => e.VenueUuid).Distinct().Should().ContainSingle();
+        plan.Evidence.Select(e => e.VenueId).Distinct().Should().ContainSingle();
         plan.Left.Should().BeEmpty();
     }
 
@@ -77,7 +77,7 @@ public class TestVenueMatcher
     public void AKnownVenueTakesItsSpellingsAndItsInitials()
     {
         var garden = new CatalogueVenue(
-            Guid.NewGuid(),
+            VenueId.New(),
             "Madison Square Garden",
             "site",
             null,
@@ -92,10 +92,10 @@ public class TestVenueMatcher
         };
 
         var plan = VenueMatcher.Match(
-            State(rows, [garden], [("Madison Square Garden", garden.Uuid)])
+            State(rows, [garden], [("Madison Square Garden", garden.Id)])
         );
 
-        plan.Evidence.Should().OnlyContain(e => e.VenueUuid == garden.Uuid);
+        plan.Evidence.Should().OnlyContain(e => e.VenueId == garden.Id);
         plan.Evidence.Select(e => e.Confidence).Should().BeEquivalentTo([0.95f, 0.9f]);
         plan.Names.Select(n => n.Name).Should().Equal("MSG");
     }
@@ -157,7 +157,7 @@ public class TestVenueMatcher
     public void ARowWithoutATownJoinsOnlyAVenueWhoseNameIsUnique()
     {
         var garden = new CatalogueVenue(
-            Guid.NewGuid(),
+            VenueId.New(),
             "Madison Square Garden",
             "site",
             null,
@@ -166,7 +166,7 @@ public class TestVenueMatcher
             "US"
         );
         var capitolA = new CatalogueVenue(
-            Guid.NewGuid(),
+            VenueId.New(),
             "Capitol Theatre",
             "site",
             null,
@@ -175,7 +175,7 @@ public class TestVenueMatcher
             "US"
         );
         var capitolB = new CatalogueVenue(
-            Guid.NewGuid(),
+            VenueId.New(),
             "Capitol Theatre",
             "site",
             null,
@@ -194,14 +194,14 @@ public class TestVenueMatcher
                 rows,
                 [garden, capitolA, capitolB],
                 [
-                    ("Madison Square Garden", garden.Uuid),
-                    ("Capitol Theatre", capitolA.Uuid),
-                    ("Capitol Theatre", capitolB.Uuid),
+                    ("Madison Square Garden", garden.Id),
+                    ("Capitol Theatre", capitolA.Id),
+                    ("Capitol Theatre", capitolB.Id),
                 ]
             )
         );
 
-        plan.Evidence.Should().ContainSingle().Which.VenueUuid.Should().Be(garden.Uuid);
+        plan.Evidence.Should().ContainSingle().Which.VenueId.Should().Be(garden.Id);
         // Two Capitol Theatres: the model decides with both candidates in front of it.
         plan.Left.Single().Select(r => r.Name).Should().Equal("Capitol Theatre");
     }
@@ -288,14 +288,14 @@ public class TestVenueMatcher
         var plan = VenueMatcher.Match(State(rows));
 
         plan.NewVenues.Should().ContainSingle();
-        plan.Evidence.Select(e => e.VenueUuid).Distinct().Should().ContainSingle();
+        plan.Evidence.Select(e => e.VenueId).Distinct().Should().ContainSingle();
     }
 
     [Test]
     public void AnIdLearnedInThePassPlacesEveryRowCarryingIt()
     {
         var garden = new CatalogueVenue(
-            Guid.NewGuid(),
+            VenueId.New(),
             "Madison Square Garden",
             "site",
             null,
@@ -311,18 +311,18 @@ public class TestVenueMatcher
         };
 
         var plan = VenueMatcher.Match(
-            State(rows, [garden], [("Madison Square Garden", garden.Uuid)])
+            State(rows, [garden], [("Madison Square Garden", garden.Id)])
         );
 
         plan.NewVenues.Should().BeEmpty();
-        plan.Evidence.Should().OnlyContain(e => e.VenueUuid == garden.Uuid).And.HaveCount(2);
+        plan.Evidence.Should().OnlyContain(e => e.VenueId == garden.Id).And.HaveCount(2);
     }
 
     [Test]
     public void ANameKnownInANeighbouringTownGoesToTheModel()
     {
         var known = new CatalogueVenue(
-            Guid.NewGuid(),
+            VenueId.New(),
             "Higher Ground",
             "site",
             null,
@@ -335,7 +335,7 @@ public class TestVenueMatcher
             State(
                 [Row("Higher Ground", "South Burlington, VT")],
                 [known],
-                [("Higher Ground", known.Uuid)]
+                [("Higher Ground", known.Id)]
             )
         );
 
@@ -355,7 +355,7 @@ public class TestVenueMatcher
 
         // One name in two spacings, in one town: one venue.
         plan.NewVenues.Should().ContainSingle();
-        plan.Evidence.Select(e => e.VenueUuid).Distinct().Should().ContainSingle();
+        plan.Evidence.Select(e => e.VenueId).Distinct().Should().ContainSingle();
         plan.Left.Should().BeEmpty();
     }
 
@@ -371,7 +371,7 @@ public class TestVenueMatcher
         var plan = VenueMatcher.Match(State(VenueState.WithoutStateTypos(rows)));
 
         plan.NewVenues.Should().ContainSingle().Which.Region.Should().Be("CO");
-        plan.Evidence.Select(e => e.VenueUuid).Distinct().Should().ContainSingle();
+        plan.Evidence.Select(e => e.VenueId).Distinct().Should().ContainSingle();
     }
 
     [Test]
@@ -636,7 +636,7 @@ public class TestVenueMatcher
     public void ATapeTakesTheVenueTheOtherTapesOfItsShowsAreOn()
     {
         var garden = new CatalogueVenue(
-            Guid.NewGuid(),
+            VenueId.New(),
             "Madison Square Garden",
             "site",
             null,
@@ -645,7 +645,7 @@ public class TestVenueMatcher
             "US"
         );
         var peel = new CatalogueVenue(
-            Guid.NewGuid(),
+            VenueId.New(),
             "The Orange Peel",
             "site",
             null,
@@ -660,22 +660,22 @@ public class TestVenueMatcher
         var state = new VenueState
         {
             Unmapped = [msg, instore, fieldhouse, breeden],
-            Venues = new Dictionary<Guid, CatalogueVenue>
+            Venues = new Dictionary<VenueId, CatalogueVenue>
             {
-                [garden.Uuid] = garden,
-                [peel.Uuid] = peel,
+                [garden.Id] = garden,
+                [peel.Id] = peel,
             },
             Names = new[]
             {
-                ("madison square garden", garden.Uuid),
-                ("orange peel", peel.Uuid),
+                ("madison square garden", garden.Id),
+                ("orange peel", peel.Id),
             }.ToLookup(n => n.Item1, n => n.Item2),
-            ExternalIds = new Dictionary<(string, string), Guid>(),
+            ExternalIds = new Dictionary<(string, string), VenueId>(),
             ShowDates = new Dictionary<Guid, int> { [msg.Uuid] = 2, [instore.Uuid] = 1 },
-            SameShows = new Dictionary<Guid, IReadOnlyDictionary<Guid, int>>
+            SameShows = new Dictionary<Guid, IReadOnlyDictionary<VenueId, int>>
             {
-                [msg.Uuid] = new Dictionary<Guid, int> { [garden.Uuid] = 2 },
-                [instore.Uuid] = new Dictionary<Guid, int> { [peel.Uuid] = 1 },
+                [msg.Uuid] = new Dictionary<VenueId, int> { [garden.Id] = 2 },
+                [instore.Uuid] = new Dictionary<VenueId, int> { [peel.Id] = 1 },
             },
             SameShowRows = [(fieldhouse.Uuid, breeden.Uuid)],
         };
@@ -683,9 +683,9 @@ public class TestVenueMatcher
         var plan = VenueMatcher.Match(state);
 
         plan.Evidence.Should()
-            .ContainSingle(e => e.LegacyVenueUuid == msg.Uuid && e.VenueUuid == garden.Uuid);
+            .ContainSingle(e => e.LegacyVenueUuid == msg.Uuid && e.VenueId == garden.Id);
         plan.Evidence.Should()
-            .NotContain(e => e.LegacyVenueUuid == instore.Uuid && e.VenueUuid == peel.Uuid);
+            .NotContain(e => e.LegacyVenueUuid == instore.Uuid && e.VenueId == peel.Id);
         // Two names of one show's place: one family, for the model.
         plan.Left.Should().Contain(f => f.Contains(fieldhouse) && f.Contains(breeden));
     }
@@ -829,7 +829,7 @@ public class TestVenueMatcher
     public void ASameDayNameThatDisagreesStaysOutEvenWithoutATown()
     {
         var peel = new CatalogueVenue(
-            Guid.NewGuid(),
+            VenueId.New(),
             "The Orange Peel",
             "site",
             null,
@@ -841,13 +841,13 @@ public class TestVenueMatcher
         var state = new VenueState
         {
             Unmapped = [instore],
-            Venues = new Dictionary<Guid, CatalogueVenue> { [peel.Uuid] = peel },
-            Names = new[] { ("orange peel", peel.Uuid) }.ToLookup(n => n.Item1, n => n.Item2),
-            ExternalIds = new Dictionary<(string, string), Guid>(),
+            Venues = new Dictionary<VenueId, CatalogueVenue> { [peel.Id] = peel },
+            Names = new[] { ("orange peel", peel.Id) }.ToLookup(n => n.Item1, n => n.Item2),
+            ExternalIds = new Dictionary<(string, string), VenueId>(),
             ShowDates = new Dictionary<Guid, int> { [instore.Uuid] = 1 },
-            SameShows = new Dictionary<Guid, IReadOnlyDictionary<Guid, int>>
+            SameShows = new Dictionary<Guid, IReadOnlyDictionary<VenueId, int>>
             {
-                [instore.Uuid] = new Dictionary<Guid, int> { [peel.Uuid] = 1 },
+                [instore.Uuid] = new Dictionary<VenueId, int> { [peel.Id] = 1 },
             },
         };
 

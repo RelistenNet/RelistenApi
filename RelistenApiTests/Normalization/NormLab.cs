@@ -518,7 +518,7 @@ public class NormLab
         TestContext.Out.WriteLine($"match {watch.Elapsed.TotalSeconds:F1}s");
         bool Wanted(Relisten.Normalization.Venues.LegacyVenue r) =>
             r.Name.Contains(filter, StringComparison.OrdinalIgnoreCase);
-        var placed = plan.Evidence.ToDictionary(e => e.LegacyVenueUuid, e => e.VenueUuid);
+        var placed = plan.Evidence.ToDictionary(e => e.LegacyVenueUuid, e => e.VenueId);
         var sizes = plan.Left.Select(f => f.Select(r => r.Key).Distinct().Count()).ToList();
         TestContext.Out.WriteLine(
             $"left families {sizes.Count}: names 1 {sizes.Count(n => n == 1)}, 2-5 {sizes.Count(n => n is >= 2 and <= 5)}, 6-20 {sizes.Count(n => n is > 5 and <= 20)}, >20 {sizes.Count(n => n > 20)}, largest {(sizes.Count > 0 ? sizes.Max() : 0)}"
@@ -599,7 +599,7 @@ public class NormLab
             var line in await connection.QueryAsync<string>(
                 """
                 SELECT v.name || ' — ' || v.city || ' — ' || coalesce(r.proposal, '') || ' [' || round(r.confidence::numeric, 2) || ']'
-                FROM norm.review_items r JOIN norm.venues v ON v.uuid = r.venue_uuid
+                FROM norm.review_items r JOIN norm.venues v ON v.id = r.venue_id
                 WHERE r.key LIKE 'history:%' ORDER BY r.shows DESC NULLS LAST
                 """
             )
@@ -779,9 +779,9 @@ public class NormLab
             var line in await connection.QueryAsync<string>(
                 """
                 SELECT v.name || ' [' || v.kind || coalesce(' in ' || p.name, '') || '] ' || coalesce(v.city, '?') || ', ' || coalesce(v.region, v.country, '')
-                       || ' — ' || (SELECT string_agg(n.name || coalesce(' ' || n.valid_from || '…' || coalesce(n.valid_to::text, ''), '') || ' (' || n.kind || ')', '; ' ORDER BY n.kind, n.valid_from) FROM norm.venue_names n WHERE n.venue_uuid = v.uuid)
-                       || ' — ' || (SELECT count(*) FROM norm.show_venues sv WHERE sv.venue_uuid = v.uuid) || ' shows'
-                FROM norm.venues v LEFT JOIN norm.venues p ON p.uuid = v.parent_uuid
+                       || ' — ' || (SELECT string_agg(n.name || coalesce(' ' || n.valid_from || '…' || coalesce(n.valid_to::text, ''), '') || ' (' || n.kind || ')', '; ' ORDER BY n.kind, n.valid_from) FROM norm.venue_names n WHERE n.venue_id = v.id)
+                       || ' — ' || (SELECT count(*) FROM norm.show_venues sv WHERE sv.venue_id = v.id) || ' shows'
+                FROM norm.venues v LEFT JOIN norm.venues p ON p.id = v.parent_id
                 WHERE v.merged_into IS NULL AND (v.name ~* '(madison square|spectrum|wells fargo|wachovia|first union|corestates|fox thea|red rocks|fillmore|winterland|warfield)')
                 ORDER BY v.city, v.name
                 """
@@ -874,7 +874,7 @@ public class NormLab
         {
             var names = (
                 await connection.QueryAsync<(Guid Uuid, string Name)>(
-                    "SELECT uuid, name FROM norm.songs WHERE artist_uuid = @uuid AND merged_into IS NULL",
+                    "SELECT id, name FROM norm.songs WHERE artist_uuid = @uuid AND merged_into IS NULL",
                     new { uuid }
                 )
             ).ToDictionary(s => s.Uuid, s => TitleNormalizer.Normalize(s.Name));
@@ -891,7 +891,7 @@ public class NormLab
                     string AuthorType,
                     float? Confidence
                 )>(
-                    "SELECT normalized, alias, song_uuid, author_type, confidence FROM norm.song_aliases WHERE artist_uuid = @uuid",
+                    "SELECT normalized, alias, song_id, author_type, confidence FROM norm.song_aliases WHERE artist_uuid = @uuid",
                     new { uuid }
                 )
             ).ToList();
@@ -959,7 +959,7 @@ public class NormLab
             long Tracks
         )>(
             """
-            SELECT s.name, s.kind, s.original_artist, (SELECT count(DISTINCT ts.track_uuid) FROM norm.track_songs ts WHERE ts.song_uuid = s.uuid)
+            SELECT s.name, s.kind, s.original_artist, (SELECT count(DISTINCT ts.track_uuid) FROM norm.track_songs ts WHERE ts.song_id = s.id)
             FROM norm.songs s WHERE s.artist_uuid = @artist ORDER BY 4 DESC, 1
             """,
             new { artist }
@@ -974,7 +974,7 @@ public class NormLab
             """
             SELECT t.title, s.name, ts.text, ts.confidence, ts.author_ref
             FROM norm.track_songs ts JOIN source_tracks t ON t.uuid = ts.track_uuid
-            LEFT JOIN norm.songs s ON s.uuid = ts.song_uuid
+            LEFT JOIN norm.songs s ON s.id = ts.song_id
             WHERE t.artist_id = (SELECT id FROM artists WHERE uuid = @artist)
             ORDER BY md5(ts.track_uuid::text || ts.part) LIMIT 40
             """,
@@ -1049,9 +1049,7 @@ public class NormLab
             .ToList();
         var songs = names
             .GroupBy(n => n.Key)
-            .Select(g =>
-                (Uuid: Guid.CreateVersion7(), Name: g.First().Name.Trim(), Members: g.ToList())
-            )
+            .Select(g => (Id: SongId.New(), Name: g.First().Name.Trim(), Members: g.ToList()))
             .ToList();
 
         await using var tx = await connection.BeginTransactionAsync();
@@ -1062,15 +1060,13 @@ public class NormLab
             "lab-setlist-scaffold@1"
         );
         await store.WriteSongsAsync(
-            songs.Select(s => new SongRecord(s.Uuid, artist, s.Name)).ToList()
+            songs.Select(s => new SongRecord(s.Id, artist, s.Name)).ToList()
         );
         await store.WriteAliasesAsync(
-            songs.Select(s => new AliasRecord(artist, s.Name, s.Uuid)).ToList()
+            songs.Select(s => new AliasRecord(artist, s.Name, s.Id)).ToList()
         );
         await store.WriteEvidenceAsync(
-            songs
-                .SelectMany(s => s.Members.Select(m => new EvidenceRecord(m.Uuid, s.Uuid)))
-                .ToList()
+            songs.SelectMany(s => s.Members.Select(m => new EvidenceRecord(m.Uuid, s.Id))).ToList()
         );
         await store.FinishAsync();
         await tx.CommitAsync();
@@ -1089,11 +1085,11 @@ public class NormLab
             """
             SELECT
                 (SELECT count(*) FROM norm.track_songs ts JOIN source_tracks t ON t.uuid = ts.track_uuid
-                 JOIN artists a ON a.id = t.artist_id JOIN norm.songs s ON s.uuid = ts.song_uuid
+                 JOIN artists a ON a.id = t.artist_id JOIN norm.songs s ON s.id = ts.song_id
                  WHERE s.artist_uuid <> a.uuid),
-                (SELECT count(*) FROM norm.song_aliases al JOIN norm.songs s ON s.uuid = al.song_uuid WHERE s.artist_uuid <> al.artist_uuid),
+                (SELECT count(*) FROM norm.song_aliases al JOIN norm.songs s ON s.id = al.song_id WHERE s.artist_uuid <> al.artist_uuid),
                 (SELECT count(*) FROM norm.song_evidence e JOIN setlist_songs ss ON ss.uuid = e.setlist_song_uuid
-                 JOIN artists a ON a.id = ss.artist_id JOIN norm.songs s ON s.uuid = e.song_uuid WHERE s.artist_uuid <> a.uuid),
+                 JOIN artists a ON a.id = ss.artist_id JOIN norm.songs s ON s.id = e.song_id WHERE s.artist_uuid <> a.uuid),
                 (SELECT count(*) FROM norm.songs s WHERE NOT EXISTS (
                     SELECT 1 FROM norm.changes c WHERE c.table_name = 'songs' AND c.row_key = jsonb_build_object('uuid', s.uuid))),
                 (SELECT count(*) FROM norm.track_songs ts WHERE NOT EXISTS (SELECT 1 FROM norm.runs r WHERE r.uuid = ts.run_uuid))

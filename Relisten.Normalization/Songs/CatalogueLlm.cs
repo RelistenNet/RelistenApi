@@ -555,9 +555,9 @@ public sealed class CatalogueLlm(INormalizationDatabase db, ICatalogueModel mode
         // duplicates one ("Sweet Jane" proposed again from "(Check) Sweet Jane").
         var existingByName = state
             .Songs.GroupBy(s => TitleNormalizer.Normalize(s.Name))
-            .ToDictionary(g => g.Key, g => g.First().Uuid);
+            .ToDictionary(g => g.Key, g => g.First().Id);
         var refs = request.SongIds.ToDictionary(s => s.Key, s => s.Value);
-        var newSongs = new List<(NewSongAnswer n, Guid Uuid)>();
+        var newSongs = new List<(NewSongAnswer n, SongId Id)>();
         foreach (
             var n in answer.NewSongs.Where(n => sure.Any(k => k.Value.SongRefs.Contains(n.Ref)))
         )
@@ -569,24 +569,23 @@ public sealed class CatalogueLlm(INormalizationDatabase db, ICatalogueModel mode
                 continue;
             }
 
-            var uuid = Guid.CreateVersion7();
-            existingByName[name] = uuid;
-            refs[n.Ref] = uuid;
-            newSongs.Add((n, uuid));
+            var id = SongId.New();
+            existingByName[name] = id;
+            refs[n.Ref] = id;
+            newSongs.Add((n, id));
         }
 
-        await store.WriteSongsAsync(
+        await store.CreateSongsAsync(
             newSongs
                 .Select(s => new SongRecord(
-                    s.Uuid,
+                    s.Id,
                     state.ArtistUuid,
                     s.n.Name,
                     s.n.Kind,
                     s.n.OriginalArtist,
                     sure.Where(k => k.Value.SongRefs.Contains(s.n.Ref)).Max(k => k.Value.Confidence)
                 ))
-                .ToList(),
-            NormWriteMode.FillOnly
+                .ToList()
         );
 
         // Song names, not titles (docs/llm.md §3). The answer's song_text is the span of the
@@ -596,10 +595,10 @@ public sealed class CatalogueLlm(INormalizationDatabase db, ICatalogueModel mode
         // answer decides (a one-off spelling, a title whose song name is wrapped in noise the
         // parser left, a combination, not a song) becomes a ruling on its tracks.
         var nameKeys = state
-            .Songs.Select(s => (s.Uuid, s.Name))
-            .Concat(newSongs.Select(s => (s.Uuid, s.n.Name)))
-            .ToDictionary(s => s.Uuid, s => TitleNormalizer.Normalize(s.Name));
-        var aliases = new Dictionary<string, Guid>(state.Aliases);
+            .Songs.Select(s => (s.Id, s.Name))
+            .Concat(newSongs.Select(s => (s.Id, s.n.Name)))
+            .ToDictionary(s => s.Id, s => TitleNormalizer.Normalize(s.Name));
+        var aliases = new Dictionary<string, SongId>(state.Aliases);
         var extra = new Dictionary<string, PartDecision>();
         var aliasRecords = new List<AliasRecord>();
         foreach (var (key, decision) in sure)
@@ -656,7 +655,7 @@ public sealed class CatalogueLlm(INormalizationDatabase db, ICatalogueModel mode
             Songs =
             [
                 .. state.Songs,
-                .. newSongs.Select(s => new CatalogueSong(s.Uuid, s.n.Name, s.n.Kind)),
+                .. newSongs.Select(s => new CatalogueSong(s.Id, s.n.Name, s.n.Kind)),
             ],
             Aliases = aliases,
         };
@@ -736,12 +735,12 @@ internal sealed record CatalogueAnswer(
 );
 
 /// The request and response shapes of one chunk. Ids are short refs (s12 for an existing
-/// song, k3 for a key, n1 for a song the model proposes) so the model never handles uuids,
+/// song, k3 for a key, n1 for a song the model proposes) so the model never handles ids,
 /// and every ref in an answer must be one the request supplied (docs/llm.md rule 2).
 internal sealed class CatalogueRequest
 {
     public required string Data { get; init; }
-    public required IReadOnlyDictionary<string, Guid> SongIds { get; init; }
+    public required IReadOnlyDictionary<string, SongId> SongIds { get; init; }
     public IReadOnlyDictionary<string, string> SongNames { get; init; } =
         new Dictionary<string, string>();
     public required IReadOnlyDictionary<string, string> KeyIds { get; init; }
@@ -897,7 +896,7 @@ internal sealed class CatalogueRequest
         return new CatalogueRequest
         {
             Data = data,
-            SongIds = songIds.ToDictionary(s => s.Id, s => s.s.Uuid),
+            SongIds = songIds.ToDictionary(s => s.Id, s => s.s.Id),
             SongNames = songIds.ToDictionary(s => s.Id, s => s.s.Name),
             KeyIds = keyIds,
             KeyTexts = keyTexts,

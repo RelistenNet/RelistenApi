@@ -482,11 +482,11 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
         // A proposed venue that repeats a venue listed in its locality (or one proposed before
         // it there) under one of its names is that venue: the model doesn't make a twin.
         var learnable = Learnable(request, answer);
-        var refs = new Dictionary<string, Guid>(request.VenueIds);
+        var refs = new Dictionary<string, VenueId>(request.VenueIds);
         var created = new List<NewVenueAnswer>();
         var twins = new List<NewVenueAnswer>();
-        // Sites first, so a room's parent has its uuid when the room is compared.
-        var placed = new Dictionary<string, (string Locality, string Kind, Guid? Parent)>();
+        // Sites first, so a room's parent has its id when the room is compared.
+        var placed = new Dictionary<string, (string Locality, string Kind, VenueId? Parent)>();
         foreach (
             var n in answer
                 .NewVenues.Where(n => used.Contains(n.Ref))
@@ -498,7 +498,7 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
             var here = (
                 Locality: request.Places[n.Locality].Key,
                 n.Kind,
-                Parent: n.Parent == null ? (Guid?)null : refs.GetValueOrDefault(n.Parent)
+                Parent: n.Parent == null ? (VenueId?)null : refs[n.Parent]
             );
             var twin = request
                 .VenuePlaces.Where(v => v.Value == here)
@@ -521,12 +521,12 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
                 continue;
             }
 
-            refs[n.Ref] = Guid.CreateVersion7();
+            refs[n.Ref] = VenueId.New();
             placed[n.Ref] = here;
             created.Add(n);
         }
 
-        await store.WriteVenuesAsync(
+        await store.CreateVenuesAsync(
             created
                 .Select(n =>
                 {
@@ -535,15 +535,14 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
                         refs[n.Ref],
                         n.Name,
                         n.Kind,
-                        n.Parent == null ? null : refs.GetValueOrDefault(n.Parent),
+                        n.Parent == null ? null : refs[n.Parent],
                         place.City,
                         place.Region,
                         place.Country,
                         Confidence: Threshold
                     );
                 })
-                .ToList(),
-            NormWriteMode.FillOnly
+                .ToList()
         );
 
         var names = new List<VenueNameRecord>();
@@ -560,7 +559,7 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
             {
                 names.AddRange(
                     n.Names.Where(m => learnable(m.Name))
-                        .Select(m => m with { VenueUuid = refs[n.Ref] })
+                        .Select(m => m with { VenueId = refs[n.Ref] })
                 );
                 continue;
             }
@@ -582,15 +581,14 @@ public sealed class VenueLlm(INormalizationDatabase db, ICatalogueModel model)
                     )
             );
             names.AddRange(
-                n.Names.Where(m => learnable(m.Name))
-                    .Select(m => m with { VenueUuid = refs[n.Ref] })
+                n.Names.Where(m => learnable(m.Name)).Select(m => m with { VenueId = refs[n.Ref] })
             );
         }
 
         names.AddRange(
             KnownNamesToLearn(request, answer)
                 .Where(k => refs.ContainsKey(k.Ref))
-                .Select(k => k.Name with { VenueUuid = refs[k.Ref] })
+                .Select(k => k.Name with { VenueId = refs[k.Ref] })
         );
         var evidence = new List<VenueEvidenceRecord>();
         var ids = new List<VenueExternalIdRecord>();
@@ -703,7 +701,7 @@ internal sealed record VenueAnswer(
 internal sealed class VenueRequest
 {
     public required string Data { get; init; }
-    public required IReadOnlyDictionary<string, Guid> VenueIds { get; init; }
+    public required IReadOnlyDictionary<string, VenueId> VenueIds { get; init; }
     public required IReadOnlyDictionary<string, string> VenueNames { get; init; }
     public required IReadOnlyDictionary<string, string> VenueLocality { get; init; }
     public required IReadOnlyDictionary<string, Spelling> Spellings { get; init; }
@@ -718,8 +716,8 @@ internal sealed class VenueRequest
     /// Each listed venue's own town (whatever locality it was listed under), kind and site.
     public IReadOnlyDictionary<
         string,
-        (string? Locality, string Kind, Guid? Parent)
-    > VenuePlaces { get; init; } = new Dictionary<string, (string?, string, Guid?)>();
+        (string? Locality, string Kind, VenueId? Parent)
+    > VenuePlaces { get; init; } = new Dictionary<string, (string?, string, VenueId?)>();
 
     public const string Instructions = """
         You normalise the venues of live concert recordings: one physical place, whatever the
@@ -853,11 +851,11 @@ internal sealed class VenueRequest
 
     internal static VenueRequest Build(VenueState state, IReadOnlyList<Spelling> chunk)
     {
-        var venueIds = new Dictionary<string, Guid>();
+        var venueIds = new Dictionary<string, VenueId>();
         var venueNames = new Dictionary<string, string>();
         var venueLocality = new Dictionary<string, string>();
         var venueKeys = new Dictionary<string, IReadOnlyList<string>>();
-        var venuePlaces = new Dictionary<string, (string?, string, Guid?)>();
+        var venuePlaces = new Dictionary<string, (string?, string, VenueId?)>();
         var spellings = new Dictionary<string, Spelling>();
         var spellingIds = new Dictionary<string, string>();
         var spellingLocality = new Dictionary<string, string>();
@@ -896,7 +894,7 @@ internal sealed class VenueRequest
                 // its names anywhere, and those in a town of that name.
                 ? namesakes
                     .Concat(place == null ? [] : SameTown(state, place))
-                    .DistinctBy(v => v.Uuid)
+                    .DistinctBy(v => v.Id)
                 // The venues there; namesakes elsewhere in the state (the club an uploader
                 // filed under a neighbouring town); and those in a town of the same name in
                 // another state (a typo'd state).
@@ -913,7 +911,7 @@ internal sealed class VenueRequest
                             )
                         )
                     )
-                    .DistinctBy(v => v.Uuid);
+                    .DistinctBy(v => v.Id);
             // Venues elsewhere in the state sharing a word that names a place with a spelling
             // ("Tussey Mountain Amphitheater" in Boalsburg for "Summer Sun Music Festival @
             // Tussey Mtn. Amphitheatre" in State College), a few at most.
@@ -934,15 +932,15 @@ internal sealed class VenueRequest
                             )
                             .Take(8)
                     )
-                    .DistinctBy(v => v.Uuid);
+                    .DistinctBy(v => v.Id);
             }
 
             // The venues other tapes of these spellings' shows are on: listed too, wherever
             // they are (a tape with a typo'd or missing town is still that show's).
-            Dictionary<Guid, int> SameShows(Spelling s) =>
+            Dictionary<VenueId, int> SameShows(Spelling s) =>
                 s
                     .Rows.SelectMany(r =>
-                        state.SameShows.GetValueOrDefault(r.Uuid) ?? new Dictionary<Guid, int>()
+                        state.SameShows.GetValueOrDefault(r.Uuid) ?? new Dictionary<VenueId, int>()
                     )
                     .GroupBy(v => v.Key)
                     .ToDictionary(g => g.Key, g => g.Sum(v => v.Value));
@@ -953,17 +951,17 @@ internal sealed class VenueRequest
                         .Where(state.Venues.ContainsKey)
                         .Select(v => state.Venues[v])
                 )
-                .DistinctBy(v => v.Uuid);
-            var listed = new Dictionary<Guid, string>();
+                .DistinctBy(v => v.Id);
+            var listed = new Dictionary<VenueId, string>();
             var venues = here.Select(v =>
                 {
                     var id = $"v{venueIds.Count + 1}";
-                    listed[v.Uuid] = id;
-                    venueIds[id] = v.Uuid;
+                    listed[v.Id] = id;
+                    venueIds[id] = v.Id;
                     venueNames[id] = v.Name;
                     venueLocality[id] = lid;
-                    venuePlaces[id] = (v.LocalityKey, v.Kind, v.ParentUuid);
-                    venueKeys[id] = namesOf[v.Uuid]
+                    venuePlaces[id] = (v.LocalityKey, v.Kind, v.ParentId);
+                    venueKeys[id] = namesOf[v.Id]
                         .Append(VenueNormalizer.Key(v.Name) ?? "")
                         .ToList();
                     return new
@@ -972,7 +970,7 @@ internal sealed class VenueRequest
                         name = v.Name,
                         kind = v.Kind,
                         // A room says which site it is in: two "Main Stage"s are two festivals'.
-                        inside = v.ParentUuid is { } parent
+                        inside = v.ParentId is { } parent
                         && state.Venues.TryGetValue(parent, out var site)
                             ? site.Name
                             : null,
@@ -983,7 +981,7 @@ internal sealed class VenueRequest
                                 ", ",
                                 new[] { v.City, v.Region ?? v.Country }.OfType<string>()
                             ),
-                        names = namesOf[v.Uuid].Take(12),
+                        names = namesOf[v.Id].Take(12),
                     };
                 })
                 .ToList();
@@ -1085,7 +1083,7 @@ internal sealed class VenueRequest
                 (string?)n["parent"],
                 n["names"]!
                     .AsArray()
-                    .Select(m => Name(Guid.Empty, m!))
+                    .Select(m => Name(default, m!))
                     .OfType<VenueNameRecord>()
                     .ToList()
             ))
@@ -1198,7 +1196,7 @@ internal sealed class VenueRequest
         }
 
         var known = knownNodes
-            .Select(k => (Ref: (string?)k!["venue"], Name: Name(Guid.Empty, k!)))
+            .Select(k => (Ref: (string?)k!["venue"], Name: Name(default, k!)))
             .Where(k => k.Ref != null && request.VenueIds.ContainsKey(k.Ref) && k.Name != null)
             .Select(k => new KnownNameAnswer(k.Ref!, k.Name!))
             .ToList();
@@ -1219,7 +1217,9 @@ internal sealed class VenueRequest
         request.Places.TryGetValue(locality, out var place) ? place.RegionKey : null;
 
     /// A name with its kind and dates; null when the name is empty or its dates don't parse.
-    internal static VenueNameRecord? Name(Guid venue, JsonNode node)
+    /// venue is default when the answer is read, before it is known whose name it is: the
+    /// caller sets it (`with { VenueId = ... }`) before writing.
+    internal static VenueNameRecord? Name(VenueId venue, JsonNode node)
     {
         var name = ((string?)node["name"] ?? "").Trim();
         var kind =

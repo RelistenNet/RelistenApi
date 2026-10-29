@@ -254,7 +254,7 @@ public class TestCatalogueLlm
             .BeEmpty(); // song names match directly; the one-show typo is a ruling on its track
         (
             await Strings(
-                "SELECT s.name FROM norm.song_evidence e JOIN norm.songs s ON s.uuid = e.song_uuid JOIN setlist_songs ss ON ss.uuid = e.setlist_song_uuid WHERE ss.artist_id = @artistId"
+                "SELECT s.name FROM norm.song_evidence e JOIN norm.songs s ON s.id = e.song_id JOIN setlist_songs ss ON ss.uuid = e.setlist_song_uuid WHERE ss.artist_id = @artistId"
             )
         )
             .Should()
@@ -264,7 +264,7 @@ public class TestCatalogueLlm
                 """
                 SELECT t.title || ' = ' || coalesce(s.name, CASE WHEN ts.resolved THEN '-' ELSE '?' END) || ' (' || ts.basis || ')'
                 FROM source_tracks t
-                JOIN norm.track_songs ts ON ts.track_uuid = t.uuid LEFT JOIN norm.songs s ON s.uuid = ts.song_uuid
+                JOIN norm.track_songs ts ON ts.track_uuid = t.uuid LEFT JOIN norm.songs s ON s.id = ts.song_id
                 WHERE t.artist_id = @artistId ORDER BY t.track_position, ts.part
                 """
             )
@@ -350,7 +350,7 @@ public class TestCatalogueLlm
             .Equal("Me And My Uncle", "Sugaree");
         (
             await Strings(
-                "SELECT s.name FROM norm.track_songs ts JOIN source_tracks t ON t.uuid = ts.track_uuid JOIN norm.songs s ON s.uuid = ts.song_uuid WHERE t.slug = 'uncle' AND t.artist_id = @artistId"
+                "SELECT s.name FROM norm.track_songs ts JOIN source_tracks t ON t.uuid = ts.track_uuid JOIN norm.songs s ON s.id = ts.song_id WHERE t.slug = 'uncle' AND t.artist_id = @artistId"
             )
         )
             .Should()
@@ -371,7 +371,7 @@ public class TestCatalogueLlm
             var connection = (Npgsql.NpgsqlConnection)c;
             await using var tx = await connection.BeginTransactionAsync();
             var store = await NormStore.BeginAsync(connection, tx, AuthorTypes.Moderator, "m1");
-            var song = Guid.CreateVersion7();
+            var song = SongId.New();
             await store.WriteSongsAsync([new SongRecord(song, artist, "Unknown Thing")]);
             await store.WriteAliasesAsync([new AliasRecord(artist, "Unknown Thing", song)]);
             await tx.CommitAsync();
@@ -384,7 +384,7 @@ public class TestCatalogueLlm
             await Strings(
                 """
                 SELECT coalesce(s.name, '?') || ':' || ts.resolved FROM source_tracks t
-                JOIN norm.track_songs ts ON ts.track_uuid = t.uuid LEFT JOIN norm.songs s ON s.uuid = ts.song_uuid
+                JOIN norm.track_songs ts ON ts.track_uuid = t.uuid LEFT JOIN norm.songs s ON s.id = ts.song_id
                 WHERE t.artist_id = @artistId AND t.title = 'Sugaree > Unknown Thing' ORDER BY ts.part
                 """
             )
@@ -435,7 +435,7 @@ public class TestCatalogueLlm
             var connection = (Npgsql.NpgsqlConnection)c;
             await using var tx = await connection.BeginTransactionAsync();
             var store = await NormStore.BeginAsync(connection, tx, AuthorTypes.Moderator, "m1");
-            var song = Guid.CreateVersion7();
+            var song = SongId.New();
             await store.WriteSongsAsync([new SongRecord(song, artist, "Unknown Thing")]);
             await store.WriteAliasesAsync([new AliasRecord(artist, "Unknown Thing", song)]);
             await tx.CommitAsync();
@@ -448,7 +448,7 @@ public class TestCatalogueLlm
             await Strings(
                 """
                 SELECT coalesce(s.name, '?') || ':' || ts.resolved FROM source_tracks t
-                JOIN norm.track_songs ts ON ts.track_uuid = t.uuid LEFT JOIN norm.songs s ON s.uuid = ts.song_uuid
+                JOIN norm.track_songs ts ON ts.track_uuid = t.uuid LEFT JOIN norm.songs s ON s.id = ts.song_id
                 WHERE t.artist_id = @artistId AND t.slug = 'uncle' ORDER BY ts.part
                 """
             )
@@ -491,17 +491,17 @@ public class TestCatalogueLlm
             c.QueryAsync<string>(
                 """
                 SELECT coalesce(s.name, '-') || ' (' || ts.basis || ')' || coalesce(' [' || array_to_string(nullif(ts.qualifiers, '{}'), ',') || ']', '')
-                FROM source_tracks t JOIN norm.track_songs ts ON ts.track_uuid = t.uuid LEFT JOIN norm.songs s ON s.uuid = ts.song_uuid
+                FROM source_tracks t JOIN norm.track_songs ts ON ts.track_uuid = t.uuid LEFT JOIN norm.songs s ON s.id = ts.song_id
                 WHERE t.artist_id = @artistId AND t.slug = @slug ORDER BY ts.part
                 """,
                 new { artistId, slug }
             )
         );
 
-    private Task<Guid> SongNamed(string name) =>
+    private Task<SongId> SongNamed(string name) =>
         db.WithWriteConnection(c =>
-            c.QuerySingleAsync<Guid>(
-                "SELECT uuid FROM norm.songs WHERE artist_uuid = @artist AND name = @name",
+            c.QuerySingleAsync<SongId>(
+                "SELECT id FROM norm.songs WHERE artist_uuid = @artist AND name = @name",
                 new { artist, name }
             )
         );
@@ -514,7 +514,7 @@ public class TestCatalogueLlm
             new ScriptedModel()
         ).RunChunkAsync(artist, [], CancellationToken.None);
         var sugaree = await SongNamed("Sugaree");
-        var duplicate = Guid.CreateVersion7();
+        var duplicate = SongId.New();
         await AsModerator(async s =>
         {
             await s.WriteSongsAsync([new SongRecord(duplicate, artist, "Sugaree Two")]);
@@ -526,7 +526,7 @@ public class TestCatalogueLlm
             await using var tx = await connection.BeginTransactionAsync();
             await NormStore.BeginAsync(connection, tx, AuthorTypes.Moderator, "m1", "merge");
             await connection.ExecuteAsync(
-                "UPDATE norm.songs SET merged_into = @sugaree WHERE uuid = @duplicate",
+                "UPDATE norm.songs SET merged_into = @sugaree WHERE id = @duplicate",
                 new { sugaree, duplicate },
                 tx
             );
@@ -550,7 +550,7 @@ public class TestCatalogueLlm
             new ScriptedModel()
         ).RunChunkAsync(artist, [], CancellationToken.None);
         var sugaree = await SongNamed("Sugaree");
-        var (shorter, jam) = (Guid.CreateVersion7(), Guid.CreateVersion7());
+        var (shorter, jam) = (SongId.New(), SongId.New());
         await AsModerator(s =>
             s.WriteSongsAsync([
                 new SongRecord(shorter, artist, "Sugar"),
@@ -686,7 +686,7 @@ public class TestCatalogueLlm
             new ScriptedModel()
         ).RunChunkAsync(artist, [], CancellationToken.None);
         var uncle = await SongNamed("Me And My Uncle");
-        var survivor = Guid.CreateVersion7();
+        var survivor = SongId.New();
         await AsModerator(async s =>
         {
             await s.WriteSongsAsync([
@@ -789,7 +789,7 @@ public class TestCatalogueLlm
         await AddTrack("Sugaree Reprise >", "rep1");
         await AddTrack("Uncle Song Reprise", "rep2");
         await AsModerator(s =>
-            s.WriteSongsAsync([new SongRecord(Guid.CreateVersion7(), artist, "Uncle Song Reprise")])
+            s.WriteSongsAsync([new SongRecord(SongId.New(), artist, "Uncle Song Reprise")])
         );
 
         await new CatalogueMatch(

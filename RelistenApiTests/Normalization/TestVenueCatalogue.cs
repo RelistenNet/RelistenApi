@@ -281,8 +281,8 @@ public class TestVenueCatalogue
                     DELETE FROM norm.venue_evidence;
                     DELETE FROM norm.venue_external_ids;
                     DELETE FROM norm.venue_names;
-                    UPDATE norm.venues SET parent_uuid = NULL, merged_into = NULL
-                    WHERE parent_uuid IS NOT NULL OR merged_into IS NOT NULL;
+                    UPDATE norm.venues SET parent_id = NULL, merged_into = NULL
+                    WHERE parent_id IS NOT NULL OR merged_into IS NOT NULL;
                     DELETE FROM norm.venues;
                 END $$
                 """
@@ -391,10 +391,10 @@ public class TestVenueCatalogue
             await Strings(
                 """
                 SELECT v.name || ' (' || v.kind || coalesce(', in ' || p.name, '') || ') ' || v.city
-                FROM norm.venues v LEFT JOIN norm.venues p ON p.uuid = v.parent_uuid
-                WHERE v.uuid IN (SELECT e.venue_uuid FROM norm.venue_evidence e JOIN venues lv ON lv.uuid = e.legacy_venue_uuid
+                FROM norm.venues v LEFT JOIN norm.venues p ON p.id = v.parent_id
+                WHERE v.id IN (SELECT e.venue_id FROM norm.venue_evidence e JOIN venues lv ON lv.uuid = e.legacy_venue_uuid
                                  JOIN artists a ON a.id = lv.artist_id WHERE a.uuid = ANY(@artists))
-                   OR v.uuid IN (SELECT parent_uuid FROM norm.venues)
+                   OR v.id IN (SELECT parent_id FROM norm.venues)
                 ORDER BY 1
                 """
             )
@@ -404,7 +404,7 @@ public class TestVenueCatalogue
         (
             await Strings(
                 """
-                SELECT sh.display_date || ' ' || norm.venue_name_on(sv.venue_uuid, sh.date) || ' (' || sv.basis || ')'
+                SELECT sh.display_date || ' ' || norm.venue_name_on(sv.venue_id, sh.date) || ' (' || sv.basis || ')'
                 FROM shows sh JOIN artists a ON a.id = sh.artist_id
                 LEFT JOIN norm.show_venues sv ON sv.show_uuid = sh.uuid
                 WHERE a.uuid = ANY(@artists) ORDER BY sh.date
@@ -462,7 +462,7 @@ public class TestVenueCatalogue
         (
             await Strings(
                 """
-                SELECT n.name || ' (' || n.kind || ')' FROM norm.venues v JOIN norm.venue_names n ON n.venue_uuid = v.uuid
+                SELECT n.name || ' (' || n.kind || ')' FROM norm.venues v JOIN norm.venue_names n ON n.venue_id = v.id
                 WHERE v.name = 'Madison Square Garden' ORDER BY 1
                 """
             )
@@ -502,7 +502,7 @@ public class TestVenueCatalogue
             store =>
                 store.WriteVenuesAsync([
                     new VenueRecord(
-                        Guid.CreateVersion7(),
+                        VenueId.New(),
                         "Cat's Cradle",
                         City: "Carrboro",
                         Region: "NC",
@@ -510,7 +510,7 @@ public class TestVenueCatalogue
                         Confidence: 0.9f
                     ),
                     new VenueRecord(
-                        Guid.CreateVersion7(),
+                        VenueId.New(),
                         "Cat's Cradle",
                         City: "Chapel Hill",
                         Region: "NC",
@@ -578,7 +578,7 @@ public class TestVenueCatalogue
 
         (
             await Strings(
-                "SELECT r.name || ' in ' || p.name FROM norm.venues r JOIN norm.venues p ON p.uuid = r.parent_uuid ORDER BY 1"
+                "SELECT r.name || ' in ' || p.name FROM norm.venues r JOIN norm.venues p ON p.id = r.parent_id ORDER BY 1"
             )
         )
             .Should()
@@ -601,13 +601,16 @@ public class TestVenueCatalogue
             )
         );
 
-    private Task<Guid?> PlacedOn(Guid row) =>
-        db.WithWriteConnection(c =>
-            c.QuerySingleOrDefaultAsync<Guid?>(
-                "SELECT venue_uuid FROM norm.venue_evidence WHERE legacy_venue_uuid = @row",
+    private async Task<VenueId?> PlacedOn(Guid row) =>
+        await db.WithWriteConnection(c =>
+            c.QuerySingleOrDefaultAsync<string?>(
+                "SELECT venue_id FROM norm.venue_evidence WHERE legacy_venue_uuid = @row",
                 new { row }
             )
-        );
+        )
+            is { } id
+            ? VenueId.Parse(id)
+            : null;
 
     [Test]
     public async Task ARematchPlacesAnOlderMatchersRowsAgainAndRetiresWhatTheyLeft()
@@ -620,7 +623,7 @@ public class TestVenueCatalogue
 
         // An older matcher put the row on a venue of its own in the wrong town, and pinned the
         // row's provider id there (the matcher trusts an id before anything else).
-        var denver = Guid.CreateVersion7();
+        var denver = VenueId.New();
         await db.WithWriteConnection(async c =>
         {
             var connection = (Npgsql.NpgsqlConnection)c;
@@ -686,7 +689,7 @@ public class TestVenueCatalogue
         (
             await Strings(
                 """
-                SELECT sv.venue_uuid::text FROM norm.show_venues sv JOIN shows s ON s.uuid = sv.show_uuid
+                SELECT sv.venue_id::text FROM norm.show_venues sv JOIN shows s ON s.uuid = sv.show_uuid
                 WHERE s.date = '2004-06-25'
                 """
             )
@@ -700,12 +703,12 @@ public class TestVenueCatalogue
         var match = new VenueMatch(database);
         await match.RunAsync(artists, CancellationToken.None);
         const string placements = """
-            SELECT e.legacy_venue_uuid::text || '>' || e.venue_uuid::text FROM norm.venue_evidence e
+            SELECT e.legacy_venue_uuid::text || '>' || e.venue_id::text FROM norm.venue_evidence e
             JOIN venues v ON v.uuid = e.legacy_venue_uuid JOIN artists a ON a.id = v.artist_id
             WHERE a.uuid = ANY(@artists) ORDER BY 1
             """;
         var before = (await Strings(placements)).ToList();
-        var venues = (await Strings("SELECT uuid::text FROM norm.venues ORDER BY 1")).ToList();
+        var venues = (await Strings("SELECT id FROM norm.venues ORDER BY 1")).ToList();
         before.Should().NotBeEmpty();
 
         // Every placement as an older matcher's, so a rematch forgets them all: each venue
@@ -737,8 +740,8 @@ public class TestVenueCatalogue
         (await match.RetireAsync(forget.Venues, CancellationToken.None)).Should().Be(0);
 
         (await Strings(placements)).Should().Equal(before);
-        (await Strings("SELECT uuid::text FROM norm.venues ORDER BY 1")).Should().Equal(venues);
-        (await Strings("SELECT uuid::text FROM norm.venues WHERE merged_into IS NOT NULL"))
+        (await Strings("SELECT id FROM norm.venues ORDER BY 1")).Should().Equal(venues);
+        (await Strings("SELECT id FROM norm.venues WHERE merged_into IS NOT NULL"))
             .Should()
             .BeEmpty();
     }
@@ -798,7 +801,7 @@ public class TestVenueCatalogue
             var connection = (Npgsql.NpgsqlConnection)c;
             await using var tx = await connection.BeginTransactionAsync();
             var store = await NormStore.BeginAsync(connection, tx, AuthorTypes.Llm, "venue-llm@5");
-            var brooklyn = Guid.CreateVersion7();
+            var brooklyn = VenueId.New();
             await store.WriteVenuesAsync([
                 new VenueRecord(
                     brooklyn,
@@ -841,17 +844,13 @@ public class TestVenueCatalogue
             var connection = (Npgsql.NpgsqlConnection)c;
             await using var tx = await connection.BeginTransactionAsync();
             var store = await NormStore.BeginAsync(connection, tx, AuthorTypes.Llm, "venue-llm@6");
-            var (auditorium, opera, room) = (
-                Guid.CreateVersion7(),
-                Guid.CreateVersion7(),
-                Guid.CreateVersion7()
-            );
+            var (auditorium, opera, room) = (VenueId.New(), VenueId.New(), VenueId.New());
             VenueRecord At(
-                Guid uuid,
+                VenueId id,
                 string name,
                 string kind = VenueKinds.Site,
-                Guid? parent = null
-            ) => new(uuid, name, kind, parent, "St. Louis", "MO", "US", Confidence: 0.9f);
+                VenueId? parent = null
+            ) => new(id, name, kind, parent, "St. Louis", "MO", "US", Confidence: 0.9f);
             await store.WriteVenuesAsync([
                 At(auditorium, "Kiel Auditorium"),
                 At(opera, "Kiel Opera House"),
@@ -891,7 +890,7 @@ public class TestVenueCatalogue
         chunk.Unsure.Should().Be(0);
         (
             await Strings(
-                "SELECT lv.name FROM norm.venue_evidence e JOIN venues lv ON lv.uuid = e.legacy_venue_uuid JOIN norm.venues v ON v.uuid = e.venue_uuid WHERE lv.name = 'MSG' AND v.name = 'Madison Square Garden'"
+                "SELECT lv.name FROM norm.venue_evidence e JOIN venues lv ON lv.uuid = e.legacy_venue_uuid JOIN norm.venues v ON v.id = e.venue_id WHERE lv.name = 'MSG' AND v.name = 'Madison Square Garden'"
             )
         )
             .Should()
@@ -1006,7 +1005,7 @@ public class TestVenueCatalogue
     [Test]
     public async Task ReciprocalMergesCannotMakeACycle()
     {
-        var (a, b) = (Guid.CreateVersion7(), Guid.CreateVersion7());
+        var (a, b) = (VenueId.New(), VenueId.New());
         await db.WithWriteConnection(async c =>
         {
             var connection = (Npgsql.NpgsqlConnection)c;
@@ -1052,7 +1051,7 @@ public class TestVenueCatalogue
     [Test]
     public async Task ARevertNeverUndoesAnEditCommittedDuringIt()
     {
-        var song = Guid.CreateVersion7();
+        var song = SongId.New();
         var run = await db.WithWriteConnection(async c =>
         {
             var connection = (Npgsql.NpgsqlConnection)c;
@@ -1077,7 +1076,7 @@ public class TestVenueCatalogue
         await using var edit = await editor.BeginTransactionAsync();
         await NormStore.BeginAsync(editor, edit, AuthorTypes.Moderator, "m1");
         await editor.ExecuteAsync(
-            "UPDATE norm.songs SET name = 'Sugaree (corrected)' WHERE uuid = @song",
+            "UPDATE norm.songs SET name = 'Sugaree (corrected)' WHERE id = @song",
             new { song },
             edit
         );
@@ -1095,7 +1094,7 @@ public class TestVenueCatalogue
         await edit.CommitAsync();
 
         (await revert).Should().Be((0, 1));
-        (await Strings($"SELECT name FROM norm.songs WHERE uuid = '{song}'"))
+        (await Strings($"SELECT name FROM norm.songs WHERE id = '{song}'"))
             .Should()
             .Equal("Sugaree (corrected)");
     }
