@@ -1,0 +1,228 @@
+using System.Linq;
+using Relisten.Catalog;
+using Relisten.Identifiers;
+using Relisten.Normalization;
+
+namespace Relisten.Api.Models.Api.V4;
+
+/// <summary>Projects materialized catalog facts without further database reads.</summary>
+public static class V4CatalogProjection
+{
+    public static ShowResource Show(CatalogShow value) =>
+        new()
+        {
+            Id = new(value.uuid),
+            ArtistId = new(value.artist_uuid),
+            YearId = value.year_uuid is { } idYearId ? new YearId(idYearId) : null,
+            TourId = value.tour_uuid is { } idTourId ? new TourId(idTourId) : null,
+            Date = value.date,
+            DisplayDate = value.display_date,
+            AvgRating = value.avg_rating,
+            AvgDuration = value.avg_duration,
+            MostRecentSourceUpdatedAt = value.most_recent_source_updated_at,
+            HasSoundboardSource = value.has_soundboard_source,
+            HasStreamableFlacSource = value.has_streamable_flac_source,
+            SourceCount = value.source_count,
+            CreatedAt = value.created_at,
+            UpdatedAt = value.updated_at,
+            ImportedVenue = value.ImportedVenue is { } imported ? ImportedVenue(imported) : null,
+            NormalizedVenue = value.NormalizedVenue is { } normalized ? Venue(normalized) : null,
+            VenueDisplay = new(value.VenueDisplayName, DisplayLocation(value)),
+            Year = value.Year is { } year ? Year(year) : null,
+            Tour = value.Tour is { } tour ? Tour(tour) : null,
+            Era = value.Era is { } era ? Era(era) : null,
+            Sources = value.Sources.Select(Source).ToArray(),
+        };
+
+    public static SourceResource Source(CatalogSource value) =>
+        new()
+        {
+            Id = new(value.uuid),
+            ArtistId = new(value.artist_uuid),
+            ShowId = new(value.show_uuid),
+            DisplayDate = value.display_date,
+            IsSoundboard = value.is_soundboard,
+            IsRemaster = value.is_remaster,
+            HasJamcharts = value.has_jamcharts,
+            AvgRating = value.avg_rating,
+            NumReviews = value.num_reviews,
+            NumRatings = value.num_ratings,
+            AvgRatingWeighted = value.avg_rating_weighted,
+            Duration = value.duration,
+            UpstreamIdentifier = value.upstream_identifier,
+            Description = value.description,
+            TaperNotes = value.taper_notes,
+            Source = value.source,
+            Taper = value.taper,
+            Transferrer = value.transferrer,
+            Lineage = value.lineage,
+            FlacType = value.flac_type switch
+            {
+                0 => "NoFlac",
+                1 => "Flac16Bit",
+                2 => "Flac24Bit",
+                3 => "NoPlayableFlac",
+                _ => "Unknown",
+            },
+            ReviewCount = value.review_count,
+            CreatedAt = value.created_at,
+            UpdatedAt = value.updated_at,
+            ImportedVenue = value.ImportedVenue is { } imported ? ImportedVenue(imported) : null,
+            Sets = value.Sets.Select(Set).ToArray(),
+            Links = value.Links.Select(Link).ToArray(),
+        };
+
+    public static SourceSetResource Set(CatalogSet value) =>
+        new()
+        {
+            Id = new(value.uuid),
+            SourceId = new(value.source_uuid),
+            ArtistId = new(value.artist_uuid),
+            Index = value.index,
+            IsEncore = value.is_encore,
+            Name = value.name,
+            CreatedAt = value.created_at,
+            UpdatedAt = value.updated_at,
+            Tracks = value.Tracks.Select(Track).ToArray(),
+        };
+
+    public static TrackResource Track(CatalogTrack value) =>
+        new()
+        {
+            Id = new(value.uuid),
+            SourceId = new(value.source_uuid),
+            SourceSetId = new(value.source_set_uuid),
+            ShowId = new(value.show_uuid),
+            ArtistId = new(value.artist_uuid),
+            TrackPosition = value.track_position,
+            Duration = value.duration,
+            Title = value.title,
+            Slug = value.slug,
+            Mp3Url = value.mp3_url,
+            Mp3Md5 = value.mp3_md5,
+            FlacUrl = value.flac_url,
+            FlacMd5 = value.flac_md5,
+            CreatedAt = value.created_at,
+            UpdatedAt = value.updated_at,
+            Normalization = new(
+                value.Normalization.State,
+                value.Normalization.Reason,
+                value.Normalization.Parts.Select(Part).ToArray()
+            ),
+        };
+
+    public static ImportedVenueResource ImportedVenue(CatalogImportedVenue value) =>
+        new()
+        {
+            Id = new(value.uuid),
+            ArtistId = new(value.artist_uuid),
+            Latitude = value.latitude,
+            Longitude = value.longitude,
+            Name = value.name,
+            Location = value.location,
+            UpstreamIdentifier = value.upstream_identifier,
+            Slug = value.slug,
+            PastNames = value.past_names,
+            CreatedAt = value.created_at,
+            UpdatedAt = value.updated_at,
+        };
+
+    public static LinkResource Link(CatalogLink value) =>
+        new()
+        {
+            SourceId = new(value.source_uuid),
+            Provider = value.provider,
+            ForReviews = value.for_reviews,
+            ForRatings = value.for_ratings,
+            ForSource = value.for_source,
+            Url = value.url,
+            Label = value.label,
+            CreatedAt = value.created_at,
+            UpdatedAt = value.updated_at,
+        };
+
+    public static EraResource Era(CatalogEra value) =>
+        new() { Order = value.order, Name = value.name };
+
+    public static NormalizedSongResource Song(CatalogSong value) =>
+        new()
+        {
+            Id = SongId.Parse(value.id),
+            ArtistId = new(value.artist_uuid),
+            Name = value.name,
+            Kind = value.kind,
+        };
+
+    public static NormalizedVenueResource Venue(CatalogVenue value) =>
+        new()
+        {
+            Id = VenueId.Parse(value.id),
+            Name = value.name,
+            Kind = value.kind,
+            ParentId = value.parent_id is { } parent ? VenueId.Parse(parent) : null,
+            City = value.city,
+            Region = value.region,
+            Country = value.country,
+            Latitude = value.latitude,
+            Longitude = value.longitude,
+            CoordinatePrecision = value.coordinate_precision,
+        };
+
+    public static TrackPartResource Part(CatalogPart value) =>
+        new()
+        {
+            Ordinal = value.part,
+            Text = value.text,
+            Qualifiers = value.qualifiers,
+            Notes = value.notes,
+            SegueAfter = value.segue_after,
+            Song = value.Song is { } song ? Song(song) : null,
+            State =
+                !value.resolved ? "unresolved"
+                : value.Song is not null ? "matched"
+                : "non_song",
+        };
+
+    public static YearResource Year(CatalogYear value) =>
+        new()
+        {
+            Id = new(value.uuid),
+            ArtistId = new(value.artist_uuid),
+            ShowCount = value.show_count,
+            SourceCount = value.source_count,
+            Duration = value.duration,
+            AvgDuration = value.avg_duration,
+            AvgRating = value.avg_rating,
+            Year = value.year,
+            CreatedAt = value.created_at,
+            UpdatedAt = value.updated_at,
+        };
+
+    public static TourResource Tour(CatalogTour value) =>
+        new()
+        {
+            Id = new(value.uuid),
+            ArtistId = new(value.artist_uuid),
+            StartDate = value.start_date,
+            EndDate = value.end_date,
+            Name = value.name,
+            Slug = value.slug,
+            UpstreamIdentifier = value.upstream_identifier,
+            CreatedAt = value.created_at,
+            UpdatedAt = value.updated_at,
+        };
+
+    // Canonical coordinates/locality may be incomplete while imported observations remain useful.
+    private static string? DisplayLocation(CatalogShow show)
+    {
+        if (show.NormalizedVenue is not { } venue)
+        {
+            return show.ImportedVenue?.location;
+        }
+        var location = string.Join(
+            ", ",
+            new[] { venue.city, venue.region, venue.country }.Where(x => !string.IsNullOrEmpty(x))
+        );
+        return location.Length > 0 ? location : show.ImportedVenue?.location;
+    }
+}
