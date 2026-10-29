@@ -67,4 +67,29 @@ VALUES (910005,'00000000-0000-0000-0000-000000000045',910004,910004,910004,2,20,
        (910006,'00000000-0000-0000-0000-000000000046',910004,910004,910004,3,30,'Unknown title','unknown','https://example.invalid/unknown.mp3','2026-01-01T00:00:00Z');
 INSERT INTO norm.track_songs (track_uuid,part,text,resolved,basis,author_type,author_ref,run_uuid)
 VALUES ('00000000-0000-0000-0000-000000000045',1,'Tuning',true,'noise','importer','v4-review','00000000-0000-0000-0000-000000000099');
+-- Browse edges: one known but empty auto-created artist, and a second year
+-- for the matched artist. These rows distinguish membership, ordering and scope.
+UPDATE artists SET featured=1 WHERE id=910001;
+UPDATE artists SET featured=2 WHERE id=910002;
+INSERT INTO artists (id,uuid,name,slug,featured,updated_at)
+VALUES (910010,'00000000-0000-0000-0000-000000000020','Empty Artist','v4-empty',2,'2026-01-01T00:00:00Z');
+INSERT INTO features (id,artist_id) VALUES (910010,910010);
+UPDATE years SET show_count=1,source_count=1 WHERE id BETWEEN 910001 AND 910004;
+INSERT INTO years (id,uuid,artist_id,year,show_count,source_count,updated_at)
+VALUES (910010,'00000000-0000-0000-0000-000000000160',910004,'1994',1,1,'2026-01-01T00:00:00Z');
+INSERT INTO shows (id,uuid,artist_id,year_id,venue_id,date,display_date,updated_at)
+VALUES (910010,'00000000-0000-0000-0000-000000000010',910004,910010,910004,'1994-07-01','1994-07-01','2026-01-01T00:00:00Z');
+INSERT INTO sources (id,uuid,show_id,artist_id,venue_id,is_soundboard,is_remaster,has_jamcharts,upstream_identifier,display_date,updated_at)
+VALUES (910010,'00000000-0000-0000-0000-000000000120',910010,910004,910004,false,false,false,'browse-review','1994-07-01','2026-01-01T00:00:00Z');
+INSERT INTO source_sets (id,uuid,source_id,index,name,updated_at)
+VALUES (910010,'00000000-0000-0000-0000-000000000130',910010,1,'Set 1','2026-01-01T00:00:00Z');
+INSERT INTO source_tracks (id,uuid,artist_id,source_id,source_set_id,track_position,duration,title,slug,mp3_url,updated_at)
+VALUES (910010,'00000000-0000-0000-0000-000000000150',910004,910010,910010,1,120,'Earlier show track','earlier-track','https://example.invalid/earlier.mp3','2026-01-01T00:00:00Z');
+INSERT INTO upstream_sources (id,name,url,description,credit_line)
+VALUES (910010,'review.provider','https://example.invalid','Unknown provider remains readable','Fixture credit');
+INSERT INTO artists_upstream_sources (artist_id,upstream_source_id,upstream_identifier)
+VALUES (910004,910010,'matched-upstream');
+-- Imported years retain four-digit calendar labels, including early years.
+INSERT INTO years (id,uuid,artist_id,year,show_count,source_count,updated_at)
+VALUES (910023,'00000000-0000-0000-0000-000000000023',910001,'0023',0,0,'2026-01-01T00:00:00Z');
 COMMIT;

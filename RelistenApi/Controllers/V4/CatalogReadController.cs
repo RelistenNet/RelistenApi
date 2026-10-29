@@ -3,7 +3,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
-using Npgsql;
 using Relisten.Api.Models.Api.V4;
 using Relisten.Catalog;
 using Relisten.Identifiers;
@@ -17,7 +16,7 @@ namespace Relisten.Controllers.V4;
 public sealed class CatalogReadController(
     CatalogReader reader,
     ILogger<CatalogReadController> logger
-) : ControllerBase
+) : CatalogControllerBase(logger)
 {
     [HttpGet("shows/{showId}")]
     [ProducesResponseType(typeof(ShowResource), 200)]
@@ -50,38 +49,4 @@ public sealed class CatalogReadController(
                 return track is null ? null : V4CatalogProjection.Track(track);
             }
         );
-
-    private async Task<IActionResult> Read<T>(string id, string prefix, Func<Guid, Task<T?>> read)
-        where T : class
-    {
-        if (!UuidTypeId.TryParse(id, prefix, out var uuid))
-        {
-            return Failure(422, "invalid_id", "Expected a canonical " + prefix + " ID.");
-        }
-
-        try
-        {
-            var resource = await read(uuid);
-            return resource is null
-                ? Failure(404, "not_found", "The requested resource does not exist.")
-                : new CatalogJsonResult(resource);
-        }
-        catch (Exception exception) when (exception is NpgsqlException or TimeoutException)
-        {
-            logger.LogError(exception, "Catalog read failed for {ResourceId}", id);
-            return Failure(503, "catalog_unavailable", "The catalog is temporarily unavailable.");
-        }
-    }
-
-    private ObjectResult Failure(int status, string code, string title)
-    {
-        Response.Headers.CacheControl = "no-store";
-        var problem = new ProblemDetails { Status = status, Title = title };
-        problem.Extensions["code"] = code;
-        return new ObjectResult(problem)
-        {
-            StatusCode = status,
-            ContentTypes = { "application/problem+json" },
-        };
-    }
 }

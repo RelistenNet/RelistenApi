@@ -10,6 +10,16 @@ namespace Relisten.Api.Models.Api.V4;
 public static class V4CatalogProjection
 {
     public static ShowResource Show(CatalogShow value) =>
+        ProjectShow<ShowResource>(value) with
+        {
+            Sources = value.Sources.Select(Source).ToArray(),
+        };
+
+    public static ShowSummaryResource ShowSummary(CatalogShow value) =>
+        ProjectShow<ShowSummaryResource>(value);
+
+    private static T ProjectShow<T>(CatalogShow value)
+        where T : ShowSummaryResource, new() =>
         new()
         {
             Id = new(value.uuid),
@@ -32,7 +42,6 @@ public static class V4CatalogProjection
             Year = value.Year is { } year ? Year(year) : null,
             Tour = value.Tour is { } tour ? Tour(tour) : null,
             Era = value.Era is { } era ? Era(era) : null,
-            Sources = value.Sources.Select(Source).ToArray(),
         };
 
     public static SourceResource Source(CatalogSource value) =>
@@ -243,7 +252,16 @@ public static class V4CatalogProjection
             _ => throw new InvalidOperationException("Unsupported track qualifier."),
         };
 
-    public static YearResource Year(CatalogYear value) =>
+    public static YearResource Year(CatalogYear value) => ProjectYear<YearResource>(value);
+
+    public static YearWithShowsResource YearWithShows(CatalogYearDetail value) =>
+        ProjectYear<YearWithShowsResource>(value.Year) with
+        {
+            Shows = value.Shows.Select(ShowSummary).ToArray(),
+        };
+
+    private static T ProjectYear<T>(CatalogYear value)
+        where T : YearResource, new() =>
         new()
         {
             Id = new(value.uuid),

@@ -23,6 +23,8 @@ public static class V4CatalogRegistration
     public static IServiceCollection AddV4Catalog(this IServiceCollection services)
     {
         services.AddTransient<CatalogReader>();
+        services.AddTransient<CatalogBrowseReader>();
+        services.AddTransient<CatalogShowMetadataReader>();
         services.AddCors(options =>
             options.AddPolicy(
                 CorsPolicy,
@@ -59,7 +61,7 @@ public static class V4CatalogRegistration
         MapId<SourceReviewId>(options);
         options.MapType<Relisten.Normalization.VenueId>(() => ShortId("venue"));
         options.MapType<Relisten.Normalization.SongId>(() => ShortId("song"));
-        options.SchemaFilter<NullableCatalogEnumSchemaFilter>();
+        options.SchemaFilter<NullableCatalogSchemaFilter>();
     }
 
     private static void MapId<T>(SwaggerGenOptions options)

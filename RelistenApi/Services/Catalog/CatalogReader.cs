@@ -12,7 +12,11 @@ namespace Relisten.Catalog;
 /// Reads recording facts and optional approved interpretations in one primary
 /// snapshot. It never invokes ingestion, normalization jobs or legacy services.
 /// </summary>
-public sealed class CatalogReader(DbService db, ILogger<CatalogReader> logger)
+public sealed class CatalogReader(
+    DbService db,
+    ILogger<CatalogReader> logger,
+    CatalogShowMetadataReader metadata
+)
 {
     /// <summary>Returns a complete recording hierarchy, or null when the show is unknown.</summary>
     public async Task<CatalogShow?> ReadShow(
@@ -23,21 +27,7 @@ public sealed class CatalogReader(DbService db, ILogger<CatalogReader> logger)
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
         var show = await session.Connection.QuerySingleOrDefaultAsync<CatalogShow>(
             session.Command(
-                """
-                SELECT s.id, s.uuid, s.venue_id, s.date::timestamp AS date,
-                       s.avg_rating, s.avg_duration, s.display_date, s.created_at, s.updated_at,
-                       a.uuid artist_uuid, y.uuid year_uuid, t.uuid tour_uuid,
-                       COALESCE(f.norm_catalogue, false) normalization_enabled,
-                       COALESCE(cnt.source_count, 0) source_count,
-                       COALESCE(cnt.has_soundboard_source, false) has_soundboard_source,
-                       COALESCE(cnt.has_flac, false) has_streamable_flac_source,
-                       COALESCE(cnt.max_updated_at, s.updated_at) most_recent_source_updated_at
-                FROM shows s JOIN artists a ON a.id=s.artist_id
-                LEFT JOIN features f ON f.artist_id=a.id
-                LEFT JOIN years y ON y.id=s.year_id LEFT JOIN tours t ON t.id=s.tour_id
-                LEFT JOIN show_source_information cnt ON cnt.show_id=s.id
-                WHERE s.uuid=@uuid
-                """,
+                CatalogShowMetadataReader.ShowSelect + " WHERE s.uuid=@uuid",
                 new { uuid },
                 cancellationToken
             )
@@ -48,7 +38,7 @@ public sealed class CatalogReader(DbService db, ILogger<CatalogReader> logger)
         }
 
         await ReadRecordings(session, show, cancellationToken);
-        await ReadShowMetadata(session, show, cancellationToken);
+        await metadata.Apply(session, [show], cancellationToken);
         await ApplyNormalization(
             session,
             show.Sources.SelectMany(x => x.Sets).SelectMany(x => x.Tracks).ToArray(),
@@ -158,104 +148,6 @@ public sealed class CatalogReader(DbService db, ILogger<CatalogReader> logger)
             source.Links = linksBySource[source.id].ToList();
         }
         show.Sources = sources;
-    }
-
-    private async Task ReadShowMetadata(
-        CatalogReadSession session,
-        CatalogShow show,
-        CancellationToken cancellationToken
-    )
-    {
-        var venues = (
-            await session.Connection.QueryAsync<CatalogImportedVenue>(
-                session.Command(
-                    """
-                    SELECT v.*, a.uuid artist_uuid FROM venues v JOIN artists a ON a.id=v.artist_id
-                    WHERE v.id=@venue_id OR v.id IN (SELECT venue_id FROM sources WHERE show_id=@id)
-                    """,
-                    new { show.venue_id, show.id },
-                    cancellationToken
-                )
-            )
-        ).ToDictionary(x => x.id);
-        show.ImportedVenue = show.venue_id is { } venueId
-            ? venues.GetValueOrDefault(venueId)
-            : null;
-        foreach (var source in show.Sources)
-        {
-            source.ImportedVenue = source.venue_id is { } sourceVenue
-                ? venues.GetValueOrDefault(sourceVenue)
-                : null;
-        }
-        show.Year = await session.Connection.QuerySingleOrDefaultAsync<CatalogYear>(
-            session.Command(
-                "SELECT y.*,a.uuid artist_uuid FROM years y JOIN shows s ON s.year_id=y.id JOIN artists a ON a.id=y.artist_id WHERE s.uuid=@uuid",
-                new { show.uuid },
-                cancellationToken
-            )
-        );
-        show.Tour = await session.Connection.QuerySingleOrDefaultAsync<CatalogTour>(
-            session.Command(
-                """
-                SELECT t.uuid, a.uuid artist_uuid, t.start_date::timestamp start_date,
-                       t.end_date::timestamp end_date, t.name, t.slug, t.upstream_identifier,
-                       t.created_at,t.updated_at
-                FROM tours t JOIN shows s ON s.tour_id=t.id JOIN artists a ON a.id=t.artist_id
-                WHERE s.uuid=@uuid
-                """,
-                new { show.uuid },
-                cancellationToken
-            )
-        );
-        show.Era = await session.Connection.QuerySingleOrDefaultAsync<CatalogEra>(
-            session.Command(
-                "SELECT e.\"order\",e.name FROM eras e JOIN shows s ON s.era_id=e.id WHERE s.uuid=@uuid",
-                new { show.uuid },
-                cancellationToken
-            )
-        );
-        show.VenueDisplayName = show.ImportedVenue?.name;
-        if (!show.normalization_enabled)
-        {
-            return;
-        }
-
-        var chain = (
-            await session.Connection.QueryAsync<CatalogVenue>(
-                session.Command(
-                    """
-                    WITH RECURSIVE chain AS (
-                      SELECT v.*, ARRAY[v.id] path FROM norm.venues v JOIN norm.show_venues sv ON sv.venue_id=v.id WHERE sv.show_uuid=@uuid
-                      UNION ALL
-                      SELECT v.*, c.path || v.id FROM norm.venues v JOIN chain c ON v.id=c.merged_into
-                      WHERE cardinality(c.path)<32 AND NOT v.id=ANY(c.path)
-                    ) SELECT * FROM chain
-                    """,
-                    new { show.uuid },
-                    cancellationToken
-                )
-            )
-        ).ToArray();
-        var canonical = chain.SingleOrDefault(x => x.merged_into is null);
-        if (canonical is null)
-        {
-            if (chain.Length > 0)
-            {
-                logger.LogWarning(
-                    "Invalid normalized venue merge chain for show {ShowUuid}",
-                    show.uuid
-                );
-            }
-            return;
-        }
-        show.NormalizedVenue = canonical;
-        show.VenueDisplayName = await session.Connection.QuerySingleAsync<string>(
-            session.Command(
-                "SELECT norm.venue_name_on(@id,@date::date)",
-                new { canonical.id, show.date },
-                cancellationToken
-            )
-        );
     }
 
     private async Task ApplyNormalization(
