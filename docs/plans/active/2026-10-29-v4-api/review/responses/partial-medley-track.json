@@ -1,0 +1,117 @@
+{
+  "id": "track_1h6z9r284h9vgmc616h3jpma6z",
+  "source_id": "source_27g9cyc26rsa1gfx789j1cmvgv",
+  "source_set_id": "source_set_2xncs5zqdmb1hsdbf7dh8bt64c",
+  "show_id": "show_1yqzwefqaphk26cdr8ke37z8q1",
+  "artist_id": "artist_7mdg13db3h45swdc5fmkhbnpzf",
+  "track_position": 15,
+  "duration": 374,
+  "title": "Slipknot! -> Wilson Jam / Chant * -> Feel Like a Stranger Jam -> Slipknot! -> Wilson Jam / Chant * -> Slipknot! ->",
+  "slug": "slipknot---wilson-jam-chant---feel-like-a-stranger-jam---slipknot---wilson-jam-chant---slipknot",
+  "mp3_url": "https://archive.org/download/jrad2018-08-16.CA14/jrad2018-08-16.CA14.t15.mp3",
+  "mp3_md5": "42d166c97529d3592ef7d5dbc1dfd265",
+  "flac_url": "https://archive.org/download/jrad2018-08-16.CA14/jrad2018-08-16.CA14.t15.flac",
+  "flac_md5": "c962ac747089d3e24761f85e3b80f420",
+  "created_at": "2018-10-10T03:00:04.93448Z",
+  "updated_at": "2018-08-19T20:10:21Z",
+  "normalization": {
+    "state": "partial",
+    "reason": null,
+    "parts": [
+      {
+        "ordinal": 1,
+        "text": "Slipknot!",
+        "qualifiers": [],
+        "notes": [],
+        "segue_after": true,
+        "song": {
+          "id": "song_rq6bw6qd",
+          "artist_id": "artist_7mdg13db3h45swdc5fmkhbnpzf",
+          "name": "Slipknot!",
+          "kind": "song"
+        },
+        "state": "matched"
+      },
+      {
+        "ordinal": 2,
+        "text": "Wilson Jam",
+        "qualifiers": [],
+        "notes": [],
+        "segue_after": false,
+        "song": null,
+        "state": "unresolved"
+      },
+      {
+        "ordinal": 3,
+        "text": "Chant",
+        "qualifiers": [],
+        "notes": [],
+        "segue_after": true,
+        "song": null,
+        "state": "unresolved"
+      },
+      {
+        "ordinal": 4,
+        "text": "Feel Like a Stranger Jam",
+        "qualifiers": [
+          "jam"
+        ],
+        "notes": [],
+        "segue_after": true,
+        "song": {
+          "id": "song_40z3abk1",
+          "artist_id": "artist_7mdg13db3h45swdc5fmkhbnpzf",
+          "name": "Feel Like A Stranger",
+          "kind": "song"
+        },
+        "state": "matched"
+      },
+      {
+        "ordinal": 5,
+        "text": "Slipknot!",
+        "qualifiers": [],
+        "notes": [],
+        "segue_after": true,
+        "song": {
+          "id": "song_rq6bw6qd",
+          "artist_id": "artist_7mdg13db3h45swdc5fmkhbnpzf",
+          "name": "Slipknot!",
+          "kind": "song"
+        },
+        "state": "matched"
+      },
+      {
+        "ordinal": 6,
+        "text": "Wilson Jam",
+        "qualifiers": [],
+        "notes": [],
+        "segue_after": false,
+        "song": null,
+        "state": "unresolved"
+      },
+      {
+        "ordinal": 7,
+        "text": "Chant",
+        "qualifiers": [],
+        "notes": [],
+        "segue_after": true,
+        "song": null,
+        "state": "unresolved"
+      },
+      {
+        "ordinal": 8,
+        "text": "Slipknot!",
+        "qualifiers": [],
+        "notes": [],
+        "segue_after": true,
+        "song": {
+          "id": "song_rq6bw6qd",
+          "artist_id": "artist_7mdg13db3h45swdc5fmkhbnpzf",
+          "name": "Slipknot!",
+          "kind": "song"
+        },
+        "state": "matched"
+      }
+    ]
+  }
+}

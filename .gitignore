@@ -289,3 +289,6 @@ _Pvt_Extensions
 
 # Local secrets (OPENAI_API_KEY for the norm lab)
 .env.local
+
+# Local C1 review captures and saved feature flags
+/local-dev/v4-review/.output/

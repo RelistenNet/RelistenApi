@@ -1,7 +1,7 @@
 # Deliver the complete v4 catalog and mobile adapter
 
-Status: C1 implementation in progress, 2026-10-29. Runtime code is being
-implemented locally; no production deployment or account migration has occurred. This is a living ExecPlan: update Progress,
+Status: C1 ready for response review, 2026-10-29. The local API reads the
+restored production catalog; no production deployment or account migration occurred. This is a living ExecPlan: update Progress,
 Discoveries, Decision Log, and Outcomes as work proceeds.
 
 Build and review this in stages. First deliver a running show/track API that
@@ -147,7 +147,8 @@ Implement mobile's actual queries, not a generic interpreter of all server route
 - [x] Finish contract/migration/verification documents and fresh plan review;
   resolve feasibility, bootstrap, compatibility and rollback findings.
 - [x] Start C1 on `codex/v4-api-c1`; shared ID codec passes 15 focused tests.
-- [ ] Complete and review C1 HTTP/database behavior and the local review host.
+- [x] Implement C1, pass 33 focused tests and validate the live real-data host.
+- [ ] Alec reviews the [actual C1 responses](review/README.md) before expansion.
 - [ ] C2–C5 remain unstarted pending the C1 response review.
 
 ## Discoveries and changes from the exploration
@@ -331,7 +332,9 @@ migration/rollback steps and verification. The full thread was reread during the
 simplification pass; later decisions supersede the exploration's old epoch,
 generic metadata, library versioning and UUID-backed account-storage proposals.
 
-Runtime implementation, migrations, HTTP tests, mobile schema upgrades, load
-measurements and deployment remain unperformed. Primary capacity and deployment
+C1 runtime implementation and local HTTP/snapshot checks are complete; see the
+[response review](review/README.md). Canonical ID retention is still scheduled
+before C4 external canonical lookup/favorites; C1 adds no migration. Mobile schema
+upgrades, production load measurements and deployment remain unperformed. Primary capacity and deployment
 configuration are execution gates, not assumed facts. Record implementation
 results here as milestones are completed.

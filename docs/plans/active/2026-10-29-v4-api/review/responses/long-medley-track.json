@@ -1,0 +1,153 @@
+{
+  "id": "track_1g992kg61eh3k8yk6f85wfbmsp",
+  "source_id": "source_7yak4m37vp476mvvzg8h12xded",
+  "source_set_id": "source_set_6we1cwk12rfjhjrmgf8g359btt",
+  "show_id": "show_0vrf1add2t4192cdqaf8bgmxe1",
+  "artist_id": "artist_7mdg13db3h45swdc5fmkhbnpzf",
+  "track_position": 12,
+  "duration": 1091,
+  "title": "Cumberland Blues Jam * -> Big River Jam I + -> Cumberland Blues -> Big River Jam II + -> Cumberland Blues -> Big River Refrain I + -> Cumberland Blues -> Big River Refrain + II -> Cumberland Blues Reprise @@",
+  "slug": "cumberland-blues-jam---big-river-jam-i---cumberland-blues---big-river-jam-ii---cumberland-blues---big-river-refrain-i---cumberland-blues---big-river-refrain-ii---cumberland-blues-reprise",
+  "mp3_url": "https://archive.org/download/jrad2018-05-05.cmc621.cmc64.sbd.matrix.flac16/jrad2018-05-05.cmc621.cmc64.sbd.matrix-s2t06.mp3",
+  "mp3_md5": "f2eabe670066366ce2e45ad9c608a5e3",
+  "flac_url": "https://archive.org/download/jrad2018-05-05.cmc621.cmc64.sbd.matrix.flac16/jrad2018-05-05.cmc621.cmc64.sbd.matrix-s2t06.flac",
+  "flac_md5": "2dd33c97dbd8e69c5aea99dc5a968bb5",
+  "created_at": "2018-08-10T19:47:05.092055Z",
+  "updated_at": "2018-07-27T12:23:11Z",
+  "normalization": {
+    "state": "interpreted",
+    "reason": null,
+    "parts": [
+      {
+        "ordinal": 1,
+        "text": "Cumberland Blues Jam",
+        "qualifiers": [
+          "jam"
+        ],
+        "notes": [],
+        "segue_after": true,
+        "song": {
+          "id": "song_rde53tnk",
+          "artist_id": "artist_7mdg13db3h45swdc5fmkhbnpzf",
+          "name": "Cumberland Blues",
+          "kind": "song"
+        },
+        "state": "matched"
+      },
+      {
+        "ordinal": 2,
+        "text": "Big River Jam I",
+        "qualifiers": [],
+        "notes": [],
+        "segue_after": true,
+        "song": {
+          "id": "song_ee1r43fq",
+          "artist_id": "artist_7mdg13db3h45swdc5fmkhbnpzf",
+          "name": "Big River",
+          "kind": "song"
+        },
+        "state": "matched"
+      },
+      {
+        "ordinal": 3,
+        "text": "Cumberland Blues",
+        "qualifiers": [],
+        "notes": [],
+        "segue_after": true,
+        "song": {
+          "id": "song_rde53tnk",
+          "artist_id": "artist_7mdg13db3h45swdc5fmkhbnpzf",
+          "name": "Cumberland Blues",
+          "kind": "song"
+        },
+        "state": "matched"
+      },
+      {
+        "ordinal": 4,
+        "text": "Big River Jam II",
+        "qualifiers": [],
+        "notes": [],
+        "segue_after": true,
+        "song": {
+          "id": "song_ee1r43fq",
+          "artist_id": "artist_7mdg13db3h45swdc5fmkhbnpzf",
+          "name": "Big River",
+          "kind": "song"
+        },
+        "state": "matched"
+      },
+      {
+        "ordinal": 5,
+        "text": "Cumberland Blues",
+        "qualifiers": [],
+        "notes": [],
+        "segue_after": true,
+        "song": {
+          "id": "song_rde53tnk",
+          "artist_id": "artist_7mdg13db3h45swdc5fmkhbnpzf",
+          "name": "Cumberland Blues",
+          "kind": "song"
+        },
+        "state": "matched"
+      },
+      {
+        "ordinal": 6,
+        "text": "Big River Refrain I",
+        "qualifiers": [],
+        "notes": [],
+        "segue_after": true,
+        "song": {
+          "id": "song_ee1r43fq",
+          "artist_id": "artist_7mdg13db3h45swdc5fmkhbnpzf",
+          "name": "Big River",
+          "kind": "song"
+        },
+        "state": "matched"
+      },
+      {
+        "ordinal": 7,
+        "text": "Cumberland Blues",
+        "qualifiers": [],
+        "notes": [],
+        "segue_after": true,
+        "song": {
+          "id": "song_rde53tnk",
+          "artist_id": "artist_7mdg13db3h45swdc5fmkhbnpzf",
+          "name": "Cumberland Blues",
+          "kind": "song"
+        },
+        "state": "matched"
+      },
+      {
+        "ordinal": 8,
+        "text": "Big River Refrain + II",
+        "qualifiers": [],
+        "notes": [],
+        "segue_after": true,
+        "song": {
+          "id": "song_ee1r43fq",
+          "artist_id": "artist_7mdg13db3h45swdc5fmkhbnpzf",
+          "name": "Big River",
+          "kind": "song"
+        },
+        "state": "matched"
+      },
+      {
+        "ordinal": 9,
+        "text": "Cumberland Blues Reprise",
+        "qualifiers": [
+          "reprise"
+        ],
+        "notes": [],
+        "segue_after": false,
+        "song": {
+          "id": "song_rde53tnk",
+          "artist_id": "artist_7mdg13db3h45swdc5fmkhbnpzf",
+          "name": "Cumberland Blues",
+          "kind": "song"
+        },
+        "state": "matched"
+      }
+    ]
+  }
+}

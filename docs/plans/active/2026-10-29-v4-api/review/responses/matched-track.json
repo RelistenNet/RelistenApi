@@ -1,0 +1,51 @@
+{
+  "id": "track_3s1y1rg4yaxa7nqw31wk617b0d",
+  "source_id": "source_2wwgekk9qbskw2gp5v68znz9pa",
+  "source_set_id": "source_set_6drn4k6c8mn1tchybs5a1ghxw7",
+  "show_id": "show_2jn80dqf5ntfxmmkwx11j27gdk",
+  "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+  "track_position": 5,
+  "duration": 373,
+  "title": "Mama Tried -> Me And My Uncle",
+  "slug": "mama-tried---me-and-my-uncle",
+  "mp3_url": "https://archive.org/download/gd1985-09-02.senn441.adam-justin-monica.ford.85981.sbeok.flac16/gd1985-09-02d1t05.mp3",
+  "mp3_md5": "6dd82d3d2742473be991729ff1637d0e",
+  "flac_url": "https://archive.org/download/gd1985-09-02.senn441.adam-justin-monica.ford.85981.sbeok.flac16/gd1985-09-02d1t05.flac",
+  "flac_md5": "ac7297a5e974edc772fa1fdd8c17a8c0",
+  "created_at": "2017-12-16T09:59:58.893678Z",
+  "updated_at": "2008-01-17T03:33:37Z",
+  "normalization": {
+    "state": "interpreted",
+    "reason": null,
+    "parts": [
+      {
+        "ordinal": 1,
+        "text": "Mama Tried",
+        "qualifiers": [],
+        "notes": [],
+        "segue_after": true,
+        "song": {
+          "id": "song_0k9kvy1d",
+          "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+          "name": "Mama Tried",
+          "kind": "song"
+        },
+        "state": "matched"
+      },
+      {
+        "ordinal": 2,
+        "text": "Me And My Uncle",
+        "qualifiers": [],
+        "notes": [],
+        "segue_after": false,
+        "song": {
+          "id": "song_8dhmzkjb",
+          "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+          "name": "Me And My Uncle",
+          "kind": "song"
+        },
+        "state": "matched"
+      }
+    ]
+  }
+}
