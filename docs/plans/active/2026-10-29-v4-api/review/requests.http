@@ -1,0 +1,48 @@
+# Synthetic C1 catalog on the dedicated review host. Run local-dev/v4-review/run.sh first.
+@base = http://127.0.0.1:43823
+@rawShow = show_00000000000000000000000001
+@rawTrack = track_00000000000000000000000021
+@disabledShow = show_00000000000000000000000002
+@disabledTrack = track_00000000000000000000000022
+@partialShow = show_00000000000000000000000003
+@partialTrack = track_00000000000000000000000023
+@matchedShow = show_00000000000000000000000004
+@matchedTrack = track_00000000000000000000000024
+
+### Raw show — full source/set/track hierarchy
+GET {{base}}/api/v4/shows/{{rawShow}}
+
+### Raw playable file
+GET {{base}}/api/v4/source-tracks/{{rawTrack}}
+
+### Disabled show — full source/set/track hierarchy
+GET {{base}}/api/v4/shows/{{disabledShow}}
+
+### Disabled playable file
+GET {{base}}/api/v4/source-tracks/{{disabledTrack}}
+
+### Partial show — full source/set/track hierarchy
+GET {{base}}/api/v4/shows/{{partialShow}}
+
+### Partial playable file
+GET {{base}}/api/v4/source-tracks/{{partialTrack}}
+
+### Matched show — full source/set/track hierarchy
+GET {{base}}/api/v4/shows/{{matchedShow}}
+
+### Matched playable file
+GET {{base}}/api/v4/source-tracks/{{matchedTrack}}
+
+### Paste the complete ETag from the matched show response (including W/ and quotes).
+GET {{base}}/api/v4/shows/{{matchedShow}}
+If-None-Match: W/"replace-with-returned-hash"
+
+### Wrong resource prefix: expect 422
+GET {{base}}/api/v4/source-tracks/{{matchedShow}}
+
+### Well-formed missing show: expect 404
+GET {{base}}/api/v4/shows/show_00000000000000000000000009
+
+### Compressed response
+GET {{base}}/api/v4/shows/{{matchedShow}}
+Accept-Encoding: gzip
