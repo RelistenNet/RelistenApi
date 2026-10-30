@@ -10,7 +10,7 @@
     "source_count": 729,
     "created_at": "2017-07-12T09:10:36.240117Z",
     "updated_at": "2017-07-12T09:10:36.240117Z",
-    "capabilities": {
+    "features": {
       "descriptions": true,
       "eras": false,
       "multiple_sources": true,

@@ -818,3 +818,57 @@ oversized-body checks passed with both Content-Length and chunked requests: each
 returned a no-store 413 ProblemDetails with `request_too_large`. The resolver’s
 size limit and exception filter own that boundary. Positive response captures
 remain valid after these validation-only fixes. No auth or mobile phase began.
+
+### Date and recent browsing checkpoint — 2026-10-30
+
+Commit `ba194f4ae` restores `artist.features` and implements 13 discovery
+operations, bringing the running local contract to 39 operations (38 GETs and
+resolver POST). No auth, account, migration, or production changes were made.
+See the [review walkthrough](review/discovery-browsing.md) and regenerated
+[requests](review/requests.http). Full responses, headers and single-request
+local timings are in ignored `local-dev/v4-review/.output/`; checked-in
+anniversary/recent excerpts select only the first two results.
+
+`RELISTEN_LOCAL_INGESTION_TESTS=1 dotnet test
+RelistenApiTests/RelistenApiTests.csproj --no-restore --filter
+'FullyQualifiedName~RelistenApiTests.V4'` passed all 113 checks. The strengthened
+recent-order test also passed after adding repeated artist filters and asserting
+that normalization corrections leave imported update timestamps unchanged.
+The new tests share the existing HTTP host and fixture, with no separate harness.
+They exercise anniversary versus exact/partial display-date lookup, raw and
+normalized summaries, playback equivalence, source-vs-show timestamps, day-window
+precedence and caps, rating rank, deterministic ties, ETag refresh, random no-store,
+empty/unknown artists, invalid queries, and public Swagger enum/error contracts.
+
+The solution build passed. `dotnet csharpier check .` and `git diff --check` passed.
+A two-pass independent review confirmed two issues, both fixed and verified:
+
+- Controller JSON metadata overrode the shared error media type. Shared failures
+  now use explicit JSON ProblemDetails; discovery OpenAPI declares the same
+  `application/problem+json` type. Runtime invalid sort returns 422/no-store.
+- An extreme but valid `previous_days` overflowed PostgreSQL timestamps. The
+  indexed timestamp predicate now saturates at year 1, the minimum supported
+  catalog timestamp. The int32 maximum returns 200; ordinary windows retain
+  their existing inclusive cutoff and limit behavior.
+
+The code-simplifier pass retained one discovery reader and the existing batched
+metadata/full-recording loaders. No new query framework, read repair, Redis cache,
+aggregate refresh, or database schema was added. Date windows use database
+`CURRENT_DATE`; normalized metadata shares the request's primary repeatable-read
+snapshot. Invalid input and dependency failures are uncacheable; a retry opens
+its own snapshot.
+
+After restarting the production composition locally, live OpenAPI exposes 39
+operations and the two allowed `sort_by` values. The capture script succeeded
+against the restored real catalog. Grateful Dead's July 7 anniversary list has
+eight shows, and exact 1978-07-07 resolves to
+`show_0gmtpk4g0pf5yfayb76m0j0k7g`. One local capture measured artist recent lists
+at 17–35 ms, global five-show recent lists at 9–74 ms, top-five at 24 ms, exact
+full show at 74 ms, random full show at 37 ms, and the 702-show global today list
+at 82 ms. These are individual development-machine samples, not production load
+results or percentile estimates.
+
+Search and popularity/trending/momentum account for the remaining 10 mobile-facing
+catalog operations. Another 10 planned operations cover operator/import and
+live activity. Account/auth work remains a separate checkpoint after response
+review.

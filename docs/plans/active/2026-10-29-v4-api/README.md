@@ -1,7 +1,7 @@
 # Deliver the complete v4 catalog and mobile adapter
 
 Status: C1 includes playback navigation, artist snapshots, and saved-reference
-resolution, 2026-10-30.
+resolution, date browsing, and recent show lists, 2026-10-30.
 Implementation and real-response verification are in progress.
 The local API reads the restored production catalog; no production deployment or
 account migration occurred. This is a living ExecPlan: update Progress,
@@ -206,6 +206,8 @@ Implement mobile's actual queries, not a generic interpreter of all server route
   next C1 review; retain source sets only inside source/show responses.
 - [x] Add complete artist snapshots and bounded saved-reference resolution for
   offline sync review, plus canonical public-ID retirement safety.
+- [x] Restore `artist.features`; add exact-date, anniversary, recent, top, and
+  random show browsing with focused HTTP tests and real-data review links.
 - [ ] C2–C5 remain unstarted pending the C1 response review.
 
 ## Discoveries and changes from the exploration
@@ -434,6 +436,10 @@ by accepting this plan.
 - 2026-10-30: implement the offline catalog checkpoint with complete artist-owned
   snapshots and upsert-only saved-reference hydration. Keep recording hierarchies
   lazy, imported identity intact, and artist metadata cached separately.
+
+- 2026-10-30, Alec: keep the familiar `artist.features` name. Extend catalog
+  review through date and recent browsing before auth; retain direct lists,
+  existing query meanings, ETags, and per-endpoint replacement rules.
 
 ## Outcomes and retrospective
 

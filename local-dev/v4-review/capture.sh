@@ -59,6 +59,24 @@ browse = [('artists', '/artists'), ('artist', '/artists/' + artist_id),
           ('imported-venues', '/artists/' + artist_id + '/imported-venues')]
 for name, path in browse:
     capture(name, path, 'Browse: ' + name)
+# Discovery lists reuse the same summaries; exact-date/random reads include playback.
+discovery = [
+    ('artist-today', '/artists/' + artist_id + '/shows/today?month=7&day=7'),
+    ('artist-anniversary', '/artists/' + artist_id + '/shows/on-date?month=7&day=7'),
+    ('exact-date-show', '/artists/' + artist_id + '/shows/by-date/1978-07-07'),
+    ('random-show', '/artists/' + artist_id + '/shows/random'),
+    ('top-shows', '/artists/' + artist_id + '/shows/top?limit=5'),
+    ('today-shows', '/shows/today'),
+    ('anniversary-shows', '/shows/on-date?month=7&day=7'),
+]
+for kind in ['recently-added', 'recently-performed', 'recently-updated']:
+    query_string = '?limit=5' if kind == 'recently-added' else '?shows=5'
+    discovery.extend([
+        ('artist-' + kind, '/artists/' + artist_id + '/shows/' + kind + query_string),
+        (kind + '-shows', '/shows/' + kind + query_string),
+    ])
+for name, path in discovery:
+    capture(name, path, 'Discovery: ' + name)
 year = json.loads((out / 'year-by-number.json').read_text())
 for name, path in [('year-by-id', '/artists/' + artist_id + '/years/' + year['id']),
                    ('artist-shows', '/artists/' + artist_id + '/shows')]:
@@ -298,6 +316,8 @@ for name, body in [('artist-catalog', artist_catalog), ('raw-artist-catalog', ra
 resolver_excerpt = {'references': resolver['references'],
                     'entities': {kind: entities[:1] for kind, entities in resolver['entities'].items()}}
 save_example('resolver-excerpt', resolver_excerpt)
+for name in ['artist-anniversary', 'artist-recently-added']:
+    save_example(name + '-excerpt', json.loads((out / (name + '.json')).read_text())[:2])
 save_example('phish-tours-excerpt', phish_tours[:2])
 save_example('phish-tour-detail-excerpt', detail_excerpt(tour_detail))
 save_example('phish-eras', phish_eras)

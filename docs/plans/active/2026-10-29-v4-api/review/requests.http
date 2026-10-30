@@ -21,6 +21,45 @@ GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/venues
 ### Browse: imported-venues
 GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/imported-venues
 
+### Discovery: artist-today
+GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/shows/today?month=7&day=7
+
+### Discovery: artist-anniversary
+GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/shows/on-date?month=7&day=7
+
+### Discovery: exact-date-show
+GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/shows/by-date/1978-07-07
+
+### Discovery: random-show
+GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/shows/random
+
+### Discovery: top-shows
+GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/shows/top?limit=5
+
+### Discovery: today-shows
+GET {{base}}/api/v4/shows/today
+
+### Discovery: anniversary-shows
+GET {{base}}/api/v4/shows/on-date?month=7&day=7
+
+### Discovery: artist-recently-added
+GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/shows/recently-added?limit=5
+
+### Discovery: recently-added-shows
+GET {{base}}/api/v4/shows/recently-added?limit=5
+
+### Discovery: artist-recently-performed
+GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/shows/recently-performed?shows=5
+
+### Discovery: recently-performed-shows
+GET {{base}}/api/v4/shows/recently-performed?shows=5
+
+### Discovery: artist-recently-updated
+GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/shows/recently-updated?shows=5
+
+### Discovery: recently-updated-shows
+GET {{base}}/api/v4/shows/recently-updated?shows=5
+
 ### Browse: year-by-id
 GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/years/year_59t8nz8n0m6e4c2ej2aq9dbkb9
 

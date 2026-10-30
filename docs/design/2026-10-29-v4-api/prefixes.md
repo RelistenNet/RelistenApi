@@ -86,7 +86,7 @@ functionality does not require inventing an era UUID.
 |---|---|
 | Upstream-source integer key | Use stable provider name plus metadata, such as `archive.org`; retain unknown source names |
 | Provider item ID, MusicBrainz ID, upstream identifier | Preserve provider-qualified external value |
-| Artist feature-row ID | Embedded capabilities; no independent feature identity |
+| Artist feature-row ID | Embedded features; no independent feature identity |
 | Source link ID | Embedded provider, URL, label and link-purpose flags; parent source reference uses `source_` |
 | Live play event integer / `lastSeenId` | Explicit event sequence and/or opaque history cursor; track reference uses `track_` |
 | Calendar year/date, set index, track position, era order | Domain values stay numbers/dates |
