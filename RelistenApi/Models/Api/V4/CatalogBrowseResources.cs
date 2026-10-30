@@ -9,7 +9,7 @@ namespace Relisten.Api.Models.Api.V4;
 // Browse resources retain typed navigation identities. Collection results contain
 // summaries; only detail resources claim ownership of recording hierarchies.
 [JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
-public sealed class ArtistResource
+public record ArtistResource
 {
     public ArtistId Id { get; init; }
     public string Name { get; init; } = null!;

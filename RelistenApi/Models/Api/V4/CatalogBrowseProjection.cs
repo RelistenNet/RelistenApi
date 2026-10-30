@@ -7,6 +7,10 @@ namespace Relisten.Api.Models.Api.V4;
 public static class CatalogBrowseProjection
 {
     public static ArtistResource Artist(CatalogArtist value) =>
+        ProjectArtist<ArtistResource>(value);
+
+    internal static T ProjectArtist<T>(CatalogArtist value)
+        where T : ArtistResource, new() =>
         new()
         {
             Id = new(value.uuid),
