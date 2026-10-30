@@ -1,0 +1,61 @@
+{
+  "shows": [
+    {
+      "id": "show_0kf8c0ac90dh0eava0zx2pn05m",
+      "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+      "year_id": "year_47bwc1mrpq3hh21gjybbjpcmmp",
+      "tour_id": null,
+      "date": "1975-06-05T07:00:00Z",
+      "display_date": "1975-06-05",
+      "avg_rating": 8.5,
+      "avg_duration": 5546.0,
+      "most_recent_source_updated_at": "2019-03-23T22:35:47Z",
+      "has_soundboard_source": true,
+      "has_streamable_flac_source": true,
+      "source_count": 3,
+      "created_at": "2026-08-14T11:44:18.538637Z",
+      "updated_at": "2019-03-23T22:35:47Z",
+      "imported_venue": {
+        "show_count": 1,
+        "id": "imported_venue_78331pxdqjdg434rrgm1d2pnrj",
+        "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+        "latitude": null,
+        "longitude": null,
+        "name": "Ace's Studio",
+        "location": "San Rafael, CA",
+        "upstream_identifier": "Ace's StudioSan Rafael, CA",
+        "slug": "aces-studio",
+        "past_names": null,
+        "created_at": "2019-03-25T07:00:10.763183Z",
+        "updated_at": "2019-03-23T22:35:47Z"
+      },
+      "artist_venue": null,
+      "year": {
+        "id": "year_47bwc1mrpq3hh21gjybbjpcmmp",
+        "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+        "show_count": 25,
+        "source_count": 63,
+        "duration": 438509,
+        "avg_duration": 8758.413,
+        "avg_rating": 8.406416,
+        "year": "1975",
+        "created_at": "2018-10-23T07:01:01.785875Z",
+        "updated_at": "2026-03-11T21:33:41Z"
+      },
+      "tour": null,
+      "era": null
+    }
+  ],
+  "show_count": 1,
+  "id": "imported_venue_78331pxdqjdg434rrgm1d2pnrj",
+  "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+  "latitude": null,
+  "longitude": null,
+  "name": "Ace's Studio",
+  "location": "San Rafael, CA",
+  "upstream_identifier": "Ace's StudioSan Rafael, CA",
+  "slug": "aces-studio",
+  "past_names": null,
+  "created_at": "2019-03-25T07:00:10.763183Z",
+  "updated_at": "2019-03-23T22:35:47Z"
+}

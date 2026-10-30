@@ -1,0 +1,165 @@
+{
+  "shows": [
+    {
+      "id": "show_0gmtpk4g0pf5yfayb76m0j0k7g",
+      "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+      "year_id": "year_17y4xnqznvcfat3b9kyncexdjg",
+      "tour_id": "tour_6s5scd4m3jar2z3s2rknje9nvv",
+      "date": "1978-07-07T07:00:00Z",
+      "display_date": "1978-07-07",
+      "avg_rating": 9.2,
+      "avg_duration": 10481.0,
+      "most_recent_source_updated_at": "2022-08-29T14:17:38Z",
+      "has_soundboard_source": true,
+      "has_streamable_flac_source": true,
+      "source_count": 8,
+      "created_at": "2018-10-23T07:00:49.513477Z",
+      "updated_at": "2022-08-29T14:17:38Z",
+      "imported_venue": {
+        "show_count": 20,
+        "id": "imported_venue_2gmztrmy1hazzhf34wmqv23acm",
+        "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+        "latitude": null,
+        "longitude": null,
+        "name": "Red Rocks Amphitheatre",
+        "location": "Morrison, CO, USA",
+        "upstream_identifier": "jerrygarcia.com_Red Rocks Amphitheatre::Morrison, CO, USA",
+        "slug": "red-rocks-amphitheatre",
+        "past_names": null,
+        "created_at": "2025-12-21T21:50:14.337355Z",
+        "updated_at": "2021-06-15T21:53:23Z"
+      },
+      "artist_venue": {
+        "id": "artist_venue_344wrm28",
+        "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+        "artist_show_count": 20,
+        "created_at": "2026-10-30T19:25:55.608915Z",
+        "updated_at": "2026-10-30T19:25:55.608915Z",
+        "venue": {
+          "id": "venue_fp4h900f",
+          "global_show_count": 176,
+          "name": "Red Rocks Amphitheatre",
+          "kind": "site",
+          "parent_id": null,
+          "city": "Morrison",
+          "region": "CO",
+          "country": "US",
+          "latitude": null,
+          "longitude": null,
+          "coordinate_precision": null,
+          "names": [
+            {
+              "name": "Red Rocks Amphitheatre",
+              "kind": "official"
+            },
+            {
+              "name": "Red Rocks",
+              "kind": "short"
+            },
+            {
+              "name": "Red Rocks Amp.",
+              "kind": "spelling"
+            },
+            {
+              "name": "Red Rocks Amphiteatre",
+              "kind": "spelling"
+            },
+            {
+              "name": "Red Rocks Amphitheater, Morrison, CO",
+              "kind": "spelling"
+            },
+            {
+              "name": "Red Rocks Amphitheatr",
+              "kind": "spelling"
+            },
+            {
+              "name": "Red Rocks Amphtheatre",
+              "kind": "spelling"
+            },
+            {
+              "name": "Red Rocks Ampitheater",
+              "kind": "spelling"
+            },
+            {
+              "name": "Red Rocks Ampitheatre",
+              "kind": "spelling"
+            }
+          ]
+        }
+      },
+      "year": {
+        "id": "year_17y4xnqznvcfat3b9kyncexdjg",
+        "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+        "show_count": 87,
+        "source_count": 596,
+        "duration": 5640971,
+        "avg_duration": 11608.9375,
+        "avg_rating": 9.008332,
+        "year": "1978",
+        "created_at": "2018-10-23T07:01:01.785875Z",
+        "updated_at": "2026-09-22T16:17:28Z"
+      },
+      "tour": {
+        "id": "tour_6s5scd4m3jar2z3s2rknje9nvv",
+        "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+        "start_date": "1965-12-04T08:00:00Z",
+        "end_date": "1995-07-09T07:00:00Z",
+        "name": "Not Part of a Tour",
+        "slug": "not-part-of-a-tour",
+        "upstream_identifier": "Not Part of a Tour",
+        "created_at": "2017-12-16T10:39:50.97883Z",
+        "updated_at": "2017-05-17T13:07:54Z"
+      },
+      "era": null
+    }
+  ],
+  "id": "venue_fp4h900f",
+  "global_show_count": 176,
+  "name": "Red Rocks Amphitheatre",
+  "kind": "site",
+  "parent_id": null,
+  "city": "Morrison",
+  "region": "CO",
+  "country": "US",
+  "latitude": null,
+  "longitude": null,
+  "coordinate_precision": null,
+  "names": [
+    {
+      "name": "Red Rocks Amphitheatre",
+      "kind": "official"
+    },
+    {
+      "name": "Red Rocks",
+      "kind": "short"
+    },
+    {
+      "name": "Red Rocks Amp.",
+      "kind": "spelling"
+    },
+    {
+      "name": "Red Rocks Amphiteatre",
+      "kind": "spelling"
+    },
+    {
+      "name": "Red Rocks Amphitheater, Morrison, CO",
+      "kind": "spelling"
+    },
+    {
+      "name": "Red Rocks Amphitheatr",
+      "kind": "spelling"
+    },
+    {
+      "name": "Red Rocks Amphtheatre",
+      "kind": "spelling"
+    },
+    {
+      "name": "Red Rocks Ampitheater",
+      "kind": "spelling"
+    },
+    {
+      "name": "Red Rocks Ampitheatre",
+      "kind": "spelling"
+    }
+  ]
+}

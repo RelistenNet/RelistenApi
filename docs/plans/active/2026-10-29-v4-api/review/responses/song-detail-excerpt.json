@@ -1,0 +1,98 @@
+{
+  "shows": [
+    {
+      "id": "show_3n03w01p0513amd3cc3c1fqfwt",
+      "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+      "year_id": "year_7bmdpej1eng223j6mewdamchbn",
+      "tour_id": "tour_6s5scd4m3jar2z3s2rknje9nvv",
+      "date": "1973-10-30T08:00:00Z",
+      "display_date": "1973-10-30",
+      "avg_rating": 9.066667,
+      "avg_duration": 11845.0,
+      "most_recent_source_updated_at": "2025-02-24T19:51:56Z",
+      "has_soundboard_source": true,
+      "has_streamable_flac_source": true,
+      "source_count": 7,
+      "created_at": "2018-10-23T07:00:49.513477Z",
+      "updated_at": "2025-02-24T19:51:56Z",
+      "imported_venue": {
+        "show_count": 7,
+        "id": "imported_venue_6fwwhtb14fdfs79s04h5wgrzk9",
+        "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+        "latitude": null,
+        "longitude": null,
+        "name": "Kiel Auditorium",
+        "location": "St. Louis, MO, USA",
+        "upstream_identifier": "jerrygarcia.com_Kiel Auditorium::St. Louis, MO, USA",
+        "slug": "kiel-auditorium",
+        "past_names": null,
+        "created_at": "2025-12-21T21:48:28.831263Z",
+        "updated_at": "2021-06-15T21:53:09Z"
+      },
+      "artist_venue": {
+        "id": "artist_venue_p5vnyc06",
+        "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+        "artist_show_count": 7,
+        "created_at": "2026-10-30T19:25:55.608145Z",
+        "updated_at": "2026-10-30T19:25:55.608145Z",
+        "venue": {
+          "id": "venue_bxqn7fdg",
+          "global_show_count": 7,
+          "name": "Kiel Auditorium",
+          "kind": "site",
+          "parent_id": null,
+          "city": "St. Louis",
+          "region": "MO",
+          "country": "US",
+          "latitude": null,
+          "longitude": null,
+          "coordinate_precision": null,
+          "names": [
+            {
+              "name": "Kiel Auditorium",
+              "kind": "official"
+            }
+          ]
+        }
+      },
+      "year": {
+        "id": "year_7bmdpej1eng223j6mewdamchbn",
+        "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+        "show_count": 75,
+        "source_count": 448,
+        "duration": 4649936,
+        "avg_duration": 12912.92,
+        "avg_rating": 9.334922,
+        "year": "1973",
+        "created_at": "2018-10-23T07:01:01.785875Z",
+        "updated_at": "2026-08-01T19:17:31Z"
+      },
+      "tour": {
+        "id": "tour_6s5scd4m3jar2z3s2rknje9nvv",
+        "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+        "start_date": "1965-12-04T08:00:00Z",
+        "end_date": "1995-07-09T07:00:00Z",
+        "name": "Not Part of a Tour",
+        "slug": "not-part-of-a-tour",
+        "upstream_identifier": "Not Part of a Tour",
+        "created_at": "2017-12-16T10:39:50.97883Z",
+        "updated_at": "2017-05-17T13:07:54Z"
+      },
+      "era": null
+    }
+  ],
+  "id": "song_62mhvjyd",
+  "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+  "name": "Scarlet Begonias",
+  "kind": "song",
+  "slug": "scarlet-begonias",
+  "original_artist": null,
+  "aliases": [
+    "Scarclet Begonias",
+    "Scarlet",
+    "Scarlet Begonnias",
+    "Scarlett Begoinias"
+  ],
+  "matched_track_count": 3355,
+  "matched_show_count": 332
+}

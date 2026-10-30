@@ -101,7 +101,7 @@ Keeping show detail without nested playable data would fail existing coverage.
 | Current registration | Proposed v4 coverage | Inputs, output, and behavior to retain | Evidence |
 | --- | --- | --- | --- |
 | `GET /api/v2/artists/{artistIdOrSlug}/venues` | `GET /api/v4/artists/{artistId}/venues` plus `GET /api/v4/artists/{artistId}/imported-venues` | Clients use the main list for every artist and follow each entry's kind. Canonical entries group by place; imported entries keep unmatched shows reachable and include full imported counts. These collections can overlap during partial normalization. The separate imported inventory preserves all original rows/counts. Never sum imported venue counts to infer canonical counts. | [Venues:32](../../../RelistenApi/Controllers/VenuesController.cs#L32) |
-| `GET /api/v2/artists/{artistIdOrSlug}/venues/{idAndSlug}` | `GET /api/v4/artists/{artistId}/imported-venues/{importedVenueId}` plus resolver | Preserve the original venue and its original show scope. A legacy raw row is not assumed to have one canonical target. | [Venues:46](../../../RelistenApi/Controllers/VenuesController.cs#L46) |
+| `GET /api/v2/artists/{artistIdOrSlug}/venues/{idAndSlug}` | `GET /api/v4/imported-venues/{importedVenueId}` plus resolver | Preserve the original venue and its original show scope. A legacy raw row is not assumed to have one canonical target. | [Venues:46](../../../RelistenApi/Controllers/VenuesController.cs#L46) |
 | `GET /api/v3/artists/{artistIdOrSlug}/venues/{venueIdOrSlug}` | Same imported detail route plus resolver | Preserve UUID/numeric/slug access to imported venue/show data. Canonical venue detail has a different route/ID. | [Venues:61](../../../RelistenApi/Controllers/VenuesController.cs#L61) |
 
 ## Songs — 3 registrations, 3 actions
@@ -109,16 +109,16 @@ Keeping show detail without nested playable data would fail existing coverage.
 | Current registration | Proposed v4 coverage | Inputs, output, and behavior to retain | Evidence |
 | --- | --- | --- | --- |
 | `GET /api/v2/artists/{artistIdOrSlug}/songs` | `GET /api/v4/artists/{artistId}/songs` plus `GET /api/v4/artists/{artistId}/imported-songs` | Artist-scoped mixed browse uses approved canonical songs plus imported rows without valid evidence mappings. Canonical counts describe exact active files/shows; imported setlist counts remain separate. The raw inventory preserves mapped and unused imported rows. | [Songs:32](../../../RelistenApi/Controllers/SongsController.cs#L32) |
-| `GET /api/v2/artists/{artistIdOrSlug}/songs/{idAndSlug}` | `GET /api/v4/artists/{artistId}/imported-songs/{importedSongId}` plus resolver | Preserve imported song's setlist-derived show list. Normalized song matches and file membership are additional data, not proof of an identical show list. | [Songs:46](../../../RelistenApi/Controllers/SongsController.cs#L46) |
+| `GET /api/v2/artists/{artistIdOrSlug}/songs/{idAndSlug}` | `GET /api/v4/imported-songs/{importedSongId}` plus resolver | Preserve imported song's setlist-derived show list. Normalized song matches and file membership are additional data, not proof of an identical show list. | [Songs:46](../../../RelistenApi/Controllers/SongsController.cs#L46) |
 | `GET /api/v3/artists/{artistIdOrSlug}/songs/{songIdOrSlug}` | Same imported detail route plus resolver | Preserve UUID/numeric/slug lookup and setlist show links; canonical normalized song detail uses its own short ID. | [Songs:61](../../../RelistenApi/Controllers/SongsController.cs#L61) |
 
 Current setlist show membership comes from `setlist_songs_plays` through
 `setlist_shows`, not normalized track interpretation:
 [SetlistSongService](../../../RelistenApi/Services/Data/SetlistSongService.cs#L67).
-The six-read song checkpoint is documented in the
+The song checkpoint is documented in the
 [song-to-playback walkthrough](../../plans/active/2026-10-29-v4-api/review/song-source-journey.md).
 Canonical `/songs/{songId}` exposes `matched_track_count` and `matched_show_count`;
-its `/tracks` list returns each file once with matching ordinals, and `/shows`
+its `/tracks` detail returns each file once with matching ordinals, and its `shows`
 deduplicates recording-supported catalog shows. Imported detail exposes
 `setlist_show_count`, counting distinct catalog show IDs matched by artist/date,
 and its corresponding show list. Setlist-only dates without a catalog show do
@@ -146,24 +146,31 @@ resource names plus canonical UUIDs; it does not already support integer/slug
 schemes. Specify allowed reference kinds and require artist scope where legacy
 identifiers are not global. Avoid an unbounded arbitrary-query endpoint.
 
-## Added v4 capabilities with no direct current route
+## Added v4 capabilities
 
-These supplement the coverage above; they must not be mistaken for existing
-controller routes or replacements for the imported resources.
+These extend the legacy capability mappings above. The current implementation
+status is in the [plan](../../plans/active/2026-10-29-v4-api/README.md); the full
+[manifest](../../plans/active/2026-10-29-v4-api/endpoints.json) also includes pending
+routes. Detail reads use one snapshot and payload ETag.
 
-| Proposed v4 route | Purpose and data contract |
+| V4 route | Purpose and data contract |
 | --- | --- |
-| `GET /api/v4/artists/{artistId}/shows` | Complete/paginated artist show collection outside the bootstrap snapshot. Declare revision/completeness. |
-| `GET /api/v4/sources/{sourceId}` | Direct full source lookup, including sets/tracks, and show/artist context. Current standalone source access is through show detail or batch resolver. |
-| `GET /api/v4/source-sets/{sourceSetId}` | Direct set metadata with playable tracks and parent context, useful for typed-reference completeness. New capability, not required to preserve an old route. |
-| `GET /api/v4/source-tracks/{sourceTrackId}` | Direct playable track plus normalization and parent references, useful for hydration without a whole show. |
-| `GET /api/v4/venues/{venueId}` | Global normalized physical venue/room metadata, merge survivor, and current name. |
-| `GET /api/v4/venues/{venueId}/shows` | Shows across artists at the canonical venue; optional typed artist filter. Counts/grouping follow show-specific links. |
-| `GET /api/v4/artists/{artistId}/venues/{venueId}` | Artist-scoped canonical venue metadata/counts; apply both artist and venue filters. Raw fallback detail uses the imported venue route above. |
-| `GET /api/v4/artists/{artistId}/venues/{venueId}/shows` | Artist-scoped show collection for a canonical venue, separate from global venue shows. Apply both filters and declare collection completeness. |
-| `GET /api/v4/songs/{songId}` | Normalized artist-scoped song metadata and clearly labeled association counts. |
-| `GET /api/v4/songs/{songId}/shows` | Distinct catalog shows from exact resolved normalized recording-track matches, with source/track links. Imported setlist-derived show lists remain on imported-song routes; they do not fabricate recording matches. |
-| `GET /api/v4/songs/{songId}/tracks` | Playable tracks plus matching part ordinals; one file appears once even if several parts match. Embed normalization on every track. |
+| `GET /api/v4/artists/{artistId}/shows` | Complete artist show-summary collection outside bootstrap. |
+| `GET /api/v4/sources/{sourceId}` | Direct full source lookup with sets/tracks and typed parents. |
+| `GET /api/v4/source-sets/{sourceSetId}` | Planned direct set metadata with tracks and typed parents. |
+| `GET /api/v4/source-tracks/{sourceTrackId}` | Direct playable track, normalization, and typed parents. |
+| `GET /api/v4/venues/{venueId}` | Shared venue metadata, aliases, global count, complete approved cross-artist `shows`. |
+| `GET /api/v4/artist-venues/{artistVenueId}` | Relationship metadata, artist count, complete scoped `shows`. |
+| `GET /api/v4/artists/{artistId}/venues/{venueId}` | Pair lookup returning the same complete artist-venue detail. |
+| `GET /api/v4/songs/{songId}` | Song metadata, stored recording counts, complete distinct recording `shows`. |
+| `GET /api/v4/songs/{songId}/tracks` | Song metadata and complete `tracks` with matching part ordinals. Each file appears once; no `shows` field. |
+
+Imported venue/song details likewise include metadata and complete `shows`,
+with direct imported-ID lookup. Artists come from a separately loaded catalog;
+details retain `artist_id` references without embedding artist resources. Browse
+and embedded resources stay compact. No bare venue/song `/shows` routes or `detail_url` fields
+are needed. Mobile replaces only the returned detail owner’s membership;
+shared entities, downloads, and favorites remain independent.
 
 ## Decisions that the inventory makes visible
 

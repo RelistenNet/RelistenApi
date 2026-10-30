@@ -44,6 +44,10 @@ def capture(name, path, label):
     requests.extend(['### ' + label, 'GET {{base}}/api/v4' + path, ''])
     return json.loads((out / (name + '.json')).read_text())
 
+def metadata(detail):
+    return {key: value for key, value in detail.items() if key not in ('shows', 'tracks')}
+
+
 scenarios = []
 # Walk the same typed references a client uses; no legacy lookup parameters.
 artist_uuid = query("SELECT a.uuid FROM artists a JOIN sources src ON src.artist_id=a.id JOIN source_tracks st ON st.source_id=src.id WHERE st.uuid='790f8388-13ca-ea8f-5bf0-61e4cc13ac0d'")
@@ -63,32 +67,34 @@ for name, path in [('year-by-id', '/artists/' + artist_id + '/years/' + year['id
 entries = json.loads((out / 'artist-venues.json').read_text())
 venue_entry = next(entry for entry in entries if entry['artist_venue'] and entry['artist_venue']['venue']['id'] == 'venue_wwrsykhn')
 venue_id = venue_entry['artist_venue']['venue']['id']
-capture('venue', '/venues/' + venue_id, 'Global venue: canonical metadata and aliases')
-capture('artist-venue', '/artists/' + artist_id + '/venues/' + venue_id, 'Artist venue: show membership and count')
-venue_shows = capture('artist-venue-shows', '/artists/' + artist_id + '/venues/' + venue_id + '/shows', 'Artist venue shows')
-capture('venue-shows', '/venues/' + venue_id + '/shows', 'Global venue shows across approved artists')
-capture('venue-shows-filtered', '/venues/' + venue_id + '/shows?artist_id=' + artist_id, 'Global venue shows filtered to the same artist')
+venue = capture('venue', '/venues/' + venue_id, 'Global venue: metadata, aliases and shows')
+artist_venue = capture('artist-venue', '/artist-venues/' + venue_entry['artist_venue']['id'], 'Direct artist venue: relationship and shows')
+artist_venue_by_pair = capture('artist-venue-by-pair', '/artists/' + artist_id + '/venues/' + venue_id, 'Artist and venue pair resolves to the same detail')
+assert artist_venue == artist_venue_by_pair
+assert metadata(artist_venue) == venue_entry['artist_venue']
+assert artist_venue['venue'] == metadata(venue)
+venue_shows = artist_venue['shows']
 shared_id = query('''SELECT v.id FROM norm.venues v
 JOIN norm.show_venues sv ON sv.venue_id=v.id JOIN shows sh ON sh.uuid=sv.show_uuid
 JOIN features f ON f.artist_id=sh.artist_id WHERE v.merged_into IS NULL AND f.norm_catalogue
 GROUP BY v.id HAVING count(DISTINCT sh.artist_id)>1 ORDER BY count(*) DESC,v.id LIMIT 1''')
 if shared_id:
-    shared_venue = capture('shared-venue', '/venues/' + shared_id, 'Shared venue: one place across artists')
-    shared_shows = capture('shared-venue-shows', '/venues/' + shared_id + '/shows', 'Shared venue: shows across approved artists')
-    assert shared_venue['global_show_count'] == len(shared_shows)
-    shared_artist = next(show['artist_id'] for show in shared_shows if show['artist_id'] == artist_id)
-    shared_relationship = capture('shared-artist-venue', '/artists/' + shared_artist + '/venues/' + shared_id, 'Shared venue: artist count beside global count')
-    shared_artist_shows = capture('shared-artist-venue-shows', '/artists/' + shared_artist + '/venues/' + shared_id + '/shows', 'Shared venue: the artist collection')
-    assert shared_relationship['artist_show_count'] == len(shared_artist_shows)
-    assert shared_relationship['venue'] == shared_venue
-    shared_show = capture('shared-venue-show', '/shows/' + shared_artist_shows[0]['id'], 'Shared venue: a show with the same relationship and counts')
-    assert shared_show['artist_venue'] == shared_relationship
+    shared_venue = capture('shared-venue', '/venues/' + shared_id, 'Shared venue: metadata and shows across approved artists')
+    shared_artist = next(show['artist_id'] for show in shared_venue['shows'] if show['artist_id'] == artist_id)
+    shared_relationship = capture('shared-artist-venue', '/artists/' + shared_artist + '/venues/' + shared_id, 'Shared venue: artist collection beside global metadata')
+    shared_direct = capture('shared-artist-venue-by-id', '/artist-venues/' + shared_relationship['id'], 'Direct relationship agrees with the artist and venue lookup')
+    assert shared_direct == shared_relationship
+    assert shared_relationship['venue'] == metadata(shared_venue)
+    assert all(show['artist_id'] == shared_artist for show in shared_relationship['shows'])
+    shared_show = capture('shared-venue-show', '/shows/' + shared_relationship['shows'][0]['id'], 'Shared venue: a show with the same compact relationship and counts')
+    assert shared_show['artist_venue'] == metadata(shared_relationship)
     if shared_show['year_id']:
         shared_year = capture('shared-venue-year', '/artists/' + shared_artist + '/years/' + shared_show['year_id'], 'Shared venue: year summaries keep the full artist and global counts')
         shared_year_shows = [show for show in shared_year['shows'] if show['artist_venue'] and show['artist_venue']['venue']['id'] == shared_id]
-        assert shared_year_shows and all(show['artist_venue'] == shared_relationship for show in shared_year_shows)
+        assert shared_year_shows and all(show['artist_venue'] == metadata(shared_relationship) for show in shared_year_shows)
 imported_id = next(show['imported_venue']['id'] for show in venue_shows if show['imported_venue'])
-capture('imported-venue', '/artists/' + artist_id + '/imported-venues/' + imported_id, 'Imported venue: original observations and exact show scope')
+capture('imported-venue', '/imported-venues/' + imported_id, 'Imported venue: original observations, and shows')
+capture('user-imported-venue', '/imported-venues/imported_venue_78331pxdqjdg434rrgm1d2pnrj', 'Requested imported venue: direct lookup with shows')
 for name, raw in samples.items():
     row = json.loads(query(f'''SELECT row_to_json(x) FROM (SELECT st.title,a.name artist,sh.uuid show_uuid
     FROM source_tracks st JOIN sources src ON src.id=st.source_id JOIN shows sh ON sh.id=src.show_id
@@ -111,13 +117,12 @@ raw_inventory = json.loads((out / 'imported-venues.json').read_text())
 raw_by_id = {venue['id']: venue for venue in raw_inventory}
 assert all('fallback_show_count' not in entry for entry in entries)
 assert all(entry['imported_venue'] == raw_by_id[entry['imported_venue']['id']] for entry in entries if entry['imported_venue'])
-raw_detail = capture('unmatched-imported-venue', '/artists/' + artist_id + '/imported-venues/' + raw_entry['imported_venue']['id'], 'Imported browse target: complete collection including any normalized shows')
-assert raw_entry['imported_venue'] == {key: value for key, value in raw_detail.items() if key != 'shows'}
-assert raw_detail['show_count'] == len(raw_detail['shows'])
+raw_detail = capture('unmatched-imported-venue', '/imported-venues/' + raw_entry['imported_venue']['id'], 'Imported browse target: complete collection including any normalized shows')
+assert raw_entry['imported_venue'] == metadata(raw_detail)
 disabled_track = json.loads((out / 'disabled-track.json').read_text())
 disabled_entries = capture('disabled-artist-venues', '/artists/' + disabled_track['artist_id'] + '/venues', 'Unnormalized artist: imported venue browsing')
 disabled_imported = next(entry['imported_venue'] for entry in disabled_entries if entry['imported_venue'])
-capture('disabled-imported-venue', '/artists/' + disabled_track['artist_id'] + '/imported-venues/' + disabled_imported['id'], 'Unnormalized artist: imported venue and shows')
+capture('disabled-imported-venue', '/imported-venues/' + disabled_imported['id'], 'Unnormalized artist: imported venue and shows')
 matched = next(row for row in scenarios if row['name'] == 'matched')
 etag = next(line.split(': ', 1)[1] for line in (out / 'matched-track.headers').read_text().splitlines() if line.lower().startswith('etag:'))
 requests += ['### Revalidate captured matched track (304 unless data changed)',
@@ -131,35 +136,36 @@ capture('historical-show', '/shows/' + historical, 'Venue aliases: imported show
 # Song discovery preserves exact recording matches separately from setlist evidence.
 song_id = 'song_62mhvjyd'
 song_entries = capture('artist-songs', '/artists/' + artist_id + '/songs', 'Song browse: canonical songs plus imported fallbacks')
-song = capture('song', '/songs/' + song_id, 'Scarlet Begonias: metadata and exact recording counts')
-assert next(entry['song'] for entry in song_entries if entry['song'] and entry['song']['id'] == song_id) == song
-song_tracks = capture('song-tracks', '/songs/' + song_id + '/tracks', 'Scarlet Begonias: one result per file, with matching part ordinals')
-song_shows = capture('song-shows', '/songs/' + song_id + '/shows', 'Scarlet Begonias: distinct recording-backed shows')
-assert song['matched_track_count'] == len(song_tracks)
-assert song['matched_show_count'] == len(song_shows)
+song = capture('song', '/songs/' + song_id, 'Scarlet Begonias: metadata, distinct recording-backed shows')
+assert next(entry['song'] for entry in song_entries if entry['song'] and entry['song']['id'] == song_id) == metadata(song)
+song_track_detail = capture('song-tracks', '/songs/' + song_id + '/tracks', 'Scarlet Begonias: metadata and exact files, with matching part ordinals')
+song_tracks = song_track_detail['tracks']
+assert 'shows' not in song_track_detail
+assert metadata(song_track_detail) == metadata(song)
 assert len({match['track']['id'] for match in song_tracks}) == len(song_tracks)
-assert {match['track']['show_id'] for match in song_tracks} == {show['id'] for show in song_shows}
+assert {match['track']['show_id'] for match in song_tracks} == {show['id'] for show in song['shows']}
+capture('user-song', '/songs/song_mbkeejfd', 'Requested song: direct metadata and show collection')
 for match in song_tracks:
     track = match['track']
     assert match['matching_part_ordinals'] == [part['ordinal'] for part in track['normalization']['parts'] if part['state'] == 'matched' and part['song']['id'] == song_id]
 imported_songs = capture('imported-songs', '/artists/' + artist_id + '/imported-songs', 'Full imported song inventory, including mapped and unused rows')
 imported_song_id = typed('imported_song', '73a1f1ec-0e2c-2b68-839f-946193fb3565')
-imported_song = capture('imported-song', '/artists/' + artist_id + '/imported-songs/' + imported_song_id, 'Imported Scarlet Begonias: independent setlist-backed shows')
-assert imported_song['setlist_show_count'] == len(imported_song['shows'])
-assert next(raw for raw in imported_songs if raw['id'] == imported_song_id) == {key: value for key, value in imported_song.items() if key != 'shows'}
+imported_song = capture('imported-song', '/imported-songs/' + imported_song_id, 'Imported Scarlet Begonias: independent setlist-backed shows')
+assert next(raw for raw in imported_songs if raw['id'] == imported_song_id) == metadata(imported_song)
 unmatched_song = next(entry['imported_song'] for entry in song_entries if entry['imported_song'] and entry['imported_song']['id'] == typed('imported_song', '6f107d7d-037b-5e8d-e856-2662838bce2f'))
-capture('unmatched-imported-song', '/artists/' + artist_id + '/imported-songs/' + unmatched_song['id'], 'Unmapped Jam: imported fallback, no title inference')
+capture('unmatched-imported-song', '/imported-songs/' + unmatched_song['id'], 'Unmapped Jam: imported fallback, no title inference')
 zero_song = capture('zero-match-song', '/songs/song_aaatqpek', 'Canonical song with no recording matches remains visible')
 assert zero_song['matched_track_count'] == 0 and zero_song['matched_show_count'] == 0
-assert capture('zero-match-song-tracks', '/songs/song_aaatqpek/tracks', 'Zero-match song: empty files') == []
-assert capture('zero-match-song-shows', '/songs/song_aaatqpek/shows', 'Zero-match song: empty recording-backed shows') == []
+assert zero_song['shows'] == []
+zero_tracks = capture('zero-match-song-tracks', '/songs/song_aaatqpek/tracks', 'Zero-match song: metadata and empty files')
+assert zero_tracks['tracks'] == [] and 'shows' not in zero_tracks
+assert metadata(zero_tracks) == metadata(zero_song)
 raw_artist = typed('artist', '2e38a274-2d4d-787f-bfcf-73fb2c79cc4a')
 raw_songs = capture('disabled-artist-songs', '/artists/' + raw_artist + '/songs', 'Ryan Adams: same browse route without approved normalization')
 raw_song_inventory = capture('disabled-imported-songs', '/artists/' + raw_artist + '/imported-songs', 'Ryan Adams: full imported song inventory')
 assert raw_songs and all(entry['kind'] == 'imported_song' and entry['song'] is None for entry in raw_songs)
 assert [entry['imported_song'] for entry in raw_songs] == raw_song_inventory
-raw_song_detail = capture('disabled-imported-song', '/artists/' + raw_artist + '/imported-songs/' + raw_songs[0]['imported_song']['id'], 'Ryan Adams: imported song navigation remains usable')
-assert raw_song_detail['setlist_show_count'] == len(raw_song_detail['shows'])
+raw_song_detail = capture('disabled-imported-song', '/imported-songs/' + raw_songs[0]['imported_song']['id'], 'Ryan Adams: imported song navigation remains usable')
 file = song_tracks[0]['track']
 direct_file = capture('song-journey-track', '/source-tracks/' + file['id'], 'Song journey: direct playable file is identical')
 assert direct_file == file
@@ -167,6 +173,31 @@ song_source = capture('song-journey-source', '/sources/' + file['source_id'], 'S
 assert next(track for group in song_source['sets'] for track in group['tracks'] if track['id'] == file['id']) == file
 song_show = capture('song-journey-show', '/shows/' + file['show_id'], 'Song journey: full show hierarchy contains the same recording')
 assert next(source for source in song_show['sources'] if source['id'] == file['source_id']) == song_source
+
+# Checked-in samples are selected excerpts; .output retains the complete responses.
+review = Path('docs/plans/active/2026-10-29-v4-api/review/responses')
+review.mkdir(parents=True, exist_ok=True)
+def save_example(name, body):
+    (review / (name + '.json')).write_text(json.dumps(body, indent=2) + '\n')
+
+def detail_excerpt(body):
+    result = dict(body)
+    if 'shows' in body:
+        result['shows'] = body['shows'][:1]
+    if 'tracks' in body:
+        result['tracks'] = body['tracks'][:1]
+    return result
+
+for name in ('shared-artist-venue', 'shared-venue',
+             'disabled-imported-venue', 'song', 'song-tracks',
+             'imported-song', 'user-song', 'user-imported-venue'):
+    if name.startswith('shared-') and not shared_id:
+        continue
+    body = json.loads((out / (name + '.json')).read_text())
+    save_example(name + '-detail-excerpt', detail_excerpt(body))
+save_example('zero-match-song', zero_song)
+save_example('imported-song-metadata-excerpt', metadata(imported_song))
+save_example('song-track-match', next(match for match in song_tracks if match['track']['id'] == 'track_2n09qd0gcm6jye7trwhpa1rys7'))
 
 Path('docs/plans/active/2026-10-29-v4-api/review/requests.http').write_text('\n'.join(requests))
 (out / 'scenarios.json').write_text(json.dumps(scenarios, indent=2) + '\n')

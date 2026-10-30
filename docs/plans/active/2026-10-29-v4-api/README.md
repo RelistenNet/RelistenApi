@@ -69,7 +69,7 @@ an earlier design proposal.
   `global_show_count` sums stored counts for approved-read artists and stays the
   same across artist/year filters. Imported fallback remains separate.
 - Canonical artist venue list entries contain `artist_venue`; canonical detail
-  returns that resource directly. Every imported venue includes its full
+  returns its metadata plus complete `shows`. Every imported venue includes its full
   `show_count`, including embedded show/source venues and imported detail.
   Include an imported entry when needed to reach unmatched shows; its full
   collection can overlap canonical entries during partial normalization. Clients always browse `/venues` and
@@ -81,6 +81,12 @@ an earlier design proposal.
   discovery shares the recount's membership function, while saved counts may
   briefly lag post-commit imports. Admin song edits refresh atomically. Ordinary
   repairs commit each artist separately under the existing artist-scoped lock.
+- Venue and song details return flat metadata and complete `shows` in one
+  snapshot and ETag. Direct lookup routes accept their own ID
+  kind, including imported and artist-venue IDs, without `detail_url`. Bare
+  venue/song `/shows` routes are removed. The large song file-match collection
+  remains separate, with song metadata and `tracks` but no `shows`. Compact browse
+  and embedded resources cannot clear detail membership.
 - “Recently updated” retains its imported recording-update meaning. A normalized
   correction still refreshes metadata; it does not move the show into that list.
 - Global venue favorites do not implicitly favorite their shows or add all those
@@ -185,13 +191,16 @@ Implement mobile's actual queries, not a generic interpreter of all server route
 - [x] Refresh the saved request/capture evidence for the new graph.
 - [ ] Alec reviews the [expanded C1 browsing and playback responses](review/README.md)
   before account/auth work.
-- [x] Add six song browsing/discovery reads for the
+- [x] Add song browsing/discovery reads for the
   [song-to-playback review](review/song-source-journey.md).
 - [x] Stack [stored song counts #111](https://github.com/RelistenNet/RelistenApi/pull/111)
   below v4, update admin refreshes, backfill locally, and verify the 19 ms warm
   artist-browse median with unchanged payloads.
 - [ ] Alec reviews song counts, exact recording matches, and imported setlist
   fallback before account/auth work.
+- [x] Unify venue/song detail snapshots, add direct imported and artist-venue
+  lookups, and verify focused HTTP tests and real local responses. Keep compact
+  browse resources and separate file-match detail; omit `detail_url`.
 - [ ] C2–C5 remain unstarted pending the C1 response review.
 
 ## Discoveries and changes from the exploration
@@ -408,11 +417,16 @@ by accepting this plan.
   from audited song decisions, and avoid schedules, queues, or per-row triggers.
   Wire v4 to stored reads and remeasure after local backfill.
 
+- 2026-10-30, Alec: make every venue/song detail a resource-with-shows snapshot,
+  using the separately loaded artist catalog. Add direct imported
+  and artist-venue ID lookup; omit `detail_url`. Keep browse compact and song file
+  matches separate. Review real responses before account/auth work.
+
 ## Outcomes and retrospective
 
 Planning is complete. Independent feasibility and mobile/account reviewers
 confirmed the corrected plan has no remaining blockers in their reviewed areas.
-The handoff includes 62 catalog/operator endpoints, three in-place library
+The handoff includes 60 catalog/operator endpoints, three in-place library
 endpoints, two profile actions, contracts, five personal review checkpoints,
 migration/rollback steps and verification. The full thread was reread during the
 simplification pass; later decisions supersede the exploration's old epoch,

@@ -43,8 +43,8 @@ caching; exact-target favorites keep merge behavior small.
 Implement packages 1 and 2 for artist/year/show-list navigation, show detail,
 direct source and track reads. Alec expanded C1 to review these with the venue
 family before auth: artist venue groups, canonical metadata and show collections,
-and imported venue fallback detail. The song family adds six reads, bringing
-the local review to 22 GET routes.
+and imported venue fallback detail. Song discovery extends the review to a
+complete resource-with-shows journey. The current local contract has 20 GET routes.
 Cover raw, normalization-disabled, partial and fully interpreted
 fixtures. Alec reviews each family before its contract spreads to the next family
 or mobile work.
@@ -55,6 +55,14 @@ Then use the [song-to-playback walkthrough](review/song-source-journey.md):
 artist → song → matched files/shows → source → playable track. Search, recent
 lists, and artist bootstrap remain later catalog work.
 Keep account/auth as a separate checkpoint after the catalog responses settle.
+Venue and song details return flat metadata and complete `shows`; file-match
+detail returns metadata plus `tracks` without `shows`. Artists come from the
+separately loaded artist catalog, referenced by `artist_id`.
+Compact browse responses remain unchanged. Review direct imported and
+artist-venue ID lookups as well as global and artist-scoped details. There is no
+`detail_url`, and the old bare venue/song `/shows` routes are removed.
+Mobile will replace each detail owner’s membership atomically, including empty
+lists, while retaining shared entities. That mobile apply work has not run yet.
 
 Deliver a repeatable local review setup using the real development API,
 controllers, serializers and readers. Alec required real data, so manual review now uses a freshly restored production

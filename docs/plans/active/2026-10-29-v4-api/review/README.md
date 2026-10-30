@@ -14,34 +14,40 @@ appearances. Its test and live-capture results belong in the
 Shows now expose `artist_venue`, whose `artist_show_count` belongs to that
 artist and canonical place. Its nested `venue.global_show_count` belongs to the
 shared venue across approved-read artists. The old flat `show.venue` is removed.
-The same relationship resource appears in show summaries, full shows, canonical
-artist-list children, and direct artist venue detail.
+The same relationship metadata appears in show summaries, full shows, canonical
+artist-list children, and direct artist venue detail. Only detail adds complete `shows`.
 
-The local host serves all 22 review routes. The latest 62-request real-data
-capture passed its count, identity, fallback, and song-to-playback checks.
-The [verification log](../verification.md#stored-song-counts-and-latency-2026-10-30)
-records the results and timing method. Stored counts bring artist song browsing
-to a 19 ms median across five warm local requests, with identical response bodies.
-Earlier captures describe their recorded revision.
+The local host now serves 20 review routes. Venue and song detail destinations
+return metadata and complete `shows` together. Direct
+lookups use the resource's ID kind; there is no returned detail URL. Compact
+browse children stay compact. The [contracts](../contracts.md) define replacement
+ownership. Mobile holds the artist catalog separately and resolves `artist_id`
+references from it; detail responses contain no artist arrays. Mobile v4 apply
+implementation remains a later checkpoint.
+
+Earlier captures and timings describe their recorded revision. The
+[verification log](../verification.md) distinguishes the stored-count evidence
+from the newer resource-with-shows contract.
 
 Start with Red Rocks and Grateful Dead: the shared venue has 176 shows across
 approved artists; Grateful Dead's relationship has 20 across all its years.
 
 - [Global venue](http://127.0.0.1:43823/api/v4/venues/venue_fp4h900f)
-- [Grateful Dead relationship](http://127.0.0.1:43823/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/venues/venue_fp4h900f)
+- [Grateful Dead relationship](http://127.0.0.1:43823/api/v4/artist-venues/artist_venue_344wrm28)
 - [Show on 1978-07-07](http://127.0.0.1:43823/api/v4/shows/show_0gmtpk4g0pf5yfayb76m0j0k7g)
 
-The saved [relationship response](responses/shared-artist-venue.json),
-[global venue response](responses/shared-venue.json), and
+The saved [relationship excerpt](responses/shared-artist-venue-detail-excerpt.json),
+[global venue excerpt](responses/shared-venue-detail-excerpt.json), and
 [show venue excerpt](responses/shared-show-venue-excerpt.json) preserve the same
-IDs and counts. The excerpt includes selected venue-related fields from the full
-show response; use its URL for the complete recording hierarchy.
+IDs and counts. Detail excerpts select the first show; use the live URLs or
+ignored full captures for complete memberships.
+The show excerpt selects venue-related fields from the recording hierarchy.
 
 ## Follow the counts through the catalog
 
 Use the [venue-to-playback walkthrough](venue-source-journey.md): artist venue
-list → relationship detail → venue shows → show → source → track. The venue/playback
-routes retain their paths; six song reads extend the local review to 22 GET routes.
+list → relationship with shows → show → source → track. Shared venue detail
+provides the cross-artist view in the same resource-with-shows format.
 
 1. Open an artist's venue list. A canonical entry has `kind: "artist_venue"` and
    an `artist_venue` child. Its imported alternative has `kind: "imported_venue"`
@@ -50,15 +56,17 @@ routes retain their paths; six song reads extend the local review to 22 GET rout
    can overlap canonical entries during partial normalization. Use this list for
    every artist; follow each entry's `kind` instead of inspecting feature flags.
    Embedded imported venues in show/source responses use that same full count.
-2. Open `/artists/{artistId}/venues/{venueId}`. It returns the direct relationship
-   resource, identical to the canonical child in the list. Its native short ID
-   maps to `norm.artist_venues`; the artist and venue retain their own IDs.
+2. Open `/artist-venues/{artistVenueId}`. Its metadata matches the canonical
+   browse child; it adds complete `shows`. The
+   `/artists/{artistId}/venues/{venueId}` pair lookup returns the same detail.
+   Its native short ID maps to `norm.artist_venues`.
 3. Open one of that venue's shows and its year. `artist_venue.id` and
    `artist_show_count` must agree. The relationship count covers all the artist's
    shows at the venue, even in a single-year response.
-4. Open `/venues/{venueId}` and its cross-artist show list. Compare
-   `global_show_count` with the same venue nested under any artist. Filtering by
-   `artist_id` narrows show membership, never the global venue count.
+4. Open `/venues/{venueId}`. Its `shows` spans approved artists, referenced by
+   `artist_id` into mobile’s cached artist catalog. Compare `global_show_count` with
+   the same venue nested under any artist. Artist-venue detail provides the
+   artist-scoped membership; it never narrows the nested global count.
 5. Keep playing through the show's source and direct track. Imported titles,
    URLs, exact parents, and track `normalization` remain unchanged.
 
@@ -101,8 +109,8 @@ from this guide.
   unresolved text remains visible and playable.
 - [Raw](responses/raw-track.json) and [disabled](responses/disabled-track.json)
   states: imported playback remains usable and parent IDs are typed strings.
-- [Artist venue](responses/artist-venue.json), [direct source](responses/venue-journey-source.json),
-  and [imported fallback](responses/disabled-imported-venue.json): compare direct
+- [Artist venue](responses/shared-artist-venue-detail-excerpt.json), [direct source](responses/venue-journey-source.json),
+  and [imported fallback](responses/disabled-imported-venue-detail-excerpt.json): compare direct
   and nested resource identity without confusing count scopes.
 - [Henry J. Kaiser venue](responses/kaiser-venue.json): deduplicated `{ name, kind }`
   aliases, including retained merged names. Kinds are `official`, `short`, and
@@ -123,7 +131,8 @@ memberships, with no mismatches. A repeated recount preserved IDs, counts, and
 timestamps. The [foundation plan](../../2026-10-30-artist-venues/README.md) owns
 count maintenance and records concurrency, permissions, and repair behavior.
 
-The branch stack is normalization enums → artist-venue foundation → v4 API.
+The branch stack is normalization enums → artist-venue foundation → song-count
+foundation → v4 API.
 Production was not changed. This checkpoint qualifies local response review;
 remaining API routes, account migration, mobile rollout, and production capacity
 remain separate work.

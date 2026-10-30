@@ -234,3 +234,25 @@ Mobile persistence should keep the relationship and global venue as separate
 entities. A query result owns its membership, not the entity's count scope. The
 same nested venue cannot safely alternate between artist and global counts in a
 shared cache.
+
+
+## Resource-with-shows correction, 2026-10-30
+
+The earlier metadata-only canonical details and bare show-list routes required
+separate reads for one mobile screen. Imported UUID-backed IDs also needed an
+artist path parameter despite being globally unique. The corrected contract
+returns metadata and complete `shows` in one read
+snapshot with one ETag. Direct imported and artist-venue lookups remove that
+extra route context; fixed route selection follows ID kind without `detail_url`.
+Song file matches remain separate because one song can have thousands of files.
+Their response includes song metadata and `tracks`, with no `shows` field.
+
+Current mobile expects metadata and shows together, but its old apply path can
+skip unchanged parent timestamps and add memberships without removing old links.
+The planned v4 apply must upsert related entities and replace only the detail
+owner’s membership, including empty lists, atomically with its ETag. Never delete
+shared shows, downloaded files, or favorite membership from a detail omission.
+Mobile already holds the artist catalog; returned `artist_id` references use
+those cached rows. Detail responses need no repeated artist records or artist
+hydration queries. Refresh the artist catalog separately.
+This update changes the API contract and plan; it does not yet migrate mobile.

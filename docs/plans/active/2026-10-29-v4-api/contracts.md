@@ -283,38 +283,47 @@ detail routes. The wrapper owns no venue identity or count. Sort by target name,
 then ID.
 
 Clients use this list for every artist; the server applies approval and partial
-coverage. Navigate `artist_venue` entries using `artist_venue.venue.id` at
-`/artists/{artistId}/venues/{venueId}` and `imported_venue` entries using
-`imported_venue.id` at `/artists/{artistId}/imported-venues/{importedVenueId}`.
-Artist feature flags do not select the client route.
+coverage. Follow `artist_venue.id` to `/artist-venues/{artistVenueId}` and
+`imported_venue.id` to `/imported-venues/{importedVenueId}`. A shared `venue_` ID
+opens `/venues/{venueId}`. Artist feature flags do not select the client route.
+IDs are sufficient to select these fixed routes; responses add no `detail_url`.
 
-`GET /artists/{artistId}/venues/{venueId}` returns the direct
-`ArtistVenueResource`, identical to the canonical child in the list and matching
-show summaries. The route still takes the global `venue_` ID and resolves merged
-venue IDs before the relationship lookup. It returns 404 for missing, disabled,
-or unavailable relationships. No separate `/artist-venues/{id}` route is added in
-this checkpoint; clients can navigate with the resource's `artist_id` and
-`venue.id` while using its stable relationship ID for persistence.
+All three venue detail resources return their metadata directly, plus complete
+`shows` arrays:
 
-`GET /venues/{venueId}` returns `VenueResource`, resolving a merged ID to its
-survivor. `GET /venues/{venueId}/shows` returns show summaries for approved
-assignments, with an optional typed `artist_id` filter. The artist-scoped
-`GET /artists/{artistId}/venues/{venueId}/shows` returns the same filtered list.
-Every returned summary uses the same `artist_venue` graph. Unknown parents return
-404. Known parents with no qualifying membership return `[]`, including an artist
-with normalization disabled. Global metadata does not require artist membership
-or approval.
+- `GET /artist-venues/{artistVenueId}` returns `ArtistVenueWithShowsResource`.
+  Its metadata matches the compact `artist_venue` browse child. Its `shows`
+  contains that artist's approved assignments to the canonical place.
+- `GET /artists/{artistId}/venues/{venueId}` is a pair lookup returning the same
+  full relationship detail. It resolves merged venue IDs before looking up the
+  pair. Both lookups return 404 for missing or disabled relationships. A retained
+  zero-count relationship returns 200 with `shows: []`.
+- `GET /venues/{venueId}` returns `VenueWithShowsResource`, resolving a merged
+  ID to its survivor. Its `shows` spans approved assignments across artists.
+  The resource remains readable with `shows: []` when no approved artist
+  contributes shows. Use artist-venue detail for artist-scoped membership.
+- `GET /imported-venues/{importedVenueId}` returns the imported fields,
+  `show_count`, and complete `shows`. Membership uses `shows.artist_id` and
+  `shows.venue_id`; a source's different venue does not add a show. It includes
+  shows with canonical links too. No artist parameter is needed to retrieve a
+  globally unique imported ID. Imported detail remains available without
+  normalization and returns `shows: []` for an unused row.
 
-`GET /artists/{artistId}/imported-venues` returns flat imported venue resources
-with `show_count`, including unused rows with zero shows and rows fully covered
-by normalization. This is the full imported inventory, not the default browse
-list for artists without normalization.
-`GET /artists/{artistId}/imported-venues/{importedVenueId}` returns the imported
-fields plus `show_count` and `shows`. Both count and detail use `shows.artist_id`
-and `shows.venue_id`; a source's different imported venue does not create show
-membership. This corrects a legacy cached-count inconsistency without changing
-legacy routes. Imported detail retains all its show-level matches, including
-shows with an `artist_venue`. Foreign imported rows return 404.
+`GET /artists/{artistId}/imported-venues` remains the compact full inventory,
+including unused rows and rows fully covered by normalization. Browse, embedded,
+and inventory resources do not contain detail `shows`.
+
+Venue and song details reference artists by `artist_id`; they do not repeat artist
+resources. Mobile holds the artist catalog separately in memory and persistence.
+Load `/artists?include_autocreated=true` during artist bootstrap: unlike the
+default list, it includes autocreated artists with shows or sources, covering
+artists referenced by returned show collections. Artist metadata has its own
+resource/list ETag and refresh lifecycle. The detail ETag covers its represented
+metadata and membership, not changes to separately cached artist metadata.
+
+Read each detail’s metadata and membership in one repeatable-read session.
+Separate bare venue `/shows` routes are removed. Wrong-kind or malformed IDs
+return 422; valid but unknown IDs return 404.
 
 `GET /sources/{sourceId}` returns the same `SourceResource` as full show detail.
 Load only its sets, active non-orphaned tracks, links, and own imported venue in
@@ -411,21 +420,22 @@ unapproved artists, return imported entries only. The full
 rows, including unused songs, even when canonical entries replace them in the
 browse list.
 
-`GET /songs/{songId}` returns `SongDetailResource` directly:
+`GET /songs/{songId}` returns `SongWithShowsResource` directly:
 
 - `id`, `artist_id`, `name`, and nullable `kind` identify the surviving song;
 - `slug` and nullable `original_artist` retain canonical metadata;
 - `aliases` contains distinct alias strings and merged predecessors' names in
   stable order. Song aliases have no alias-kind field in the normalization schema;
-- `matched_track_count` and `matched_show_count` count exact active recording
-  matches under the rules below.
+- `matched_track_count` and `matched_show_count` are the stored recording counts;
+- `shows` is the complete, deduplicated recording-show membership.
 
-The `song` child in a canonical browse entry is that same detail resource.
-Track parts retain the compact `SongResource` containing only `id`, `artist_id`,
-`name`, and `kind`. A compact reference does not clear previously stored song
-metadata or set absent counts to zero.
+The `song` child in a canonical browse entry contains the same metadata and
+counts, without detail collections. Track parts retain the compact `SongResource`
+containing only `id`, `artist_id`, `name`, and `kind`. A compact reference does not
+clear previously stored song metadata or set absent counts to zero.
 
-`GET /songs/{songId}/tracks` returns direct list entries shaped as:
+`GET /songs/{songId}/tracks` returns song metadata and `tracks`.
+It has no `shows` property. Each `tracks` item is shaped as:
 
 ```json
 {
@@ -440,6 +450,8 @@ playback title, file URLs, exact artist/show/source/set parents, and full ordere
 normalization. Return each playable file once even when the requested song
 occurs in several parts. `matching_part_ordinals` lists those matched parts in
 ascending order; it does not establish new file identities or audio offsets.
+This separate file-match detail avoids loading thousands of tracks when a client
+only needs song metadata and shows.
 
 Discovery membership requires a resolved song part, a valid artist-owned
 canonical chain, an active non-orphaned track, and consistent source/set/show/
@@ -448,11 +460,11 @@ track can match through its resolved parts; a track whose complete interpretatio
 is inconsistent is excluded. Counts use this same recording membership at refresh
 time; discovery reads current membership from the shared
 `norm.song_recording_matches` function.
-`GET /songs/{songId}/shows` returns distinct show summaries from those recording
-matches, ordered by show date and identity. It does not include shows known only
-through imported setlists.
+The canonical detail’s `shows` contains distinct summaries from those recording
+matches, ordered by show date and identity. It excludes shows known only through
+imported setlists. There is no separate canonical song `/shows` route.
 
-All three canonical song routes resolve a merged ID to its survivor. Unknown IDs
+Both canonical song routes resolve a merged ID to its survivor. Unknown IDs
 or a song owned by an artist without approved reads return 404. Malformed or
 wrong-kind IDs return 422. A known approved song with an invalid canonical chain
 returns a no-store 503 problem; correcting that chain restores normal reads.
@@ -461,10 +473,10 @@ returns a no-store 503 problem; correcting that chain restores normal reads.
 
 An `ImportedSongResource` contains `id`, `artist_id`, `name`, `slug`,
 `upstream_identifier`, `created_at`, `updated_at`, and `setlist_show_count`.
-`GET /artists/{artistId}/imported-songs/{importedSongId}` returns those fields
-plus `shows`, the complete setlist-supported catalog show-summary collection.
-Foreign artist-owned rows return 404; known songs with no catalog show matches
-return an empty list and a zero count.
+`GET /imported-songs/{importedSongId}` returns those fields plus `shows`, the
+complete setlist-supported catalog show-summary collection. Imported IDs need no
+artist scope for lookup. Unknown IDs return 404; known songs with no catalog show
+matches return `shows: []`. Stored counts can lag membership until refresh.
 
 `setlist_show_count` counts distinct **catalog show identities** supported by
 `setlist_songs_plays → setlist_shows`, matched by artist and date. Multiple
@@ -505,14 +517,22 @@ stored counts can lag the live track/show lists. A GET never repairs them.
 Explicit refresh restores agreement. A count-only correction changes payload
 ETags even when imported timestamps and track interpretations are unchanged.
 Mobile accepts the returned count and does not replace it with a partial local
-list length. A 304 validates the represented stored count, not the freshness of
-all underlying recording membership.
+list length. For compact browse responses, a 304 validates the represented stored count
+and metadata; it does not establish fresh recording membership. Detail ETags
+also validate the live membership returned in that response. Its stored counts
+can independently lag that membership.
 
-These six routes use the existing direct-response, single-snapshot, payload-ETag,
-and failure contracts. Artist lists replace only their own browse/inventory
-membership. Song track/show lists replace only their exact cached query results;
-imported detail replaces only that imported song's show associations. Upsert
-related resources without deleting favorites, offline files, or other queries.
+These five song routes use direct responses and the existing failure contracts.
+Each detail reads its metadata and collection in one
+repeatable-read session, covered by one payload ETag. Artist lists replace only
+their own browse/inventory membership. Canonical and imported detail replace only
+their respective song-show associations, including an empty list. File-match
+detail replaces only that song’s track-match membership and never clears shows.
+Upsert shows and tracks and save the ETag in the same mobile
+transaction. Retain favorites, offline files, shared entities, and other queries.
+A 304 keeps the previously applied snapshot; failed fetch/apply keeps the last
+complete state. Bypass legacy parent-timestamp guards: changed membership can
+change the ETag while the parent’s imported timestamp remains unchanged.
 
 The implementation separates
 [canonical resolution](../../../../RelistenApi/Services/Catalog/CatalogSongMetadataReader.cs),
