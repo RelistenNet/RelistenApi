@@ -156,6 +156,9 @@ commits. Count refresh failures are logged and do not fail an otherwise complete
 import. Counts can differ from the current show list until an explicit successful
 refresh; no recurring repair job is registered. The admin app's venue-edit
 transaction includes its refresh and rolls the edit back if that refresh fails.
+Artist-scoped recounts can run concurrently for disjoint artists; overlapping
+scopes serialize. Venue edits and full recounts exclude scoped recounts through
+the existing venue gate. Ordinary readers do not acquire those advisory locks.
 Direct SQL repairs must explicitly refresh affected counts. Parent foreign keys
 cascade relationship deletion; count refreshes need no source triggers or pending
 queue. Venue merges remain owned by

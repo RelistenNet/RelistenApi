@@ -29,6 +29,9 @@ outside this work.
 - [x] Connect atomic admin refresh and retain best-effort import hooks.
 - [x] Verify referential integrity, identity, counts, permissions, and recovery.
 - [x] Complete independent review and verify the restacked v4 branch.
+- [x] 2026-10-30, Alec: make scoped recount locks follow the requested artists.
+- [x] Verify disjoint, overlapping, full-refresh, and admin concurrency.
+- [x] Review the lock-scope update and verify the restacked v4 branch.
 
 ## Context and interfaces
 
@@ -70,12 +73,23 @@ limits the refresh. Null refreshes all owners found in current assignments or
 stored relationships; an empty list does nothing. Stored relationships are
 included so a pair whose final assignment disappeared still reaches zero.
 
-The function joins the existing `norm-venues` advisory transaction lock used by
-venue normalization and admin writes. Admin venue operations already take this
-lock before editing source rows. Sharing it avoids a second lock order and keeps
-merge resolution consistent with the edit being committed. Venue writers and
-other refreshes can wait for this lock. Ordinary read queries use PostgreSQL
-snapshots and do not acquire it.
+The function coordinates through the existing `norm-venues` advisory transaction
+lock. A scoped recount takes that lock in shared mode, then exclusive locks for
+the requested artists. Disjoint artist scopes can run concurrently; overlapping
+scopes wait for each other. Artist lock keys are deduplicated and acquired in
+their actual key order, so caller order and hash collisions cannot reverse the
+acquisition order. The count query reads its source snapshot after those waits.
+
+A full recount takes the venue lock exclusively. Venue normalization and admin
+writes already take it exclusively before source edits, excluding scoped recounts
+while a venue changes. Ordinary read queries use PostgreSQL snapshots and do not
+acquire these advisory locks. An empty artist array returns without taking a lock.
+
+Locks last until the transaction ends. Each C# service call owns one autocommitted
+statement. A caller retaining a transaction must acquire its complete artist set
+before narrower refreshes; if full scope may be needed, take the exclusive venue
+lock before source work. Do not upgrade a shared scope to full scope while other
+scopes run. The admin already follows the exclusive-first order.
 
 The function uses `SECURITY DEFINER` with a fixed safe search path, and its SQL
 qualifies source and target tables. Public execution is revoked. A narrow
@@ -190,6 +204,8 @@ repository's roll-forward policy and has no destructive down migration.
   pending queue, and the count-specific Temporal workflow.
 - 2026-10-30: use the existing venue-write advisory lock. Give the restricted
   admin role narrow execution permission on the security-definer refresh function.
+- 2026-10-30, Alec: scoped recounts share venue coordination and serialize only
+  overlapping artist lock keys. Full recounts and venue writes remain exclusive.
 - 2026-10-30: preserve best-effort post-commit refreshes for imports and
   normalization. Recover failed hooks or out-of-band edits through explicit SQL.
 - 2026-10-30: keep merge authority in `norm.venues`. Store counts and pair identity
@@ -202,24 +218,31 @@ repository's roll-forward policy and has no destructive down migration.
 Implementation commits are `d0c71fdfc` (foreign keys and direct recount) and
 `8cb329e7a` (atomic admin contract and removal of recurring work). The companion
 admin commit is `327f070` in [PR #3](https://github.com/RelistenNet/relisten-admin/pull/3).
+The scoped-lock correction is `92080de9f`; admin commit `a5671f3` adds concurrency
+tests without changing the transaction helper.
 
 Final verification on 2026-10-30:
 
 - Foundation and restacked v4 solution builds passed. Existing dependency-audit
   and nullable-reference warnings remain.
-- Database and migration checks: 24 passed, including public service calls,
+- Database and migration checks: 31 passed, including public service calls,
   cascading deletion, restricted-role execution, atomic source/count rollback,
   and nonblocking reads of committed counts during an uncommitted recount.
+  Concurrency checks prove disjoint artist progress, same/partial-overlap waits,
+  fresh snapshots, reversed scope order, and exclusion with full recounts and
+  venue writers in both directions.
 - Restacked API, v4, typed-ID, Swagger, normalization, ingestion workflow, and
-  catalog checks: 197 passed, two opt-in model/corpus tests skipped.
+  catalog checks: 204 passed, two opt-in model/corpus tests skipped.
 - Normalization library: 366 passed.
-- Admin transaction tests: four passed on a disposable projection of real data.
+- Admin transaction tests: six passed on a disposable projection of real data.
   The updated bootstrap installed the exact shared migration. Type checking,
-  lint, formatting, and whitespace checks passed.
+  lint, formatting, and whitespace checks passed. The two concurrency cases prove
+  waiting before admin source work and fresh counts after the atomic admin commit.
 - The existing admin lab-dependent suite was not run because its source template
   databases are absent. The new transaction and permission checks ran separately.
 - Independent two-pass review found no unresolved correctness or readability
-  issues. The copied-redirect deletion bug found earlier has its own regression.
+  issues, including a fresh review of the scoped-lock update. The copied-redirect
+  deletion bug found earlier has its own regression.
 - All 14 v4 commits rebased unchanged, verified by range comparison. Repository
   CSharpier checks passed.
 

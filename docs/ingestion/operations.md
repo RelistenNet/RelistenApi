@@ -319,11 +319,18 @@ execution permission can repair counts explicitly:
 SELECT * FROM norm.refresh_artist_venues();
 ```
 
-An explicit UUID array limits the refresh to those artists; null or omitted input
-refreshes all current owners. The refresh joins the existing `norm-venues`
-advisory transaction lock. Venue writers and other refreshes can wait for it;
-ordinary read queries use snapshots and do not acquire it. The repair performs
-database work only, with no provider or model requests.
+An explicit UUID array limits the refresh and its exclusive artist locks to those
+artists. Scoped recounts share the `norm-venues` gate, allowing disjoint artist
+scopes to run concurrently. Overlapping artist scopes serialize. Null or omitted
+input refreshes all current owners under the exclusive venue gate; venue edits
+also hold that gate exclusively. Ordinary reads use snapshots and do not acquire
+these advisory locks. The repair performs database work only, with no provider or
+model requests.
+
+Locks last until transaction end. Use one complete refresh scope per transaction.
+If a transaction will need a full recount, acquire the venue gate exclusively
+before editing source rows, as the admin does; do not upgrade a scoped shared
+gate to exclusive while other scopes run.
 
 For application rollback, keep the additive schema and grant. Older admin builds
 and workers can leave counts stale after source edits; run an explicit refresh
