@@ -1,5 +1,4 @@
 using System;
-using System.Globalization;
 using System.Linq;
 using Relisten.Catalog;
 using Relisten.Identifiers;
@@ -199,16 +198,7 @@ public static class V4CatalogProjection
         };
 
     private static VenueNameResource VenueName(CatalogVenueName value) =>
-        new(
-            value.name,
-            NormalizationEnums.Parse<VenueNameKind>(value.kind),
-            value.valid_from is { } from
-                ? DateOnly.ParseExact(from, "yyyy-MM-dd", CultureInfo.InvariantCulture)
-                : null,
-            value.valid_to is { } to
-                ? DateOnly.ParseExact(to, "yyyy-MM-dd", CultureInfo.InvariantCulture)
-                : null
-        );
+        new(value.name, NormalizationEnums.Parse<VenueNameKind>(value.kind));
 
     public static TrackPartResource Part(CatalogPart value) =>
         new()

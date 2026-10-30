@@ -183,9 +183,8 @@ public sealed class CatalogShowMetadataReader(ILogger<CatalogShowMetadataReader>
             return;
         }
 
-        // Retain merged venues' names without inventing cleaner periods. Clients
-        // choose the first active official name: own venue first, then merged aliases,
-        // newest start first. Bounds are inclusive below, exclusive above, and null when open.
+        // Names are aliases for discovery and details. Imported venue observations
+        // supply show labels; repeated stored periods must not duplicate aliases.
         var ids = venues.Select(venue => venue.id).Distinct().ToArray();
         var names = await session.Connection.QueryAsync<CatalogVenueName>(
             session.Command(
@@ -198,11 +197,9 @@ public sealed class CatalogShowMetadataReader(ILogger<CatalogShowMetadataReader>
                   FROM lineage f JOIN norm.venues v ON v.merged_into=f.venue_id
                   WHERE f.depth<20 AND NOT v.id=ANY(f.path)
                 )
-                SELECT f.canonical_venue_id,n.name,n.kind,
-                       CASE WHEN isfinite(n.valid_from) THEN to_char(n.valid_from,'YYYY-MM-DD') END valid_from,
-                       CASE WHEN isfinite(n.valid_to) THEN to_char(n.valid_to,'YYYY-MM-DD') END valid_to
+                SELECT DISTINCT f.canonical_venue_id,n.name,n.kind
                 FROM lineage f JOIN norm.venue_names n ON n.venue_id=f.venue_id
-                ORDER BY f.canonical_venue_id,f.depth,n.valid_from DESC,n.kind,n.normalized,n.name,n.valid_to,n.venue_id
+                ORDER BY f.canonical_venue_id,n.kind,n.name
                 """,
                 new { ids },
                 cancellationToken

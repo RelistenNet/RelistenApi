@@ -19,9 +19,11 @@ running API responses, isolated account/auth, mobile pilot, complete API and ful
 mobile acceptance. The implementation plan is authoritative; this design retains
 the exploration and its reasoning.
 
-Later C1 feedback names canonical public resources `venue` and `song`, includes
-venue name periods, and removes `venue_display`; clients select the historical
-label. See the authoritative plan contracts for the current response shape.
+Later C1 feedback names canonical public resources `venue` and `song` and removes
+`venue_display`. The 2026-10-30 decision supersedes the timeline proposals below:
+show UI displays imported venue labels and links to canonical venues when present.
+Venue `names` contains `{ name, kind }` aliases without dates. See the
+authoritative plan contracts for the current response shape.
 
 ## Agreed approach
 
@@ -315,6 +317,9 @@ identity across all artists. Existing artist-specific favorites can retain
 their scope, but they are internal testing data and do not justify a complex
 migration. The normalized overlay does not remove the required account contract
 work.
+
+**Superseded on 2026-10-30:** the following historical-name proposal is retained
+for exploration context. Show UI now uses the imported label and canonical link.
 
 Shows also need their own venue display name, resolved for the show date.
 Current cards read `show.venue.name`; a shared canonical current name cannot

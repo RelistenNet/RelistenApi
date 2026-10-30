@@ -3,7 +3,9 @@
 These are contract sketches for choosing the approach, not implemented DTOs.
 The [implementation contracts](../../plans/active/2026-10-29-v4-api/contracts.md)
 supersede exploratory shapes here, including canonical account/auth ID storage
-and the in-place account API cutover.
+and the in-place account API cutover. The 2026-10-30 venue decision also
+supersedes the historical-display sketches below: show UI uses `imported_venue`,
+links through optional `venue`, and receives `{ name, kind }` aliases without dates.
 Names and field casing can be settled in planning. Angle-bracket IDs below are
 schematic placeholders, not parser test vectors.
 

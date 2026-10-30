@@ -164,7 +164,7 @@ public sealed class VenueResource
     public double? Longitude { get; init; }
     public VenueCoordinatePrecision? CoordinatePrecision { get; init; }
 
-    /// <summary>Stored periods, including merged aliases, ordered for client-side selection.</summary>
+    /// <summary>Distinct names and alias kinds, including merged venues, in stable order.</summary>
     public IReadOnlyList<VenueNameResource> Names { get; init; } = [];
 }
 
@@ -216,11 +216,6 @@ public sealed class TourResource
     public DateTime UpdatedAt { get; init; }
 }
 
-/// <summary>A stored venue name period. Bounds are inclusive/exclusive; null means unbounded.</summary>
+/// <summary>A venue name or alias, independent of its stored historical periods.</summary>
 [JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
-public sealed record VenueNameResource(
-    string Name,
-    VenueNameKind Kind,
-    DateOnly? ValidFrom,
-    DateOnly? ValidTo
-);
+public sealed record VenueNameResource(string Name, VenueNameKind Kind);

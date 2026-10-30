@@ -1,7 +1,8 @@
 # Deliver the complete v4 catalog and mobile adapter
 
-Status: C1 ready for response review, 2026-10-29. The local API reads the
-restored production catalog; no production deployment or account migration occurred. This is a living ExecPlan: update Progress,
+Status: C1 ready for response review; venue alias policy revised 2026-10-30.
+The local API reads the restored production catalog; no production deployment or
+account migration occurred. This is a living ExecPlan: update Progress,
 Discoveries, Decision Log, and Outcomes as work proceeds.
 
 Build and review this in stages. First deliver a running browse and playback API that
@@ -56,8 +57,10 @@ an earlier design proposal.
   Imported setlist evidence cannot establish a recording/track match. Preserve
   imported song/show behavior for artists without normalization and unresolved
   imported entries for partial coverage.
-- Client show venue label: date-appropriate official name, then stored canonical
-  name, then imported label. Track playback title remains imported.
+- Show UI renders the imported venue name/locality and links to the normalized
+  venue when present. Canonical name/locality is fallback only when imported data
+  is absent. Venue `names` contains deduplicated `{ name, kind }` aliases, not date
+  periods. Track playback title remains imported.
 - “Recently updated” retains its imported recording-update meaning. A normalized
   correction still refreshes metadata; it does not move the show into that list.
 - Global venue favorites do not implicitly favorite their shows or add all those
@@ -213,8 +216,8 @@ primary read-only REPEATABLE READ transaction, explicit connection/transaction,
 batched SQL, cancellation and a 30-second command timeout. Materialize before
 serialization. Preserve legacy cache/routing and Npgsql auto-prepare.
 
-Implement approved-read gating, partial track parts, raw fallback, historical
-venue names, canonical redirects and the ID reservation migration in
+Implement approved-read gating, partial track parts, raw fallback, canonical venue
+links and aliases, canonical redirects and the ID reservation migration in
 [contracts](contracts.md#canonical-redirects-and-retirement). Generate payload
 ETags without writer counters. Deliver C1's running local Swagger/request setup:
 normalization-only edits must change JSON/ETag despite unchanged imported times.
@@ -277,8 +280,9 @@ Test direct schema-15 upgrades and staged account-only then catalog upgrades.
 
 Use server-counted canonical-or-imported venue/song entries with existing artist
 navigation. Song matches identify exact show/source/track; imported fallback
-retains its setlist meaning. Centralize historical venue display. Preserve imported
-title, playback URLs, source/set order and offline identity.
+retains its setlist meaning. Render imported venue labels and link to canonical
+venues where available. Preserve imported titles, playback URLs, source/set order
+and offline identity.
 
 Add global venue detail and a separate My Library Venues section using existing
 styles. Venue favorites span artists without implicit show favorites. Keep simple
@@ -305,7 +309,8 @@ by accepting this plan.
 - 2026-10-29, Alec: normalized information belongs on every track, entirely
   under `normalization`; keep imported playback titles and raw artist support.
 - 2026-10-29, Alec: exact show/source/track information from normalization;
-  historical venue-name fallback; recording-only recent updates; honor read flag.
+  venue-name fallback (superseded by the imported-display decision below);
+  recording-only recent updates; honor read flag.
 - 2026-10-29, Alec: separate global Venues library section; simplest merge
   favorite behavior is acceptable, including re-favoriting; alpha sync may break.
 - 2026-10-29, Alec: ordinary responses are direct resources/lists; use HTTP
@@ -327,7 +332,13 @@ by accepting this plan.
   Keep the full plan, but review these public contracts together first.
 
 - 2026-10-29, Alec: canonical public resources are `venue`/`song`; include venue
-  name periods and remove `venue_display`. Clients choose the display label.
+  name periods and remove `venue_display` (periods superseded below).
+
+- 2026-10-30, Alec: discard the additional venue-history fix and its branch. Show
+  UI displays imported venue name/locality and links to the normalized venue
+  when present. Return deduplicated `{ name, kind }` aliases without dates.
+  No timeline resolution, history backfill, or date-evidence work is required.
+  The active branch stack is normalization enums → v4 API.
 
 ## Outcomes and retrospective
 

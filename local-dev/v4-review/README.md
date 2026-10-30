@@ -26,7 +26,7 @@ a different snapshot may require choosing replacement records.
 
 The request collection works in Rider or a compatible HTTP client. Swagger
 provides Try it out too. Start with the matched and partial tracks, compare
-their full shows, then inspect the historical venue example. Playback URLs and
+their full shows, then inspect the venue alias example. Playback URLs and
 titles are imported values; normalized parts describe the file without replacing it.
 
 The expanded C1 browse checkpoint implements:
@@ -37,7 +37,7 @@ The expanded C1 browse checkpoint implements:
   `/by-number/{year}` for year detail with show summaries.
 - `GET /api/v4/artists/{artistId}/shows`: the complete artist show-summary list.
 - `GET /api/v4/shows/{showId}`: full show with sources, sets, tracks, imported
-  venue observations, historical venue display and approved normalization.
+  venue observations, canonical venue aliases and approved normalization.
 - `GET /api/v4/source-tracks/{sourceTrackId}`: that same track resource directly,
   with exact typed artist/show/source/set parents.
 
@@ -79,11 +79,9 @@ Synthetic regression data is confined to disposable test databases under
 
 Venue resources use `venue` and `song` schema names. Shows expose nullable
 `venue` alongside `imported_venue`; `venue_display` has been removed. A venue's
-`names` includes official, short and spelling entries with date-only bounds
-(start inclusive, end exclusive, null unbounded). Entries preserve stored periods
-and include merged aliases. Clients can select the first date-applicable official
-entry using the machine-readable show `date`, then fall back to the stored
-canonical name and imported observations. `display_date` may be fuzzy, such as
-`1984-XX-XX`; it is not a date parser input. Imported machine dates may be imputed,
-so clients may choose the canonical label for an uncertain date.
+`names` contains distinct `{ name, kind }` pairs, including merged aliases;
+kind is `official`, `short`, or `spelling`. Date ranges are not exposed.
+Show UI displays the imported venue label and locality and links to `venue.id`
+when a normalized venue exists. The canonical label is a fallback when imported
+venue data is absent.
 The request collection includes the Oakland/Henry J. Kaiser example.

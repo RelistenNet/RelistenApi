@@ -2,7 +2,10 @@
 
 API checkout inspected at `3fb0e0f` on 2026-10-29. Line numbers are navigation
 aids at that revision. These observations describe code, not verified production
-schema, deployment, coverage, or released mobile behavior.
+schema, deployment, coverage, or released mobile behavior. The later
+[implementation contracts](../../plans/active/2026-10-29-v4-api/contracts.md)
+supersede historical venue-display conclusions here: imported labels are displayed,
+with canonical venue links and typed aliases.
 
 ## API and normalization
 
