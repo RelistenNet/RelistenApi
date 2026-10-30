@@ -45,10 +45,12 @@
 ## Database & Postgres Tips
 - Local Postgres runs on `127.0.0.1:15432` with database `relisten_db`, user `relisten`, password `local_dev_password`.
 - Quick connect: `PGPASSWORD=local_dev_password psql -h 127.0.0.1 -p 15432 -U relisten -d relisten_db`.
+- The local Kubernetes context is `relisten3-k3s`. Check `kubectl config get-contexts -o name` before declaring production access unavailable; older notes may call it `relisten3`.
 - Production read-only Postgres runs on the relisten3 replica. Use the direct endpoint `relisten-db-ro.tail09dbf.ts.net:5432` with database `app` and user `app` for schema inspection and query-performance checks such as `EXPLAIN (ANALYZE, BUFFERS)`.
 - Use `relisten-db-pgbouncer-ro.tail09dbf.ts.net:5432` when a check needs to follow the application's PgBouncer path. The matching Postico favorites are `relisten-prod direct RO app` and `relisten-prod PgBouncer RO app`.
-- Read the current password from the `relisten-db-app` secret in the `relisten3` context instead of relying on a cached Postico password. Do not print or persist it; the quick-connect command below passes it directly to `psql`.
-- Quick connect to the direct production replica: `PGPASSWORD="$(kubectl --context relisten3 -n default get secret relisten-db-app -o jsonpath='{.data.password}' | base64 --decode)" PGSSLMODE=require PGOPTIONS='-c default_transaction_read_only=on' psql -X -v ON_ERROR_STOP=1 -h relisten-db-ro.tail09dbf.ts.net -p 5432 -U app -d app`.
+- Read the current password from the `relisten-db-app` secret in the `relisten3-k3s` context instead of relying on a cached Postico password. Do not print or persist it; the quick-connect command below passes it directly to `psql`.
+- Quick connect to the direct production replica: `PGPASSWORD="$(kubectl --context relisten3-k3s -n default get secret relisten-db-app -o jsonpath='{.data.password}' | base64 --decode)" PGSSLMODE=require PGOPTIONS='-c default_transaction_read_only=on' psql -X -v ON_ERROR_STOP=1 -h relisten-db-ro.tail09dbf.ts.net -p 5432 -U app -d app`.
+- If a one-off Npgsql client fails its macOS TLS handshake while this `psql` command succeeds, use `psql` for the read-only export. Preserve `PGSSLMODE=require` and read-only session settings; do not disable TLS or change production configuration.
 - Helpful tables: `artists`, `features`, `artists_upstream_sources`, `upstream_sources` (archive.org is `upstream_source_id = 1`).
 - Example query to inspect archive.org artists:\n  `select a.id, a.name, a.slug, a.featured, aus.upstream_identifier from artists a join artists_upstream_sources aus on aus.artist_id=a.id where aus.upstream_source_id=1;`
 - It is MUCH better to inspect the schema using psql than to rely on the migration files to learn about the schema.  
