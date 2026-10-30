@@ -83,68 +83,62 @@ public sealed partial class TestV4CatalogHttp
     public async Task Song_tracks_keep_exact_parents_and_all_parts_but_return_each_file_once()
     {
         var recordingDetail = await GetJson(DiscoverySongPath + "/tracks");
-        var matches = recordingDetail["tracks"]!.AsArray();
+        var tracks = recordingDetail["tracks"]!.AsArray();
         recordingDetail.AsObject().ContainsKey("shows").Should().BeFalse();
         var detail = await GetJson(DiscoverySongPath);
         JsonNode
             .DeepEquals(ResourceMetadata(recordingDetail), ResourceMetadata(detail))
             .Should()
             .BeTrue();
-        matches.Should().HaveCount(3);
-        matches
-            .Select(match => match!["track"]!["id"]!.GetValue<string>())
+        tracks.Should().HaveCount(3);
+        tracks
+            .Select(track => track!["id"]!.GetValue<string>())
             .Should()
             .BeEquivalentTo(
                 CatalogId("track", 341),
                 CatalogId("track", 342),
                 CatalogId("track", 343)
             );
-        foreach (var match in matches)
+        foreach (var track in tracks)
         {
-            var track = match!["track"]!;
-            var direct = await GetJson("/api/v4/source-tracks/" + track["id"]!.GetValue<string>());
+            var direct = await GetJson("/api/v4/source-tracks/" + track!["id"]!.GetValue<string>());
             JsonNode.DeepEquals(track, direct).Should().BeTrue();
             track["artist_id"]!.GetValue<string>().Should().Be(CatalogId("artist", 301));
-            match["matching_part_ordinals"]!.AsArray().Should().NotBeEmpty();
+            MatchingOrdinals(track).Should().NotBeEmpty();
         }
-        var medley = matches.Single(match =>
-            match!["track"]!["id"]!.GetValue<string>() == CatalogId("track", 341)
+        var medley = tracks.Single(track =>
+            track!["id"]!.GetValue<string>() == CatalogId("track", 341)
         )!;
-        medley["matching_part_ordinals"]!
-            .AsArray()
-            .Select(part => part!.GetValue<int>())
-            .Should()
-            .Equal(1, 3);
-        medley["track"]!["source_id"]!.GetValue<string>().Should().Be(CatalogId("source", 321));
-        medley["track"]!["source_set_id"]!
-            .GetValue<string>()
-            .Should()
-            .Be(CatalogId("source_set", 331));
-        medley["track"]!["show_id"]!.GetValue<string>().Should().Be(CatalogId("show", 311));
-        medley["track"]!["title"]!
-            .GetValue<string>()
-            .Should()
-            .Be("Original Scarlet > Fire > Scarlet");
-        medley["track"]!["normalization"]!["parts"]!.AsArray().Should().HaveCount(3);
-        var partial = matches.Single(match =>
-            match!["track"]!["id"]!.GetValue<string>() == CatalogId("track", 343)
+        MatchingOrdinals(medley).Should().Equal(1, 3);
+        medley["source_id"]!.GetValue<string>().Should().Be(CatalogId("source", 321));
+        medley["source_set_id"]!.GetValue<string>().Should().Be(CatalogId("source_set", 331));
+        medley["show_id"]!.GetValue<string>().Should().Be(CatalogId("show", 311));
+        medley["title"]!.GetValue<string>().Should().Be("Original Scarlet > Fire > Scarlet");
+        medley["normalization"]!["parts"]!.AsArray().Should().HaveCount(3);
+        var partial = tracks.Single(track =>
+            track!["id"]!.GetValue<string>() == CatalogId("track", 343)
         )!;
-        partial["track"]!["normalization"]!["state"]!.GetValue<string>().Should().Be("partial");
-        partial["matching_part_ordinals"]!
-            .AsArray()
-            .Select(part => part!.GetValue<int>())
-            .Should()
-            .Equal(1);
+        partial["normalization"]!["state"]!.GetValue<string>().Should().Be("partial");
+        MatchingOrdinals(partial).Should().Equal(1);
 
         var shows = detail["shows"]!.AsArray();
         shows
             .Select(show => show!["id"]!.GetValue<string>())
             .Should()
             .Equal(CatalogId("show", 311), CatalogId("show", 312));
-        detail["matched_track_count"]!.GetValue<int>().Should().Be(matches.Count);
+        detail["matched_track_count"]!.GetValue<int>().Should().Be(tracks.Count);
         detail["matched_show_count"]!.GetValue<int>().Should().Be(shows.Count);
         var document = await GetJson("/api-docs/v4/swagger.json");
-        AssertSchemaFields(document, "SongTrackMatchResource", medley);
+        AssertSchemaFields(document, "TrackResource", medley);
+
+        IEnumerable<int> MatchingOrdinals(JsonNode track) =>
+            track["normalization"]!["parts"]!
+                .AsArray()
+                .Where(part =>
+                    part!["song"]?["id"]?.GetValue<string>()
+                    == recordingDetail["id"]!.GetValue<string>()
+                )
+                .Select(part => part!["ordinal"]!.GetValue<int>());
     }
 
     [Test]

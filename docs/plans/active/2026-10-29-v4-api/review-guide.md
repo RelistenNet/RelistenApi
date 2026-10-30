@@ -99,7 +99,8 @@ Alec should be able to answer these questions by making requests:
   fallback and cross-artist approved assignments? Does direct source detail match
   that same source inside its full show?
 - Do canonical song counts match exact playable files and their distinct shows?
-  Does a repeated medley song return one file with multiple matching ordinals?
+  Does a repeated medley song return one complete track whose normalization parts
+  retain each occurrence?
   Are imported setlist counts and show lists clearly separate from recording
   matches, including zero-match canonical songs and artists without normalization?
 - Are wrong prefixes, unknown IDs and dependency failures clear?

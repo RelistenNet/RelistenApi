@@ -434,24 +434,20 @@ counts, without detail collections. Track parts retain the compact `SongResource
 containing only `id`, `artist_id`, `name`, and `kind`. A compact reference does not
 clear previously stored song metadata or set absent counts to zero.
 
-`GET /songs/{songId}/tracks` returns song metadata and `tracks`.
-It has no `shows` property. Each `tracks` item is shaped as:
+`GET /songs/{songId}/tracks` returns song metadata and `tracks: TrackResource[]`.
+It has no `shows` property. Each item is the complete existing `TrackResource`,
+identical to its direct track read. It preserves the imported playback title,
+file URLs, exact artist/show/source/set parents, and full ordered normalization.
+Return each playable file once even when the song occurs in several parts.
 
-```json
-{
-  "track": { "id": "track_<UUID-suffix>", "normalization": {} },
-  "matching_part_ordinals": [1, 3]
-}
-```
-
-The example abbreviates `track`: the actual child is the complete existing
-`TrackResource`, identical to its direct track read. It preserves the imported
-playback title, file URLs, exact artist/show/source/set parents, and full ordered
-normalization. Return each playable file once even when the requested song
-occurs in several parts. `matching_part_ordinals` lists those matched parts in
-ascending order; it does not establish new file identities or audio offsets.
-This separate file-match detail avoids loading thousands of tracks when a client
-only needs song metadata and shows.
+To highlight the song’s matching parts, select `track.normalization.parts` where
+`state == "matched"` and `song.id` equals the returned root song `id`. Use that
+canonical returned ID because a requested merged song ID can resolve to its
+survivor. The existing parts already supply their ordinals, text, and song
+references; no per-track match wrapper or duplicated ordinal list is needed.
+Parts do not establish new file identities or audio offsets. This separate
+detail avoids loading thousands of tracks when a client only needs song metadata
+and shows.
 
 Discovery membership requires a resolved song part, a valid artist-owned
 canonical chain, an active non-orphaned track, and consistent source/set/show/

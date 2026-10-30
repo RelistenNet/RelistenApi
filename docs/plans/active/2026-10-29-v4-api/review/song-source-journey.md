@@ -22,12 +22,14 @@ from this walkthrough.
    loaded artist catalog.
 3. Open [matched files](http://127.0.0.1:43823/api/v4/songs/song_62mhvjyd/tracks).
    This response contains song metadata and `tracks`.
-   Each `tracks` item contains a complete `track` and `matching_part_ordinals`. A medley
-   can contain the song more than once, but its file appears once. Count files,
+   Each `tracks` item is a complete `TrackResource`, equal to its direct track
+   response. A medley can contain the song more than once, but its file appears
+   once. Select matched normalization parts whose `song.id` equals the root
+   response’s canonical `id` to highlight occurrences. Count files,
    not matching parts. The track retains its imported title and all normalized
    parts, including unresolved parts of a partial interpretation.
-4. Follow an item's `track.source_id` to `/api/v4/sources/{sourceId}` and
-   `track.id` to `/api/v4/source-tracks/{trackId}`. The returned file, exact
+4. Follow an item's `source_id` to `/api/v4/sources/{sourceId}` and
+   `id` to `/api/v4/source-tracks/{trackId}`. The returned file, exact
    show/source/set parents, playback URLs, and normalization should match.
 5. Inspect canonical detail’s `shows`. A show appears once even if several
    recordings/files match. There is no separate `/songs/{id}/shows` route. Follow its ID to
@@ -40,7 +42,7 @@ from this walkthrough.
 
 The current snapshot returns 3,355 Scarlet Begonias files across 332 shows;
 the imported setlist row returns 315 catalog shows. Saved examples include the
-[canonical resource](responses/song-detail-excerpt.json), a [complete file match](responses/song-track-match.json),
+[canonical resource](responses/song-detail-excerpt.json), a [complete file match](responses/song-track.json),
 and a [zero-match song](responses/zero-match-song.json). The
 [browse entry excerpt](responses/artist-song-entries-excerpt.json) selects two
 entries from the full artist list. The [imported metadata excerpt](responses/imported-song-metadata-excerpt.json)
@@ -74,8 +76,8 @@ manual review does not edit the restored source data.
 Canonical detail and browse children upsert a song's discovery metadata and
 counts. Compact song references inside track parts update only their four
 supplied identity/name/kind fields. They do not reset absent counts or aliases.
-Each file still has its existing UUID-backed track identity. Matching ordinals
-are query metadata, not new playable identities.
+Each file still has its existing UUID-backed track identity. Normalization parts
+carry their own ordinals; the song-track collection adds no new playable identities.
 
 The artist song list replaces only that artist’s browse membership. Raw inventory
 owns its separate imported membership. Canonical and imported detail each return

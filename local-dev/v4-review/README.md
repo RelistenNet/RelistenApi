@@ -147,8 +147,9 @@ collection includes the Oakland/Henry J. Kaiser example.
 
 Canonical `matched_track_count` counts distinct active playable files containing
 a resolved part for that song; `matched_show_count` counts their distinct shows.
-`/songs/{id}/tracks` returns each file once with its matching ordinals. The complete
-track is shared with direct track and recording reads, preserving imported titles,
+`/songs/{id}/tracks` returns each file once as a complete track resource. Match
+its normalization parts against the returned root song ID. The complete track is
+shared with direct track and recording reads, preserving imported titles,
 playback URLs, exact parents, and partial normalization.
 
 Imported `setlist_show_count` counts distinct catalog shows supported by imported

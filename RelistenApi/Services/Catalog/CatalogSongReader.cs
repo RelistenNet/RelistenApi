@@ -118,13 +118,7 @@ public sealed class CatalogSongReader(
         ).ToArray();
         await trackNormalization.Apply(session, tracks, true, cancellationToken);
         var byUuid = tracks.ToDictionary(track => track.uuid);
-        var trackMatches = membership
-            .Select(row => new CatalogSongTrackMatch(
-                byUuid[row.track_uuid],
-                row.matching_part_ordinals
-            ))
-            .ToArray();
-        return new(song, trackMatches);
+        return new(song, membership.Select(row => byUuid[row.track_uuid]).ToArray());
     }
 
     public async Task<IReadOnlyList<CatalogImportedSong>?> ReadImportedSongs(

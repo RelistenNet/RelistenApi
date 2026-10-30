@@ -151,11 +151,14 @@ GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/songs
 ### Scarlet Begonias: metadata, distinct recording-backed shows
 GET {{base}}/api/v4/songs/song_62mhvjyd
 
-### Scarlet Begonias: metadata and exact files, with matching part ordinals
+### Scarlet Begonias: metadata and exact files as complete track resources
 GET {{base}}/api/v4/songs/song_62mhvjyd/tracks
 
 ### Requested song: direct metadata and show collection
 GET {{base}}/api/v4/songs/song_mbkeejfd
+
+### Requested song: complete direct track resources
+GET {{base}}/api/v4/songs/song_mbkeejfd/tracks
 
 ### Full imported song inventory, including mapped and unused rows
 GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/imported-songs

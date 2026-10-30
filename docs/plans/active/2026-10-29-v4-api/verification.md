@@ -720,14 +720,21 @@ capacity measurements:
 
 | Detail | Returned membership | Time |
 | --- | --- | --- |
-| Shared Red Rocks venue | 176 shows | 26 ms |
-| Imported Ace’s Studio (`imported_venue_78331pxdqjdg434rrgm1d2pnrj`) | 1 show | 4 ms |
-| Song `song_mbkeejfd` | 147 shows | 66 ms |
-| Scarlet Begonias | 332 shows | 172 ms |
-| Scarlet file-match detail | 3,355 files | 242 ms |
+| Shared Red Rocks venue | 176 shows | 29.894 ms |
+| Imported Ace’s Studio (`imported_venue_78331pxdqjdg434rrgm1d2pnrj`) | 1 show | 5.540 ms |
+| Song `song_mbkeejfd` | 147 shows | 68.175 ms |
+| Scarlet Begonias | 332 shows | 180.401 ms |
+| Scarlet track detail | 3,355 files | 187.366 ms |
 
 Revalidating captured ETags for a global venue and both user-reported examples
 returned 304. Curated excerpts retain detail metadata and select the first show
 or file match. Complete response bodies, headers, and timing samples remain in
 ignored `local-dev/v4-review/.output/`; the live URLs return full collections.
 Artists resolve by `artist_id` from mobile’s separately loaded artist catalog.
+
+The simplified track contract passed all 82 focused v4 tests and a fresh review.
+The latest capture verifies `tracks` contains direct `TrackResource` items, unique
+by track ID, identical to direct track lookup, with matched parts referencing the
+root canonical song ID. The user-reported `song_mbkeejfd` returns 1,483 direct
+tracks; its captured ETag revalidated with 304. Matching parts come from each
+track’s `normalization.parts`, with no wrapper or duplicated ordinal field.

@@ -118,7 +118,7 @@ Current setlist show membership comes from `setlist_songs_plays` through
 The song checkpoint is documented in the
 [song-to-playback walkthrough](../../plans/active/2026-10-29-v4-api/review/song-source-journey.md).
 Canonical `/songs/{songId}` exposes `matched_track_count` and `matched_show_count`;
-its `/tracks` detail returns each file once with matching ordinals, and its `shows`
+its `/tracks` detail returns each complete file once, retaining all normalized parts, and its `shows`
 deduplicates recording-supported catalog shows. Imported detail exposes
 `setlist_show_count`, counting distinct catalog show IDs matched by artist/date,
 and its corresponding show list. Setlist-only dates without a catalog show do
@@ -163,7 +163,7 @@ routes. Detail reads use one snapshot and payload ETag.
 | `GET /api/v4/artist-venues/{artistVenueId}` | Relationship metadata, artist count, complete scoped `shows`. |
 | `GET /api/v4/artists/{artistId}/venues/{venueId}` | Pair lookup returning the same complete artist-venue detail. |
 | `GET /api/v4/songs/{songId}` | Song metadata, stored recording counts, complete distinct recording `shows`. |
-| `GET /api/v4/songs/{songId}/tracks` | Song metadata and complete `tracks` with matching part ordinals. Each file appears once; no `shows` field. |
+| `GET /api/v4/songs/{songId}/tracks` | Song metadata and complete `TrackResource` items in `tracks`. Each file appears once; matching parts come from its normalization. No `shows` field. |
 
 Imported venue/song details likewise include metadata and complete `shows`,
 with direct imported-ID lookup. Artists come from a separately loaded catalog;

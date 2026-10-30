@@ -29,11 +29,14 @@ public sealed record SongWithShowsResource : SongDetailResource
     public IReadOnlyList<ShowSummaryResource> Shows { get; init; } = [];
 }
 
-/// <summary>A song and its complete playable-file matches, without show membership.</summary>
+/// <summary>
+/// A song and its complete playable files, each returned once. Matching normalization
+/// parts reference this song's ID; the collection does not replace show membership.
+/// </summary>
 [JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
 public sealed record SongWithTracksResource : SongDetailResource
 {
-    public IReadOnlyList<SongTrackMatchResource> Tracks { get; init; } = [];
+    public IReadOnlyList<TrackResource> Tracks { get; init; } = [];
 }
 
 /// <summary>Imported setlist song. The count is distinct catalog shows supported by imported setlist evidence.</summary>
@@ -62,11 +65,4 @@ public sealed record ArtistSongEntryResource(
     SongEntryKind Kind,
     SongDetailResource? Song,
     ImportedSongResource? ImportedSong
-);
-
-/// <summary>One playable file, even if the requested song occurs in several of its parts.</summary>
-[JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
-public sealed record SongTrackMatchResource(
-    TrackResource Track,
-    IReadOnlyList<int> MatchingPartOrdinals
 );
