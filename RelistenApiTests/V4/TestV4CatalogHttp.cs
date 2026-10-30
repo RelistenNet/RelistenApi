@@ -965,13 +965,9 @@ public sealed partial class TestV4CatalogHttp
     {
         var metadata = detail.DeepClone().AsObject();
         metadata.Remove("shows");
-        metadata.Remove("artists");
         metadata.Remove("tracks");
         return metadata;
     }
-
-    private static IEnumerable<string> RelatedArtistIds(JsonNode detail) =>
-        detail["artists"]!.AsArray().Select(artist => artist!["id"]!.GetValue<string>());
 
     private static void AssertSchemaFields(JsonNode document, string schema, JsonNode response)
     {

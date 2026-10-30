@@ -63,7 +63,6 @@ public sealed partial class TestV4CatalogHttp
         var shows = detail["shows"]!.AsArray();
         var direct = await GetJson("/api/v4/artist-venues/" + detail["id"]!.GetValue<string>());
         JsonNode.DeepEquals(direct, detail).Should().BeTrue();
-        RelatedArtistIds(detail).Should().Equal(BrowseArtistId);
         canonical["artist_venue"]!.AsObject().ContainsKey("shows").Should().BeFalse();
         canonical["artist_venue"]!.AsObject().ContainsKey("artists").Should().BeFalse();
         shows.Select(show => show!["id"]!.GetValue<string>()).Should().Equal(ShowId(4));
@@ -105,7 +104,7 @@ public sealed partial class TestV4CatalogHttp
     }
 
     [Test]
-    public async Task Global_venue_detail_includes_approved_shows_and_their_full_artist_resources()
+    public async Task Global_venue_detail_includes_only_approved_shows()
     {
         var detail = await GetJson(CanonicalVenuePath);
         var shows = detail["shows"]!.AsArray();
@@ -113,17 +112,7 @@ public sealed partial class TestV4CatalogHttp
             .Select(show => show!["id"]!.GetValue<string>())
             .Should()
             .BeEquivalentTo(ShowId(3), ShowId(4));
-        RelatedArtistIds(detail).Should().BeEquivalentTo(CatalogId("artist", 13), BrowseArtistId);
-        foreach (var artist in detail["artists"]!.AsArray())
-        {
-            JsonNode
-                .DeepEquals(
-                    artist,
-                    await GetJson("/api/v4/artists/" + artist!["id"]!.GetValue<string>())
-                )
-                .Should()
-                .BeTrue();
-        }
+        detail.AsObject().ContainsKey("artists").Should().BeFalse();
         (await GetJson("/api/v4/venues/venue_00000003"))["shows"]!.AsArray().Should().BeEmpty();
         (await GetJson(ArtistPath(20) + "/venues")).AsArray().Should().BeEmpty();
     }
@@ -200,8 +189,6 @@ public sealed partial class TestV4CatalogHttp
                 .Single(show => show!["id"]!.GetValue<string>() == ShowId(10))!["artist_venue"]
                 .Should()
                 .BeNull();
-            RelatedArtistIds(detail).Should().Equal(BrowseArtistId);
-            RelatedArtistIds(empty).Should().Equal(BrowseArtistId);
 
             var document = await GetJson("/api-docs/v4/swagger.json");
             AssertSchemaFields(document, "ImportedVenueResource", rows[0]!);

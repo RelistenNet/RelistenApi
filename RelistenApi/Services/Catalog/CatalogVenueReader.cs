@@ -217,12 +217,7 @@ public sealed class CatalogVenueReader(
 
         relationship.Venue = venue;
         var shows = await ReadVenueShows(session, venue.id, artistUuid, cancellationToken);
-        var artists = await CatalogBrowseReader.ReadRelatedArtists(
-            session,
-            shows.Select(show => show.artist_uuid).Append(artistUuid),
-            cancellationToken
-        );
-        return new(relationship, shows, artists);
+        return new(relationship, shows);
     }
 
     /// <summary>Global venue identity, aliases, and its complete approved show collection.</summary>
@@ -239,12 +234,7 @@ public sealed class CatalogVenueReader(
         }
 
         var shows = await ReadVenueShows(session, venue.id, null, cancellationToken);
-        var artists = await CatalogBrowseReader.ReadRelatedArtists(
-            session,
-            shows.Select(show => show.artist_uuid),
-            cancellationToken
-        );
-        return new(venue, shows, artists);
+        return new(venue, shows);
     }
 
     /// <summary>All artist-owned imported rows, including unused rows with a zero show count.</summary>
@@ -298,12 +288,7 @@ public sealed class CatalogVenueReader(
             new { artistUuid = venue.artist_uuid, venueId = venue.id },
             cancellationToken
         );
-        var artists = await CatalogBrowseReader.ReadRelatedArtists(
-            session,
-            shows.Select(show => show.artist_uuid).Append(venue.artist_uuid),
-            cancellationToken
-        );
-        return new(venue, shows, artists);
+        return new(venue, shows);
     }
 
     private async Task<CatalogVenue?> ReadVenue(

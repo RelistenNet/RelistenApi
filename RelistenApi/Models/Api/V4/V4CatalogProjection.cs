@@ -155,7 +155,6 @@ public static partial class V4CatalogProjection
         ProjectArtistVenue<ArtistVenueWithShowsResource>(value.ArtistVenue) with
         {
             Shows = value.Shows.Select(ShowSummary).ToArray(),
-            Artists = value.Artists.Select(CatalogBrowseProjection.Artist).ToArray(),
         };
 
     private static T ProjectArtistVenue<T>(CatalogArtistVenue value)
@@ -179,7 +178,6 @@ public static partial class V4CatalogProjection
         ProjectImportedVenue<ImportedVenueWithShowsResource>(value.Venue) with
         {
             Shows = value.Shows.Select(ShowSummary).ToArray(),
-            Artists = value.Artists.Select(CatalogBrowseProjection.Artist).ToArray(),
         };
 
     private static T ProjectImportedVenue<T>(CatalogImportedVenue value)
@@ -232,7 +230,6 @@ public static partial class V4CatalogProjection
         ProjectVenue<VenueWithShowsResource>(value.Venue) with
         {
             Shows = value.Shows.Select(ShowSummary).ToArray(),
-            Artists = value.Artists.Select(CatalogBrowseProjection.Artist).ToArray(),
         };
 
     private static T ProjectVenue<T>(CatalogVenue value)

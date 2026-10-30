@@ -237,7 +237,6 @@ public sealed partial class TestV4CatalogHttp
             detail["id"]!.GetValue<string>().Should().Be(originalId);
             detail["artist_show_count"]!.GetValue<int>().Should().Be(0);
             detail["shows"]!.AsArray().Should().BeEmpty();
-            RelatedArtistIds(detail).Should().Equal(BrowseArtistId);
             JsonNode
                 .DeepEquals(detail, await GetJson("/api/v4/artist-venues/" + originalId))
                 .Should()

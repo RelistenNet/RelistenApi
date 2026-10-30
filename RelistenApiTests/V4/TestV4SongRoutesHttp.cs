@@ -73,8 +73,6 @@ public sealed partial class TestV4CatalogHttp
         var document = await GetJson("/api-docs/v4/swagger.json");
         AssertSchemaFields(document, "SongWithShowsResource", detail);
         AssertSchemaFields(document, "SongDetailResource", songs[0]!["song"]!);
-        RelatedArtistIds(detail).Should().Equal(CatalogId("artist", 301));
-        RelatedArtistIds(empty).Should().Equal(CatalogId("artist", 301));
         AssertSchemaFields(document, "ArtistSongEntryResource", entries[0]!);
         EnumValues(document, "ArtistSongEntryResource", "kind")
             .Should()
@@ -87,7 +85,6 @@ public sealed partial class TestV4CatalogHttp
         var recordingDetail = await GetJson(DiscoverySongPath + "/tracks");
         var matches = recordingDetail["tracks"]!.AsArray();
         recordingDetail.AsObject().ContainsKey("shows").Should().BeFalse();
-        RelatedArtistIds(recordingDetail).Should().Equal(CatalogId("artist", 301));
         var detail = await GetJson(DiscoverySongPath);
         JsonNode
             .DeepEquals(ResourceMetadata(recordingDetail), ResourceMetadata(detail))
@@ -172,9 +169,7 @@ public sealed partial class TestV4CatalogHttp
             var empty = await GetJson(ImportedSongPath(suffix));
             empty["setlist_show_count"]!.GetValue<int>().Should().Be(0);
             empty["shows"]!.AsArray().Should().BeEmpty();
-            RelatedArtistIds(empty).Should().Equal(CatalogId("artist", 301));
         }
-        RelatedArtistIds(detail).Should().Equal(CatalogId("artist", 301));
         var document = await GetJson("/api-docs/v4/swagger.json");
         AssertSchemaFields(document, "ImportedSongResource", imported);
         AssertSchemaFields(document, "ImportedSongWithShowsResource", detail);

@@ -84,12 +84,7 @@ public sealed class CatalogSongReader(
             new { uuids = membership.Select(row => row.show_uuid).Distinct().ToArray() },
             cancellationToken
         );
-        var artists = await CatalogBrowseReader.ReadRelatedArtists(
-            session,
-            shows.Select(show => show.artist_uuid).Append(song.artist_uuid),
-            cancellationToken
-        );
-        return new(song, shows, artists);
+        return new(song, shows);
     }
 
     /// <summary>Large file-match collections have their own snapshot and owning song metadata.</summary>
@@ -129,12 +124,7 @@ public sealed class CatalogSongReader(
                 row.matching_part_ordinals
             ))
             .ToArray();
-        var artists = await CatalogBrowseReader.ReadRelatedArtists(
-            session,
-            tracks.Select(track => track.artist_uuid).Append(song.artist_uuid),
-            cancellationToken
-        );
-        return new(song, trackMatches, artists);
+        return new(song, trackMatches);
     }
 
     public async Task<IReadOnlyList<CatalogImportedSong>?> ReadImportedSongs(
@@ -179,12 +169,7 @@ public sealed class CatalogSongReader(
             new { artistUuid = song.artist_uuid, songId = song.id },
             cancellationToken
         );
-        var artists = await CatalogBrowseReader.ReadRelatedArtists(
-            session,
-            shows.Select(show => show.artist_uuid).Append(song.artist_uuid),
-            cancellationToken
-        );
-        return new(song, shows, artists);
+        return new(song, shows);
     }
 
     private async Task<CatalogSongDetail?> ReadApprovedSongDetail(

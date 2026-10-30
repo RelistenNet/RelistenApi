@@ -35,20 +35,14 @@ public sealed record CatalogArtistSongEntry(
 
 public sealed record CatalogImportedSongDetail(
     CatalogImportedSong Song,
-    IReadOnlyList<CatalogShow> Shows,
-    IReadOnlyList<CatalogArtist> Artists
+    IReadOnlyList<CatalogShow> Shows
 );
 
-public sealed record CatalogSongWithShows(
-    CatalogSongDetail Song,
-    IReadOnlyList<CatalogShow> Shows,
-    IReadOnlyList<CatalogArtist> Artists
-);
+public sealed record CatalogSongWithShows(CatalogSongDetail Song, IReadOnlyList<CatalogShow> Shows);
 
 public sealed record CatalogSongWithTracks(
     CatalogSongDetail Song,
-    IReadOnlyList<CatalogSongTrackMatch> Tracks,
-    IReadOnlyList<CatalogArtist> Artists
+    IReadOnlyList<CatalogSongTrackMatch> Tracks
 );
 
 public sealed record CatalogSongTrackMatch(
