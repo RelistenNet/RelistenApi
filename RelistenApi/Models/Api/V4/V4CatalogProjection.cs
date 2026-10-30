@@ -44,6 +44,17 @@ public static partial class V4CatalogProjection
         };
 
     public static SourceResource Source(CatalogSource value) =>
+        ProjectSource<SourceResource>(value) with
+        {
+            Sets = value.Sets.Select(Set).ToArray(),
+            Links = value.Links.Select(Link).ToArray(),
+        };
+
+    public static SourceSummaryResource SourceSummary(CatalogSource value) =>
+        ProjectSource<SourceSummaryResource>(value);
+
+    private static T ProjectSource<T>(CatalogSource value)
+        where T : SourceSummaryResource, new() =>
         new()
         {
             Id = new(value.uuid),
@@ -77,8 +88,6 @@ public static partial class V4CatalogProjection
             CreatedAt = value.created_at,
             UpdatedAt = value.updated_at,
             ImportedVenue = value.ImportedVenue is { } imported ? ImportedVenue(imported) : null,
-            Sets = value.Sets.Select(Set).ToArray(),
-            Links = value.Links.Select(Link).ToArray(),
         };
 
     public static SourceReviewResource SourceReview(CatalogSourceReview review) =>
@@ -95,6 +104,16 @@ public static partial class V4CatalogProjection
         };
 
     public static SourceSetResource Set(CatalogSet value) =>
+        ProjectSet<SourceSetResource>(value) with
+        {
+            Tracks = value.Tracks.Select(Track).ToArray(),
+        };
+
+    public static SourceSetSummaryResource SetSummary(CatalogSet value) =>
+        ProjectSet<SourceSetSummaryResource>(value);
+
+    private static T ProjectSet<T>(CatalogSet value)
+        where T : SourceSetSummaryResource, new() =>
         new()
         {
             Id = new(value.uuid),
@@ -105,7 +124,6 @@ public static partial class V4CatalogProjection
             Name = value.name,
             CreatedAt = value.created_at,
             UpdatedAt = value.updated_at,
-            Tracks = value.Tracks.Select(Track).ToArray(),
         };
 
     public static TrackResource Track(CatalogTrack value) =>

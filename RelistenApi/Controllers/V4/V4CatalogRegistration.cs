@@ -24,6 +24,9 @@ public static class V4CatalogRegistration
     {
         services.AddTransient<CatalogReader>();
         services.AddTransient<CatalogSourceReviewReader>();
+        services.AddTransient<CatalogReferenceLookup>();
+        services.AddTransient<CatalogResolverHydrator>();
+        services.AddTransient<CatalogResolver>();
         services.AddTransient<CatalogTourReader>();
         services.AddTransient<CatalogTourMetadataReader>();
         services.AddTransient<CatalogSongMetadataReader>();
@@ -31,6 +34,7 @@ public static class V4CatalogRegistration
         services.AddTransient<CatalogSongMatchReader>();
         services.AddTransient<CatalogSongReader>();
         services.AddTransient<CatalogBrowseReader>();
+        services.AddTransient<CatalogArtistSnapshotReader>();
         services.AddTransient<CatalogImportedVenueMetadataReader>();
         services.AddTransient<CatalogShowMetadataReader>();
         services.AddTransient<CatalogVenueMetadataReader>();
@@ -42,8 +46,8 @@ public static class V4CatalogRegistration
                 policy =>
                     policy
                         .AllowAnyOrigin()
-                        .WithMethods("GET")
-                        .WithHeaders("If-None-Match")
+                        .WithMethods("GET", "POST")
+                        .WithHeaders("If-None-Match", "Content-Type")
                         .WithExposedHeaders("ETag")
             )
         );
@@ -76,6 +80,8 @@ public static class V4CatalogRegistration
             ShortId(PublicIdPrefixes.ArtistVenue)
         );
         options.SchemaFilter<NullableCatalogSchemaFilter>();
+        options.SchemaFilter<CatalogResolveRequestSchema>();
+        options.OperationFilter<CatalogResolveRequestSchema>();
     }
 
     private static void MapId<T>(SwaggerGenOptions options)

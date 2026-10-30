@@ -17,7 +17,7 @@ public abstract class CatalogControllerBase(ILogger logger) : ControllerBase
             ? Execute(() => read(uuid))
             : Task.FromResult<IActionResult>(InvalidId(prefix));
 
-    protected async Task<IActionResult> Execute<T>(Func<Task<T?>> read)
+    protected async Task<IActionResult> Execute<T>(Func<Task<T?>> read, bool cacheable = true)
         where T : class
     {
         if (!ModelState.IsValid)
@@ -30,7 +30,11 @@ public abstract class CatalogControllerBase(ILogger logger) : ControllerBase
             var resource = await read();
             return resource is null
                 ? Failure(404, "not_found", "The requested resource does not exist.")
-                : new CatalogJsonResult(resource);
+                : new CatalogJsonResult(resource, cacheable);
+        }
+        catch (CatalogRetiredResourceException)
+        {
+            return Failure(410, "retired", "The requested catalog identity has been retired.");
         }
         catch (CatalogNormalizationUnavailableException exception)
         {
