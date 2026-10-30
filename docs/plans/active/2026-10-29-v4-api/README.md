@@ -56,7 +56,7 @@ an earlier design proposal.
   Imported setlist evidence cannot establish a recording/track match. Preserve
   imported song/show behavior for artists without normalization and unresolved
   imported entries for partial coverage.
-- Show venue label: date-appropriate normalized name, then canonical current
+- Client show venue label: date-appropriate official name, then stored canonical
   name, then imported label. Track playback title remains imported.
 - “Recently updated” retains its imported recording-update meaning. A normalized
   correction still refreshes metadata; it does not move the show into that list.
@@ -325,6 +325,9 @@ by accepting this plan.
 
 - 2026-10-29, Alec: expand C1 to artist/year/show-list navigation before auth.
   Keep the full plan, but review these public contracts together first.
+
+- 2026-10-29, Alec: canonical public resources are `venue`/`song`; include venue
+  name periods and remove `venue_display`. Clients choose the display label.
 
 ## Outcomes and retrospective
 
