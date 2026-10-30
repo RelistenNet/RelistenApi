@@ -23,6 +23,8 @@ public static class V4CatalogRegistration
     public static IServiceCollection AddV4Catalog(this IServiceCollection services)
     {
         services.AddTransient<CatalogReader>();
+        services.AddTransient<CatalogSongMetadataReader>();
+        services.AddTransient<CatalogTrackNormalizationReader>();
         services.AddTransient<CatalogBrowseReader>();
         services.AddTransient<CatalogImportedVenueMetadataReader>();
         services.AddTransient<CatalogShowMetadataReader>();
