@@ -7,8 +7,9 @@ captures and restoring the local approval flags.
 
 The sample payloads in [responses](responses/) were captured from the restored
 2026-10-29 production catalog. They retain the original titles, playback URLs and
-normalization results; they are not hand-built responses. Full shows and headers
-are captured locally in `local-dev/v4-review/.output/`.
+normalization results. The venue example was reduced to the approved alias-only
+response contract; stored normalization data was not changed. Full shows and
+headers are captured locally in `local-dev/v4-review/.output/`.
 
 ## Review navigation first
 
@@ -20,8 +21,9 @@ sources and playable tracks. Swagger now exposes eight routes.
 The captured [artist response](responses/artist.json) and [year list](responses/years.json)
 show the typed navigation IDs. The restored catalog's Grateful Dead responses agree on 2,081 shows and 18,226
 sources across 31 years. The 1985 detail includes 73 show summaries. Summaries
-omit `sources`; full show detail owns the recording hierarchy. Venue identity and full name history are identical in both responses; clients
-choose a historical label from the show date. These observations validate the
+omit `sources`; full show detail owns the recording hierarchy. Venue identity and
+aliases are identical in both responses. Show UI displays the imported venue label
+and links to the normalized venue when available. These observations validate the
 local snapshot, not production performance.
 
 Artist capabilities and provider metadata are included. Popularity augmentation,
@@ -37,8 +39,8 @@ Review these questions before proceeding:
    partial normalization on a real complex title.
 3. Are [raw](responses/raw-track.json) and [disabled](responses/disabled-track.json)
    states clear and useful? All parent IDs should be typed strings.
-4. Does the historical show include **The Crown** and its date range in
-   `venue.names`, alongside the stored canonical venue label?
+4. Does the show retain its imported venue label and normalized link, with
+   **The Crown** represented as a typed alias in `venue.names`?
 5. Are the complete show/source/set/track hierarchy and error responses usable?
 
 The local flags are enabled for all 12 artists with normalized data, as Alec
@@ -50,7 +52,7 @@ legacy Swagger). Tests cover
 normalization corrections with unchanged imported timestamps, merges, failure
 and recovery, nullable IDs, schema agreement, gzip/304 and browser preflight.
 Live requests separately checked real full/partial shows, exact parent links,
-historical display, CORS, gzip and unchanged 304s. Fresh review caught and fixed
+venue aliases, CORS, gzip and unchanged 304s. Fresh review caught and fixed
 Swagger naming, nullable ID serialization and legacy CORS integration issues.
 
 This qualifies the local C1 response review. It does not qualify production
@@ -65,27 +67,22 @@ Expanded browsing review also corrected nullable nested-object schemas. Missing
 venues/eras and unresolved song links now admit null without making shared
 resource definitions or required objects nullable.
 
-Venue feedback: canonical resources are now `venue` and `song`. The venue
-includes names with inclusive-start/exclusive-end date periods; null bounds are
-unbounded. `venue_display` was removed at Alec's request. Clients select an
-active official name, then fall back to the stored venue label and imported data.
-The [Henry J. Kaiser venue example](responses/kaiser-venue.json) preserves all six
-stored name rows, including their
-overlapping/open-ended periods.
+Venue feedback, revised 2026-10-30: canonical resources remain `venue` and `song`.
+The venue includes deduplicated `{ name, kind }` aliases, where kind is `official`,
+`short`, or `spelling`. Date periods and client historical-name selection have
+been removed. `venue_display` remains absent. The
+[Henry J. Kaiser venue example](responses/kaiser-venue.json) retains the six
+name/kind pairs without their stored date ranges.
 
-For a client reading raw JSON, the default historical label can be selected as
-follows. Keep the calendar day encoded in `date`; do not parse `display_date` or
-shift the timestamp into the device's timezone for this lookup.
+For show display, use the imported name and locality, with the canonical venue as
+fallback only when the imported venue is absent. Link that label to the normalized
+venue when present; normalization does not replace the imported label. For example:
 
 ```js
-const date = show.date.slice(0, 10);
-const official = show.venue?.names.find(name =>
-  name.kind === "official" &&
-  (name.valid_from === null || name.valid_from <= date) &&
-  (name.valid_to === null || date < name.valid_to)
-);
-const label = official?.name ?? show.venue?.name ?? show.imported_venue?.name;
+const label = show.imported_venue?.name ?? show.venue?.name;
+const venueId = show.venue?.id; // Canonical navigation target, when available.
 ```
 
-Imported machine dates may be imputed for fuzzy labels. A client can choose the
-canonical-label fallback instead when the source date is uncertain.
+The venue-history fix branch was discarded. The API branch now builds directly
+on the shared normalization enums branch. No enrichment, historical backfill, or
+normalization data change was run.

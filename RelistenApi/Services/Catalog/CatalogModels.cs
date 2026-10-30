@@ -157,15 +157,12 @@ public sealed class CatalogVenue
     public IReadOnlyList<CatalogVenueName> Names { get; set; } = [];
 }
 
-// Association keys retain the survivor and original owner independently. Name
-// periods remain on merged-away venues and still participate in historical display.
+// Aliases retained on merged-away venues are exposed under the surviving identity.
 public sealed class CatalogVenueName
 {
     public string canonical_venue_id { get; set; } = null!;
     public string name { get; set; } = null!;
     public string kind { get; set; } = null!;
-    public string? valid_from { get; set; }
-    public string? valid_to { get; set; }
 }
 
 public sealed class CatalogPart

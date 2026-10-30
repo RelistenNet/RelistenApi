@@ -18,9 +18,29 @@ An independent review found no remaining correctness or readability issue.
 
 After restacking, the solution build and all 51 focused v4/ID/Swagger tests passed.
 The running local API returned identical JSON for all six real track scenarios,
-the historical-venue show, and the entire v4 OpenAPI document compared with
+the venue example show, and the entire v4 OpenAPI document compared with
 captures taken before the change. Existing package advisories and nullable
 warnings remain. No production changes occurred.
+
+## Venue alias simplification, 2026-10-30
+
+The venue-history fix and `codex/normalization-venue-history` branch were discarded.
+The active stack is `codex/normalization-enums` → `codex/v4-api-c1`. V4 returns
+`imported_venue` for show display and optional `venue` for normalized navigation,
+grouping, and details. Venue names are deduplicated `{ name, kind }` aliases with
+no date fields. UI does not resolve historical periods. No history backfill or
+normalization data/schema change belongs to this revision.
+
+Verify alias deduplication across stored periods and merged venues, full/list/year
+response agreement, and OpenAPI agreement. Alias name/kind corrections must change
+ETags; date-only edits must not. Imported labels remain unchanged in either case.
+
+Verified the solution build, all 52 focused v4/ID/Swagger tests, and all 365
+normalization unit tests. No tests skipped in these runs. Fresh review found no
+remaining correctness or readability findings. Real show/track captures were
+refreshed from the local API; the live Kaiser venue and OpenAPI both expose only
+`name` and `kind` for each alias. Normalization source and its tests match the
+enum foundation exactly. Existing package advisories and nullable warnings remain.
 
 ## Main edit locations
 
@@ -219,7 +239,8 @@ then anonymous favorite IDs/targets map to native typed values and imported kind
 normalized `song`/`venue` meaning during that conversion.
 
 Apply a v4 normalization-only change with unchanged imported `updated_at` and
-verify both stored parts and visible venue labels change. Fail the Realm apply
+verify stored parts and canonical venue aliases/links change while the visible
+imported venue label remains unchanged. Fail the Realm apply
 and verify no new applied ETag or account cursor is committed. Simulate superseded
 same-scope responses, account switch, response 304 with/without matching applied
 local ETag, offline launch, reconnect, manual refresh and shallow resolver hydration.

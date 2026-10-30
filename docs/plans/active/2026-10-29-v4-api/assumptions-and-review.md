@@ -136,7 +136,8 @@ Reread all chat turns through the account-storage and re-sign-in approvals,
 then checked the saved plan against those decisions. The latest decisions remain:
 full capability coverage; approved 13 catalog/six account prefixes; every track's
 normalization under one key; exact recording matches; imported playback identity
-and titles; raw/partial fallback; historical venue names; existing approval flag;
+and titles; raw/partial fallback; imported venue display with canonical links and
+typed aliases; existing approval flag;
 global venue favorites; direct resources/lists and ETags; in-place library with
 canonical owned account/auth IDs and tester re-sign-in. No product decision
 needs reopening based on this review.
@@ -180,7 +181,7 @@ as objects; legacy global CORS blocked browser conditional-read preflight.
 Full solution build and 33 focused ID/HTTP/session/legacy Swagger tests pass.
 Existing package advisory and importer-nullability build warnings remain outside
 this change. Live restored-record checks separately verify full/partial shows,
-parent identity, historical names, gzip, 304s and CORS. No production capacity
+parent identity, venue aliases, gzip, 304s and CORS. No production capacity
 claim follows from these local results.
 
 ## Expanded C1 browsing checkpoint
@@ -188,7 +189,7 @@ claim follows from these local results.
 Alec asked to inspect core artist/year/show navigation before auth. Six browse
 reads now join the original show/track reads, with typed parents, direct lists,
 artist ownership checks and explicit show summaries. Shared batch metadata reads
-keep historical venue display consistent without a query per show. Artist counts
+keep canonical venue links and aliases consistent without a query per show. Artist counts
 and Grateful Dead's 31 year rows agree with 2,081 shows and 18,226 sources in
 the restored snapshot; 1985 has 73 shows. This is local evidence, not a load test.
 
@@ -199,13 +200,16 @@ real imported year label `0023`: calendar lookup now pads its numeric argument
 so `/by-number/23` and the typed-year route identify the same resource. No
 production data, account/auth code or mobile state changed.
 
-## Venue identity and name history feedback
+## Venue identity and alias feedback
 
-For show `show_127p0pfc1sgb4p9hdf4agq5dch` (1985-02-18), the stored venue
-label is Oakland Auditorium while its official period supplies Henry J. Kaiser
-Convention Center. The original API omitted the six stored name rows. Alec
-chose plain public `venue`/`song` names, complete venue names/date periods, and
-removal of `venue_display`; clients now choose the display label. The read
-contract preserves overlaps and open bounds without correcting normalization
-data. Names retained on merged venues are included in deterministic priority
-order, in the same request snapshot. No database data or schema changed.
+The earlier C1 revision exposed venue name periods and left historical selection
+to clients. Alec superseded that policy on 2026-10-30 and discarded the separate
+venue-history fix branch. The active stack is normalization enums → v4 API.
+
+Show UI displays imported venue name/locality and links through the optional
+canonical `venue`. Canonical name/locality is fallback only when imported data is
+absent. Canonical resources remain `venue`/`song`; no `venue_display` is required.
+Venue `names` is a deduplicated collection of `{ name, kind }` aliases, including
+retained names from merged venues. Periods and historical display selection are
+out of scope. Alias corrections refresh the resource ETag without changing its
+imported label or recording timestamps. No data repair or backfill was run.

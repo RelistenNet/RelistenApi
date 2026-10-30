@@ -72,8 +72,8 @@ Alec should be able to answer these questions by making requests:
 - Is the original playable title obvious? Are ordered normalized parts useful
   without suggesting that a part is another file?
 - Are raw, disabled and partial results understandable and still playable?
-- Does a historical show display its dated normalized venue name, with the
-  approved canonical/imported fallbacks?
+- Does the show preserve its imported venue label/locality, with a normalized
+  venue link and typed aliases when available?
 - Are wrong prefixes, unknown IDs and dependency failures clear?
 - Does an unchanged request return 304? Does a local normalization correction
   return 200 with a changed ETag despite unchanged imported timestamps?
@@ -112,7 +112,8 @@ this pilot before expanding all v4 route families. A local read/playback pilot
 needs no account login; account deployment and catalog activation stay separate.
 
 Alec opens both shows, switches source, plays a track and inspects normalized
-details. Apply a normalization-only correction and verify the display refreshes.
+details. Apply a normalization-only correction and verify canonical links and
+alias details refresh while the imported venue label stays unchanged.
 Test offline restart, unchanged file paths, queue/history restoration and a
 failed apply followed by retry. Data and applied ETag commit together.
 
@@ -126,7 +127,7 @@ models. Convert its legacy reads into bounded compatibility adapters with
 pre-change response and performance fixtures. Avoid one large legacy rewrite.
 
 Extend the same request collection and Swagger examples. Alec reviews artist
-bootstrap, grouped venues, historical names, raw song fallback, exact normalized
+bootstrap, grouped venues, typed venue aliases, raw song fallback, exact normalized
 song → show/source/track matches, resolver results, search and recent lists.
 Normalization corrections must not change the recording-based meaning of
 recently updated. Review operator inputs/results through inert tests separately.

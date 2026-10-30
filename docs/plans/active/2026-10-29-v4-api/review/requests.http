@@ -61,7 +61,7 @@ GET {{base}}/api/v4/shows/show_40cz6xz6yhr1mh5fafmgjkt3tk
 GET {{base}}/api/v4/source-tracks/track_3s1y1rg4yaxa7nqw31wk617b0d
 If-None-Match: W/"ccd4e6875feba1cb46ca7c57b56d6a1b43da70e564cba3d71f158ac8639a218f"
 
-### Venue name history: The Crown on 1998-11-14
+### Venue aliases: imported show label with a canonical venue link
 GET {{base}}/api/v4/shows/show_1vxn1nx36jes73mc3p9e1e04mr
 
 ### Wrong resource kind (422)
@@ -70,5 +70,5 @@ GET {{base}}/api/v4/source-tracks/show_1vxn1nx36jes73mc3p9e1e04mr
 ### Valid unknown identity (404)
 GET {{base}}/api/v4/shows/show_00000000000000000000000000
 
-### Oakland venue: Henry J. Kaiser name periods on 1985-02-18
+### Oakland venue: imported label and canonical aliases
 GET {{base}}/api/v4/shows/show_127p0pfc1sgb4p9hdf4agq5dch
