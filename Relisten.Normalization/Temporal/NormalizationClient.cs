@@ -21,9 +21,9 @@ public sealed class NormalizationClient(ITemporalClient client)
     /// never overlap.
     public const string VenueRunId = "norm/venues";
 
-    /// Register the nightly venue model run (10:00 UTC), minutely pending-count drain, and
-    /// daily count reconciliation (11:00 UTC). The model run uses at most nightlyCalls calls
-    /// for artists whose venues are switched on. Registration preserves saved schedules.
+    /// Register the nightly venue model run (10:00 UTC) and count reconciliation every
+    /// five minutes. The model run uses at most nightlyCalls calls for artists whose
+    /// venues are switched on. Registration preserves saved schedules.
     public async Task RegisterSchedulesAsync(int nightlyCalls = 60)
     {
         var nightly = new BuildVenueCatalogue(null, nightlyCalls, FlaggedOnly: true);
@@ -51,26 +51,17 @@ public sealed class NormalizationClient(ITemporalClient client)
             // Operators own existing schedules, including their paused state.
         }
 
-        await RegisterArtistVenueScheduleAsync(
-            "relisten-artist-venues-refresh",
-            new RefreshArtistVenues(),
-            "* * * * *"
-        );
-        await RegisterArtistVenueScheduleAsync(
-            "relisten-artist-venues-reconcile",
-            new RefreshArtistVenues(Reconcile: true),
-            "0 11 * * *"
-        );
+        await RegisterArtistVenueScheduleAsync();
     }
 
-    /// Starts an operator-requested refresh; reconciliation also queues all known owners.
-    public async Task<string> RefreshArtistVenuesAsync(bool reconcile = false)
+    /// Starts an operator-requested reconciliation of all stored artist venue counts.
+    public async Task<string> RefreshArtistVenuesAsync()
     {
         const string workflowId = "norm/artist-venues/manual";
         try
         {
             var handle = await client.StartWorkflowAsync(
-                (ArtistVenueRefreshWorkflow workflow) => workflow.RunAsync(new(reconcile)),
+                (ArtistVenueRefreshWorkflow workflow) => workflow.RunAsync(),
                 ArtistVenueOptions(workflowId)
             );
             return handle.Id;
@@ -81,20 +72,16 @@ public sealed class NormalizationClient(ITemporalClient client)
         }
     }
 
-    private async Task RegisterArtistVenueScheduleAsync(
-        string scheduleId,
-        RefreshArtistVenues request,
-        string cron
-    )
+    private async Task RegisterArtistVenueScheduleAsync()
     {
-        // Each schedule skips overlap. Concurrent manual/reconciliation runs are safe:
-        // the database claims distinct pending artists with row locks.
+        // Skip overlapping scheduled runs. Manual runs and post-write hooks may overlap;
+        // only refreshers take the database's dedicated refresh advisory lock.
         var schedule = new Schedule(
             ScheduleActionStartWorkflow.Create(
-                (ArtistVenueRefreshWorkflow workflow) => workflow.RunAsync(request),
-                ArtistVenueOptions("norm/artist-venues/" + scheduleId)
+                (ArtistVenueRefreshWorkflow workflow) => workflow.RunAsync(),
+                ArtistVenueOptions("norm/artist-venues/scheduled")
             ),
-            new ScheduleSpec { CronExpressions = [cron], TimeZoneName = "UTC" }
+            new ScheduleSpec { CronExpressions = ["*/5 * * * *"], TimeZoneName = "UTC" }
         )
         {
             Policy = new SchedulePolicy { Overlap = ScheduleOverlapPolicy.Skip },
@@ -102,7 +89,7 @@ public sealed class NormalizationClient(ITemporalClient client)
 
         try
         {
-            await client.CreateScheduleAsync(scheduleId, schedule);
+            await client.CreateScheduleAsync("relisten-artist-venues-refresh", schedule);
         }
         catch (ScheduleAlreadyRunningException)
         {

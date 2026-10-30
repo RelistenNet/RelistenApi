@@ -118,16 +118,19 @@ public sealed class VenueActivities(
         var cancellationToken = ActivityExecutionContext.Current.CancellationToken;
         try
         {
-            await counts.RefreshPendingAsync(cancellationToken: cancellationToken);
+            await counts.RefreshAllAsync(cancellationToken);
         }
         catch (Exception exception)
             when (!cancellationToken.IsCancellationRequested
                 && exception is NpgsqlException or TimeoutException
             )
         {
-            // Normalization already committed. The durable queue keeps failed/busy
-            // artists pending for the scheduled refresh rather than failing model work.
-            logger.LogWarning(exception, "Artist venue counts remain pending after normalization");
+            // Normalization already committed. Periodic reconciliation repairs failed
+            // count refreshes without retrying otherwise successful model work.
+            logger.LogWarning(
+                exception,
+                "Artist venue counts need reconciliation after normalization"
+            );
         }
     }
 }
@@ -170,7 +173,7 @@ public sealed class VenueMatchActivities(
         {
             logger.LogWarning(
                 exception,
-                "Artist venue counts remain pending after matching {Artist}",
+                "Artist venue counts need reconciliation after matching {Artist}",
                 artist
             );
         }
