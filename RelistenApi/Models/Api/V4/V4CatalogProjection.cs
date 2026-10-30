@@ -137,7 +137,36 @@ public static class V4CatalogProjection
             ),
         };
 
+    public static ArtistVenueEntryResource VenueEntry(CatalogArtistVenueEntry value) =>
+        new(
+            value.Venue is not null ? VenueEntryKind.Venue : VenueEntryKind.ImportedVenue,
+            value.ShowCount,
+            value.Venue is { } venue ? Venue(venue) : null,
+            value.ImportedVenue is { } imported ? ImportedVenue(imported) : null
+        );
+
     public static ImportedVenueResource ImportedVenue(CatalogImportedVenue value) =>
+        ProjectImportedVenue<ImportedVenueResource>(value);
+
+    public static ImportedVenueWithShowCountResource ImportedVenueWithShowCount(
+        CatalogImportedVenue value
+    ) =>
+        ProjectImportedVenue<ImportedVenueWithShowCountResource>(value) with
+        {
+            ShowCount = value.show_count,
+        };
+
+    public static ImportedVenueWithShowsResource ImportedVenueWithShows(
+        CatalogImportedVenueDetail value
+    ) =>
+        ProjectImportedVenue<ImportedVenueWithShowsResource>(value.Venue) with
+        {
+            ShowCount = value.Shows.Count,
+            Shows = value.Shows.Select(ShowSummary).ToArray(),
+        };
+
+    private static T ProjectImportedVenue<T>(CatalogImportedVenue value)
+        where T : ImportedVenueResource, new() =>
         new()
         {
             Id = new(value.uuid),

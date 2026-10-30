@@ -25,6 +25,8 @@ public static class V4CatalogRegistration
         services.AddTransient<CatalogReader>();
         services.AddTransient<CatalogBrowseReader>();
         services.AddTransient<CatalogShowMetadataReader>();
+        services.AddTransient<CatalogVenueMetadataReader>();
+        services.AddTransient<CatalogVenueReader>();
         services.AddCors(options =>
             options.AddPolicy(
                 CorsPolicy,

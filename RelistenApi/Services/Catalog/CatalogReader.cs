@@ -48,6 +48,44 @@ public sealed class CatalogReader(
         return show;
     }
 
+    /// <summary>Returns one complete recording without loading the show's other sources.</summary>
+    public async Task<CatalogSource?> ReadSource(
+        Guid uuid,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await using var session = await CatalogReadSession.Open(db, cancellationToken);
+        var source = await session.Connection.QuerySingleOrDefaultAsync<CatalogSource>(
+            session.Command(SourceSelect + " WHERE src.uuid=@uuid", new { uuid }, cancellationToken)
+        );
+        if (source is null)
+        {
+            return null;
+        }
+
+        await ReadRecordingContents(session, [source], cancellationToken);
+        if (source.venue_id is { } venueId)
+        {
+            source.ImportedVenue =
+                await session.Connection.QuerySingleOrDefaultAsync<CatalogImportedVenue>(
+                    session.Command(
+                        "SELECT v.*,a.uuid artist_uuid FROM venues v JOIN artists a ON a.id=v.artist_id WHERE v.id=@venueId",
+                        new { venueId },
+                        cancellationToken
+                    )
+                );
+        }
+
+        var approved = await NormalizationApproved(session, source.artist_uuid, cancellationToken);
+        await ApplyNormalization(
+            session,
+            source.Sets.SelectMany(set => set.Tracks).ToArray(),
+            approved,
+            cancellationToken
+        );
+        return source;
+    }
+
     /// <summary>Returns one non-orphaned playable file with exact recording parents.</summary>
     public async Task<CatalogTrack?> ReadTrack(
         Guid uuid,
@@ -67,13 +105,7 @@ public sealed class CatalogReader(
             return null;
         }
 
-        var approved = await session.Connection.QuerySingleAsync<bool>(
-            session.Command(
-                "SELECT COALESCE(f.norm_catalogue,false) FROM artists a LEFT JOIN features f ON f.artist_id=a.id WHERE a.uuid=@artist_uuid",
-                new { track.artist_uuid },
-                cancellationToken
-            )
-        );
+        var approved = await NormalizationApproved(session, track.artist_uuid, cancellationToken);
         await ApplyNormalization(session, [track], approved, cancellationToken);
         return track;
     }
@@ -87,27 +119,40 @@ public sealed class CatalogReader(
         var sources = (
             await session.Connection.QueryAsync<CatalogSource>(
                 session.Command(
-                    """
-                    SELECT src.*, a.uuid artist_uuid, sh.uuid show_uuid,
-                           COALESCE(rc.source_review_count,0) review_count
-                    FROM sources src JOIN artists a ON a.id=src.artist_id JOIN shows sh ON sh.id=src.show_id
-                    LEFT JOIN source_review_counts rc ON rc.source_id=src.id
-                    WHERE sh.uuid=@uuid ORDER BY src.avg_rating_weighted DESC, src.uuid
-                    """,
-                    new { show.uuid },
+                    SourceSelect
+                        + " WHERE src.show_id=@id ORDER BY src.avg_rating_weighted DESC,src.uuid",
+                    new { show.id },
                     cancellationToken
                 )
             )
         ).ToList();
+        await ReadRecordingContents(session, sources, cancellationToken);
+        show.Sources = sources;
+    }
+
+    // Complete sets, tracks and links belong to the requested source IDs. Both full-show
+    // and direct-source reads use this loader, so playback and replacement semantics agree.
+    private static async Task ReadRecordingContents(
+        CatalogReadSession session,
+        IReadOnlyList<CatalogSource> sources,
+        CancellationToken cancellationToken
+    )
+    {
+        if (sources.Count == 0)
+        {
+            return;
+        }
+
+        var sourceIds = sources.Select(source => source.id).ToArray();
         var sets = (
             await session.Connection.QueryAsync<CatalogSet>(
                 session.Command(
                     """
                     SELECT sets.*, src.uuid source_uuid, a.uuid artist_uuid
                     FROM source_sets sets JOIN sources src ON src.id=sets.source_id JOIN artists a ON a.id=src.artist_id
-                    WHERE src.show_id=@id ORDER BY sets.index, sets.uuid
+                    WHERE src.id=ANY(@sourceIds) ORDER BY sets.index,sets.uuid
                     """,
-                    new { show.id },
+                    new { sourceIds },
                     cancellationToken
                 )
             )
@@ -116,8 +161,8 @@ public sealed class CatalogReader(
             await session.Connection.QueryAsync<CatalogTrack>(
                 session.Command(
                     TrackSelect
-                        + " WHERE sh.uuid=@uuid AND NOT t.is_orphaned ORDER BY t.track_position,t.uuid",
-                    new { show.uuid },
+                        + " WHERE src.id=ANY(@sourceIds) AND NOT t.is_orphaned ORDER BY t.track_position,t.uuid",
+                    new { sourceIds },
                     cancellationToken
                 )
             )
@@ -128,9 +173,9 @@ public sealed class CatalogReader(
                     """
                     SELECT l.*, src.uuid source_uuid, up.name provider FROM links l JOIN sources src ON src.id=l.source_id
                     JOIN upstream_sources up ON up.id=l.upstream_source_id
-                    WHERE src.show_id=@id ORDER BY l.id
+                    WHERE src.id=ANY(@sourceIds) ORDER BY l.id
                     """,
-                    new { show.id },
+                    new { sourceIds },
                     cancellationToken
                 )
             )
@@ -147,8 +192,20 @@ public sealed class CatalogReader(
             source.Sets = setsBySource[source.id].ToList();
             source.Links = linksBySource[source.id].ToList();
         }
-        show.Sources = sources;
     }
+
+    private static Task<bool> NormalizationApproved(
+        CatalogReadSession session,
+        Guid artistUuid,
+        CancellationToken cancellationToken
+    ) =>
+        session.Connection.QuerySingleAsync<bool>(
+            session.Command(
+                "SELECT COALESCE(f.norm_catalogue,false) FROM artists a LEFT JOIN features f ON f.artist_id=a.id WHERE a.uuid=@artistUuid",
+                new { artistUuid },
+                cancellationToken
+            )
+        );
 
     private async Task ApplyNormalization(
         CatalogReadSession session,
@@ -248,6 +305,13 @@ public sealed class CatalogReader(
         }
         return null;
     }
+
+    private const string SourceSelect = """
+        SELECT src.*,a.uuid artist_uuid,sh.uuid show_uuid,
+               COALESCE(rc.source_review_count,0) review_count
+        FROM sources src JOIN artists a ON a.id=src.artist_id JOIN shows sh ON sh.id=src.show_id
+        LEFT JOIN source_review_counts rc ON rc.source_id=src.id
+        """;
 
     private const string TrackSelect = """
         SELECT t.*, src.uuid source_uuid, sets.uuid source_set_uuid, sh.uuid show_uuid, a.uuid artist_uuid
