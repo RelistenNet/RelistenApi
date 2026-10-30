@@ -21,6 +21,8 @@ public class TestNormMigrations
         tables
             .Should()
             .Equal(
+                "artist_venue_refresh_queue",
+                "artist_venues",
                 "changes",
                 "model_calls",
                 "review_items",

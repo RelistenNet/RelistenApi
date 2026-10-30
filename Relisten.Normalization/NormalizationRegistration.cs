@@ -16,6 +16,7 @@ public static class NormalizationRegistration
         services.AddScoped<Venues.VenueMatch>();
         services.AddScoped<Venues.VenueLlm>();
         services.AddScoped<Venues.VenueHistory>();
+        services.AddScoped<Venues.ArtistVenueCounts>();
         services.AddScoped<NormFlags>();
         services.AddSingleton<NormalizationClient>();
         return services;
@@ -28,7 +29,8 @@ public static class NormalizationRegistration
         workflows
             .AddWorkflow<SongCatalogueWorkflow>()
             .AddWorkflow<VenueCatalogueWorkflow>()
-            .AddWorkflow<NightlyVenueCatalogueWorkflow>();
+            .AddWorkflow<NightlyVenueCatalogueWorkflow>()
+            .AddWorkflow<ArtistVenueRefreshWorkflow>();
 
     /// Normalization's database steps, on the host's database worker.
     public static ITemporalWorkerServiceOptionsBuilder AddNormalizationActivities(
@@ -37,5 +39,6 @@ public static class NormalizationRegistration
         database
             .AddScopedActivities<SongActivities>()
             .AddScopedActivities<VenueActivities>()
-            .AddScopedActivities<VenueMatchActivities>();
+            .AddScopedActivities<VenueMatchActivities>()
+            .AddScopedActivities<ArtistVenueRefreshActivities>();
 }

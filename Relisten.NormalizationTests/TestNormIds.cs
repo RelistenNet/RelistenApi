@@ -39,4 +39,18 @@ public class TestNormIds
             .Should()
             .Throw<FormatException>();
     }
+
+    [Test]
+    public void ArtistVenueIdsKeepTheirFullPrefixThroughJson()
+    {
+        var id = ArtistVenueId.Parse("artist_venue_k3m9x2qa");
+
+        JsonSerializer.Serialize(id).Should().Be("\"artist_venue_k3m9x2qa\"");
+        JsonSerializer.Deserialize<ArtistVenueId>(JsonSerializer.Serialize(id)).Should().Be(id);
+        ArtistVenueId.New().Value.Should().MatchRegex("^artist_venue_[0-9a-hjkmnp-tv-z]{8}$");
+        FluentActions
+            .Invoking(() => ArtistVenueId.Parse("venue_k3m9x2qa"))
+            .Should()
+            .Throw<FormatException>();
+    }
 }

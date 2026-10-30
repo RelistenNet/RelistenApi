@@ -1,15 +1,23 @@
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
+using Npgsql;
 using Relisten.Api.Models;
 using Relisten.Data;
+using Relisten.Normalization.Venues;
 using Temporalio.Activities;
 using Temporalio.Exceptions;
 
 namespace Relisten.Ingestion;
 
 /// <summary>Resolves the current artist and owns the three independently retryable catalog rebuild steps.</summary>
-public sealed class CatalogActivities(ArtistService artists, CatalogRebuildService rebuild)
+public sealed class CatalogActivities(
+    ArtistService artists,
+    CatalogRebuildService rebuild,
+    ArtistVenueCounts artistVenues,
+    ILogger<CatalogActivities> logger
+)
 {
     [Activity("Catalog.PrepareArtist")]
     public async Task<ArtistImportPlan> PrepareArtist(
@@ -74,6 +82,26 @@ public sealed class CatalogActivities(ArtistService artists, CatalogRebuildServi
     {
         using var heartbeat = new ActivityHeartbeat();
         await rebuild.InvalidateArtistCache(await Resolve(context));
+        RequireActive(context.Execution);
+
+        var cancellationToken = ActivityExecutionContext.Current.CancellationToken;
+        try
+        {
+            await artistVenues.RefreshArtistsAsync([context.Artist.Value], cancellationToken);
+        }
+        catch (Exception exception)
+            when (!cancellationToken.IsCancellationRequested
+                && exception is NpgsqlException or TimeoutException
+            )
+        {
+            // Catalog rebuilds already committed. Source triggers retained pending work;
+            // scheduled refresh/reconciliation repairs counts without failing the import.
+            logger.LogWarning(
+                exception,
+                "Artist venue counts remain pending after rebuilding {Artist}",
+                context.Artist
+            );
+        }
         RequireActive(context.Execution);
     }
 
