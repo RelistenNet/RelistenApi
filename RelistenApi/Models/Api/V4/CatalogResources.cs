@@ -26,8 +26,7 @@ public record ShowSummaryResource
     public DateTime CreatedAt { get; init; }
     public DateTime UpdatedAt { get; init; }
     public ImportedVenueResource? ImportedVenue { get; init; }
-    public NormalizedVenueResource? NormalizedVenue { get; init; }
-    public VenueDisplayResource VenueDisplay { get; init; } = null!;
+    public VenueResource? Venue { get; init; }
     public YearResource? Year { get; init; }
     public TourResource? Tour { get; init; }
     public EraResource? Era { get; init; }
@@ -143,20 +142,20 @@ public sealed class EraResource
 }
 
 [JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
-public sealed class NormalizedSongResource
+public sealed class SongResource
 {
     public SongId Id { get; init; }
     public ArtistId ArtistId { get; init; }
     public string Name { get; init; } = null!;
-    public NormalizedSongKind? Kind { get; init; }
+    public SongKind? Kind { get; init; }
 }
 
 [JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
-public sealed class NormalizedVenueResource
+public sealed class VenueResource
 {
     public VenueId Id { get; init; }
     public string Name { get; init; } = null!;
-    public NormalizedVenueKind Kind { get; init; }
+    public VenueKind Kind { get; init; }
     public VenueId? ParentId { get; init; }
     public string? City { get; init; }
     public string? Region { get; init; }
@@ -164,6 +163,9 @@ public sealed class NormalizedVenueResource
     public double? Latitude { get; init; }
     public double? Longitude { get; init; }
     public VenueCoordinatePrecision? CoordinatePrecision { get; init; }
+
+    /// <summary>Stored periods, including merged aliases, ordered for client-side selection.</summary>
+    public IReadOnlyList<VenueNameResource> Names { get; init; } = [];
 }
 
 [JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
@@ -174,12 +176,9 @@ public sealed class TrackPartResource
     public IReadOnlyList<TrackQualifier> Qualifiers { get; init; } = [];
     public IReadOnlyList<string> Notes { get; init; } = [];
     public bool SegueAfter { get; init; }
-    public NormalizedSongResource? Song { get; init; }
+    public SongResource? Song { get; init; }
     public TrackPartState State { get; init; }
 }
-
-[JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
-public sealed record VenueDisplayResource(string? Name, string? Location);
 
 [JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
 public sealed record TrackNormalizationResource(
@@ -216,3 +215,12 @@ public sealed class TourResource
     public DateTime CreatedAt { get; init; }
     public DateTime UpdatedAt { get; init; }
 }
+
+/// <summary>A stored venue name period. Bounds are inclusive/exclusive; null means unbounded.</summary>
+[JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
+public sealed record VenueNameResource(
+    string Name,
+    VenueNameKind Kind,
+    DateOnly? ValidFrom,
+    DateOnly? ValidTo
+);

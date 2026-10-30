@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json.Nodes;
@@ -111,9 +112,11 @@ public sealed class TestV4CatalogHttp
         var nested = show["sources"]![0]!["sets"]![0]!["tracks"]![0]!;
         JsonNode.DeepEquals(track, nested).Should().BeTrue();
         show.AsObject().ContainsKey("meta").Should().BeFalse();
+        show.AsObject().ContainsKey("venue_display").Should().BeFalse();
+        show.AsObject().ContainsKey("normalized_venue").Should().BeFalse();
         if (scenario >= 3)
         {
-            show["venue_display"]!["name"]!.GetValue<string>().Should().Be("Historical Arena");
+            DisplayVenueName(show).Should().Be("Historical Arena");
             var parts = track["normalization"]!["parts"]!.AsArray();
             parts.Should().HaveCount(2);
             parts[0]!["song"]!["id"]!.GetValue<string>().Should().StartWith("song_");
@@ -124,8 +127,8 @@ public sealed class TestV4CatalogHttp
         }
         else
         {
-            show["normalized_venue"].Should().BeNull();
-            show["venue_display"]!["name"]!.GetValue<string>().Should().Be("Imported Civic Center");
+            show["venue"].Should().BeNull();
+            DisplayVenueName(show).Should().Be("Imported Civic Center");
             track["normalization"]!["parts"]!.AsArray().Should().BeEmpty();
         }
     }
@@ -201,13 +204,17 @@ public sealed class TestV4CatalogHttp
                 """
                 INSERT INTO norm.venues (id,name,slug,author_type,author_ref,run_uuid)
                 VALUES ('venue_00000002','Survivor Arena','survivor-review-arena','importer','v4-review','00000000-0000-0000-0000-000000000099');
+                INSERT INTO norm.venue_names (venue_id,normalized,name,kind,valid_from,valid_to,author_type,author_ref,run_uuid)
+                VALUES ('venue_00000002','survivor-official','Survivor Official','official','1996-01-01',NULL,'importer','v4-review','00000000-0000-0000-0000-000000000099');
                 UPDATE norm.venues SET merged_into='venue_00000002' WHERE id='venue_00000001';
                 UPDATE norm.songs SET merged_into='song_00000004' WHERE id='song_00000003';
                 """
             );
             var show = await GetJson(ShowPath(4));
-            show["normalized_venue"]!["id"]!.GetValue<string>().Should().Be("venue_00000002");
-            show["venue_display"]!["name"]!.GetValue<string>().Should().Be("Historical Arena");
+            show["venue"]!["id"]!.GetValue<string>().Should().Be("venue_00000002");
+            DisplayVenueName(show).Should().Be("Historical Arena");
+            DisplayVenueName(show, "1996-01-01").Should().Be("Survivor Official");
+            show["venue"]!["names"]!.AsArray().Should().HaveCount(7);
             var track = await GetJson(TrackPath(4));
             track["title"]!
                 .GetValue<string>()
@@ -225,6 +232,7 @@ public sealed class TestV4CatalogHttp
                 """
                 UPDATE norm.songs SET merged_into=NULL WHERE id='song_00000003';
                 UPDATE norm.venues SET merged_into=NULL WHERE id='venue_00000001';
+                DELETE FROM norm.venue_names WHERE venue_id='venue_00000002';
                 DELETE FROM norm.venues WHERE id='venue_00000002';
                 """
             );
@@ -293,10 +301,10 @@ public sealed class TestV4CatalogHttp
         var show = await GetJson(ShowPath(4));
         show["year_id"]!.GetValue<string>().Should().StartWith("year_");
         show["tour_id"]!.GetValue<string>().Should().StartWith("tour_");
-        show["normalized_venue"]!["parent_id"]!.GetValue<string>().Should().Be("venue_00000003");
+        show["venue"]!["parent_id"]!.GetValue<string>().Should().Be("venue_00000003");
         var withoutTour = await GetJson(ShowPath(1));
         withoutTour["tour_id"].Should().BeNull();
-        withoutTour["normalized_venue"].Should().BeNull();
+        withoutTour["venue"].Should().BeNull();
     }
 
     [Test]
@@ -395,11 +403,8 @@ public sealed class TestV4CatalogHttp
             .Select(show => show!["display_date"]!.GetValue<string>())
             .Should()
             .Equal("1994-07-01", "1995-12-31");
-        allShows[0]!["venue_display"]!["name"]!
-            .GetValue<string>()
-            .Should()
-            .Be("Imported Civic Center");
-        allShows[1]!["venue_display"]!["name"]!.GetValue<string>().Should().Be("Historical Arena");
+        DisplayVenueName(allShows[0]!).Should().Be("Imported Civic Center");
+        DisplayVenueName(allShows[1]!).Should().Be("Historical Arena");
     }
 
     [Test]
@@ -491,10 +496,7 @@ public sealed class TestV4CatalogHttp
             changed.StatusCode.Should().Be(HttpStatusCode.OK);
             changed.Headers.ETag!.ToString().Should().NotBe(etag);
             var after = JsonNode.Parse(await changed.Content.ReadAsStringAsync())!.AsArray();
-            after[1]!["venue_display"]!["name"]!
-                .GetValue<string>()
-                .Should()
-                .Be("Reviewed Historical Arena");
+            DisplayVenueName(after[1]!).Should().Be("Reviewed Historical Arena");
             after[1]!["updated_at"]!
                 .ToJsonString()
                 .Should()
@@ -505,6 +507,142 @@ public sealed class TestV4CatalogHttp
             await ChangeNormalization(
                 connection,
                 "UPDATE norm.venue_names SET name='Historical Arena' WHERE venue_id='venue_00000001' AND normalized='historical-arena'"
+            );
+        }
+    }
+
+    [Test]
+    public async Task Venue_names_preserve_aliases_open_bounds_and_overlapping_periods_across_navigation()
+    {
+        var show = await GetJson(ShowPath(4));
+        var venue = show["venue"]!;
+        venue["name"]!.GetValue<string>().Should().Be("Current Arena");
+        var names = venue["names"]!.AsArray();
+        names.Should().HaveCount(6);
+        names.Count(item => item!["name"]!.GetValue<string>() == "Historical Arena").Should().Be(2);
+        var original = names.Single(item => item!["name"]!.GetValue<string>() == "Original Arena")!;
+        original["valid_from"].Should().BeNull();
+        original["valid_to"]!.GetValue<string>().Should().Be("1990-01-01");
+        var current = names.Single(item => item!["name"]!.GetValue<string>() == "Current Arena")!;
+        current["valid_from"]!.GetValue<string>().Should().Be("2000-01-01");
+        current["valid_to"].Should().BeNull();
+        var shortName = names.Single(item => item!["kind"]!.GetValue<string>() == "short")!;
+        shortName["valid_from"].Should().BeNull();
+        shortName["valid_to"].Should().BeNull();
+        names.Should().Contain(item => item!["kind"]!.GetValue<string>() == "spelling");
+        DisplayVenueName(show, "1989-12-31").Should().Be("Original Arena");
+        DisplayVenueName(show, "1990-01-01").Should().Be("Historical Arena");
+        DisplayVenueName(show, "1999-12-31").Should().Be("Historical Arena");
+        DisplayVenueName(show, "2000-01-01").Should().Be("Current Arena");
+
+        var summary = (await GetJson(BrowseArtistPath + "/shows"))
+            .AsArray()
+            .Single(item => item!["id"]!.GetValue<string>() == ShowId(4))!;
+        var year = await GetJson(BrowseArtistPath + "/years/by-number/1995");
+        JsonNode.DeepEquals(venue, summary["venue"]).Should().BeTrue();
+        JsonNode.DeepEquals(venue, year["shows"]![0]!["venue"]).Should().BeTrue();
+        summary.AsObject().ContainsKey("venue_display").Should().BeFalse();
+        year["shows"]![0]!.AsObject().ContainsKey("venue_display").Should().BeFalse();
+
+        var document = await GetJson("/api-docs/v4/swagger.json");
+        AssertSchemaFields(document, "VenueResource", venue);
+        AssertSchemaFields(document, "VenueNameResource", names[0]!);
+        EnumValues(document, "VenueNameResource", "kind")
+            .Should()
+            .BeEquivalentTo("official", "short", "spelling");
+        foreach (var bound in new[] { "valid_from", "valid_to" })
+        {
+            var schema = document["components"]!["schemas"]!["VenueNameResource"]!["properties"]![
+                bound
+            ]!;
+            schema["type"]!.GetValue<string>().Should().Be("string");
+            schema["format"]!.GetValue<string>().Should().Be("date");
+            schema["nullable"]!.GetValue<bool>().Should().BeTrue();
+        }
+    }
+
+    [Test]
+    public async Task Unused_venue_alias_corrections_refresh_history_without_recording_or_current_name_changes()
+    {
+        using var initial = await http.GetAsync(ShowPath(4));
+        initial.StatusCode.Should().Be(HttpStatusCode.OK);
+        var before = JsonNode.Parse(await initial.Content.ReadAsStringAsync())!;
+        var etag = initial.Headers.ETag!.ToString();
+        await using var connection = await MigratedTestDatabase.OpenAsync();
+        try
+        {
+            await ChangeNormalization(
+                connection,
+                "UPDATE norm.venue_names SET name='Reviewed Areena' WHERE venue_id='venue_00000001' AND normalized='historical-areena'"
+            );
+            using var response = await Conditional(ShowPath(4), etag);
+            response.StatusCode.Should().Be(HttpStatusCode.OK);
+            response.Headers.ETag!.ToString().Should().NotBe(etag);
+            var after = JsonNode.Parse(await response.Content.ReadAsStringAsync())!;
+            after["updated_at"]!.ToJsonString().Should().Be(before["updated_at"]!.ToJsonString());
+            after["venue"]!["name"]!.GetValue<string>().Should().Be("Current Arena");
+            DisplayVenueName(after).Should().Be(DisplayVenueName(before));
+            after["venue"]!["names"]!
+                .AsArray()
+                .Should()
+                .Contain(item => item!["name"]!.GetValue<string>() == "Reviewed Areena");
+        }
+        finally
+        {
+            await ChangeNormalization(
+                connection,
+                "UPDATE norm.venue_names SET name='Historical Areena' WHERE venue_id='venue_00000001' AND normalized='historical-areena'"
+            );
+        }
+    }
+
+    [Test]
+    public async Task Client_selection_can_fall_back_to_canonical_name_when_no_periods_exist()
+    {
+        await using var connection = await MigratedTestDatabase.OpenAsync();
+        try
+        {
+            await ChangeNormalization(
+                connection,
+                "UPDATE norm.show_venues SET venue_id='venue_00000003' WHERE show_uuid='00000000-0000-0000-0000-000000000004'"
+            );
+            var show = await GetJson(ShowPath(4));
+            show["venue"]!["names"]!.AsArray().Should().BeEmpty();
+            DisplayVenueName(show).Should().Be("Arena Site");
+            show["imported_venue"]!["name"]!
+                .GetValue<string>()
+                .Should()
+                .Be("Imported Civic Center");
+        }
+        finally
+        {
+            await ChangeNormalization(
+                connection,
+                "UPDATE norm.show_venues SET venue_id='venue_00000001' WHERE show_uuid='00000000-0000-0000-0000-000000000004'"
+            );
+        }
+    }
+
+    [Test]
+    public async Task Fuzzy_display_labels_remain_readable_without_becoming_date_parse_inputs()
+    {
+        var before = await GetJson(ShowPath(4));
+        await using var connection = await MigratedTestDatabase.OpenAsync();
+        try
+        {
+            await connection.ExecuteAsync(
+                "UPDATE shows SET display_date='1995-XX-XX' WHERE uuid='00000000-0000-0000-0000-000000000004'"
+            );
+            var show = await GetJson(ShowPath(4));
+            show["display_date"]!.GetValue<string>().Should().Be("1995-XX-XX");
+            show["date"]!.GetValue<string>().Should().Be(before["date"]!.GetValue<string>());
+            DisplayVenueName(show).Should().Be("Historical Arena");
+        }
+        finally
+        {
+            await connection.ExecuteAsync(
+                "UPDATE shows SET display_date=@label WHERE uuid='00000000-0000-0000-0000-000000000004'",
+                new { label = before["display_date"]!.GetValue<string>() }
             );
         }
     }
@@ -527,7 +665,7 @@ public sealed class TestV4CatalogHttp
         AssertSchemaFields(document, "TrackPartResource", track["normalization"]!["parts"]![0]!);
         AssertSchemaFields(
             document,
-            "NormalizedSongResource",
+            "SongResource",
             track["normalization"]!["parts"]![0]!["song"]!
         );
         var trackProperties = document["components"]!["schemas"]!["TrackResource"]!["properties"]!;
@@ -543,16 +681,16 @@ public sealed class TestV4CatalogHttp
     {
         var document = await GetJson("/api-docs/v4/swagger.json");
         var raw = await GetJson(ShowPath(1));
-        raw["normalized_venue"].Should().BeNull();
+        raw["venue"].Should().BeNull();
         raw["era"].Should().BeNull();
         var partial = await GetJson(TrackPath(3));
         partial["normalization"]!["parts"]![1]!["song"].Should().BeNull();
         foreach (
             var (resource, property) in new[]
             {
-                ("ShowResource", "normalized_venue"),
+                ("ShowResource", "venue"),
                 ("ShowResource", "era"),
-                ("ShowSummaryResource", "normalized_venue"),
+                ("ShowSummaryResource", "venue"),
                 ("ShowSummaryResource", "era"),
                 ("TrackPartResource", "song"),
             }
@@ -570,7 +708,6 @@ public sealed class TestV4CatalogHttp
             {
                 ("TrackResource", "normalization"),
                 ("ArtistResource", "capabilities"),
-                ("ShowResource", "venue_display"),
             }
         )
         {
@@ -583,9 +720,7 @@ public sealed class TestV4CatalogHttp
             }
             (schema["nullable"]?.GetValue<bool>() ?? false).Should().BeFalse();
         }
-        foreach (
-            var name in new[] { "NormalizedVenueResource", "EraResource", "NormalizedSongResource" }
-        )
+        foreach (var name in new[] { "VenueResource", "EraResource", "SongResource" })
         {
             var definition = document["components"]!["schemas"]![name]!;
             (definition["nullable"]?.GetValue<bool>() ?? false).Should().BeFalse();
@@ -605,13 +740,11 @@ public sealed class TestV4CatalogHttp
         EnumValues(document, "TrackPartResource", "state")
             .Should()
             .BeEquivalentTo("matched", "non_song", "unresolved");
-        EnumValues(document, "NormalizedSongResource", "kind")
+        EnumValues(document, "SongResource", "kind")
             .Should()
             .BeEquivalentTo("song", "jam", "segment", "tuning", "banter", "other");
-        EnumValues(document, "NormalizedVenueResource", "kind")
-            .Should()
-            .BeEquivalentTo("site", "room");
-        EnumValues(document, "NormalizedVenueResource", "coordinate_precision")
+        EnumValues(document, "VenueResource", "kind").Should().BeEquivalentTo("site", "room");
+        EnumValues(document, "VenueResource", "coordinate_precision")
             .Should()
             .BeEquivalentTo("venue", "city");
         EnumValues(document, "SourceResource", "flac_type")
@@ -655,20 +788,20 @@ public sealed class TestV4CatalogHttp
                     .Contain(part!["state"]!.GetValue<string>());
                 if (part["song"] is { } song)
                 {
-                    EnumValues(document, "NormalizedSongResource", "kind")
+                    EnumValues(document, "SongResource", "kind")
                         .Should()
                         .Contain(song["kind"]!.GetValue<string>());
                 }
             }
         }
         var show = await GetJson(ShowPath(4));
-        EnumValues(document, "NormalizedVenueResource", "kind")
+        EnumValues(document, "VenueResource", "kind")
             .Should()
-            .Contain(show["normalized_venue"]!["kind"]!.GetValue<string>());
+            .Contain(show["venue"]!["kind"]!.GetValue<string>());
         EnumValues(document, "SourceResource", "flac_type")
             .Should()
             .Contain(show["sources"]![0]!["flac_type"]!.GetValue<string>());
-        show["normalized_venue"]!["coordinate_precision"].Should().BeNull();
+        show["venue"]!["coordinate_precision"].Should().BeNull();
     }
 
     [Test]
@@ -700,13 +833,13 @@ public sealed class TestV4CatalogHttp
                 .Should()
                 .Contain(qualifiers);
             var show = await GetJson(ShowPath(4));
-            show["normalized_venue"]!["coordinate_precision"].Should().BeNull();
+            show["venue"]!["coordinate_precision"].Should().BeNull();
             foreach (
                 var (resource, property) in new[]
                 {
                     ("TrackNormalizationResource", "reason"),
-                    ("NormalizedSongResource", "kind"),
-                    ("NormalizedVenueResource", "coordinate_precision"),
+                    ("SongResource", "kind"),
+                    ("VenueResource", "coordinate_precision"),
                 }
             )
             {
@@ -796,6 +929,49 @@ public sealed class TestV4CatalogHttp
             .Select(entry => entry.Key)
             .Should()
             .NotContain(path => path.StartsWith("/api/v4/"));
+    }
+
+    // Example client selection: use the priority-ordered official periods for the
+    // show date, then the canonical label; imported observations remain the raw fallback.
+    private static string? DisplayVenueName(JsonNode show, string? onDate = null)
+    {
+        if (show["venue"] is not { } venue)
+        {
+            return show["imported_venue"]?["name"]?.GetValue<string>();
+        }
+
+        // display_date is a presentation label and may contain unknown month/day.
+        // Preserve the calendar day serialized in date rather than parsing that label.
+        var date = onDate is null
+            ? DateOnly.FromDateTime(
+                DateTimeOffset
+                    .Parse(show["date"]!.GetValue<string>(), CultureInfo.InvariantCulture)
+                    .DateTime
+            )
+            : DateOnly.ParseExact(onDate, "yyyy-MM-dd", CultureInfo.InvariantCulture);
+        foreach (var item in venue["names"]!.AsArray())
+        {
+            if (item!["kind"]!.GetValue<string>() != "official")
+            {
+                continue;
+            }
+            var from = item["valid_from"]?.GetValue<string>();
+            var to = item["valid_to"]?.GetValue<string>();
+            if (
+                (
+                    from is null
+                    || DateOnly.ParseExact(from, "yyyy-MM-dd", CultureInfo.InvariantCulture) <= date
+                )
+                && (
+                    to is null
+                    || date < DateOnly.ParseExact(to, "yyyy-MM-dd", CultureInfo.InvariantCulture)
+                )
+            )
+            {
+                return item["name"]!.GetValue<string>();
+            }
+        }
+        return venue["name"]!.GetValue<string>();
     }
 
     private async Task<JsonNode> GetJson(string path)

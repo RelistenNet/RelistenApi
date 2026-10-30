@@ -89,7 +89,6 @@ public sealed class CatalogShowMetadataReader(ILogger<CatalogShowMetadataReader>
             show.ImportedVenue = show.venue_id is { } venueId
                 ? venues.GetValueOrDefault(venueId)
                 : null;
-            show.VenueDisplayName = show.ImportedVenue?.name;
             show.Year = show.year_uuid is { } yearId ? years.GetValueOrDefault(yearId) : null;
             show.Tour = show.tour_uuid is { } tourId ? tours.GetValueOrDefault(tourId) : null;
             show.Era = eras.TryGetValue(show.uuid, out var era)
@@ -103,10 +102,10 @@ public sealed class CatalogShowMetadataReader(ILogger<CatalogShowMetadataReader>
             }
         }
 
-        await ApplyNormalizedVenues(session, shows, cancellationToken);
+        await ApplyVenues(session, shows, cancellationToken);
     }
 
-    private async Task ApplyNormalizedVenues(
+    private async Task ApplyVenues(
         CatalogReadSession session,
         IReadOnlyList<CatalogShow> shows,
         CancellationToken cancellationToken
@@ -133,11 +132,9 @@ public sealed class CatalogShowMetadataReader(ILogger<CatalogShowMetadataReader>
                       FROM chain c JOIN norm.venues v ON v.id=c.merged_into
                       WHERE cardinality(c.path)<32 AND NOT v.id=ANY(c.path)
                     )
-                    SELECT c.show_uuid,
-                           CASE WHEN c.merged_into IS NULL THEN norm.venue_name_on(c.id,s.date) END display_name,
-                           c.id,c.name,c.kind,c.parent_id,c.city,c.region,c.country,
+                    SELECT c.show_uuid,c.id,c.name,c.kind,c.parent_id,c.city,c.region,c.country,
                            c.latitude,c.longitude,c.coordinate_precision,c.merged_into
-                    FROM chain c JOIN shows s ON s.uuid=c.show_uuid
+                    FROM chain c
                     """,
                     new { showUuids = approvedShows.Keys.ToArray() },
                     cancellationToken
@@ -162,9 +159,64 @@ public sealed class CatalogShowMetadataReader(ILogger<CatalogShowMetadataReader>
                 continue;
             }
             var show = approvedShows[group.Key];
-            show.NormalizedVenue = survivor.Venue;
-            show.VenueDisplayName =
-                survivor.display_name ?? survivor.Venue.name ?? show.ImportedVenue?.name;
+            show.Venue = survivor.Venue;
+        }
+
+        await ReadVenueNames(
+            session,
+            approvedShows
+                .Values.Where(show => show.Venue is not null)
+                .Select(show => show.Venue!)
+                .ToArray(),
+            cancellationToken
+        );
+    }
+
+    private static async Task ReadVenueNames(
+        CatalogReadSession session,
+        IReadOnlyList<CatalogVenue> venues,
+        CancellationToken cancellationToken
+    )
+    {
+        if (venues.Count == 0)
+        {
+            return;
+        }
+
+        // Retain merged venues' names without inventing cleaner periods. Clients
+        // choose the first active official name: own venue first, then merged aliases,
+        // newest start first. Bounds are inclusive below, exclusive above, and null when open.
+        var ids = venues.Select(venue => venue.id).Distinct().ToArray();
+        var names = await session.Connection.QueryAsync<CatalogVenueName>(
+            session.Command(
+                """
+                WITH RECURSIVE lineage AS (
+                  SELECT v.id canonical_venue_id,v.id venue_id,0 depth,ARRAY[v.id] path
+                  FROM norm.venues v WHERE v.id=ANY(@ids)
+                  UNION ALL
+                  SELECT f.canonical_venue_id,v.id,f.depth+1,f.path || v.id
+                  FROM lineage f JOIN norm.venues v ON v.merged_into=f.venue_id
+                  WHERE f.depth<20 AND NOT v.id=ANY(f.path)
+                )
+                SELECT f.canonical_venue_id,n.name,n.kind,
+                       CASE WHEN isfinite(n.valid_from) THEN to_char(n.valid_from,'YYYY-MM-DD') END valid_from,
+                       CASE WHEN isfinite(n.valid_to) THEN to_char(n.valid_to,'YYYY-MM-DD') END valid_to
+                FROM lineage f JOIN norm.venue_names n ON n.venue_id=f.venue_id
+                ORDER BY f.canonical_venue_id,f.depth,n.valid_from DESC,n.kind,n.normalized,n.name,n.valid_to,n.venue_id
+                """,
+                new { ids },
+                cancellationToken
+            )
+        );
+        var namesByVenue = names
+            .GroupBy(name => name.canonical_venue_id)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<CatalogVenueName>)group.ToArray()
+            );
+        foreach (var venue in venues)
+        {
+            venue.Names = namesByVenue.GetValueOrDefault(venue.id) ?? [];
         }
     }
 
@@ -192,7 +244,6 @@ public sealed class CatalogShowMetadataReader(ILogger<CatalogShowMetadataReader>
     private sealed class ShowVenue
     {
         public Guid show_uuid { get; set; }
-        public string? display_name { get; set; }
         public CatalogVenue Venue { get; set; } = null!;
     }
 }

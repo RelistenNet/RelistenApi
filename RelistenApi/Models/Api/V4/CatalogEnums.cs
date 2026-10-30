@@ -49,7 +49,7 @@ public enum TrackPartState
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-public enum NormalizedSongKind
+public enum SongKind
 {
     [EnumMember(Value = "song")]
     Song,
@@ -71,7 +71,7 @@ public enum NormalizedSongKind
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-public enum NormalizedVenueKind
+public enum VenueKind
 {
     [EnumMember(Value = "site")]
     Site,
@@ -150,4 +150,17 @@ public enum TrackQualifier
 
     [EnumMember(Value = "jam")]
     Jam,
+}
+
+[JsonConverter(typeof(StringEnumConverter))]
+public enum VenueNameKind
+{
+    [EnumMember(Value = "official")]
+    Official,
+
+    [EnumMember(Value = "short")]
+    Short,
+
+    [EnumMember(Value = "spelling")]
+    Spelling,
 }
