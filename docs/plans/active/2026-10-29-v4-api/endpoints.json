@@ -3,6 +3,13 @@
   "catalog_endpoints": [
     {
       "method": "GET",
+      "path": "/api/v4/artist-venues/{artistVenueId}",
+      "coverage_source": "catalog-route-inventory.md",
+      "response_shape": "resource_with_shows",
+      "sync_policy": "detail_shows"
+    },
+    {
+      "method": "GET",
       "path": "/api/v4/artists",
       "coverage_source": "catalog-route-inventory.md",
       "response_shape": "list",
@@ -52,24 +59,10 @@
     },
     {
       "method": "GET",
-      "path": "/api/v4/artists/{artistId}/imported-songs/{importedSongId}",
-      "coverage_source": "catalog-route-inventory.md",
-      "response_shape": "resource_with_shows",
-      "sync_policy": "detail_shows"
-    },
-    {
-      "method": "GET",
       "path": "/api/v4/artists/{artistId}/imported-venues",
       "coverage_source": "catalog-route-inventory.md",
       "response_shape": "list",
       "sync_policy": "artist_collection"
-    },
-    {
-      "method": "GET",
-      "path": "/api/v4/artists/{artistId}/imported-venues/{importedVenueId}",
-      "coverage_source": "catalog-route-inventory.md",
-      "response_shape": "resource_with_shows",
-      "sync_policy": "detail_shows"
     },
     {
       "method": "GET",
@@ -173,15 +166,8 @@
       "method": "GET",
       "path": "/api/v4/artists/{artistId}/venues/{venueId}",
       "coverage_source": "catalog-route-inventory.md",
-      "response_shape": "resource",
-      "sync_policy": "resource"
-    },
-    {
-      "method": "GET",
-      "path": "/api/v4/artists/{artistId}/venues/{venueId}/shows",
-      "coverage_source": "catalog-route-inventory.md",
-      "response_shape": "list",
-      "sync_policy": "query_result"
+      "response_shape": "resource_with_shows",
+      "sync_policy": "detail_shows"
     },
     {
       "method": "GET",
@@ -252,6 +238,20 @@
       "coverage_source": "other-route-inventory.md",
       "response_shape": "command_result",
       "sync_policy": "command"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/imported-songs/{importedSongId}",
+      "coverage_source": "catalog-route-inventory.md",
+      "response_shape": "resource_with_shows",
+      "sync_policy": "detail_shows"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/imported-venues/{importedVenueId}",
+      "coverage_source": "catalog-route-inventory.md",
+      "response_shape": "resource_with_shows",
+      "sync_policy": "detail_shows"
     },
     {
       "method": "GET",
@@ -355,22 +355,15 @@
       "method": "GET",
       "path": "/api/v4/songs/{songId}",
       "coverage_source": "catalog-route-inventory.md",
-      "response_shape": "resource",
-      "sync_policy": "resource"
-    },
-    {
-      "method": "GET",
-      "path": "/api/v4/songs/{songId}/shows",
-      "coverage_source": "catalog-route-inventory.md",
-      "response_shape": "list",
-      "sync_policy": "query_result"
+      "response_shape": "resource_with_shows",
+      "sync_policy": "detail_shows"
     },
     {
       "method": "GET",
       "path": "/api/v4/songs/{songId}/tracks",
       "coverage_source": "catalog-route-inventory.md",
-      "response_shape": "list",
-      "sync_policy": "query_result"
+      "response_shape": "resource_with_tracks",
+      "sync_policy": "detail_tracks"
     },
     {
       "method": "GET",
@@ -425,15 +418,8 @@
       "method": "GET",
       "path": "/api/v4/venues/{venueId}",
       "coverage_source": "catalog-route-inventory.md",
-      "response_shape": "resource",
-      "sync_policy": "resource"
-    },
-    {
-      "method": "GET",
-      "path": "/api/v4/venues/{venueId}/shows",
-      "coverage_source": "catalog-route-inventory.md",
-      "response_shape": "list",
-      "sync_policy": "query_result"
+      "response_shape": "resource_with_shows",
+      "sync_policy": "detail_shows"
     }
   ],
   "account_endpoints": [
@@ -503,17 +489,18 @@
   "sync_policies": {
     "command": "Apply the explicit command result only; no collection replacement inferred.",
     "resource": "Upsert the returned resource and supplied related fields; omission never removes unrelated entities or associations.",
-    "artist_collection": "Replace this artist endpoint\u2019s association list for the exact request/filter; retain entity records, other query associations, favorites and offline data.",
+    "artist_collection": "Replace this artist endpoint’s association list for the exact request/filter; retain entity records, other query associations, favorites and offline data.",
     "artist_catalog": "Replace years/shows/tours/eras/imported_venues/imported_songs/venue_entries/song_entries associations for this artist; normalized_venues/normalized_songs are entity patches, not global replacement sets.",
     "full_show": "Upsert the show and nested sources/sets/tracks; replace active source associations for this show and set/track associations for each fully returned source/set. Retain entity records needed for offline playback and favorites.",
     "full_source": "Upsert source and nested sets/tracks; replace active sets for this source and tracks for each fully returned set. Related artist/show summaries are patches.",
     "full_set": "Upsert set and tracks; replace active track associations for this set only. Parent summaries are patches.",
-    "detail_shows": "Upsert detail resource and replace its shows association list for this exact resource and artist/request filter only.",
+    "detail_shows": "Upsert the resource and returned show summaries; replace only this resource’s complete show association list, including an empty list. Save the payload ETag in the same local transaction. Retain shared show entities, downloads, favorites, and other query memberships. Artist-venue ID and artist-plus-venue alias identify the same membership owner.",
     "query_result": "Replace only the cached result of this exact URL and normalized query parameters; upsert returned entities. Never infer absence elsewhere from search/ranking/filtered/limited results.",
     "history": "With after_sequence append/deduplicate by event sequence; without it replace only the cached recent-history window for the exact request. Never delete catalog rows or personal playback history from omissions.",
     "resolver": "Upsert only supplied entities and per-reference availability/redirect results; never replace collections or remove favorite membership.",
     "library_snapshot": "Apply authoritative membership for the authenticated account under the revised in-place library snapshot/cursor contract, not catalog replacement rules.",
-    "library_changes": "Apply explicit ordered membership changes and advance the account cursor atomically; omissions do not remove membership."
+    "library_changes": "Apply explicit ordered membership changes and advance the account cursor atomically; omissions do not remove membership.",
+    "detail_tracks": "Upsert song metadata and returned track resources; replace only this song’s complete file-match membership, including an empty list. Save the payload ETag in the same local transaction. This response has no shows property and does not change song-show membership or shared offline entities."
   },
   "account_identity_storage": "Canonical full prefixed strings for application-owned IDs and catalog targets; OpenIddict/private surrogate keys remain internal UUIDs.",
   "account_routes": "Change existing /v1/library and /v1/me in place; no parallel library route version."

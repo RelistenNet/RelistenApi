@@ -141,7 +141,10 @@ GET /api/v4/sources/{sourceId}
 GET /api/v4/artists/{artistId}/songs
 GET /api/v4/songs/{songId}/tracks
 GET /api/v4/venues/{venueId}
-GET /api/v4/venues/{venueId}/shows?artist_id=...
+GET /api/v4/artist-venues/{artistVenueId}
+GET /api/v4/songs/{songId}
+GET /api/v4/imported-venues/{importedVenueId}
+GET /api/v4/imported-songs/{importedSongId}
 POST /api/v4/catalog/resolve
 ```
 

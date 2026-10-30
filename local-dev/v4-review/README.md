@@ -30,7 +30,7 @@ provides Try it out too. Start with the matched and partial tracks, compare
 their full shows, then inspect the venue alias example. Playback URLs and
 titles are imported values; normalized parts describe the file without replacing it.
 
-The expanded C1 browse checkpoint exposes 22 GET routes. Follow the
+The expanded C1 browse checkpoint exposes 20 GET routes. Follow the
 [venue-to-playback walkthrough](../../docs/plans/active/2026-10-29-v4-api/review/venue-source-journey.md)
 and [song-to-playback walkthrough](../../docs/plans/active/2026-10-29-v4-api/review/song-source-journey.md)
 to inspect the resource links. Implemented families are:
@@ -40,30 +40,38 @@ to inspect the resource links. Implemented families are:
 - `GET /api/v4/artists/{artistId}/years`: year list; append `/{yearId}` or
   `/by-number/{year}` for year detail with show summaries.
 - `GET /api/v4/artists/{artistId}/shows`: the complete artist show-summary list.
-- `GET /api/v4/artists/{artistId}/venues`: canonical show groups with imported
-  fallback entries. Canonical children are stored `artist_venue` resources with
-  `artist_show_count`. Append `/{venueId}` for that direct relationship resource
-  or `/{venueId}/shows` for its artist-filtered shows.
-- `GET /api/v4/venues/{venueId}`: canonical metadata, aliases, and
-  `global_show_count`; append `/shows`
-  for approved assignments across artists, optionally filtered by `artist_id`.
-- `GET /api/v4/artists/{artistId}/imported-venues`: all imported rows and show
-  counts, including unused rows. Append `/{importedVenueId}` for that row with its
-  complete show collection.
-- `GET /api/v4/artists/{artistId}/songs`: canonical songs plus imported fallback
+- `GET /api/v4/artists/{artistId}/venues`: compact canonical relationship and
+  imported fallback entries. Canonical children have stable `artist_venue` IDs
+  and `artist_show_count`; imported children have `show_count`.
+- `GET /api/v4/artist-venues/{artistVenueId}`: relationship metadata with complete
+  `shows`. `/artists/{artistId}/venues/{venueId}` is
+  the equivalent pair lookup.
+- `GET /api/v4/venues/{venueId}`: shared metadata, aliases,
+  `global_show_count`, complete cross-artist `shows`.
+- `GET /api/v4/artists/{artistId}/imported-venues`: compact full imported inventory,
+  including unused rows. `/imported-venues/{importedVenueId}` returns metadata,
+  count, complete `shows` directly by ID.
+- `GET /api/v4/artists/{artistId}/songs`: compact canonical and imported fallback
   entries, selected by the server from approved evidence.
-- `GET /api/v4/songs/{songId}`: canonical metadata and exact recording counts;
-  append `/tracks` for complete files with matching part ordinals or `/shows`
-  for their deduplicated shows.
-- `GET /api/v4/artists/{artistId}/imported-songs`: full imported inventory with
-  distinct setlist-supported catalog show counts; append `/{importedSongId}`
-  for that same imported resource and complete show list.
+- `GET /api/v4/songs/{songId}`: canonical metadata, exact recording counts,
+  complete matched `shows`. Its `/tracks` response
+  has song metadata and complete file matches in `tracks`; no `shows`.
+- `GET /api/v4/artists/{artistId}/imported-songs`: compact full imported inventory.
+  `/imported-songs/{importedSongId}` returns that resource with complete
+  setlist-supported `shows` directly by ID.
 - `GET /api/v4/shows/{showId}`: full show with sources, sets, tracks, imported
   venue observations, stored `artist_venue` links, aliases and approved normalization.
 - `GET /api/v4/sources/{sourceId}`: that same complete source resource directly,
   including its own imported venue and active playable files.
 - `GET /api/v4/source-tracks/{sourceTrackId}`: that same track resource directly,
   with exact typed artist/show/source/set parents.
+
+Venue/song details use one snapshot and ETag for metadata and complete membership.
+Artist references resolve through the separately loaded artist catalog. Bare
+venue/song `/shows` routes are removed. Browse and
+embedded resources stay compact. No `detail_url` is returned: use the ID kind to
+select the fixed direct route. See the [contracts](../../docs/plans/active/2026-10-29-v4-api/contracts.md)
+for membership replacement and count ownership.
 
 Resources return directly. Every track has `normalization` with `state`,
 `reason` and ordered `parts`. Raw, disabled and partial records stay playable.

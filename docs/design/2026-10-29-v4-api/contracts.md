@@ -81,8 +81,10 @@ UUID-only fields or record-struct objects.
 
 ```text
 GET /api/v4/artists/{artistId}/venues
-GET /api/v4/artists/{artistId}/venues/{venueId}/shows
-GET /api/v4/venues/{venueId}/shows
+GET /api/v4/artist-venues/{artistVenueId}
+GET /api/v4/artists/{artistId}/venues/{venueId}
+GET /api/v4/venues/{venueId}
+GET /api/v4/imported-venues/{importedVenueId}
 ```
 
 The first endpoint returns one entry per normalized place for that artist,
@@ -91,10 +93,14 @@ The reference discriminates canonical versus imported identity. Imported fallbac
 detail needs an explicit imported-venue route or typed-reference lookup; it must
 not be interpreted as a canonical `VenueId`.
 
-Counts come from distinct shows in the server catalog, scoped to the requested
-artist. Canonical venue detail may span artists; artist venue detail always
-filters both artist and canonical venue. The two requests answer different
-questions and must not accidentally share a cache key.
+The [implementation contract](../../plans/active/2026-10-29-v4-api/contracts.md)
+supersedes this exploration’s response sketches. Details return metadata,
+complete `shows` with one payload ETag. Artists are cached separately, referenced
+by `artist_id`. Shared venue
+counts are global across approved artists; relationship counts belong to the
+artist and canonical venue. Artist-venue ID and pair lookups return the same
+membership owner. Imported detail accepts its globally unique imported ID alone.
+Compact browse resources have no detail arrays, and no detail URL is returned.
 
 Mobile keeps `Venue`, adds `NormalizedVenue`, and gives `Show` both links.
 It caches grouped browse entries with artist, reference kind, reference ID,

@@ -668,3 +668,66 @@ Raw timing samples and captures are in ignored
 `request-timings.json`. The expensive artist-wide count aggregation is removed from
 GETs. Production load/capacity validation and mobile apply remain pending.
 No production deployment or database mutation occurred.
+
+
+## Resource-with-shows contract review, 2026-10-30
+
+The current contract has 20 local GET routes. Earlier 22-route captures above
+predate this change. Metadata-only canonical detail and bare venue/song show-list
+routes are superseded by the resource-with-shows details in [contracts](contracts.md).
+The earlier metadata-only song-detail timings do not measure the new full detail.
+
+Verify the public contract through focused HTTP tests and real-response review:
+
+- Global venue, artist-venue, imported venue, canonical song, and imported song
+  details contain flat metadata and complete `shows`.
+  Empty imported/artist-venue/song details retain `artist_id` and `shows: []`.
+  No detail response repeats artist resources; mobile caches them separately.
+- Direct artist-venue ID and artist-plus-venue lookup return the same detail.
+  Imported lookup needs only the imported ID. Wrong ID kinds return 422;
+  valid missing IDs return 404.
+- Browse and embedded resources contain neither detail `shows` nor `artists`.
+  Song file-match detail contains song metadata and complete `tracks`,
+  with no `shows` property. Removed routes are absent from live OpenAPI.
+- One payload ETag covers metadata and membership from one read snapshot.
+  Show-membership changes invalidate detail even with unchanged parent timestamps;
+  unchanged requests return 304. Dependency failure returns a no-store 503.
+- Counts keep their stored meaning and may lag live membership. Reads do not
+  recount or mint identities. A detail array length never overwrites a count.
+
+Mobile verification remains future work: apply resources and the detail owner’s
+replacement membership, including empty lists, with the ETag in one transaction;
+retain shared entities, downloads, favorites, and other memberships. File-match
+apply cannot clear song-show membership. Failed fetch/apply retains prior state.
+
+### Verified implementation and local review
+
+Source commits `19686d4ee` and `3945ca65e` implement complete details and direct ID
+lookups without embedded artist resources. All 82 focused v4 HTTP tests passed
+against the final contract. A fresh review found no additional issues. Tests cover
+direct lookup, resource/collection consistency, empty membership, approval and
+merge behavior, validators, and dependency failures. They use disposable catalog
+data and do not edit the restored review catalog.
+
+The local API has been restarted for final real-response review. No production
+catalog changes, deployment, account migration, or mobile runtime changes occurred.
+Alec’s next checkpoint is venue/song response review before account/auth work.
+Production load and mobile transactional apply remain unverified.
+
+The final real-data capture passed its assertions with no detail `artists` arrays.
+The following are individual full-response samples, not medians or production
+capacity measurements:
+
+| Detail | Returned membership | Time |
+| --- | --- | --- |
+| Shared Red Rocks venue | 176 shows | 26 ms |
+| Imported Ace’s Studio (`imported_venue_78331pxdqjdg434rrgm1d2pnrj`) | 1 show | 4 ms |
+| Song `song_mbkeejfd` | 147 shows | 66 ms |
+| Scarlet Begonias | 332 shows | 172 ms |
+| Scarlet file-match detail | 3,355 files | 242 ms |
+
+Revalidating captured ETags for a global venue and both user-reported examples
+returned 304. Curated excerpts retain detail metadata and select the first show
+or file match. Complete response bodies, headers, and timing samples remain in
+ignored `local-dev/v4-review/.output/`; the live URLs return full collections.
+Artists resolve by `artist_id` from mobile’s separately loaded artist catalog.

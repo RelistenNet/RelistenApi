@@ -1,96 +1,83 @@
-# Review the venue-to-playback journey
+# Venue to playable recording
 
-The next C1 review connects artist browsing to a physical venue, its shows, and a
-playable recording. The local API now exposes 16 GET routes. Start with the
-[request collection](requests.http) or [Swagger](http://127.0.0.1:43823/api-docs-v4).
-The capture script uses real restored records; regression tests use a disposable
-catalog. Neither review path runs ingestion or normalization jobs.
+For Alec and Switz: inspect one artist's venue groups, follow their shows to
+playback, and compare a shared venue across artists. Start the
+[local API](../../../../../local-dev/v4-review/README.md), then open
+[Swagger](http://127.0.0.1:43823/api-docs-v4). This checkpoint has 20 GET routes.
+Manual review uses restored records; tests use a disposable catalog. Neither
+review path runs ingestion or normalization jobs.
 
-Start with these live responses from the restored catalog:
+## Follow a shared venue
 
-- [Grateful Dead venue groups](http://127.0.0.1:43823/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/venues):
-  canonical artist–venue resources and imported fallback entries share one list.
-- [Oakland artist venue](http://127.0.0.1:43823/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/venues/venue_wwrsykhn)
-  and its [shows](http://127.0.0.1:43823/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/venues/venue_wwrsykhn/shows).
-- [Red Rocks across artists](http://127.0.0.1:43823/api/v4/venues/venue_fp4h900f/shows):
-  inspect the shared venue's count and show assignments across approved artists.
-- [One Oakland recording](http://127.0.0.1:43823/api/v4/sources/source_0ey8bt709t1kgkmtpmgvq85art)
-  and [one of its tracks](http://127.0.0.1:43823/api/v4/source-tracks/track_11be6feqht0xd6q911jmx31nqs).
-
-Saved full examples: [artist venue entry](responses/artist-venue.json),
-[direct source](responses/venue-journey-source.json), and
-[unnormalized artist's imported venue detail](responses/disabled-imported-venue.json).
-The request collection also includes unmatched shows within an approved artist.
-Large collections, response headers, and request timings remain in the ignored
-`local-dev/v4-review/.output/` directory.
-
-## Follow one normalized venue
-
-1. Read `/api/v4/artists/{artistId}/venues`. Each entry has `kind`,
-   `artist_venue`, and `imported_venue`, with exactly one target populated. A
-   canonical entry has `kind: "artist_venue"`; its child owns the stored ID,
-   `artist_id`, `artist_show_count`, timestamps, and nested shared venue.
-   Imported children include their full `show_count`, matching imported detail.
-   The server handles approval and partial coverage; clients use this list for
-   every artist and follow the returned `kind`.
-2. For a canonical child, read `/api/v4/artists/{artistId}/venues/{venueId}`.
-   The response is the direct relationship resource, equal to the list's child.
-   Read `/api/v4/venues/{venueId}` for the shared venue alone: global count,
-   identity, locality, parent venue, and distinct `{ name, kind }` aliases.
-   Merged IDs resolve to the survivor; no name periods are exposed.
-3. Read `/api/v4/artists/{artistId}/venues/{venueId}/shows`. Every summary's
-   `artist_venue` must match the relationship detail, including its artist-wide
-   count. A year-filtered response retains that same full artist/place count.
-4. Read `/api/v4/venues/{venueId}/shows` for approved assignments across artists.
-   Add `?artist_id={artistId}` to narrow show membership. Nested and direct
-   `global_show_count` stays global under that filter. After a successful count
-   refresh, the full qualifying show lists should agree with their scoped counts.
-5. Open a returned `/api/v4/shows/{showId}`. Display its imported venue label and
-   locality, linking through `artist_venue.venue.id` when present. Canonical name
-   is fallback only when imported data is absent. Missing materialized
-   relationships preserve imported fallback and never trigger a GET-time refresh.
-6. Open `/api/v4/sources/{sourceId}` from that show's `sources`. The resource must
-   equal its nested show counterpart, including its own imported venue, links,
-   sets, and tracks. Only this source's active files are included. Its source
-   venue can differ from the show's imported venue without changing show grouping.
-7. Open `/api/v4/source-tracks/{sourceTrackId}` from the source. The playable title,
-   URLs, parent IDs, and `normalization` must agree with the nested track. Partial,
-   raw, and disabled normalization remain usable.
+1. Open [Grateful Dead's venues](http://127.0.0.1:43823/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/venues).
+   Each entry has `kind` and exactly one populated target: `artist_venue` or
+   `imported_venue`. Clients use this list for every artist; the server handles
+   approval and partial normalization. These targets contain compact metadata,
+   without detail `shows` arrays.
+2. Open [Grateful Dead at Red Rocks](http://127.0.0.1:43823/api/v4/artist-venues/artist_venue_344wrm28).
+   It returns relationship metadata, including `artist_show_count`, plus complete `shows`. The
+   [artist-plus-venue lookup](http://127.0.0.1:43823/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/venues/venue_fp4h900f)
+   returns the same response. The relationship ID is the membership owner for
+   either lookup.
+3. Open [Red Rocks across artists](http://127.0.0.1:43823/api/v4/venues/venue_fp4h900f).
+   This has the shared venue metadata, aliases, `global_show_count`, complete
+   `shows`. Use each show’s `artist_id` to find its artist in the separately loaded
+   artist catalog. In the refreshed snapshot, the venue has 176 shows and Grateful
+   Dead's relationship has 20. Its nested and direct global count must agree.
+4. Open [one show](http://127.0.0.1:43823/api/v4/shows/show_0gmtpk4g0pf5yfayb76m0j0k7g).
+   `show.artist_venue` retains the same relationship ID and artist-wide count,
+   even in a year response. Display `show.imported_venue.name` and locality,
+   linking through `artist_venue.venue.id` when available. Canonical metadata is
+   fallback when imported data is absent. Venue aliases expose `{ name, kind }`,
+   with no name periods or server-selected display label.
+5. Open the show's `/api/v4/sources/{sourceId}`, then one of its
+   `/api/v4/source-tracks/{trackId}`. The direct resource must match its nested
+   counterpart: imported title, URLs, exact parents, and track `normalization`.
+   A source's venue observation can differ from the show's venue without changing
+   show grouping. Partial, raw, and disabled normalization remain playable.
 
 ## Follow the imported fallback
 
-For an `imported_venue` browse entry, open
-`/api/v4/artists/{artistId}/imported-venues/{importedVenueId}`. The response contains
-the imported resource fields plus `show_count` and `shows`. It uses the show's
-artist and imported venue assignment, even when one of those shows has a
-`artist_venue` link. A recording's different venue observation does not add a show
-to this collection. The count matches the imported child in the browse list.
-That child appears when at least one show needs imported fallback, but opens the
-full imported collection. Its shows can therefore overlap canonical entries
-during partial normalization; do not sum mixed browse counts as an artist total.
+Open [the imported Ace's Studio venue](http://127.0.0.1:43823/api/v4/imported-venues/imported_venue_78331pxdqjdg434rrgm1d2pnrj).
+Its globally unique imported ID needs no artist path parameter. The response has
+imported metadata, `show_count`, and complete `shows`.
+`/venues/{id}` accepts only `venue_` IDs; imported IDs use `/imported-venues/{id}`.
+There is no `detail_url` field.
 
-The separate `/api/v4/artists/{artistId}/imported-venues` list returns all raw
-venue rows for that artist, including unused rows with `show_count: 0`. V4 derives
-these counts from its actual show collection. The legacy cached count can use
-source-level observations and remains unchanged.
+Imported detail includes every show-level assignment to that row, including
+shows with canonical links. Source-only observations add no shows. An imported
+browse entry appears when at least one show needs fallback, but opens the full
+imported collection. Its shows can overlap canonical entries; do not sum mixed
+browse counts as an artist total.
 
-This path must work for artists without normalization and for unmatched shows
-within an approved artist. No canonical venue is fabricated from a similar name.
+`/api/v4/artists/{artistId}/imported-venues` remains the compact full imported
+inventory, including mapped and unused rows. An unused imported detail returns
+`shows: []` and retains its `artist_id`. Imported browsing and detail
+work without normalization; similar names never fabricate a canonical venue.
 
-## Check errors and refresh
+## Check refresh and failure behavior
 
-- A malformed or wrong-kind ID returns 422; an unknown parent or foreign imported
-  venue returns 404. A canonical artist detail with no approved stored relationship
-  also returns 404. A known artist and venue with no qualifying shows returns `[]` from
-  the show collection, including when normalization is disabled.
-- Stored counts can lag show membership after a failed write hook or out-of-band
-  repair. GET requests neither recompute counts nor write relationships.
-- Responses are direct resources or lists with weak ETags. A matching validator
-  returns 304. Alias name/kind or show-assignment changes refresh affected JSON;
-  date-only alias edits do not, because dates are not represented.
-- Database failures return no-store 503 problems. Retrying after recovery returns
-  a complete snapshot rather than a partial hierarchy.
+Each detail is one repeatable-read snapshot of its metadata and membership,
+validated by one payload ETag. A matching `If-None-Match` returns 304.
+Changing shows can invalidate the ETag without changing imported parent timestamps.
+Bare venue `/shows` routes and artist-scoped imported detail routes are removed.
 
-These eight new routes are part of the existing full-route plan. Song discovery,
-search/recent lists, artist bootstrap, legacy adapters, accounts, and mobile remain
-separate work. Review this journey before expanding the next catalog family.
+Mobile will upsert show summaries, replace only the detail
+owner's show membership, and save the ETag in one Realm transaction. An empty
+list clears that membership. Shared shows, downloads, favorites, and other query
+memberships remain. A failed fetch/apply preserves the last complete state.
+Compact browse responses never clear detail membership.
+
+Counts are stored separately and can lag live membership after a failed write
+hook or out-of-band edit. Never replace a stored count with a local array length.
+GET requests neither refresh counts nor create relationships.
+
+Malformed or wrong-kind IDs return 422; missing resources and unavailable
+artist–venue relationships return 404. A retained empty relationship is a valid
+detail. Database failures return no-store 503 problems; recovery returns a complete
+snapshot. Global venue metadata remains available with an empty show list when no
+approved artist contributes shows.
+
+Saved examples and full ignored captures are linked from the
+[review overview](README.md). Review this journey and the
+[song journey](song-source-journey.md) before account/auth work.
