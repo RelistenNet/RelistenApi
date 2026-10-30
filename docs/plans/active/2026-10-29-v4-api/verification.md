@@ -623,10 +623,11 @@ Completed verification:
   song-count, artist–venue, and rebuild checks. Three new HTTP cases prove that
   stored counter-only corrections invalidate ETags, reads never recount, and
   live discovery can lead the stored count until explicit refresh repairs it.
-- Admin passed 38 targeted checks, formatting, lint, and type checks. The tests
-  cover atomic source/count commit and rollback, narrow execution grants,
-  same-artist serialization (including uppercase UUID input), disjoint progress,
-  and nonblocking readers. Its broader lab-dependent suite was unavailable.
+- Admin passed two refresh-wiring checks, its existing rollback check, and 27
+  pure checks, plus formatting, lint, and type checks. The two dedicated count
+  suites were removed: SQL algorithms, permissions, and concurrency are covered
+  in the API foundation rather than duplicated in the admin. The broader
+  lab-dependent admin suite was unavailable.
 - Both independent correctness/readability reviews found no unresolved issues.
   Recounts reuse the existing artist catalogue lock. There is no new global gate,
   recurring scan, queue, or per-row source trigger. Ordinary full repairs commit
