@@ -29,14 +29,19 @@ disposable local databases; see `../local-dev/README.md` for setup.
 Migration 15 adds `artist_venues`: stable `artist_venue_…` identities and stored
 show counts for artist/place pairs. Counts follow accepted show-level assignments
 resolved to their canonical venue. They do not depend on artist rollout flags or
-the number of recordings. Zero-count rows keep their IDs; merged pairs redirect
-within the same artist. Creation and update timestamps describe the derived row.
+the number of recordings. Zero-count rows keep their IDs while both parents
+exist; foreign keys cascade deletion when the artist or venue is removed.
+`norm.venues` owns venue merges. Counts roll up to its canonical venue while an
+existing pair for the merged venue stays at zero. Relationship rows contain no
+copied merge pointer. Creation and update timestamps describe the derived row.
 
-Source transactions enqueue affected artists through database triggers. The
-`ArtistVenueCounts` service refreshes them in separate short transactions, so
-counts can briefly lag imports or admin edits. Queue acknowledgment and refreshed
-counts commit together; failures remain retryable. The minute refresh schedule
-drains pending work, and daily reconciliation requests all known owners.
+The `ArtistVenueCounts` service attempts refresh after import and normalization
+work commits. The admin app refreshes within its venue-edit transaction, so a
+refresh failure rolls the edit back. The SQL function uses the existing
+`norm-venues` lock and grants the restricted admin role narrow execution access.
+There is no recurring count job or pending queue. Failed post-commit hooks and
+direct SQL changes require an explicit refresh; no background repair cadence is
+promised.
 
 These derived rows have no human-edit or run provenance fields. Normalization
 decisions and their audit history remain authoritative. The foundation changes no

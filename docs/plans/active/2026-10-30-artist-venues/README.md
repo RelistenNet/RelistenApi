@@ -7,9 +7,11 @@ current as implementation and review proceed.
 ## Purpose and scope
 
 Give every normalized artist/place pair a stable `artist_venue_…` identity and a
-stored `artist_show_count`. Imports, normalization, and admin edits can briefly
-leave counts behind the catalog. Background refresh must converge without losing
-requests or changing an existing relationship's ID.
+stored `artist_show_count`. Admin venue edits refresh counts in the same
+transaction; refresh failure rolls the edit back. Imports and normalization attempt
+refresh after committing their source work. Relationships retain their IDs at zero
+count while their artist and venue exist; deleting either parent deletes the
+relationship.
 
 Alec decides the contract; Alec and Switz implement and review it. This base PR
 adds storage and refresh behavior only. The later v4 branch can expose
@@ -21,11 +23,12 @@ outside this work.
 ## Progress
 
 - [x] 2026-10-30: Confirm stored counts and brief staleness as the chosen contract.
-- [x] Implement migration, typed identity, and durable pending refreshes.
-- [x] Connect best-effort hooks and scheduled retry/reconciliation.
-- [x] Verify migration, count ownership, identity, concurrency, and failure recovery.
-- [x] Complete independent review and prepare the base PR.
-- [x] Restack v4 and verify its routes against the foundation.
+- [x] 2026-10-30, Alec: add cascading parent foreign keys and simplify refresh.
+- [x] Replace source triggers and the pending queue with direct recounts.
+- [x] 2026-10-30, Alec: make admin edits and refresh atomic; use no recurring scan.
+- [x] Connect atomic admin refresh and retain best-effort import hooks.
+- [x] Verify referential integrity, identity, counts, permissions, and recovery.
+- [x] Complete independent review and verify the restacked v4 branch.
 
 ## Context and interfaces
 
@@ -37,67 +40,73 @@ assignments regardless of `features.norm_catalogue`; public reads apply that fla
 [Migration 15](../../../../RelistenApi/Migrations/15_ArtistVenues.cs) runs the
 embedded [DDL](../../../../Relisten.Normalization/Sql/015_artist_venues.sql).
 `norm.artist_venues` owns `id`, `artist_uuid`, `venue_id`, `artist_show_count`,
-`created_at`, `updated_at`, and nullable `merged_into`. The pair is unique. The ID
+`created_at`, and `updated_at`. The pair is unique. The ID
 uses the existing eight-character Crockford suffix and the `artist_venue` prefix.
-Creation time stays fixed; refresh changes update time only when count or redirect
+The refresh preserves creation time and changes update time only when the count
 changes. These timestamps describe materialized rows; they are not sync cursors.
 
-Keep a row when its count becomes zero. A venue merge creates or reuses the
-surviving pair, sets the old pair's count to zero, and redirects it within the same
-artist. Parent artist and venue references deliberately have no foreign keys:
-existing catalog rebuilds and normalization retirement can physically remove those
-parents. Their disappearance must not destroy relationship identity or prevent
-retirement. A relationship row does not guarantee that its parent metadata remains
-available. Public visibility and missing-parent behavior belong to the later API.
+Foreign keys reference `artists(uuid)` and `norm.venues(id)`, with `ON DELETE
+CASCADE`. A relationship always has both parents. A zero-count pair keeps its ID
+if those parents remain. `norm.venues.merged_into` is the sole authority for venue
+merges. Counts roll up to that venue's canonical place. An existing pair for the
+merged venue stays at zero; a canonical pair is created when actual shows count
+toward it. The relationship table stores no copied merge pointer or self-reference.
+Unmerging a venue therefore leaves no stale relationship redirect that could
+block deletion of a former survivor before the next refresh.
 
-The derived rows have no human-edit or normalization-run provenance fields. Their
-authority is effective show membership. Original decisions and their audit history
-remain unchanged. Migration 15 seeds only these new derived relationships; their
-creation time is materialization time, not the historical first performance date.
-It does not add creation timestamps to other normalization tables.
+The refresh function owns derived relationship writes; there is no identity or
+timestamp trigger. These rows have no human-edit or normalization-run provenance
+fields. Their authority is effective show membership. Original decisions and
+their audit history remain unchanged. Migration 15 seeds only these derived rows;
+their creation time is materialization time, not the first performance date. It
+does not add creation timestamps to other normalization tables.
 
 ## Refresh data flow
 
-Source-table statement triggers enqueue affected artist UUIDs in
-`norm.artist_venue_refresh_queue` inside the source transaction. They do not count
-shows. They cover catalog show insertion/deletion/identity changes, normalized
-assignment changes, artist identity removal, and venue merge, retirement, or
-restoration. This also covers the admin app's independent SQL writes without
-requiring a new admin build.
+`norm.refresh_artist_venues(artist_filter uuid[] DEFAULT NULL)` directly recomputes
+canonical counts, inserts new pairs with shows, and zeros pairs that lost all shows.
+It returns `artists_refreshed` and `relationships_changed`. An explicit artist list
+limits the refresh. Null refreshes all owners found in current assignments or
+stored relationships; an empty list does nothing. Stored relationships are
+included so a pair whose final assignment disappeared still reaches zero.
 
-`norm.request_artist_venue_refresh(artists uuid[] DEFAULT NULL)` requests explicit
-artists; null requests every owner found in assignments or stored relationships.
-`norm.refresh_artist_venues(artist_filter uuid[] DEFAULT NULL, batch_size int
-DEFAULT 100)` returns `artists_refreshed` and `relationships_changed` for one batch.
-It claims pending artists with `FOR UPDATE SKIP LOCKED`, recomputes their groups,
-upserts changed counts/redirects, zeros vanished groups, and acknowledges those
-queue rows in the same short transaction. Other artists can refresh concurrently.
+The function joins the existing `norm-venues` advisory transaction lock used by
+venue normalization and admin writes. Admin venue operations already take this
+lock before editing source rows. Sharing it avoids a second lock order and keeps
+merge resolution consistent with the edit being committed. Venue writers and
+other refreshes can wait for this lock. Ordinary read queries use PostgreSQL
+snapshots and do not acquire it.
 
-Queue insertion uses `ON CONFLICT DO UPDATE` to take the pending row's lock. A
-source writer overlapping a claimed refresh waits at that mark, then leaves a new
-request after the refresh commits. `DO NOTHING` could lose the overlapping mark.
-This is brief serialization for the same artist, not a global writer lock or a
-source transaction running the whole background job. Failed or canceled refreshes
-roll back both materialization and acknowledgment.
+The function uses `SECURITY DEFINER` with a fixed safe search path, and its SQL
+qualifies source and target tables. Public execution is revoked. A narrow
+`EXECUTE` grant lets the existing `relisten_admin` role call this derived refresh
+without granting it general write access to `norm.artist_venues`.
 
 [`ArtistVenueCounts`](../../../../Relisten.Normalization/Venues/ArtistVenueCounts.cs)
-provides `RequestAsync`, one-batch `RefreshPendingAsync`, and finite targeted
-`RefreshArtistsAsync`. SQL calls are cancellable and have a 30-second timeout.
-Import and normalization activities attempt refresh after their source work;
-database/timeout failures are logged and do not fail that completed source work.
-Cancellation still propagates. Busy or failed artists remain pending.
+provides targeted `RefreshArtistsAsync` and full `RefreshAllAsync`. Each performs
+one SQL call with a 30-second timeout and cancellation. Import and normalization
+activities attempt refresh after their source work commits. Database and timeout
+failures are logged and do not fail that completed source work. Cancellation
+still propagates. Existing workflow command order stays unchanged; these hooks
+live in activity bodies. There is no count workflow, schedule, pending queue, or
+source trigger.
 
-[`ArtistVenueRefreshWorkflow`](../../../../Relisten.Normalization/Temporal/ArtistVenueRefreshWorkflow.cs)
-uses retryable database activities. Its default request drains at most 20 batches
-of 100 artists. An empty unlocked batch means no work was claimed, not that every
-pending writer has finished. A later scheduled run handles remaining work.
+In the companion [admin PR #3](https://github.com/RelistenNet/relisten-admin/pull/3),
+the centralized `withNormRun` helper calls the full refresh for venue-locked edits
+before finishing the run and committing. Edit, run record, and counts commit
+together. Any refresh failure rolls back all three. The companion change also
+updates `sql/relisten_admin_roles.sql` with the function's execution grant.
 
-The worker registers `relisten-artist-venues-refresh` every minute UTC and
-`relisten-artist-venues-reconcile` at 11:00 UTC daily. Reconciliation first queues
-all known owners, repairing a missed mark. Registration preserves existing saved
-schedules and their paused state. No provider or model calls occur in either job.
-Existing ingestion workflow command order is unchanged; hooks live in activity
-bodies so existing Temporal histories can replay.
+Out-of-band SQL changes and failed post-commit hooks have no background repair
+guarantee. A later import or normalization operation may refresh them, but no
+cadence is promised. An operator can explicitly repair all counts with:
+
+```sql
+SELECT * FROM norm.refresh_artist_venues();
+```
+
+Run this after a direct SQL repair that affects show membership or venue merges.
+It executes database work only, with no provider or model calls.
 
 ## Validation and acceptance
 
@@ -110,82 +119,114 @@ dotnet test Relisten.NormalizationTests/Relisten.NormalizationTests.csproj
 dotnet csharpier check .
 ```
 
-Prove that migration seeds existing memberships, counts ignore duplicate sources
-and approval flags, merges redirect within an artist, and zero/returning groups
-keep their IDs. Repeating refresh must preserve unchanged counts and timestamps.
-Direct admin-style SQL must enqueue work with existing writer privileges. Test
-show deletion and orphaned assignments, concurrent marks during a refresh, failed
-refresh rollback followed by retry, and workflow retry/batch-limit behavior.
-After restacking, run the existing v4/ID/Swagger contracts to detect unrelated
-response regressions. Record actual commands, totals, and review findings here;
-implementation is not proof that a check passed.
+Prove that foreign keys reject nonexistent parents and cascade relationship
+deletion when a parent is removed. Verify migration seeding, canonical counts,
+approval independence, venue merge/unmerge counts, and stable zero/returning IDs
+while parents exist. Repeated refresh must preserve unchanged counts and
+timestamps. Verify that unmerging and deleting a former survivor succeeds before
+the next count refresh. Test explicit refresh after source changes, full refresh
+after direct SQL, concurrent venue writes and recounts, and failed refresh rollback
+followed by explicit retry. Use the restricted admin role to prove it can call the
+function without direct derived-table writes. Through the admin transaction
+boundary, prove that a successful edit commits refreshed counts and a forced
+refresh failure rolls back the edit, run, and counts together.
+
+After restacking, run existing v4/ID/Swagger contracts to detect unrelated response
+regressions. Record actual commands, totals, and review findings here. Earlier
+queue and scheduled-workflow test totals do not validate this implementation.
 
 ## Rollout and recovery
 
-Apply migration 15 before deploying the new worker. Migration seeds the new table
-from existing data before it becomes visible. Deploy workers with the new service,
-activities, and workflow, then deliberately run `--register-schedules`; new
-schedules are active immediately. Inspect their next actions before leaving them
-unattended. No migration or schedule registration is part of read-only review.
+Migration 15 has not been deployed to production or the restored local preview.
+The PR can replace its original DDL; it does not need migration 16 for an
+unreleased design. Earlier migration checks used disposable databases.
 
-Old workers remain compatible with the additive schema: source triggers leave
-pending work until a new worker handles it. Refresh failure does not discard the
-queue. Retry the refresh schedule; trigger reconciliation when rebuilding all
-stored counts is intended. `NormalizationClient.RefreshArtistVenuesAsync` also
-starts a manual run programmatically; no dedicated CLI flag is added.
+Apply migration 15 first. It seeds the derived table from existing data before it
+becomes visible. Ensure `relisten_admin` has the function's narrow execution grant
+using the migration and companion role-provisioning script. Then deploy the admin
+transaction change and the API/worker post-commit hooks. The admin build depends
+on that function and grant; do not deploy it first. No count schedule registration
+or separate worker workflow is required.
 
-To roll back application code, pause the two new schedules before stopping their
-workers. Retain the schema and pending queue; old writers continue to enqueue.
-Resume with a schema-compatible worker and reconcile. This migration follows the
+Old applications remain schema-compatible but do not refresh the new counts. If
+an import hook fails, recover the database issue and run the repair SQL above.
+For an admin refresh failure, the edit was rolled back; retry the original admin
+operation after recovery.
+
+To roll back application code, retain the additive schema and grants. A reverted
+admin build or worker can leave counts stale after later source edits. Run an
+explicit full refresh when repairing those counts. This migration follows the
 repository's roll-forward policy and has no destructive down migration.
 
 ## Surprises & Discoveries
 
 - Existing imported counts already use artist-scoped `GROUP BY` and conditional
   upserts after rebuilds. This foundation follows that eventual-refresh pattern.
-- `norm.show_venues` has no foreign key to catalog shows, and `norm.changes` omits
-  derived assignment writes. Neither cascading deletes nor the audit log alone
-  can supply the pending work required here.
-- Independent review found that audit restoration inserts a deleted venue rather
-  than updating it. An INSERT trigger now queues retained relationship owners;
-  the regression test proves a restored merge redirects the original pair ID.
+- Venue retirement physically deletes unused machine-created venues. Keeping
+  orphan relationships was an extra retention policy, not a requirement of stable
+  IDs while an artist and venue exist.
+- A read-only canonical count query on the restored local snapshot took 52.4 ms
+  for 13,418 assignments, 5,478 venues, and 5,397 artist/place groups across 12
+  artists. This was a read-only query measurement, not production timing.
+- A disposable reduced-schema write experiment copied 4,387 artists, 5,478
+  venues, and 13,418 assignments from the local snapshot. The SQL seeded
+  5,397 pairs for 12 artists in 318 ms; an unchanged repeat took 123 ms and changed
+  no rows. Counts totaled 13,418. Source access was read-only. The disposable
+  database and temporary files were removed. These are local measurements on a
+  reduced schema, before the switch to the shared lock and security-definer
+  execution. They are not final permission/locking or production latency estimates.
+- Independent review reproduced a foreign-key failure when deleting a former
+  merge survivor after unmerge but before refresh. The relationship's copied
+  redirect was stale. Removing that field leaves merge ownership in
+  `norm.venues` and removes the deletion dependency on a prior count refresh.
 
 ## Decision Log
 
 - 2026-10-30, Alec: store the count on `artist_venues`; brief staleness is acceptable.
-- 2026-10-30: use a durable pending-artist queue with periodic reconciliation,
-  rather than recounting inside source transactions or serializing all writers.
-- 2026-10-30: retain the existing normalization model and audit semantics. New
-  derived identities are not a venue-history repair or a new sync protocol.
+- 2026-10-30, Alec: use parent foreign keys with cascading deletes. Retain
+  zero-count IDs only while their parents remain.
+- 2026-10-30, Alec: refresh admin venue counts atomically with the edit. A refresh
+  failure rolls the edit back. Remove recurring scans, source triggers, the
+  pending queue, and the count-specific Temporal workflow.
+- 2026-10-30: use the existing venue-write advisory lock. Give the restricted
+  admin role narrow execution permission on the security-definer refresh function.
+- 2026-10-30: preserve best-effort post-commit refreshes for imports and
+  normalization. Recover failed hooks or out-of-band edits through explicit SQL.
+- 2026-10-30: keep merge authority in `norm.venues`. Store counts and pair identity
+  in `artist_venues`, without a derived redirect or self-referencing foreign key.
+- 2026-10-30: retain the normalization model and audit semantics. Derived
+  identities do not add venue history or a new sync protocol.
 
 ## Outcomes & Retrospective
 
-Implementation commit: `3b7580020`. The foundation adds no v4 response fields.
-The next v4 change can use these stored rows for `artist_venue` resources and
-their artist-specific counts.
+Implementation commits are `d0c71fdfc` (foreign keys and direct recount) and
+`8cb329e7a` (atomic admin contract and removal of recurring work). The companion
+admin commit is `327f070` in [PR #3](https://github.com/RelistenNet/relisten-admin/pull/3).
 
-Validation on 2026-10-30:
+Final verification on 2026-10-30:
 
-- Solution builds passed in both the foundation and restacked v4 worktrees.
-  Existing dependency-audit and nullable-reference warnings remain.
-- Focused database and migration checks: 18 passed on disposable databases.
-- Broader normalization, Swagger, ingestion workflow, and catalog checks: 127
-  passed; two opt-in model/corpus tests skipped.
+- Foundation and restacked v4 solution builds passed. Existing dependency-audit
+  and nullable-reference warnings remain.
+- Database and migration checks: 24 passed, including public service calls,
+  cascading deletion, restricted-role execution, atomic source/count rollback,
+  and nonblocking reads of committed counts during an uncommitted recount.
+- Restacked API, v4, typed-ID, Swagger, normalization, ingestion workflow, and
+  catalog checks: 197 passed, two opt-in model/corpus tests skipped.
 - Normalization library: 366 passed.
-- Restacked v4 plus the broader API/database/workflow checks: 184 passed, two
-  opt-in model/corpus tests skipped. Typed catalog ID checks: 15 passed.
-- Repository CSharpier and whitespace checks passed on both branches.
-- Independent two-pass review confirmed and resolved the restoration gap above;
-  no actionable findings remain. The simplification pass retained the direct
-  SQL/service/activity responsibilities without adding another abstraction.
+- Admin transaction tests: four passed on a disposable projection of real data.
+  The updated bootstrap installed the exact shared migration. Type checking,
+  lint, formatting, and whitespace checks passed.
+- The existing admin lab-dependent suite was not run because its source template
+  databases are absent. The new transaction and permission checks ran separately.
+- Independent two-pass review found no unresolved correctness or readability
+  issues. The copied-redirect deletion bug found earlier has its own regression.
+- All 14 v4 commits rebased unchanged, verified by range comparison. Repository
+  CSharpier checks passed.
 
-The v4 branch rebased cleanly onto the implementation commit. Range comparison
-confirmed that its 13 commits carried over unchanged. The combined suite exposed
-an existing v4 assertion that assumed no other fixture had added artists. A
-separate v4 test commit scopes that assertion to all five controlled fixture IDs,
-preserving membership and ordering checks. No API behavior changed.
+The foundation adds no v4 response fields; the next v4 change can use these
+stored relationships for `artist_venue` resources and artist-specific counts.
 
-Review the [foundation branch comparison](https://github.com/RelistenNet/RelistenApi/compare/codex/normalization-enums...codex/artist-venues)
-for the base PR's complete diff. No production database, schedules, or deployment
-changed. The restored local preview database was also left untouched; all
-migration/count mutation checks used disposable databases.
+Review [PR #108](https://github.com/RelistenNet/RelistenApi/pull/108) for the base
+change. Production, real schedules, and the restored preview database remain
+outside the implementation's mutation scope. All migration and count-write checks
+use disposable databases.

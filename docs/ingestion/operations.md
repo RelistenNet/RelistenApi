@@ -293,43 +293,44 @@ catalog changes. Do not reset Temporal workflows while Hangfire owns ingestion.
 
 ## Stored artist venue count refresh
 
-Migration 15 creates stable artist/place identities and a durable pending-artist
-queue. Apply it before deploying workers with `ArtistVenueRefreshWorkflow`.
-It seeds only the new derived table; it does not change imported rows, accepted
-normalization decisions, or their audit history.
+Migration 15 creates stable artist/place identities and stored show counts.
+Foreign keys cascade relationship deletion when an artist or venue is removed.
+It seeds only the derived table; imported rows, accepted normalization decisions,
+and their audit history remain unchanged. `norm.venues` remains the authority for
+venue merges; relationship rows contain canonical counts and no copied redirects.
 
-After those workers are available, the existing `--register-schedules` command
-creates two missing schedules: `relisten-artist-venues-refresh` runs every minute
-UTC, and `relisten-artist-venues-reconcile` runs daily at 11:00 UTC. New schedules
-are active immediately; existing schedules and their paused state are preserved.
-Both jobs use database work only, with no upstream or model requests.
+Apply migration 15 before deploying the companion admin change. Ensure the
+existing `relisten_admin` role has `EXECUTE` on
+`norm.refresh_artist_venues(uuid[])`; the migration and admin role-provisioning
+script provide that narrow grant. The function uses `SECURITY DEFINER` with a
+safe fixed search path. The admin role needs no direct derived-table write grant.
 
-Count refresh can lag a source write. Database triggers retain the affected
-artists even when an activity's best-effort refresh fails. Inspect the queue age
-with a read-only query:
+Admin venue edits call the full refresh in the same `withNormRun` transaction,
+before finishing the run and committing. Any refresh failure rolls back the edit,
+run record, and counts. Resolve the failure before retrying the original admin
+operation. Import and normalization activities keep their best-effort post-commit
+refreshes; a database failure is logged and does not undo completed source work.
+
+There is no recurring count job, dedicated Temporal workflow, or pending queue.
+After a failed post-commit hook or an out-of-band SQL repair, an operator with
+execution permission can repair counts explicitly:
 
 ```sql
-SELECT count(*) AS pending_artists, min(requested_at) AS oldest_request
-FROM norm.artist_venue_refresh_queue;
+SELECT * FROM norm.refresh_artist_venues();
 ```
 
-A source's pending mark can briefly wait for the same artist's queue row while a
-refresh owns it. The source transaction does not perform the recount or wait for
-an entire background workflow. This per-artist serialization prevents lost marks.
+An explicit UUID array limits the refresh to those artists; null or omitted input
+refreshes all current owners. The refresh joins the existing `norm-venues`
+advisory transaction lock. Venue writers and other refreshes can wait for it;
+ordinary read queries use snapshots and do not acquire it. The repair performs
+database work only, with no provider or model requests.
 
-A normal workflow run drains up to 20 batches of 100 artists. Busy artists are
-skipped for a later run; failed batches leave their pending rows intact. Retry or
-trigger the refresh schedule after recovery. Trigger the reconciliation schedule
-when all known relationship owners should be rechecked. The programmatic
-`NormalizationClient.RefreshArtistVenuesAsync(reconcile: true)` starts the same
-reconciliation path; there is no dedicated operator CLI flag.
-
-For application rollback, pause these two schedules before stopping their
-workers. Keep the additive schema and pending work. Resume on a compatible worker
-and reconcile; no down migration deletes identities. This work does not add sync
-revision counters or change v4 responses. See the
-[foundation plan](../plans/active/2026-10-30-artist-venues/README.md) for tests and
-the detailed storage contract.
+For application rollback, keep the additive schema and grant. Older admin builds
+and workers can leave counts stale after source edits; run an explicit refresh
+when repairing them. No down migration deletes identities. This work does not add
+sync revision counters or change v4 responses.
+See the [foundation plan](../plans/active/2026-10-30-artist-venues/README.md) for
+tests and the detailed storage contract.
 
 ## Storage, backups, and recovery
 
