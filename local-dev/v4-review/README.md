@@ -33,7 +33,7 @@ titles are imported values; normalized parts describe the file without replacing
 The [date and recent browsing review](../../docs/plans/active/2026-10-29-v4-api/review/discovery-browsing.md)
 provides anniversary, exact-date, recent, top-rated, and random-show links.
 
-The expanded C1 browse checkpoint exposes 39 routes (38 GETs and one POST). Follow the
+The expanded C1 browse checkpoint exposes 49 routes (48 GETs and one POST). Follow the
 [venue-to-playback walkthrough](../../docs/plans/active/2026-10-29-v4-api/review/venue-source-journey.md)
 and [song-to-playback walkthrough](../../docs/plans/active/2026-10-29-v4-api/review/song-source-journey.md)
 to inspect the resource links. Implemented families are:
@@ -200,3 +200,18 @@ SELECT * FROM norm.refresh_song_counts('77a58ff9-2e01-c59c-b8eb-cff106049b72'::u
 Use `SongCounts.RefreshAllAsync` for all artists without retaining artist locks
 across the whole repair. Revalidate an endpoint after repair; a changed represented
 count changes its ETag even when imported timestamps stay the same.
+
+## Search and listening-ranking review
+
+The [search/ranking walkthrough](../../docs/plans/active/2026-10-29-v4-api/review/search-rankings.md)
+provides all ten new route examples, response conventions, and score provenance.
+The real catalog backup has no telemetry rows. Its ranking preview uses separately
+approved real aggregate maps from the production read-only replica, marked fresh for
+24 hours in local Redis DB 0. The capture time, source and sizes are in ignored
+`.output/ranking-snapshot-provenance.json`; original local cache values are in
+`.output/ranking-cache-before-snapshot.json`. No production or catalog data changed.
+
+Tests use Redis DB 15 and restore every fixed key they write; they do not alter
+the review snapshot in DB 0. Production keeps the existing asynchronous score
+refresh behavior. If the local snapshot becomes stale, refresh it from real aggregates
+before comparing scores; the local empty telemetry cannot reconstruct them.

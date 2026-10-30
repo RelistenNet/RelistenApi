@@ -66,6 +66,6 @@ returns 304 when its represented data is unchanged. Dates/rankings can change
 membership without imported metadata changes, so mobile must revalidate the
 query itself. The complete artist snapshot remains the offline artist inventory.
 
-Before auth, the remaining mobile-facing catalog work is search, popularity and
-trending rankings, combined popular/trending lists, and momentum: 10 operations.
-The other 10 unimplemented operations are operator/import and live-activity APIs.
+The [search and ranking review](search-rankings.md) now completes the ten
+mobile-facing operations that followed this discovery checkpoint. The remaining
+unimplemented routes are operator/import and live activity.

@@ -872,3 +872,75 @@ Search and popularity/trending/momentum account for the remaining 10 mobile-faci
 catalog operations. Another 10 planned operations cover operator/import and
 live activity. Account/auth work remains a separate checkpoint after response
 review.
+
+### Search and listening rankings checkpoint — 2026-10-30
+
+Commit `2471dadbf` implements all ten remaining mobile-facing catalog operations:
+search; popular/trending artists, years and shows; one/multiple-artist combined
+popular/trending groups; momentum. Live OpenAPI now exposes 49 paths/operations
+(48 GETs, resolver POST). Ten operator/import/live operations remain planned.
+No auth/account work or schema migration was included. The
+[review walkthrough](review/search-rankings.md) links each new route and explains
+ranking-input provenance and mobile query replacement.
+
+The solution build passed. The final focused command
+`RELISTEN_LOCAL_INGESTION_TESTS=1 dotnet test
+RelistenApiTests/RelistenApiTests.csproj --no-restore --filter
+'FullyQualifiedName~RelistenApiTests.V4|FullyQualifiedName~RelistenApiTests.Popularity'`
+passed all 148 checks. Search/ranking tests use the shared HTTP host and production
+SQL/serializers, with isolated Redis DB 15 and restored fixture keys. They cover
+six-category empties, category toggles, artist scope, source summaries, approved
+song/venue overlay and imported fallback, inherited venue aliases, typed parents,
+window order, trend thresholds, duplicate artist filters, independently limited
+groups, organic momentum, invalid inputs, and conditional GET. Existing scoring
+tests protect the shared algorithms; they were not duplicated in the new tests.
+
+A two-pass review confirmed and fixed three issues:
+
+- An initial owner cap could hide better global search hits. The final queries
+  limit matched resources before hydration, with no full artist-inventory loops.
+  Live venues-only `Center` search returns 20 hits, including The Ashkenaz
+  Community Center (123 shows), which the owner cap excluded.
+- An alias on a merged predecessor could be displayed but not searched. Reverse
+  lineage now finds inherited song/venue names. The live Grateful Dead query
+  `The Crystal Ballrom` resolves to canonical `venue_xzh8yyp9`. A focused fixture
+  also verifies imported labels assigned through a merged venue ID.
+- Explicit legacy score refreshes could reuse stale global maps and relabel
+  them fresh. Legacy compute methods now call fresh map builders directly;
+  v4 retains cached input maps and hydrates current catalog metadata separately.
+
+The code-simplifier pass removed dead extracted row fields, duplicate momentum
+sorting and unused search parameters. Shared trend floors remain owned by the
+existing scoring service. Public ranking DTOs reuse artist/year/show projections
+and add only rank and a compact score object. No response-cache framework,
+additional normalization tables, scheduled catalog refresh, or new locking was added.
+
+Alec approved a real aggregate snapshot for review because the local catalog
+backup contains zero daily/hourly play rows. Production reads used the verified
+`relisten3-k3s` context and read-only replica, with TLS required and
+`default_transaction_read_only=on`. `psql` confirmed read-only admission. An ad hoc
+macOS Npgsql client failed its TLS handshake, so the export used `psql` with the
+same SELECT queries and existing score builders. `AGENTS.md` now records the
+correct context and this fallback (`1fe15a8a0`). Production was unchanged.
+
+Only real ID/metric maps were written into local Redis DB 0: 2,817 artist,
+38,628 show and 9,341 year entries; 2,081 Grateful Dead and 1,892 Phish show entries
+for per-artist momentum. The maps were marked fresh for 24 hours locally.
+Capture time, source and counts are saved in ignored
+`local-dev/v4-review/.output/ranking-snapshot-provenance.json`, with previous cache
+values in `ranking-cache-before-snapshot.json`. Raw aggregate files are retained
+there. The one-time SQL export and scoring runner remain under `/private/tmp/`;
+they are review tooling rather than a production deployment path. No synthetic
+play events were loaded, and no catalog rows were modified.
+
+Manual live checks returned populated ranking arrays, all six search categories,
+the inherited venue alias, and typed artist groups. A global `Scarlet` search took
+841 ms in one local sample; venues-only `Center` took 192 ms. Five-result artist/year
+rankings took 43–114 ms, per-artist grouped/momentum requests 55–67 ms, and global
+show rankings 389–439 ms in initial samples. Global show reads deserialize the
+38,628-entry score map before selecting IDs; they do not hydrate that full catalog.
+These development-machine samples are not load tests or latency percentiles.
+Current timings and complete response headers/bodies are refreshed by the review
+capture script. Production input-cache miss/stale behavior remains asynchronous
+and separate from the request's catalog snapshot. Redis/SQL failures return
+503/no-store; no partial successful result or validator is published.

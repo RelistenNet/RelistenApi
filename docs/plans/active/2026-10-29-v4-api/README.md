@@ -1,7 +1,7 @@
 # Deliver the complete v4 catalog and mobile adapter
 
 Status: C1 includes playback navigation, artist snapshots, and saved-reference
-resolution, date browsing, and recent show lists, 2026-10-30.
+resolution, date browsing, search, and listening rankings, 2026-10-30.
 Implementation and real-response verification are in progress.
 The local API reads the restored production catalog; no production deployment or
 account migration occurred. This is a living ExecPlan: update Progress,
@@ -208,6 +208,8 @@ Implement mobile's actual queries, not a generic interpreter of all server route
   offline sync review, plus canonical public-ID retirement safety.
 - [x] Restore `artist.features`; add exact-date, anniversary, recent, top, and
   random show browsing with focused HTTP tests and real-data review links.
+- [x] Complete the ten search/popularity/trending/momentum reads and verify
+  current metadata against real ranking aggregates from the read-only replica.
 - [ ] C2–C5 remain unstarted pending the C1 response review.
 
 ## Discoveries and changes from the exploration
@@ -440,6 +442,10 @@ by accepting this plan.
 - 2026-10-30, Alec: keep the familiar `artist.features` name. Extend catalog
   review through date and recent browsing before auth; retain direct lists,
   existing query meanings, ETags, and per-endpoint replacement rules.
+
+- 2026-10-30, Alec: implement search and all listening-ranking reads before auth.
+  Use a real aggregate snapshot for local review; update `AGENTS.md` when
+  production access instructions do not match the available context.
 
 ## Outcomes and retrospective
 
