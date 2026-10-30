@@ -343,8 +343,14 @@ public sealed partial class TestV4CatalogHttp
     [Test]
     public async Task Artist_listing_and_detail_preserve_provider_identity_without_internal_keys()
     {
+        // Other integration fixtures share this catalog. Check our fixture's membership
+        // and order without assuming it owns every artist returned by the public route.
+        var fixtureArtistIds = new[] { 11, 12, 13, 14, 20 }
+            .Select(value => CatalogId("artist", value))
+            .ToHashSet();
         var artists = (await GetJson("/api/v4/artists")).AsArray();
         artists
+            .Where(artist => fixtureArtistIds.Contains(artist!["id"]!.GetValue<string>()))
             .Select(artist => artist!["name"]!.GetValue<string>())
             .Should()
             .Equal("Raw Artist", "Matched Artist", "Partial Artist");
@@ -365,6 +371,7 @@ public sealed partial class TestV4CatalogHttp
             await GetJson("/api/v4/artists?include_autocreated=true")
         ).AsArray();
         includingAutoCreated
+            .Where(artist => fixtureArtistIds.Contains(artist!["id"]!.GetValue<string>()))
             .Select(artist => artist!["name"]!.GetValue<string>())
             .Should()
             .Equal("Disabled Artist", "Raw Artist", "Matched Artist", "Partial Artist");
