@@ -167,9 +167,10 @@ source normalization and imported data remain authoritative.
 - 51 foundation checks passed, including 14 song-count SQL/service/migration and
   concurrency cases plus existing artist–venue and rebuild checks. The shared
   rebuild completion test covers failed refresh and explicit retry.
-- The admin companion passed 38 targeted song, venue, and pure checks, plus
-  formatting, lint, and type checks. Its broader lab-dependent suite was not run
-  because the template databases were unavailable.
+- Admin tests cover only refresh orchestration through `withNormRun` and its
+  existing transaction rollback checks. Recount algorithms, permissions, and
+  concurrency are tested here rather than duplicated in the admin. The admin's
+  broader lab-dependent suite was unavailable.
 - Two independent correctness/readability reviews found no unresolved issues.
 - The official worker applied migration 16 to local `relisten_db` and seeded
   4,539 canonical and 16,606 imported counters in 10.208 seconds, including worker
