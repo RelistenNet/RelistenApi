@@ -27,7 +27,6 @@ public record SongDetailResource
 public sealed record SongWithShowsResource : SongDetailResource
 {
     public IReadOnlyList<ShowSummaryResource> Shows { get; init; } = [];
-    public IReadOnlyList<ArtistResource> Artists { get; init; } = [];
 }
 
 /// <summary>A song and its complete playable-file matches, without show membership.</summary>
@@ -35,7 +34,6 @@ public sealed record SongWithShowsResource : SongDetailResource
 public sealed record SongWithTracksResource : SongDetailResource
 {
     public IReadOnlyList<SongTrackMatchResource> Tracks { get; init; } = [];
-    public IReadOnlyList<ArtistResource> Artists { get; init; } = [];
 }
 
 /// <summary>Imported setlist song. The count is distinct catalog shows supported by imported setlist evidence.</summary>
@@ -56,7 +54,6 @@ public record ImportedSongResource
 public sealed record ImportedSongWithShowsResource : ImportedSongResource
 {
     public IReadOnlyList<ShowSummaryResource> Shows { get; init; } = [];
-    public IReadOnlyList<ArtistResource> Artists { get; init; } = [];
 }
 
 /// <summary>Browse target. The server selects canonical or imported identity using approved evidence.</summary>

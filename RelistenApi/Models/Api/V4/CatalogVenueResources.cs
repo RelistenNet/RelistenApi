@@ -32,7 +32,6 @@ public sealed record ImportedVenueWithShowsResource : ImportedVenueResource
 {
     /// <summary>The complete artist-owned show collection for this imported row.</summary>
     public IReadOnlyList<ShowSummaryResource> Shows { get; init; } = [];
-    public IReadOnlyList<ArtistResource> Artists { get; init; } = [];
 }
 
 /// <summary>A global venue and its complete approved show collection.</summary>
@@ -40,7 +39,6 @@ public sealed record ImportedVenueWithShowsResource : ImportedVenueResource
 public sealed record VenueWithShowsResource : VenueResource
 {
     public IReadOnlyList<ShowSummaryResource> Shows { get; init; } = [];
-    public IReadOnlyList<ArtistResource> Artists { get; init; } = [];
 }
 
 /// <summary>An artist/place relationship and its complete approved show collection.</summary>
@@ -48,5 +46,4 @@ public sealed record VenueWithShowsResource : VenueResource
 public sealed record ArtistVenueWithShowsResource : ArtistVenueResource
 {
     public IReadOnlyList<ShowSummaryResource> Shows { get; init; } = [];
-    public IReadOnlyList<ArtistResource> Artists { get; init; } = [];
 }
