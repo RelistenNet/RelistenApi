@@ -11,12 +11,15 @@ normalization results. The venue example was reduced to the approved alias-only
 response contract; stored normalization data was not changed. Full shows and
 headers are captured locally in `local-dev/v4-review/.output/`.
 
-## Review navigation first
+## Review navigation and venue-to-playback links
 
-Alec expanded this checkpoint before account/auth work. Follow the first six
-requests in the collection: artist list → Grateful Dead → years → 1985 by number
+Alec expanded this checkpoint before account/auth work. Start with the artist and
+year requests in the collection: artist list → Grateful Dead → years → 1985 by number
 or typed year ID → show summaries. Then use a summary's show ID to retrieve its
-sources and playable tracks. Swagger now exposes eight routes.
+sources and playable tracks. Continue with the
+[venue-to-playback walkthrough](venue-source-journey.md): artist venue groups →
+canonical or imported venue → shows → full source → direct track. Swagger now
+exposes 16 routes, including direct source detail and seven venue reads.
 
 The captured [artist response](responses/artist.json) and [year list](responses/years.json)
 show the typed navigation IDs. The restored catalog's Grateful Dead responses agree on 2,081 shows and 18,226
@@ -26,9 +29,11 @@ aliases are identical in both responses. Show UI displays the imported venue lab
 and links to the normalized venue when available. These observations validate the
 local snapshot, not production performance.
 
-Artist capabilities and provider metadata are included. Popularity augmentation,
-other route families, account migration and mobile remain later work. Auth stays
-on hold until Alec has reviewed this expanded browsing contract.
+Artist capabilities and provider metadata are included. The venue slice adds
+grouped artist entries, global and artist-filtered canonical reads, and imported
+fallback collections with counts. Popularity augmentation, song/discovery routes,
+artist bootstrap, account migration and mobile remain later work. Auth stays on
+hold while Alec reviews the catalog journey.
 
 Review these questions before proceeding:
 
@@ -46,7 +51,7 @@ Review these questions before proceeding:
 The local flags are enabled for all 12 artists with normalized data, as Alec
 requested. Production had none enabled. No normalization results were changed.
 
-Verification: solution build passed; 51 focused tests passed, zero skipped
+Earlier C1 verification: solution build passed; 51 focused tests passed, zero skipped
 (including the core browsing journey, typed IDs, snapshot/session behavior and
 legacy Swagger). Tests cover
 normalization corrections with unchanged imported timestamps, merges, failure
@@ -54,6 +59,10 @@ and recovery, nullable IDs, schema agreement, gzip/304 and browser preflight.
 Live requests separately checked real full/partial shows, exact parent links,
 venue aliases, CORS, gzip and unchanged 304s. Fresh review caught and fixed
 Swagger naming, nullable ID serialization and legacy CORS integration issues.
+
+The [verification log](../verification.md#venue-to-playback-review-2026-10-30)
+records the venue/source slice separately, including its final build, contract
+tests, and real-data checks. Route counts do not establish complete API coverage.
 
 This qualifies the local C1 response review. It does not qualify production
 capacity, the remaining v4 routes, account migration or mobile rollout.

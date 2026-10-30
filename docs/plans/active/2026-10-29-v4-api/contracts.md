@@ -188,8 +188,8 @@ Unknown artists/years return 404. Existing artists with no years/shows return
 All reads use the same snapshot and ETag rules as other v4 reads. Metadata for
 show lists is batched, including normalized venue links and aliases. Legacy
 routes remain unchanged. Redis popularity augmentation and the remaining route
-families are still C4 work; these local preview routes do not claim complete
-legacy capability coverage yet.
+families follow the [catalog review sequence](review-guide.md); these local
+preview routes do not claim complete legacy capability coverage yet.
 
 ## Artist approval, show venues and raw fallback
 
@@ -235,6 +235,40 @@ Group approved show assignments by canonical survivor; otherwise group by
 imported venue. Count distinct server catalog shows for the artist. Never sum
 raw venue counts or derive totals from mobile's partial show cache. One raw
 venue can have show-specific assignments to more than one canonical place.
+
+### Implemented venue collections and source detail
+
+`GET /artists/{artistId}/venues` returns `ArtistVenueEntryResource[]`. Each entry
+has `kind` (`venue` or `imported_venue`), `show_count`, nullable `venue`, and
+nullable `imported_venue`; exactly one target is populated. Sort entries by the
+target name, then stable identity. Shows with neither target do not establish a
+venue group. `GET /artists/{artistId}/venues/{venueId}` returns the same entry
+for an artist's approved canonical membership, or 404 when none exists.
+
+`GET /venues/{venueId}` returns `VenueResource`, resolving a merged ID to its
+survivor. `GET /venues/{venueId}/shows` returns show summaries for approved
+assignments, with an optional typed `artist_id` filter. The artist-scoped
+`GET /artists/{artistId}/venues/{venueId}/shows` returns the same filtered list.
+Unknown parents return 404. Known parents with no qualifying membership return
+`[]` from show collections, including an artist with normalization disabled.
+Global metadata does not require artist membership or approval.
+
+`GET /artists/{artistId}/imported-venues` returns flat imported venue resources
+with `show_count`, including unused rows with zero shows.
+`GET /artists/{artistId}/imported-venues/{importedVenueId}` returns the imported
+fields plus `show_count` and `shows`. Both count and detail use `shows.artist_id`
+and `shows.venue_id`; a source's different imported venue does not create show
+membership. This corrects a legacy cached-count inconsistency without changing
+legacy routes. Imported detail retains all its show-level matches, including
+shows that also have canonical venue assignments. Foreign imported rows return 404.
+
+`GET /sources/{sourceId}` returns the same `SourceResource` as full show detail.
+Load only its sets, active non-orphaned tracks, links, and own imported venue in
+the request snapshot. Preserve exact show/artist/set parents and reuse the common
+track normalization projection. Sibling sources are outside this resource's
+association replacement scope. Unknown source IDs return 404; malformed or
+wrong-kind IDs return 422. All these reads use the existing payload ETag and
+dependency-failure contract.
 
 ## Track and normalized song contracts
 

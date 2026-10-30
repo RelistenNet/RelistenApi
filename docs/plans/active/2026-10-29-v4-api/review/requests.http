@@ -15,54 +15,117 @@ GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/years
 ### Browse: year-by-number
 GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/years/by-number/1985
 
+### Browse: artist-venues
+GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/venues
+
+### Browse: imported-venues
+GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/imported-venues
+
 ### Browse: year-by-id
 GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/years/year_59t8nz8n0m6e4c2ej2aq9dbkb9
 
 ### Browse: artist-shows
 GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/shows
 
-### raw: Grateful Dead — Intro
+### Global venue: canonical metadata and aliases
+GET {{base}}/api/v4/venues/venue_wwrsykhn
+
+### Artist venue: show membership and count
+GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/venues/venue_wwrsykhn
+
+### Artist venue shows
+GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/venues/venue_wwrsykhn/shows
+
+### Global venue shows across approved artists
+GET {{base}}/api/v4/venues/venue_wwrsykhn/shows
+
+### Global venue shows filtered to the same artist
+GET {{base}}/api/v4/venues/venue_wwrsykhn/shows?artist_id=artist_3qmp7zjbg1rpebhtyfy43096vj
+
+### Shared venue: one place across artists
+GET {{base}}/api/v4/venues/venue_fp4h900f
+
+### Shared venue: shows across approved artists
+GET {{base}}/api/v4/venues/venue_fp4h900f/shows
+
+### Imported venue: original observations and exact show scope
+GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/imported-venues/imported_venue_01r8jjw47zb4k8fgqb8heqst9w
+
+### raw track: Grateful Dead — Intro
 GET {{base}}/api/v4/source-tracks/track_37vdexm28htz4xmsdbp491ekt9
 
-### Full show for raw
+### raw show: Grateful Dead — Intro
 GET {{base}}/api/v4/shows/show_7rz6wynx51ss549v31vvpn99an
 
-### matched: Grateful Dead — Mama Tried -> Me And My Uncle
+### Direct source for raw: sets and playable tracks
+GET {{base}}/api/v4/sources/source_4n1k3e85hhm0r46gvyefwrkvr0
+
+### matched track: Grateful Dead — Mama Tried -> Me And My Uncle
 GET {{base}}/api/v4/source-tracks/track_3s1y1rg4yaxa7nqw31wk617b0d
 
-### Full show for matched
+### matched show: Grateful Dead — Mama Tried -> Me And My Uncle
 GET {{base}}/api/v4/shows/show_2jn80dqf5ntfxmmkwx11j27gdk
 
-### partial: Grateful Dead — Beat/It/On/Down/The/Line#
+### Direct source for matched: sets and playable tracks
+GET {{base}}/api/v4/sources/source_2wwgekk9qbskw2gp5v68znz9pa
+
+### partial track: Grateful Dead — Beat/It/On/Down/The/Line#
 GET {{base}}/api/v4/source-tracks/track_7b6v6pgvzqfvhd0s7avr18bdw5
 
-### Full show for partial
+### partial show: Grateful Dead — Beat/It/On/Down/The/Line#
 GET {{base}}/api/v4/shows/show_67xxr3g58g2y59tctv16a0s8kw
 
-### long-medley: Joe Russo's Almost Dead — Cumberland Blues Jam * -> Big River Jam I + -> Cumberland Blues -> Big River Jam II + -> Cumberland Blues -> Big River Refrain I + -> Cumberland Blues -> Big River Refrain + II -> Cumberland Blues Reprise @@
+### Direct source for partial: sets and playable tracks
+GET {{base}}/api/v4/sources/source_7n13sy256d5dq8617cv3mftem5
+
+### long-medley track: Joe Russo's Almost Dead — Cumberland Blues Jam * -> Big River Jam I + -> Cumberland Blues -> Big River Jam II + -> Cumberland Blues -> Big River Refrain I + -> Cumberland Blues -> Big River Refrain + II -> Cumberland Blues Reprise @@
 GET {{base}}/api/v4/source-tracks/track_1g992kg61eh3k8yk6f85wfbmsp
 
-### Full show for long-medley
+### long-medley show: Joe Russo's Almost Dead — Cumberland Blues Jam * -> Big River Jam I + -> Cumberland Blues -> Big River Jam II + -> Cumberland Blues -> Big River Refrain I + -> Cumberland Blues -> Big River Refrain + II -> Cumberland Blues Reprise @@
 GET {{base}}/api/v4/shows/show_0vrf1add2t4192cdqaf8bgmxe1
 
-### partial-medley: Joe Russo's Almost Dead — Slipknot! -> Wilson Jam / Chant * -> Feel Like a Stranger Jam -> Slipknot! -> Wilson Jam / Chant * -> Slipknot! ->
+### Direct source for long-medley: sets and playable tracks
+GET {{base}}/api/v4/sources/source_7yak4m37vp476mvvzg8h12xded
+
+### partial-medley track: Joe Russo's Almost Dead — Slipknot! -> Wilson Jam / Chant * -> Feel Like a Stranger Jam -> Slipknot! -> Wilson Jam / Chant * -> Slipknot! ->
 GET {{base}}/api/v4/source-tracks/track_1h6z9r284h9vgmc616h3jpma6z
 
-### Full show for partial-medley
+### partial-medley show: Joe Russo's Almost Dead — Slipknot! -> Wilson Jam / Chant * -> Feel Like a Stranger Jam -> Slipknot! -> Wilson Jam / Chant * -> Slipknot! ->
 GET {{base}}/api/v4/shows/show_1yqzwefqaphk26cdr8ke37z8q1
 
-### disabled: The Higgs — Make You Mine
+### Direct source for partial-medley: sets and playable tracks
+GET {{base}}/api/v4/sources/source_27g9cyc26rsa1gfx789j1cmvgv
+
+### disabled track: The Higgs — Make You Mine
 GET {{base}}/api/v4/source-tracks/track_4qt7bmm86zca756k4t9xh39ebh
 
-### Full show for disabled
+### disabled show: The Higgs — Make You Mine
 GET {{base}}/api/v4/shows/show_40cz6xz6yhr1mh5fafmgjkt3tk
+
+### Direct source for disabled: sets and playable tracks
+GET {{base}}/api/v4/sources/source_766c6hxrp2czq7n0qxm4ck060m
+
+### Venue journey: open a listed show
+GET {{base}}/api/v4/shows/show_127p0pfc1sgb4p9hdf4agq5dch
+
+### Venue journey: open a recording with active tracks
+GET {{base}}/api/v4/sources/source_0ey8bt709t1kgkmtpmgvq85art
+
+### Venue journey: open one playable track
+GET {{base}}/api/v4/source-tracks/track_11be6feqht0xd6q911jmx31nqs
+
+### Unmatched venue fallback in an approved artist
+GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/imported-venues/imported_venue_78331pxdqjdg434rrgm1d2pnrj
+
+### Unnormalized artist: imported venue browsing
+GET {{base}}/api/v4/artists/artist_26t53xjyrjg4jr1gw929zz2hm6/venues
+
+### Unnormalized artist: imported venue and shows
+GET {{base}}/api/v4/artists/artist_26t53xjyrjg4jr1gw929zz2hm6/imported-venues/imported_venue_3t9p04pkdc9cnxd48njv0xtzcz
 
 ### Revalidate captured matched track (304 unless data changed)
 GET {{base}}/api/v4/source-tracks/track_3s1y1rg4yaxa7nqw31wk617b0d
 If-None-Match: W/"ccd4e6875feba1cb46ca7c57b56d6a1b43da70e564cba3d71f158ac8639a218f"
-
-### Venue aliases: imported show label with a canonical venue link
-GET {{base}}/api/v4/shows/show_1vxn1nx36jes73mc3p9e1e04mr
 
 ### Wrong resource kind (422)
 GET {{base}}/api/v4/source-tracks/show_1vxn1nx36jes73mc3p9e1e04mr
@@ -72,3 +135,6 @@ GET {{base}}/api/v4/shows/show_00000000000000000000000000
 
 ### Oakland venue: imported label and canonical aliases
 GET {{base}}/api/v4/shows/show_127p0pfc1sgb4p9hdf4agq5dch
+
+### Venue aliases: imported show label with a canonical venue link
+GET {{base}}/api/v4/shows/show_1vxn1nx36jes73mc3p9e1e04mr

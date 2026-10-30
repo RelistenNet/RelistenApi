@@ -1,0 +1,842 @@
+{
+  "id": "source_0ey8bt709t1kgkmtpmgvq85art",
+  "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+  "show_id": "show_127p0pfc1sgb4p9hdf4agq5dch",
+  "display_date": "1985-02-18",
+  "is_soundboard": true,
+  "is_remaster": false,
+  "has_jamcharts": false,
+  "avg_rating": 6.222222328186035,
+  "num_reviews": 19,
+  "num_ratings": null,
+  "avg_rating_weighted": 4.333840370178223,
+  "duration": 8495.0,
+  "upstream_identifier": "gd85-02-18.sbd.willy.7588.sbeok.shnf",
+  "description": "Iko Iko-> CC Rider, Dire Wolf, Cassidy, Ramble On Rose, Me & My Uncle-> Mexicali Blues, China Cat Sunflower-> I Know You Rider Samson & Delilah, He's Gone-> Spoonful-> Eyes Of The World-> Goin' Down The Road Feelin' Bad-> Drums-> China Doll-> Baby What You Want Me To Do-> Sugar Magnolia, E: Day Job",
+  "taper_notes": "SBD>CM>DAT>SoundForge>CD; Source DAT from Charlie Miller; see info file for more detailed lineage; via John Spaventa; Seeded to etree by Willy",
+  "source": "SBD>CM>DAT>SoundForge>CD",
+  "taper": "",
+  "transferrer": "",
+  "lineage": "",
+  "flac_type": "NoFlac",
+  "review_count": 19,
+  "created_at": "2026-08-20T09:59:34.489655Z",
+  "updated_at": "2004-03-31T10:57:57Z",
+  "imported_venue": {
+    "id": "imported_venue_2r6gyq9br30dq8fn8taxf4n08k",
+    "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+    "latitude": null,
+    "longitude": null,
+    "name": "Henry J. Kaiser Convention Center",
+    "location": "Oakland, CA",
+    "upstream_identifier": "Henry J. Kaiser Convention CenterOakland, CA",
+    "slug": "henry-j-kaiser-convention-center",
+    "past_names": null,
+    "created_at": "2017-12-16T09:58:39.450713Z",
+    "updated_at": "2016-06-26T01:14:14Z"
+  },
+  "sets": [
+    {
+      "id": "source_set_581ddb0cewgrt9yy5q33axrgk9",
+      "source_id": "source_0ey8bt709t1kgkmtpmgvq85art",
+      "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+      "index": 0,
+      "is_encore": false,
+      "name": "Set",
+      "created_at": "2026-08-20T09:59:34.489655Z",
+      "updated_at": "2004-03-31T10:57:57Z",
+      "tracks": [
+        {
+          "id": "track_11be6feqht0xd6q911jmx31nqs",
+          "source_id": "source_0ey8bt709t1kgkmtpmgvq85art",
+          "source_set_id": "source_set_581ddb0cewgrt9yy5q33axrgk9",
+          "show_id": "show_127p0pfc1sgb4p9hdf4agq5dch",
+          "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+          "track_position": 1,
+          "duration": 392,
+          "title": "Aiko Aiko",
+          "slug": "aiko-aiko",
+          "mp3_url": "https://archive.org/download/gd85-02-18.sbd.willy.7588.sbeok.shnf/gd85-02-18d1t01.mp3",
+          "mp3_md5": "209618fbcf6a6da7efe6c00f0e3dec4e",
+          "flac_url": null,
+          "flac_md5": null,
+          "created_at": "2017-12-16T10:03:10.665286Z",
+          "updated_at": "2004-03-31T10:57:57Z",
+          "normalization": {
+            "state": "interpreted",
+            "reason": null,
+            "parts": [
+              {
+                "ordinal": 1,
+                "text": "Aiko Aiko",
+                "qualifiers": [],
+                "notes": [],
+                "segue_after": false,
+                "song": {
+                  "id": "song_sh7bwbz4",
+                  "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+                  "name": "Iko Iko",
+                  "kind": "song"
+                },
+                "state": "matched"
+              }
+            ]
+          }
+        },
+        {
+          "id": "track_5n1g3wepxk8v0g7jq17xs7e3zz",
+          "source_id": "source_0ey8bt709t1kgkmtpmgvq85art",
+          "source_set_id": "source_set_581ddb0cewgrt9yy5q33axrgk9",
+          "show_id": "show_127p0pfc1sgb4p9hdf4agq5dch",
+          "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+          "track_position": 2,
+          "duration": 501,
+          "title": "C. C. Rider",
+          "slug": "c-c-rider",
+          "mp3_url": "https://archive.org/download/gd85-02-18.sbd.willy.7588.sbeok.shnf/gd85-02-18d1t02.mp3",
+          "mp3_md5": "5e66fc927fc309e5e2b81d21c9ed41b7",
+          "flac_url": null,
+          "flac_md5": null,
+          "created_at": "2017-12-16T10:03:10.667637Z",
+          "updated_at": "2004-03-31T10:57:57Z",
+          "normalization": {
+            "state": "interpreted",
+            "reason": null,
+            "parts": [
+              {
+                "ordinal": 1,
+                "text": "C. C. Rider",
+                "qualifiers": [],
+                "notes": [],
+                "segue_after": false,
+                "song": {
+                  "id": "song_165xmfvv",
+                  "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+                  "name": "C.C. Rider",
+                  "kind": "song"
+                },
+                "state": "matched"
+              }
+            ]
+          }
+        },
+        {
+          "id": "track_2mw5f07dnqz9zraw0m9615y4qb",
+          "source_id": "source_0ey8bt709t1kgkmtpmgvq85art",
+          "source_set_id": "source_set_581ddb0cewgrt9yy5q33axrgk9",
+          "show_id": "show_127p0pfc1sgb4p9hdf4agq5dch",
+          "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+          "track_position": 3,
+          "duration": 235,
+          "title": "Dire Wolf",
+          "slug": "dire-wolf",
+          "mp3_url": "https://archive.org/download/gd85-02-18.sbd.willy.7588.sbeok.shnf/gd85-02-18d1t03.mp3",
+          "mp3_md5": "2470ee130a98f3aaab75afe998e88c72",
+          "flac_url": null,
+          "flac_md5": null,
+          "created_at": "2017-12-16T10:03:10.670502Z",
+          "updated_at": "2004-03-31T10:57:57Z",
+          "normalization": {
+            "state": "interpreted",
+            "reason": null,
+            "parts": [
+              {
+                "ordinal": 1,
+                "text": "Dire Wolf",
+                "qualifiers": [],
+                "notes": [],
+                "segue_after": false,
+                "song": {
+                  "id": "song_8j338jad",
+                  "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+                  "name": "Dire Wolf",
+                  "kind": "song"
+                },
+                "state": "matched"
+              }
+            ]
+          }
+        },
+        {
+          "id": "track_4w8ndb2dbxz05d1qady7z7eazd",
+          "source_id": "source_0ey8bt709t1kgkmtpmgvq85art",
+          "source_set_id": "source_set_581ddb0cewgrt9yy5q33axrgk9",
+          "show_id": "show_127p0pfc1sgb4p9hdf4agq5dch",
+          "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+          "track_position": 4,
+          "duration": 407,
+          "title": "Cassidy",
+          "slug": "cassidy",
+          "mp3_url": "https://archive.org/download/gd85-02-18.sbd.willy.7588.sbeok.shnf/gd85-02-18d1t04.mp3",
+          "mp3_md5": "210f2f1cb4bea9b0152ebe64f130eba2",
+          "flac_url": null,
+          "flac_md5": null,
+          "created_at": "2017-12-16T10:03:10.6725Z",
+          "updated_at": "2004-03-31T10:57:57Z",
+          "normalization": {
+            "state": "interpreted",
+            "reason": null,
+            "parts": [
+              {
+                "ordinal": 1,
+                "text": "Cassidy",
+                "qualifiers": [],
+                "notes": [],
+                "segue_after": false,
+                "song": {
+                  "id": "song_b737pg4d",
+                  "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+                  "name": "Cassidy",
+                  "kind": "song"
+                },
+                "state": "matched"
+              }
+            ]
+          }
+        },
+        {
+          "id": "track_1cvqtt24g8a3vaae6kk0a4w0ht",
+          "source_id": "source_0ey8bt709t1kgkmtpmgvq85art",
+          "source_set_id": "source_set_581ddb0cewgrt9yy5q33axrgk9",
+          "show_id": "show_127p0pfc1sgb4p9hdf4agq5dch",
+          "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+          "track_position": 5,
+          "duration": 438,
+          "title": "Ramble on Rose",
+          "slug": "ramble-on-rose",
+          "mp3_url": "https://archive.org/download/gd85-02-18.sbd.willy.7588.sbeok.shnf/gd85-02-18d1t05.mp3",
+          "mp3_md5": "015401179a6cb85e3cf4fdc66ec0aac1",
+          "flac_url": null,
+          "flac_md5": null,
+          "created_at": "2017-12-16T10:03:10.674983Z",
+          "updated_at": "2004-03-31T10:57:57Z",
+          "normalization": {
+            "state": "interpreted",
+            "reason": null,
+            "parts": [
+              {
+                "ordinal": 1,
+                "text": "Ramble on Rose",
+                "qualifiers": [],
+                "notes": [],
+                "segue_after": false,
+                "song": {
+                  "id": "song_31j0kr4m",
+                  "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+                  "name": "Ramble On Rose",
+                  "kind": "song"
+                },
+                "state": "matched"
+              }
+            ]
+          }
+        },
+        {
+          "id": "track_6ephv4cy96tsv5wsd6w3xwnxwp",
+          "source_id": "source_0ey8bt709t1kgkmtpmgvq85art",
+          "source_set_id": "source_set_581ddb0cewgrt9yy5q33axrgk9",
+          "show_id": "show_127p0pfc1sgb4p9hdf4agq5dch",
+          "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+          "track_position": 6,
+          "duration": 180,
+          "title": "Me and My Uncle",
+          "slug": "me-and-my-uncle",
+          "mp3_url": "https://archive.org/download/gd85-02-18.sbd.willy.7588.sbeok.shnf/gd85-02-18d1t06.mp3",
+          "mp3_md5": "49663e05ae2c5a7d81da7eed0a7e3807",
+          "flac_url": null,
+          "flac_md5": null,
+          "created_at": "2017-12-16T10:03:10.676988Z",
+          "updated_at": "2004-03-31T10:57:57Z",
+          "normalization": {
+            "state": "interpreted",
+            "reason": null,
+            "parts": [
+              {
+                "ordinal": 1,
+                "text": "Me and My Uncle",
+                "qualifiers": [],
+                "notes": [],
+                "segue_after": false,
+                "song": {
+                  "id": "song_8dhmzkjb",
+                  "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+                  "name": "Me And My Uncle",
+                  "kind": "song"
+                },
+                "state": "matched"
+              }
+            ]
+          }
+        },
+        {
+          "id": "track_63bkxpx11jdfmxrq3b446yhrf0",
+          "source_id": "source_0ey8bt709t1kgkmtpmgvq85art",
+          "source_set_id": "source_set_581ddb0cewgrt9yy5q33axrgk9",
+          "show_id": "show_127p0pfc1sgb4p9hdf4agq5dch",
+          "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+          "track_position": 7,
+          "duration": 288,
+          "title": "Mexicali Blues",
+          "slug": "mexicali-blues",
+          "mp3_url": "https://archive.org/download/gd85-02-18.sbd.willy.7588.sbeok.shnf/gd85-02-18d1t07.mp3",
+          "mp3_md5": "82d0650c043f0d45e0ba494fdc647dd9",
+          "flac_url": null,
+          "flac_md5": null,
+          "created_at": "2017-12-16T10:03:10.67926Z",
+          "updated_at": "2004-03-31T10:57:57Z",
+          "normalization": {
+            "state": "interpreted",
+            "reason": null,
+            "parts": [
+              {
+                "ordinal": 1,
+                "text": "Mexicali Blues",
+                "qualifiers": [],
+                "notes": [],
+                "segue_after": false,
+                "song": {
+                  "id": "song_kskxrc1r",
+                  "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+                  "name": "Mexicali Blues",
+                  "kind": "song"
+                },
+                "state": "matched"
+              }
+            ]
+          }
+        },
+        {
+          "id": "track_57p3ys3f3rg6vwts3w9tyhddke",
+          "source_id": "source_0ey8bt709t1kgkmtpmgvq85art",
+          "source_set_id": "source_set_581ddb0cewgrt9yy5q33axrgk9",
+          "show_id": "show_127p0pfc1sgb4p9hdf4agq5dch",
+          "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+          "track_position": 8,
+          "duration": 325,
+          "title": "China Cat Sunflower",
+          "slug": "china-cat-sunflower",
+          "mp3_url": "https://archive.org/download/gd85-02-18.sbd.willy.7588.sbeok.shnf/gd85-02-18d1t08.mp3",
+          "mp3_md5": "9728d476c7d1fcef573cd1719ead83f7",
+          "flac_url": null,
+          "flac_md5": null,
+          "created_at": "2017-12-16T10:03:10.680934Z",
+          "updated_at": "2004-03-31T10:57:57Z",
+          "normalization": {
+            "state": "interpreted",
+            "reason": null,
+            "parts": [
+              {
+                "ordinal": 1,
+                "text": "China Cat Sunflower",
+                "qualifiers": [],
+                "notes": [],
+                "segue_after": false,
+                "song": {
+                  "id": "song_80kpzqw9",
+                  "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+                  "name": "China Cat Sunflower",
+                  "kind": "song"
+                },
+                "state": "matched"
+              }
+            ]
+          }
+        },
+        {
+          "id": "track_7tk5g1h6tdyqtxnsmx9p8gf529",
+          "source_id": "source_0ey8bt709t1kgkmtpmgvq85art",
+          "source_set_id": "source_set_581ddb0cewgrt9yy5q33axrgk9",
+          "show_id": "show_127p0pfc1sgb4p9hdf4agq5dch",
+          "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+          "track_position": 9,
+          "duration": 296,
+          "title": "I Know You Rider",
+          "slug": "i-know-you-rider",
+          "mp3_url": "https://archive.org/download/gd85-02-18.sbd.willy.7588.sbeok.shnf/gd85-02-18d1t09.mp3",
+          "mp3_md5": "5817b01a3f15c5bfec1ff803134949dd",
+          "flac_url": null,
+          "flac_md5": null,
+          "created_at": "2017-12-16T10:03:10.683069Z",
+          "updated_at": "2004-03-31T10:57:57Z",
+          "normalization": {
+            "state": "interpreted",
+            "reason": null,
+            "parts": [
+              {
+                "ordinal": 1,
+                "text": "I Know You Rider",
+                "qualifiers": [],
+                "notes": [],
+                "segue_after": false,
+                "song": {
+                  "id": "song_61kwaepv",
+                  "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+                  "name": "I Know You Rider",
+                  "kind": "song"
+                },
+                "state": "matched"
+              }
+            ]
+          }
+        },
+        {
+          "id": "track_57495jvcrt9xpgxxmc88gk9q2z",
+          "source_id": "source_0ey8bt709t1kgkmtpmgvq85art",
+          "source_set_id": "source_set_581ddb0cewgrt9yy5q33axrgk9",
+          "show_id": "show_127p0pfc1sgb4p9hdf4agq5dch",
+          "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+          "track_position": 10,
+          "duration": 425,
+          "title": "Samson and Delilah",
+          "slug": "samson-and-delilah",
+          "mp3_url": "https://archive.org/download/gd85-02-18.sbd.willy.7588.sbeok.shnf/gd85-02-18d2t01.mp3",
+          "mp3_md5": "cdf8d0c427b22518675b0359ba59c92f",
+          "flac_url": null,
+          "flac_md5": null,
+          "created_at": "2017-12-16T10:03:10.685215Z",
+          "updated_at": "2004-03-31T10:57:57Z",
+          "normalization": {
+            "state": "interpreted",
+            "reason": null,
+            "parts": [
+              {
+                "ordinal": 1,
+                "text": "Samson and Delilah",
+                "qualifiers": [],
+                "notes": [],
+                "segue_after": false,
+                "song": {
+                  "id": "song_c71yp1ya",
+                  "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+                  "name": "Samson and Delilah",
+                  "kind": "song"
+                },
+                "state": "matched"
+              }
+            ]
+          }
+        },
+        {
+          "id": "track_6jhgxfart7mjhhzwf1fh1y306x",
+          "source_id": "source_0ey8bt709t1kgkmtpmgvq85art",
+          "source_set_id": "source_set_581ddb0cewgrt9yy5q33axrgk9",
+          "show_id": "show_127p0pfc1sgb4p9hdf4agq5dch",
+          "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+          "track_position": 11,
+          "duration": 765,
+          "title": "He's Gone",
+          "slug": "hes-gone",
+          "mp3_url": "https://archive.org/download/gd85-02-18.sbd.willy.7588.sbeok.shnf/gd85-02-18d2t02.mp3",
+          "mp3_md5": "868217d206cd3aa4660d190482b7f109",
+          "flac_url": null,
+          "flac_md5": null,
+          "created_at": "2017-12-16T10:03:10.687216Z",
+          "updated_at": "2004-03-31T10:57:57Z",
+          "normalization": {
+            "state": "interpreted",
+            "reason": null,
+            "parts": [
+              {
+                "ordinal": 1,
+                "text": "He's Gone",
+                "qualifiers": [],
+                "notes": [],
+                "segue_after": false,
+                "song": {
+                  "id": "song_tfkf4a5x",
+                  "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+                  "name": "He's Gone",
+                  "kind": "song"
+                },
+                "state": "matched"
+              }
+            ]
+          }
+        },
+        {
+          "id": "track_1ds0xpz506s4r6601wra9y8y1g",
+          "source_id": "source_0ey8bt709t1kgkmtpmgvq85art",
+          "source_set_id": "source_set_581ddb0cewgrt9yy5q33axrgk9",
+          "show_id": "show_127p0pfc1sgb4p9hdf4agq5dch",
+          "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+          "track_position": 12,
+          "duration": 282,
+          "title": "Spoonful",
+          "slug": "spoonful",
+          "mp3_url": "https://archive.org/download/gd85-02-18.sbd.willy.7588.sbeok.shnf/gd85-02-18d2t03.mp3",
+          "mp3_md5": "dd27b7897744c24c4a2ba4ecd28f5969",
+          "flac_url": null,
+          "flac_md5": null,
+          "created_at": "2017-12-16T10:03:10.689184Z",
+          "updated_at": "2004-03-31T10:57:57Z",
+          "normalization": {
+            "state": "interpreted",
+            "reason": null,
+            "parts": [
+              {
+                "ordinal": 1,
+                "text": "Spoonful",
+                "qualifiers": [],
+                "notes": [],
+                "segue_after": false,
+                "song": {
+                  "id": "song_c3qqpt0c",
+                  "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+                  "name": "Spoonful",
+                  "kind": "song"
+                },
+                "state": "matched"
+              }
+            ]
+          }
+        },
+        {
+          "id": "track_26q61kntv89bjzrt7axha5rbhf",
+          "source_id": "source_0ey8bt709t1kgkmtpmgvq85art",
+          "source_set_id": "source_set_581ddb0cewgrt9yy5q33axrgk9",
+          "show_id": "show_127p0pfc1sgb4p9hdf4agq5dch",
+          "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+          "track_position": 13,
+          "duration": 685,
+          "title": "Eyes of The World",
+          "slug": "eyes-of-the-world",
+          "mp3_url": "https://archive.org/download/gd85-02-18.sbd.willy.7588.sbeok.shnf/gd85-02-18d2t04.mp3",
+          "mp3_md5": "fc62312269e818ae7671224a4b59fdab",
+          "flac_url": null,
+          "flac_md5": null,
+          "created_at": "2017-12-16T10:03:10.691055Z",
+          "updated_at": "2004-03-31T10:57:57Z",
+          "normalization": {
+            "state": "interpreted",
+            "reason": null,
+            "parts": [
+              {
+                "ordinal": 1,
+                "text": "Eyes of The World",
+                "qualifiers": [],
+                "notes": [],
+                "segue_after": false,
+                "song": {
+                  "id": "song_8ak1kyem",
+                  "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+                  "name": "Eyes Of The World",
+                  "kind": "song"
+                },
+                "state": "matched"
+              }
+            ]
+          }
+        },
+        {
+          "id": "track_0vv2n3tn0b2xdb2cv00c4zsb5r",
+          "source_id": "source_0ey8bt709t1kgkmtpmgvq85art",
+          "source_set_id": "source_set_581ddb0cewgrt9yy5q33axrgk9",
+          "show_id": "show_127p0pfc1sgb4p9hdf4agq5dch",
+          "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+          "track_position": 14,
+          "duration": 358,
+          "title": "Goin' Down the Road",
+          "slug": "goin-down-the-road",
+          "mp3_url": "https://archive.org/download/gd85-02-18.sbd.willy.7588.sbeok.shnf/gd85-02-18d2t05.mp3",
+          "mp3_md5": "424a267eb578de65287d587434f8e9df",
+          "flac_url": null,
+          "flac_md5": null,
+          "created_at": "2017-12-16T10:03:10.693197Z",
+          "updated_at": "2004-03-31T10:57:57Z",
+          "normalization": {
+            "state": "interpreted",
+            "reason": null,
+            "parts": [
+              {
+                "ordinal": 1,
+                "text": "Goin' Down the Road",
+                "qualifiers": [],
+                "notes": [],
+                "segue_after": false,
+                "song": {
+                  "id": "song_52g2y56y",
+                  "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+                  "name": "Goin' Down The Road Feeling Bad",
+                  "kind": "song"
+                },
+                "state": "matched"
+              }
+            ]
+          }
+        },
+        {
+          "id": "track_0q9vb135b8xdgrre8v2ymdc39d",
+          "source_id": "source_0ey8bt709t1kgkmtpmgvq85art",
+          "source_set_id": "source_set_581ddb0cewgrt9yy5q33axrgk9",
+          "show_id": "show_127p0pfc1sgb4p9hdf4agq5dch",
+          "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+          "track_position": 15,
+          "duration": 234,
+          "title": "Beginning of Drums?",
+          "slug": "beginning-of-drums",
+          "mp3_url": "https://archive.org/download/gd85-02-18.sbd.willy.7588.sbeok.shnf/gd85-02-18d2t06.mp3",
+          "mp3_md5": "1fe15381568ad585d0078d29be995b9b",
+          "flac_url": null,
+          "flac_md5": null,
+          "created_at": "2017-12-16T10:03:10.695006Z",
+          "updated_at": "2004-03-31T10:57:57Z",
+          "normalization": {
+            "state": "interpreted",
+            "reason": null,
+            "parts": [
+              {
+                "ordinal": 1,
+                "text": "Beginning of Drums?",
+                "qualifiers": [],
+                "notes": [],
+                "segue_after": false,
+                "song": {
+                  "id": "song_pxnavq74",
+                  "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+                  "name": "Drums",
+                  "kind": "segment"
+                },
+                "state": "matched"
+              }
+            ]
+          }
+        },
+        {
+          "id": "track_6wkgq7qq2mpt1054sz3rfgd2r2",
+          "source_id": "source_0ey8bt709t1kgkmtpmgvq85art",
+          "source_set_id": "source_set_581ddb0cewgrt9yy5q33axrgk9",
+          "show_id": "show_127p0pfc1sgb4p9hdf4agq5dch",
+          "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+          "track_position": 16,
+          "duration": 507,
+          "title": "Drums",
+          "slug": "drums",
+          "mp3_url": "https://archive.org/download/gd85-02-18.sbd.willy.7588.sbeok.shnf/gd85-02-18d3t01.mp3",
+          "mp3_md5": "1b6acabf877e57674b82edacc79646d0",
+          "flac_url": null,
+          "flac_md5": null,
+          "created_at": "2017-12-16T10:03:10.69701Z",
+          "updated_at": "2004-03-31T10:57:57Z",
+          "normalization": {
+            "state": "interpreted",
+            "reason": null,
+            "parts": [
+              {
+                "ordinal": 1,
+                "text": "Drums",
+                "qualifiers": [],
+                "notes": [],
+                "segue_after": false,
+                "song": {
+                  "id": "song_pxnavq74",
+                  "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+                  "name": "Drums",
+                  "kind": "segment"
+                },
+                "state": "matched"
+              }
+            ]
+          }
+        },
+        {
+          "id": "track_7zkg1kg2f3jc45913s0es0sac3",
+          "source_id": "source_0ey8bt709t1kgkmtpmgvq85art",
+          "source_set_id": "source_set_581ddb0cewgrt9yy5q33axrgk9",
+          "show_id": "show_127p0pfc1sgb4p9hdf4agq5dch",
+          "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+          "track_position": 17,
+          "duration": 597,
+          "title": "Space",
+          "slug": "space",
+          "mp3_url": "https://archive.org/download/gd85-02-18.sbd.willy.7588.sbeok.shnf/gd85-02-18d3t02.mp3",
+          "mp3_md5": "baf40f2898457e033a76c6d1b8e12ca7",
+          "flac_url": null,
+          "flac_md5": null,
+          "created_at": "2017-12-16T10:03:10.698812Z",
+          "updated_at": "2004-03-31T10:57:57Z",
+          "normalization": {
+            "state": "interpreted",
+            "reason": null,
+            "parts": [
+              {
+                "ordinal": 1,
+                "text": "Space",
+                "qualifiers": [],
+                "notes": [],
+                "segue_after": false,
+                "song": {
+                  "id": "song_ph06c1zs",
+                  "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+                  "name": "Space",
+                  "kind": "segment"
+                },
+                "state": "matched"
+              }
+            ]
+          }
+        },
+        {
+          "id": "track_3j1p4e1ckpmyym299knrn2fh6b",
+          "source_id": "source_0ey8bt709t1kgkmtpmgvq85art",
+          "source_set_id": "source_set_581ddb0cewgrt9yy5q33axrgk9",
+          "show_id": "show_127p0pfc1sgb4p9hdf4agq5dch",
+          "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+          "track_position": 18,
+          "duration": 300,
+          "title": "China Doll",
+          "slug": "china-doll",
+          "mp3_url": "https://archive.org/download/gd85-02-18.sbd.willy.7588.sbeok.shnf/gd85-02-18d3t03.mp3",
+          "mp3_md5": "c0dae760ab13c87c135a16429befe4db",
+          "flac_url": null,
+          "flac_md5": null,
+          "created_at": "2017-12-16T10:03:10.700807Z",
+          "updated_at": "2004-03-31T10:57:57Z",
+          "normalization": {
+            "state": "interpreted",
+            "reason": null,
+            "parts": [
+              {
+                "ordinal": 1,
+                "text": "China Doll",
+                "qualifiers": [],
+                "notes": [],
+                "segue_after": false,
+                "song": {
+                  "id": "song_c7f1s17e",
+                  "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+                  "name": "China Doll",
+                  "kind": "song"
+                },
+                "state": "matched"
+              }
+            ]
+          }
+        },
+        {
+          "id": "track_6e4ragz1829q1jqzk5h8723hm9",
+          "source_id": "source_0ey8bt709t1kgkmtpmgvq85art",
+          "source_set_id": "source_set_581ddb0cewgrt9yy5q33axrgk9",
+          "show_id": "show_127p0pfc1sgb4p9hdf4agq5dch",
+          "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+          "track_position": 19,
+          "duration": 347,
+          "title": "Baby What You Want Me to Do",
+          "slug": "baby-what-you-want-me-to-do",
+          "mp3_url": "https://archive.org/download/gd85-02-18.sbd.willy.7588.sbeok.shnf/gd85-02-18d3t04.mp3",
+          "mp3_md5": "570dda2ffda71a3abd1eab873f414dd5",
+          "flac_url": null,
+          "flac_md5": null,
+          "created_at": "2017-12-16T10:03:10.702598Z",
+          "updated_at": "2004-03-31T10:57:57Z",
+          "normalization": {
+            "state": "interpreted",
+            "reason": null,
+            "parts": [
+              {
+                "ordinal": 1,
+                "text": "Baby What You Want Me to Do",
+                "qualifiers": [],
+                "notes": [],
+                "segue_after": false,
+                "song": {
+                  "id": "song_q4tjgt4y",
+                  "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+                  "name": "Baby What You Want Me To Do",
+                  "kind": "song"
+                },
+                "state": "matched"
+              }
+            ]
+          }
+        },
+        {
+          "id": "track_74v0hph3zxtkd320r4cmhckvyn",
+          "source_id": "source_0ey8bt709t1kgkmtpmgvq85art",
+          "source_set_id": "source_set_581ddb0cewgrt9yy5q33axrgk9",
+          "show_id": "show_127p0pfc1sgb4p9hdf4agq5dch",
+          "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+          "track_position": 20,
+          "duration": 674,
+          "title": "Sugar Magnolia",
+          "slug": "sugar-magnolia",
+          "mp3_url": "https://archive.org/download/gd85-02-18.sbd.willy.7588.sbeok.shnf/gd85-02-18d3t05.mp3",
+          "mp3_md5": "7008a04183cbe8991be5c89e47189e43",
+          "flac_url": null,
+          "flac_md5": null,
+          "created_at": "2017-12-16T10:03:10.706123Z",
+          "updated_at": "2004-03-31T10:57:57Z",
+          "normalization": {
+            "state": "interpreted",
+            "reason": null,
+            "parts": [
+              {
+                "ordinal": 1,
+                "text": "Sugar Magnolia",
+                "qualifiers": [],
+                "notes": [],
+                "segue_after": false,
+                "song": {
+                  "id": "song_mg7maaeg",
+                  "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+                  "name": "Sugar Magnolia",
+                  "kind": "song"
+                },
+                "state": "matched"
+              }
+            ]
+          }
+        },
+        {
+          "id": "track_74pmjz78c9189nxqekm21ekqsd",
+          "source_id": "source_0ey8bt709t1kgkmtpmgvq85art",
+          "source_set_id": "source_set_581ddb0cewgrt9yy5q33axrgk9",
+          "show_id": "show_127p0pfc1sgb4p9hdf4agq5dch",
+          "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+          "track_position": 21,
+          "duration": 259,
+          "title": "Day Job",
+          "slug": "day-job",
+          "mp3_url": "https://archive.org/download/gd85-02-18.sbd.willy.7588.sbeok.shnf/gd85-02-18d3t06.mp3",
+          "mp3_md5": "cd3bc344b5e85f8f62063100c92c59e9",
+          "flac_url": null,
+          "flac_md5": null,
+          "created_at": "2017-12-16T10:03:10.707847Z",
+          "updated_at": "2004-03-31T10:57:57Z",
+          "normalization": {
+            "state": "interpreted",
+            "reason": null,
+            "parts": [
+              {
+                "ordinal": 1,
+                "text": "Day Job",
+                "qualifiers": [],
+                "notes": [],
+                "segue_after": false,
+                "song": {
+                  "id": "song_90fbxy8a",
+                  "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+                  "name": "Keep Your Day Job",
+                  "kind": "song"
+                },
+                "state": "matched"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "links": [
+    {
+      "source_id": "source_0ey8bt709t1kgkmtpmgvq85art",
+      "provider": "archive.org",
+      "for_reviews": true,
+      "for_ratings": true,
+      "for_source": true,
+      "url": "https://archive.org/details/gd85-02-18.sbd.willy.7588.sbeok.shnf",
+      "label": "View on archive.org",
+      "created_at": "2026-08-20T09:59:34.489655Z",
+      "updated_at": "2026-08-20T09:59:34.489655Z"
+    }
+  ]
+}

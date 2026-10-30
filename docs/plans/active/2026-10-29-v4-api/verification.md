@@ -42,6 +42,43 @@ refreshed from the local API; the live Kaiser venue and OpenAPI both expose only
 `name` and `kind` for each alias. Normalization source and its tests match the
 enum foundation exactly. Existing package advisories and nullable warnings remain.
 
+## Venue-to-playback review, 2026-10-30
+
+C1 now includes seven venue reads and direct source detail, for 16 implemented
+GET routes. Follow the [resource journey](review/venue-source-journey.md) alongside
+the expanded request collection. The full 62-operation manifest remains the
+release baseline, not a claim that all routes are implemented.
+
+Verify distinct show membership, approved canonical grouping, raw fallback,
+cross-artist global reads, imported rows with zero shows, merged IDs/aliases, and
+direct-source parity. Imported venue counts use the actual show-level collection;
+source-only venue observations cannot inflate it. Test malformed/foreign/missing
+IDs, known empty collections, ETag corrections, database failure and recovery.
+Source responses must omit orphaned files and sibling recording contents.
+Normalizers, accounts, legacy routes, and catalog data remain unchanged.
+
+Verified the full solution build and all 74 focused v4/ID/Swagger tests, including
+54 HTTP cases, plus all 365 normalization tests. No tests skipped. The two-pass
+review found no remaining correctness or readability findings. Existing package
+advisories and nullable warnings remain.
+
+Real captures followed artist → venue → show → source → track and imported
+fallback paths. All six direct-source scenarios matched the corresponding nested
+show source and direct track. Grateful Dead's 544 venue groups (479 canonical,
+65 imported) partitioned all 2,081 shows. Red Rocks returned 176 shows across 12
+approved artists. Count/detail and global/scoped-list parity were checked.
+
+Two local captures observed artist venue grouping at 49–61 ms, venue detail at
+7–8 ms, and the selected source at 5–6 ms. The 176-show Red Rocks response took
+74 ms in the final capture. These are local HTTP observations, not production
+capacity or percentile guarantees. Full captures and timings are ignored local
+artifacts; smaller full examples are linked from the resource journey.
+
+Shared venue loading now reads assignments, unique canonical merge paths, and
+aliases in three batch queries rather than the prior two. This adds a roundtrip
+to show metadata reads but avoids repeating venue graph rows for every show and
+keeps global, artist, and nested venue resources on one resolution policy.
+
 ## Main edit locations
 
 API/normalization paths below are relative to this repository. Mobile paths are

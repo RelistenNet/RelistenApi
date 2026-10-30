@@ -1,14 +1,15 @@
 # Deliver the complete v4 catalog and mobile adapter
 
-Status: C1 ready for response review; venue alias policy revised 2026-10-30.
+Status: C1 expanded to the venue-to-playback journey, 2026-10-30.
 The local API reads the restored production catalog; no production deployment or
 account migration occurred. This is a living ExecPlan: update Progress,
 Discoveries, Decision Log, and Outcomes as work proceeds.
 
 Build and review this in stages. First deliver a running browse and playback API that
-Alec can inspect directly. Settle its responses before expanding route families.
-Test the breaking account/auth cutover against the existing v3 catalog, then
-prove a small normalized mobile journey before completing the remaining API/UI.
+Alec can inspect directly. Review artist/year and venue-to-playback responses,
+then extend song/discovery browsing before account/auth work. The later breaking
+account/auth cutover runs against the existing v3 catalog; prove a small normalized
+mobile journey before completing the remaining API/UI.
 The [review guide](review-guide.md) defines five checkpoints and what Alec sees.
 
 ## Outcome and readers
@@ -75,9 +76,9 @@ an earlier design proposal.
 
 ## Current code and constraints
 
-Rechecked API `3fb0e0fc1` and mobile `676ecd6`. The
+The pre-implementation review checked API `3fb0e0fc1` and mobile `676ecd6`. The
 [source observations and review](assumptions-and-review.md) explain the evidence.
-Current readers open separate connections; normalization changes can leave imported
+Legacy readers open separate connections; normalization changes can leave imported
 timestamps unchanged; mobile's cache can suppress those changes. V4 therefore
 needs explicit snapshot reads and authoritative apply. Imported UUIDs also identify
 mobile downloads/queues/history, so they remain stored behind the API adapter.
@@ -151,8 +152,12 @@ Implement mobile's actual queries, not a generic interpreter of all server route
   resolve feasibility, bootstrap, compatibility and rollback findings.
 - [x] Start C1 on `codex/v4-api-c1`; shared ID codec passes 15 focused tests.
 - [x] Implement the expanded C1 browsing journey and validate the live real-data host.
+- [x] Implement seven venue reads and direct source detail for the C1
+  [venue-to-playback journey](review/venue-source-journey.md).
 - [ ] Alec reviews the [expanded C1 browsing and playback responses](review/README.md)
   before account/auth work.
+- [ ] Extend the next catalog review to song matches and discovery; these routes
+  remain unimplemented and separate from the venue slice.
 - [ ] C2–C5 remain unstarted pending the C1 response review.
 
 ## Discoveries and changes from the exploration
@@ -171,8 +176,10 @@ apply entrypoint, not only DTO renaming. The in-place account change retains
 ## Implementation sequence
 
 The numbers below identify components, not a single deployment. Follow the
-[five review checkpoints](review-guide.md): packages 1/2 produce real browsing and playback HTTP
-responses first (expanded C1); package 4 plus mobile account work proves typed auth/library
+[five review checkpoints](review-guide.md): packages 1/2 and the accepted catalog
+families from package 3 produce browsing and playback HTTP responses first
+(expanded C1). Venue browsing and direct sources are implemented; song/discovery
+review comes next before auth. Package 4 plus mobile account work proves typed auth/library
 against v3 (C2); the minimum of package 5 proves raw/normalized show playback
 (C3); package 3 completes route families and their legacy adapters (C4); remaining
 mobile/UI work and release checks finish the change (C5).
@@ -187,7 +194,9 @@ as first-release requirements; an early developer checkpoint is not that release
 flowchart TD
     IDs[1 IDs and DTOs] --> Reads[2 Snapshot readers]
     Reads --> HTTP[C1 Review running HTTP responses]
-    HTTP --> Accounts[4 Account and auth cutover on v3]
+    HTTP --> Venues[C1 Venue to playback review]
+    Venues --> Songs[C1 Song and discovery review]
+    Songs --> Accounts[4 Account and auth cutover on v3]
     Accounts --> Pilot[5a Mobile show and track pilot]
     Pilot --> API[3 Complete route families]
     API --> Mobile[5b Complete mobile adapter and storage]
@@ -225,7 +234,9 @@ Alec reviews complete responses before their design spreads through the code.
 
 ### 3. Complete API families and legacy adapters for C4
 
-After C3, implement the rest of `endpoints.json` by resource family. Each family
+The venue/source family is already part of expanded C1. Add song/discovery
+families for API review before accounts. After C3, implement the remaining
+`endpoints.json` families and legacy adapters. Each family
 gets native v4 routes, common query/results, legacy projections, response fixtures
 and measured compatibility in one coherent change. Complete the pilot family's
 legacy conversion here too. Imported/approved read views and primary/prefer-replica
@@ -340,6 +351,10 @@ by accepting this plan.
   No timeline resolution, history backfill, or date-evidence work is required.
   The active branch stack is normalization enums → v4 API.
 
+- 2026-10-30, Alec: expand the API review with artist venue groups, canonical and
+  imported venue details/show lists, and direct source detail. Inspect the
+  venue-to-playback journey before the next song/discovery slice and account/auth.
+
 ## Outcomes and retrospective
 
 Planning is complete. Independent feasibility and mobile/account reviewers
@@ -352,7 +367,7 @@ generic metadata, library versioning and UUID-backed account-storage proposals.
 
 C1 runtime implementation and local HTTP/snapshot checks are complete; see the
 [response review](review/README.md). Canonical ID retention is still scheduled
-before C4 external canonical lookup/favorites; C1 adds no migration. Mobile schema
+before production canonical lookup/favorites; C1 adds no migration. Mobile schema
 upgrades, production load measurements and deployment remain unperformed. Primary capacity and deployment
 configuration are execution gates, not assumed facts. Record implementation
 results here as milestones are completed.
