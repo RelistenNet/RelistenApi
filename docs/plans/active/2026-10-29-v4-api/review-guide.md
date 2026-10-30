@@ -40,10 +40,19 @@ caching; exact-target favorites keep merge behavior small.
 
 ## C1 — Inspect the first real HTTP responses
 
-Implement packages 1 and 2 for artist/year/show-list navigation, show detail
-and direct track reads. Alec expanded C1 to review these together before auth.
+Implement packages 1 and 2 for artist/year/show-list navigation, show detail,
+direct source and track reads. Alec expanded C1 to review these with the venue
+family before auth: artist venue groups, canonical metadata and show collections,
+and imported venue fallback detail. The current local API exposes 16 GET routes.
 Cover raw, normalization-disabled, partial and fully interpreted
-fixtures. Alec accepts these responses before broad route work or mobile work.
+fixtures. Alec reviews each family before its contract spreads to the next family
+or mobile work.
+
+Use the [venue-to-playback walkthrough](review/venue-source-journey.md) for the
+current review: artist → venue group → venue's shows → show → source → track.
+Then add the next song/discovery slice for API review. Song discovery, search,
+recent lists, and artist bootstrap are not implemented by the venue slice.
+Keep account/auth as a separate checkpoint after the catalog responses settle.
 
 Deliver a repeatable local review setup using the real development API,
 controllers, serializers and readers. Alec required real data, so manual review now uses a freshly restored production
@@ -74,6 +83,9 @@ Alec should be able to answer these questions by making requests:
 - Are raw, disabled and partial results understandable and still playable?
 - Does the show preserve its imported venue label/locality, with a normalized
   venue link and typed aliases when available?
+- Do grouped venue counts match their show collections, including imported
+  fallback and cross-artist approved assignments? Does direct source detail match
+  that same source inside its full show?
 - Are wrong prefixes, unknown IDs and dependency failures clear?
 - Does an unchanged request return 304? Does a local normalization correction
   return 200 with a changed ETag despite unchanged imported timestamps?

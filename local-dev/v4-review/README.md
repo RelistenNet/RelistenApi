@@ -29,15 +29,27 @@ provides Try it out too. Start with the matched and partial tracks, compare
 their full shows, then inspect the venue alias example. Playback URLs and
 titles are imported values; normalized parts describe the file without replacing it.
 
-The expanded C1 browse checkpoint implements:
+The expanded C1 browse checkpoint exposes 16 GET routes. Follow the
+[venue-to-playback walkthrough](../../docs/plans/active/2026-10-29-v4-api/review/venue-source-journey.md)
+to inspect the resource links. Implemented families are:
 
 - `GET /api/v4/artists` and `/api/v4/artists/{artistId}`: artist list/detail,
   counts, capabilities and provider metadata.
 - `GET /api/v4/artists/{artistId}/years`: year list; append `/{yearId}` or
   `/by-number/{year}` for year detail with show summaries.
 - `GET /api/v4/artists/{artistId}/shows`: the complete artist show-summary list.
+- `GET /api/v4/artists/{artistId}/venues`: canonical show groups with imported
+  fallback entries and distinct show counts. Append `/{venueId}` for its scoped
+  entry or `/{venueId}/shows` for its artist-filtered shows.
+- `GET /api/v4/venues/{venueId}`: canonical metadata and aliases; append `/shows`
+  for approved assignments across artists, optionally filtered by `artist_id`.
+- `GET /api/v4/artists/{artistId}/imported-venues`: all imported rows and show
+  counts, including unused rows. Append `/{importedVenueId}` for that row with its
+  complete show collection.
 - `GET /api/v4/shows/{showId}`: full show with sources, sets, tracks, imported
   venue observations, canonical venue aliases and approved normalization.
+- `GET /api/v4/sources/{sourceId}`: that same complete source resource directly,
+  including its own imported venue and active playable files.
 - `GET /api/v4/source-tracks/{sourceTrackId}`: that same track resource directly,
   with exact typed artist/show/source/set parents.
 
