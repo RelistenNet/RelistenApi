@@ -37,7 +37,7 @@ public static class V4CatalogProjection
             CreatedAt = value.created_at,
             UpdatedAt = value.updated_at,
             ImportedVenue = value.ImportedVenue is { } imported ? ImportedVenue(imported) : null,
-            Venue = value.Venue is { } venue ? Venue(venue) : null,
+            ArtistVenue = value.ArtistVenue is { } artistVenue ? ArtistVenue(artistVenue) : null,
             Year = value.Year is { } year ? Year(year) : null,
             Tour = value.Tour is { } tour ? Tour(tour) : null,
             Era = value.Era is { } era ? Era(era) : null,
@@ -139,11 +139,24 @@ public static class V4CatalogProjection
 
     public static ArtistVenueEntryResource VenueEntry(CatalogArtistVenueEntry value) =>
         new(
-            value.Venue is not null ? VenueEntryKind.Venue : VenueEntryKind.ImportedVenue,
-            value.ShowCount,
-            value.Venue is { } venue ? Venue(venue) : null,
-            value.ImportedVenue is { } imported ? ImportedVenue(imported) : null
+            value.ArtistVenue is not null
+                ? VenueEntryKind.ArtistVenue
+                : VenueEntryKind.ImportedVenue,
+            value.ArtistVenue is { } artistVenue ? ArtistVenue(artistVenue) : null,
+            value.ImportedVenue is { } imported ? ImportedVenue(imported) : null,
+            value.FallbackShowCount
         );
+
+    public static ArtistVenueResource ArtistVenue(CatalogArtistVenue value) =>
+        new()
+        {
+            Id = ArtistVenueId.Parse(value.id),
+            ArtistId = new(value.artist_uuid),
+            ArtistShowCount = value.artist_show_count,
+            CreatedAt = value.created_at,
+            UpdatedAt = value.updated_at,
+            Venue = Venue(value.Venue),
+        };
 
     public static ImportedVenueResource ImportedVenue(CatalogImportedVenue value) =>
         ProjectImportedVenue<ImportedVenueResource>(value);
@@ -212,6 +225,7 @@ public static class V4CatalogProjection
         new()
         {
             Id = VenueId.Parse(value.id),
+            GlobalShowCount = value.global_show_count,
             Name = value.name,
             Kind = NormalizationEnums.Parse<VenueKind>(value.kind),
             ParentId = value.parent_id is { } parent ? VenueId.Parse(parent) : null,

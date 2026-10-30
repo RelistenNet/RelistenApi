@@ -132,7 +132,7 @@ public sealed partial class TestV4CatalogHttp
         }
         else
         {
-            show["venue"].Should().BeNull();
+            show["artist_venue"].Should().BeNull();
             track["normalization"]!["parts"]!.AsArray().Should().BeEmpty();
         }
     }
@@ -217,12 +217,12 @@ public sealed partial class TestV4CatalogHttp
                 """
             );
             var show = await GetJson(ShowPath(4));
-            show["venue"]!["id"]!.GetValue<string>().Should().Be("venue_00000002");
+            show["artist_venue"]!["venue"]!["id"]!.GetValue<string>().Should().Be("venue_00000002");
             show["imported_venue"]!["name"]!
                 .GetValue<string>()
                 .Should()
                 .Be("Imported Civic Center");
-            var aliases = show["venue"]!["names"]!.AsArray();
+            var aliases = show["artist_venue"]!["venue"]!["names"]!.AsArray();
             aliases.Should().HaveCount(7);
             aliases
                 .Should()
@@ -318,10 +318,13 @@ public sealed partial class TestV4CatalogHttp
         var show = await GetJson(ShowPath(4));
         show["year_id"]!.GetValue<string>().Should().StartWith("year_");
         show["tour_id"]!.GetValue<string>().Should().StartWith("tour_");
-        show["venue"]!["parent_id"]!.GetValue<string>().Should().Be("venue_00000003");
+        show["artist_venue"]!["venue"]!["parent_id"]!
+            .GetValue<string>()
+            .Should()
+            .Be("venue_00000003");
         var withoutTour = await GetJson(ShowPath(1));
         withoutTour["tour_id"].Should().BeNull();
-        withoutTour["venue"].Should().BeNull();
+        withoutTour["artist_venue"].Should().BeNull();
     }
 
     [Test]
@@ -526,7 +529,7 @@ public sealed partial class TestV4CatalogHttp
             changed.StatusCode.Should().Be(HttpStatusCode.OK);
             changed.Headers.ETag!.ToString().Should().NotBe(etag);
             var after = JsonNode.Parse(await changed.Content.ReadAsStringAsync())!.AsArray();
-            after[1]!["venue"]!["names"]!
+            after[1]!["artist_venue"]!["venue"]!["names"]!
                 .AsArray()
                 .Should()
                 .Contain(item => item!["name"]!.GetValue<string>() == "Reviewed Historical Arena");
@@ -552,7 +555,7 @@ public sealed partial class TestV4CatalogHttp
     public async Task Venue_aliases_are_distinct_typed_names_shared_across_navigation()
     {
         var show = await GetJson(ShowPath(4));
-        var venue = show["venue"]!;
+        var venue = show["artist_venue"]!["venue"]!;
         venue["name"]!.GetValue<string>().Should().Be("Current Arena");
         show["imported_venue"]!["name"]!.GetValue<string>().Should().Be("Imported Civic Center");
         var names = venue["names"]!.AsArray();
@@ -579,8 +582,8 @@ public sealed partial class TestV4CatalogHttp
             .AsArray()
             .Single(item => item!["id"]!.GetValue<string>() == ShowId(4))!;
         var year = await GetJson(BrowseArtistPath + "/years/by-number/1995");
-        JsonNode.DeepEquals(venue, summary["venue"]).Should().BeTrue();
-        JsonNode.DeepEquals(venue, year["shows"]![0]!["venue"]).Should().BeTrue();
+        JsonNode.DeepEquals(venue, summary["artist_venue"]!["venue"]).Should().BeTrue();
+        JsonNode.DeepEquals(venue, year["shows"]![0]!["artist_venue"]!["venue"]).Should().BeTrue();
         summary["imported_venue"]!["name"]!.GetValue<string>().Should().Be("Imported Civic Center");
         summary.AsObject().ContainsKey("venue_display").Should().BeFalse();
         year["shows"]![0]!.AsObject().ContainsKey("venue_display").Should().BeFalse();
@@ -656,12 +659,15 @@ public sealed partial class TestV4CatalogHttp
             response.Headers.ETag!.ToString().Should().NotBe(etag);
             var after = JsonNode.Parse(await response.Content.ReadAsStringAsync())!;
             after["updated_at"]!.ToJsonString().Should().Be(before["updated_at"]!.ToJsonString());
-            after["venue"]!["name"]!.GetValue<string>().Should().Be("Current Arena");
+            after["artist_venue"]!["venue"]!["name"]!
+                .GetValue<string>()
+                .Should()
+                .Be("Current Arena");
             JsonNode
                 .DeepEquals(after["imported_venue"], before["imported_venue"])
                 .Should()
                 .BeTrue();
-            after["venue"]!["names"]!
+            after["artist_venue"]!["venue"]!["names"]!
                 .AsArray()
                 .Should()
                 .Contain(item =>
@@ -690,8 +696,8 @@ public sealed partial class TestV4CatalogHttp
                 "UPDATE norm.show_venues SET venue_id='venue_00000003' WHERE show_uuid='00000000-0000-0000-0000-000000000004'"
             );
             var show = await GetJson(ShowPath(4));
-            show["venue"]!["names"]!.AsArray().Should().BeEmpty();
-            show["venue"]!["id"]!.GetValue<string>().Should().Be("venue_00000003");
+            show["artist_venue"]!["venue"]!["names"]!.AsArray().Should().BeEmpty();
+            show["artist_venue"]!["venue"]!["id"]!.GetValue<string>().Should().Be("venue_00000003");
             show["imported_venue"]!["name"]!
                 .GetValue<string>()
                 .Should()
@@ -740,16 +746,16 @@ public sealed partial class TestV4CatalogHttp
     {
         var document = await GetJson("/api-docs/v4/swagger.json");
         var raw = await GetJson(ShowPath(1));
-        raw["venue"].Should().BeNull();
+        raw["artist_venue"].Should().BeNull();
         raw["era"].Should().BeNull();
         var partial = await GetJson(TrackPath(3));
         partial["normalization"]!["parts"]![1]!["song"].Should().BeNull();
         foreach (
             var (resource, property) in new[]
             {
-                ("ShowResource", "venue"),
+                ("ShowResource", "artist_venue"),
                 ("ShowResource", "era"),
-                ("ShowSummaryResource", "venue"),
+                ("ShowSummaryResource", "artist_venue"),
                 ("ShowSummaryResource", "era"),
                 ("TrackPartResource", "song"),
             }
@@ -856,11 +862,11 @@ public sealed partial class TestV4CatalogHttp
         var show = await GetJson(ShowPath(4));
         EnumValues(document, "VenueResource", "kind")
             .Should()
-            .Contain(show["venue"]!["kind"]!.GetValue<string>());
+            .Contain(show["artist_venue"]!["venue"]!["kind"]!.GetValue<string>());
         EnumValues(document, "SourceResource", "flac_type")
             .Should()
             .Contain(show["sources"]![0]!["flac_type"]!.GetValue<string>());
-        show["venue"]!["coordinate_precision"].Should().BeNull();
+        show["artist_venue"]!["venue"]!["coordinate_precision"].Should().BeNull();
     }
 
     [Test]
@@ -892,7 +898,7 @@ public sealed partial class TestV4CatalogHttp
                 .Should()
                 .Contain(qualifiers);
             var show = await GetJson(ShowPath(4));
-            show["venue"]!["coordinate_precision"].Should().BeNull();
+            show["artist_venue"]!["venue"]!["coordinate_precision"].Should().BeNull();
             foreach (
                 var (resource, property) in new[]
                 {
@@ -1022,6 +1028,7 @@ public sealed partial class TestV4CatalogHttp
         await using var transaction = await connection.BeginTransactionAsync();
         await connection.ExecuteAsync(
             """
+            SELECT pg_advisory_xact_lock(hashtext('norm-venues'));
             SET LOCAL norm.author_type='importer';
             SET LOCAL norm.author_ref='v4-review';
             SET LOCAL norm.run_uuid='00000000-0000-0000-0000-000000000099';
@@ -1029,6 +1036,10 @@ public sealed partial class TestV4CatalogHttp
             transaction: transaction
         );
         await connection.ExecuteAsync(sql, transaction: transaction);
+        await connection.ExecuteAsync(
+            "SELECT norm.refresh_artist_venues()",
+            transaction: transaction
+        );
         await transaction.CommitAsync();
     }
 

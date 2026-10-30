@@ -29,7 +29,7 @@ public sealed class CatalogShow : CatalogTimestamps
     public int source_count { get; set; }
     public bool normalization_enabled { get; set; }
     public CatalogImportedVenue? ImportedVenue { get; set; }
-    public CatalogVenue? Venue { get; set; }
+    public CatalogArtistVenue? ArtistVenue { get; set; }
     public CatalogYear? Year { get; set; }
     public CatalogTour? Tour { get; set; }
     public CatalogEra? Era { get; set; }
@@ -145,6 +145,7 @@ public sealed class CatalogSong
 public sealed class CatalogVenue
 {
     public string id { get; set; } = null!;
+    public int global_show_count { get; set; }
     public string name { get; set; } = null!;
     public string kind { get; set; } = null!;
     public string? parent_id { get; set; }
@@ -156,6 +157,18 @@ public sealed class CatalogVenue
     public string? coordinate_precision { get; set; }
     public string? merged_into { get; set; }
     public IReadOnlyList<CatalogVenueName> Names { get; set; } = [];
+}
+
+/// <summary>A persisted artist/place identity and its last refreshed count.</summary>
+public sealed class CatalogArtistVenue : CatalogTimestamps
+{
+    public string id { get; set; } = null!;
+    public Guid artist_uuid { get; set; }
+    public string venue_id { get; set; } = null!;
+    public int artist_show_count { get; set; }
+
+    // Relationship reads attach the already-resolved venue from the caller's snapshot.
+    public CatalogVenue Venue { get; set; } = null!;
 }
 
 // Aliases retained on merged-away venues are exposed under the surviving identity.

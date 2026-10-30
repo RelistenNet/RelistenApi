@@ -36,7 +36,7 @@ public sealed class CatalogVenuesController(
         );
 
     [HttpGet("artists/{artistId}/venues/{venueId}")]
-    [ProducesResponseType(typeof(ArtistVenueEntryResource), 200)]
+    [ProducesResponseType(typeof(ArtistVenueResource), 200)]
     public Task<IActionResult> ArtistVenue(
         string artistId,
         string venueId,
@@ -55,7 +55,7 @@ public sealed class CatalogVenuesController(
                             venueId,
                             cancellationToken
                         );
-                        return entry is null ? null : V4CatalogProjection.VenueEntry(entry);
+                        return entry is null ? null : V4CatalogProjection.ArtistVenue(entry);
                     }
                 )
         );

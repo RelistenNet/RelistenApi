@@ -9,7 +9,7 @@ namespace Relisten.Catalog;
 
 /// <summary>
 /// Resolves normalized venue identities and their aliases in the caller's snapshot.
-/// Artist approval and show membership belong to the caller, not global venue metadata.
+/// Metadata remains global; its stored show total includes only approved artist scopes.
 /// </summary>
 public sealed class CatalogVenueMetadataReader(ILogger<CatalogVenueMetadataReader> logger)
 {
@@ -31,11 +31,9 @@ public sealed class CatalogVenueMetadataReader(ILogger<CatalogVenueMetadataReade
 
         var paths = await ReadMergePaths(session, requestedIds, cancellationToken);
         var resolved = ResolveVenues(requestedIds, paths);
-        await ReadNames(
-            session,
-            resolved.Values.DistinctBy(venue => venue.id).ToArray(),
-            cancellationToken
-        );
+        var canonicalVenues = resolved.Values.DistinctBy(venue => venue.id).ToArray();
+        await ReadNames(session, canonicalVenues, cancellationToken);
+        await ReadGlobalCounts(session, canonicalVenues, cancellationToken);
         return resolved;
     }
 
@@ -149,4 +147,43 @@ public sealed class CatalogVenueMetadataReader(ILogger<CatalogVenueMetadataReade
     }
 
     private sealed record VenuePath(string RequestedId, CatalogVenue Venue);
+
+    private static async Task ReadGlobalCounts(
+        CatalogReadSession session,
+        IReadOnlyList<CatalogVenue> venues,
+        CancellationToken cancellationToken
+    )
+    {
+        if (venues.Count == 0)
+        {
+            return;
+        }
+
+        // The same venue has one global count everywhere it is embedded. Artist/year
+        // route filters do not narrow it, but the approved-read flag always applies.
+        var counts = await session.Connection.QueryAsync<VenueCount>(
+            session.Command(
+                """
+                SELECT av.venue_id, SUM(av.artist_show_count)::integer show_count
+                FROM norm.artist_venues av JOIN artists a ON a.uuid=av.artist_uuid
+                JOIN features f ON f.artist_id=a.id AND f.norm_catalogue
+                WHERE av.venue_id=ANY(@ids)
+                GROUP BY av.venue_id
+                """,
+                new { ids = venues.Select(venue => venue.id).ToArray() },
+                cancellationToken
+            )
+        );
+        var byVenue = counts.ToDictionary(count => count.venue_id, count => count.show_count);
+        foreach (var venue in venues)
+        {
+            venue.global_show_count = byVenue.GetValueOrDefault(venue.id);
+        }
+    }
+
+    private sealed class VenueCount
+    {
+        public string venue_id { get; set; } = null!;
+        public int show_count { get; set; }
+    }
 }

@@ -7,8 +7,8 @@ namespace Relisten.Api.Models.Api.V4;
 [JsonConverter(typeof(StringEnumConverter))]
 public enum VenueEntryKind
 {
-    [EnumMember(Value = "venue")]
-    Venue,
+    [EnumMember(Value = "artist_venue")]
+    ArtistVenue,
 
     [EnumMember(Value = "imported_venue")]
     ImportedVenue,

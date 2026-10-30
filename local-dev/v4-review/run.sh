@@ -17,6 +17,11 @@ export ASPNETCORE_ENVIRONMENT=Development
 export ASPNETCORE_URLS=http://127.0.0.1:43823
 export PORT=43823
 export DATABASE_URL=postgresql://relisten:local_dev_password@127.0.0.1:15432/relisten_db
+export PGBOUNCER_WRITE_HOST=
+export PGBOUNCER_READ_ONLY_HOST=
 export REDIS_URL=redis://127.0.0.1:16379
 export SENTRY_DSN=
+# Client-only Temporal composition skips Hangfire recurring registration and starts no workers.
+export Ingestion__Engine=Temporal
+export ENABLE_HANGFIRE_SERVER=false
 exec dotnet run --no-build --no-launch-profile --project RelistenApi/RelistenApi.csproj

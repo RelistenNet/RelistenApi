@@ -61,8 +61,8 @@ for name, path in [('year-by-id', '/artists/' + artist_id + '/years/' + year['id
     capture(name, path, 'Browse: ' + name)
 
 entries = json.loads((out / 'artist-venues.json').read_text())
-venue_entry = next(entry for entry in entries if entry['venue'] and entry['venue']['id'] == 'venue_wwrsykhn')
-venue_id = venue_entry['venue']['id']
+venue_entry = next(entry for entry in entries if entry['artist_venue'] and entry['artist_venue']['venue']['id'] == 'venue_wwrsykhn')
+venue_id = venue_entry['artist_venue']['venue']['id']
 capture('venue', '/venues/' + venue_id, 'Global venue: canonical metadata and aliases')
 capture('artist-venue', '/artists/' + artist_id + '/venues/' + venue_id, 'Artist venue: show membership and count')
 venue_shows = capture('artist-venue-shows', '/artists/' + artist_id + '/venues/' + venue_id + '/shows', 'Artist venue shows')
@@ -73,8 +73,20 @@ JOIN norm.show_venues sv ON sv.venue_id=v.id JOIN shows sh ON sh.uuid=sv.show_uu
 JOIN features f ON f.artist_id=sh.artist_id WHERE v.merged_into IS NULL AND f.norm_catalogue
 GROUP BY v.id HAVING count(DISTINCT sh.artist_id)>1 ORDER BY count(*) DESC,v.id LIMIT 1''')
 if shared_id:
-    capture('shared-venue', '/venues/' + shared_id, 'Shared venue: one place across artists')
-    capture('shared-venue-shows', '/venues/' + shared_id + '/shows', 'Shared venue: shows across approved artists')
+    shared_venue = capture('shared-venue', '/venues/' + shared_id, 'Shared venue: one place across artists')
+    shared_shows = capture('shared-venue-shows', '/venues/' + shared_id + '/shows', 'Shared venue: shows across approved artists')
+    assert shared_venue['global_show_count'] == len(shared_shows)
+    shared_artist = next(show['artist_id'] for show in shared_shows if show['artist_id'] == artist_id)
+    shared_relationship = capture('shared-artist-venue', '/artists/' + shared_artist + '/venues/' + shared_id, 'Shared venue: artist count beside global count')
+    shared_artist_shows = capture('shared-artist-venue-shows', '/artists/' + shared_artist + '/venues/' + shared_id + '/shows', 'Shared venue: the artist collection')
+    assert shared_relationship['artist_show_count'] == len(shared_artist_shows)
+    assert shared_relationship['venue'] == shared_venue
+    shared_show = capture('shared-venue-show', '/shows/' + shared_artist_shows[0]['id'], 'Shared venue: a show with the same relationship and counts')
+    assert shared_show['artist_venue'] == shared_relationship
+    if shared_show['year_id']:
+        shared_year = capture('shared-venue-year', '/artists/' + shared_artist + '/years/' + shared_show['year_id'], 'Shared venue: year summaries keep the full artist and global counts')
+        shared_year_shows = [show for show in shared_year['shows'] if show['artist_venue'] and show['artist_venue']['venue']['id'] == shared_id]
+        assert shared_year_shows and all(show['artist_venue'] == shared_relationship for show in shared_year_shows)
 imported_id = next(show['imported_venue']['id'] for show in venue_shows if show['imported_venue'])
 capture('imported-venue', '/artists/' + artist_id + '/imported-venues/' + imported_id, 'Imported venue: original observations and exact show scope')
 for name, raw in samples.items():

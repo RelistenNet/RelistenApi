@@ -26,22 +26,36 @@ public sealed partial class TestV4CatalogHttp
     {
         var entries = (await GetJson(BrowseArtistPath + "/venues")).AsArray();
         entries.Should().HaveCount(2);
-        var canonical = entries.Single(item => item!["kind"]!.GetValue<string>() == "venue")!;
-        canonical["show_count"]!.GetValue<int>().Should().Be(1);
-        canonical["venue"]!["id"]!.GetValue<string>().Should().Be("venue_00000001");
+        var canonical = entries.Single(item =>
+            item!["kind"]!.GetValue<string>() == "artist_venue"
+        )!;
+        canonical["artist_venue"]!["artist_show_count"]!.GetValue<int>().Should().Be(1);
+        canonical["artist_venue"]!["venue"]!["id"]!
+            .GetValue<string>()
+            .Should()
+            .Be("venue_00000001");
         canonical["imported_venue"].Should().BeNull();
+        canonical["fallback_show_count"].Should().BeNull();
         var imported = entries.Single(item =>
             item!["kind"]!.GetValue<string>() == "imported_venue"
         )!;
-        imported["show_count"]!.GetValue<int>().Should().Be(1);
+        imported["fallback_show_count"]!.GetValue<int>().Should().Be(1);
         imported["imported_venue"]!["id"]!
             .GetValue<string>()
             .Should()
             .Be(CatalogId("imported_venue", 74));
-        imported["venue"].Should().BeNull();
+        imported["artist_venue"].Should().BeNull();
+        imported["imported_venue"]!.AsObject().ContainsKey("show_count").Should().BeFalse();
+        var importedDetail = await GetJson(ImportedVenuePath(14, 74));
+        importedDetail["show_count"]!.GetValue<int>().Should().Be(2);
+        var normalizedShow = await GetJson(ShowPath(4));
+        JsonNode
+            .DeepEquals(imported["imported_venue"], normalizedShow["imported_venue"])
+            .Should()
+            .BeTrue();
 
         var detail = await GetJson(BrowseArtistPath + "/venues/venue_00000001");
-        JsonNode.DeepEquals(canonical, detail).Should().BeTrue();
+        JsonNode.DeepEquals(canonical["artist_venue"], detail).Should().BeTrue();
         var global = await GetJson(CanonicalVenuePath);
         JsonNode.DeepEquals(global, detail["venue"]).Should().BeTrue();
         var shows = (await GetJson(BrowseArtistPath + "/venues/venue_00000001/shows")).AsArray();
@@ -50,13 +64,14 @@ public sealed partial class TestV4CatalogHttp
             .GetValue<string>()
             .Should()
             .Be("Imported Civic Center");
-        JsonNode.DeepEquals(global, shows[0]!["venue"]).Should().BeTrue();
+        JsonNode.DeepEquals(global, shows[0]!["artist_venue"]!["venue"]).Should().BeTrue();
 
         var document = await GetJson("/api-docs/v4/swagger.json");
-        AssertSchemaFields(document, "ArtistVenueEntryResource", detail);
+        AssertSchemaFields(document, "ArtistVenueEntryResource", canonical);
+        AssertSchemaFields(document, "ArtistVenueResource", detail);
         EnumValues(document, "ArtistVenueEntryResource", "kind")
             .Should()
-            .BeEquivalentTo("venue", "imported_venue");
+            .BeEquivalentTo("artist_venue", "imported_venue");
     }
 
     [TestCase(11)]
@@ -68,8 +83,8 @@ public sealed partial class TestV4CatalogHttp
         var entries = (await GetJson(ArtistPath(artistSuffix) + "/venues")).AsArray();
         entries.Should().ContainSingle();
         entries[0]!["kind"]!.GetValue<string>().Should().Be("imported_venue");
-        entries[0]!["venue"].Should().BeNull();
-        entries[0]!["show_count"]!.GetValue<int>().Should().Be(1);
+        entries[0]!["artist_venue"].Should().BeNull();
+        entries[0]!["fallback_show_count"]!.GetValue<int>().Should().Be(1);
         var imported = entries[0]!["imported_venue"]!;
         imported["name"]!.GetValue<string>().Should().Be("Imported Civic Center");
         imported["artist_id"]!.GetValue<string>().Should().Be(CatalogId("artist", artistSuffix));
@@ -121,7 +136,7 @@ public sealed partial class TestV4CatalogHttp
             var entries = (await GetJson(BrowseArtistPath + "/venues")).AsArray();
             entries.Should().ContainSingle();
             entries[0]!["kind"]!.GetValue<string>().Should().Be("imported_venue");
-            entries[0]!["show_count"]!.GetValue<int>().Should().Be(2);
+            entries[0]!["fallback_show_count"]!.GetValue<int>().Should().Be(2);
         }
         finally
         {
@@ -167,12 +182,14 @@ public sealed partial class TestV4CatalogHttp
                 .Select(show => show!["id"]!.GetValue<string>())
                 .Should()
                 .BeEquivalentTo(ShowId(4), ShowId(10));
-            shows.Single(show => show!["id"]!.GetValue<string>() == ShowId(4))!["venue"]!["id"]!
+            shows.Single(show => show!["id"]!.GetValue<string>() == ShowId(4))!["artist_venue"]![
+                "venue"
+            ]!["id"]!
                 .GetValue<string>()
                 .Should()
                 .Be("venue_00000001");
             shows
-                .Single(show => show!["id"]!.GetValue<string>() == ShowId(10))!["venue"]
+                .Single(show => show!["id"]!.GetValue<string>() == ShowId(10))!["artist_venue"]
                 .Should()
                 .BeNull();
             using var foreign = await http.GetAsync(ImportedVenuePath(13, 74));
@@ -220,7 +237,7 @@ public sealed partial class TestV4CatalogHttp
             JsonNode.DeepEquals(venue, entry["venue"]).Should().BeTrue();
             (await GetJson(CanonicalVenuePath + "/shows"))
                 .AsArray()
-                .Select(show => show!["venue"]!["id"]!.GetValue<string>())
+                .Select(show => show!["artist_venue"]!["venue"]!["id"]!.GetValue<string>())
                 .Should()
                 .OnlyContain(id => id == "venue_00000002");
         }
@@ -273,9 +290,9 @@ public sealed partial class TestV4CatalogHttp
             var entries = (await GetJson(BrowseArtistPath + "/venues")).AsArray();
             entries.Should().ContainSingle();
             entries[0]!["kind"]!.GetValue<string>().Should().Be("imported_venue");
-            entries[0]!["show_count"]!.GetValue<int>().Should().Be(2);
+            entries[0]!["fallback_show_count"]!.GetValue<int>().Should().Be(2);
             var show = await GetJson(ShowPath(4));
-            show["venue"].Should().BeNull();
+            show["artist_venue"].Should().BeNull();
             show["imported_venue"]!["name"]!
                 .GetValue<string>()
                 .Should()
@@ -336,9 +353,9 @@ public sealed partial class TestV4CatalogHttp
             response.Headers.ETag!.ToString().Should().NotBe(etag);
             var entries = JsonNode.Parse(await response.Content.ReadAsStringAsync())!.AsArray();
             entries.Should().ContainSingle();
-            entries[0]!["show_count"]!.GetValue<int>().Should().Be(2);
+            entries[0]!["artist_venue"]!["artist_show_count"]!.GetValue<int>().Should().Be(2);
             var detail = await GetJson(BrowseArtistPath + "/venues/venue_00000001");
-            JsonNode.DeepEquals(entries[0], detail).Should().BeTrue();
+            JsonNode.DeepEquals(entries[0]!["artist_venue"], detail).Should().BeTrue();
         }
         finally
         {
@@ -420,7 +437,9 @@ public sealed partial class TestV4CatalogHttp
                 .Should()
                 .Be("Sibling Track");
             var venueGroups = (await GetJson(BrowseArtistPath + "/venues")).AsArray();
-            venueGroups.Single(item => item!["kind"]!.GetValue<string>() == "venue")!["show_count"]!
+            venueGroups.Single(item => item!["kind"]!.GetValue<string>() == "artist_venue")![
+                "artist_venue"
+            ]!["artist_show_count"]!
                 .GetValue<int>()
                 .Should()
                 .Be(1);
