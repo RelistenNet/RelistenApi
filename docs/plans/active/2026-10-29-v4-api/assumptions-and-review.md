@@ -256,3 +256,27 @@ Mobile already holds the artist catalog; returned `artist_id` references use
 those cached rows. Detail responses need no repeated artist records or artist
 hydration queries. Refresh the artist catalog separately.
 This update changes the API contract and plan; it does not yet migrate mobile.
+
+
+## Offline catalog checkpoint, 2026-10-30
+
+The new artist snapshot composes the existing collection readers inside one read
+session. It includes imported fallback for raw/partly normalized artists and
+approved retained zero-count artist-venue rows. Shared venue/song arrays are entity
+patches; visible browse entries own artist memberships. The snapshot deliberately
+omits recording hierarchies, so a normalization-only track edit outside represented
+catalog fields belongs to recording validators rather than the artist ETag.
+
+Saved-reference resolution covers typed identities and fixed legacy schemes in a
+bounded batch. It returns ordered per-input results plus deduplicated shallow
+entity patches, without changing collection or personal membership. Imported IDs
+keep their kind; optional normalized mapping is omitted because browse/snapshot
+resources already expose approved overlays. Source sets resolve by reference but
+remain embedded for full playback detail. The resolver POST is no-store.
+
+Migration 17 reserves canonical public IDs in two AFTER INSERT/DELETE triggers.
+This preserves existing upsert behavior and acquires canonical row then reservation
+in both paths; a collision rolls back before commit. Known historical deletions
+can be retired from retained audit evidence. Unlogged/pruned deletions and former
+UUIDs with no surviving row cannot be inferred as tombstones. An explicit validated
+human restore can reactivate a reservation. Production rollout remains unverified.
