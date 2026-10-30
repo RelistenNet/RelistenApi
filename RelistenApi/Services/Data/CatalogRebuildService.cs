@@ -1,7 +1,12 @@
+using System;
+using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
+using Microsoft.Extensions.Logging;
+using Npgsql;
 using Relisten.Api.Models;
 using Relisten.Controllers;
+using Relisten.Normalization.Songs;
 
 namespace Relisten.Data;
 
@@ -9,7 +14,12 @@ namespace Relisten.Data;
 /// Rebuilds derived show/year data and invalidates the artist cache. These SQL
 /// operations own their transactions and must not run inside an item transaction.
 /// </summary>
-public sealed class CatalogRebuildService(DbService db, RedisService redisService)
+public sealed class CatalogRebuildService(
+    DbService db,
+    RedisService redisService,
+    SongCounts songCounts,
+    ILogger<CatalogRebuildService> logger
+)
 {
     private const string IncrementalShowVenueRefreshSql =
         @"
@@ -228,9 +238,32 @@ COMMIT;
         );
     }
 
-    /// <summary>Removes the cached artist response after show and year rebuilds succeed.</summary>
-    public Task InvalidateArtistCache(Artist artist) =>
-        redisService.db.KeyDeleteAsync(ArtistsController.FullArtistCacheKey(artist));
+    /// <summary>Invalidates the artist cache and refreshes song counts after committed rebuilds.</summary>
+    public async Task InvalidateArtistCache(
+        Artist artist,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await redisService.db.KeyDeleteAsync(ArtistsController.FullArtistCacheKey(artist));
+
+        try
+        {
+            // Both legacy importers and Temporal rebuilds finish through this operation.
+            // Counts commit separately; their failure must not undo completed source work.
+            await songCounts.RefreshArtistsAsync([artist.uuid], cancellationToken);
+        }
+        catch (Exception exception)
+            when (!cancellationToken.IsCancellationRequested
+                && exception is NpgsqlException or TimeoutException
+            )
+        {
+            logger.LogWarning(
+                exception,
+                "Song count refresh failed after rebuilding {Artist}; rerun the refresh explicitly",
+                artist.uuid
+            );
+        }
+    }
 
     /// <summary>Refreshes shows, recording aggregates, and derived counts for one artist.</summary>
     public async Task RebuildShows(Artist artist)
