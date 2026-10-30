@@ -103,9 +103,14 @@ filters. The artist count likewise covers all the artist's shows at that place.
 
 Artist venue lists discriminate `artist_venue` and `imported_venue` targets.
 Canonical children match show relationships and direct artist venue detail.
-Imported targets keep base metadata; the entry's `fallback_show_count` counts
-only its unmatched subset and must not overwrite a raw row's full count. Missing,
-disabled, unmatched, or unmaterialized relationships preserve imported fallback.
+Imported targets include their full `show_count`, matching imported detail.
+Embedded imported venues in show/source responses include the same full count;
+a source-only venue observation can have a count of zero.
+Missing, disabled, unmatched, or unmaterialized relationships keep imported
+entries visible. During partial normalization, an imported entry's full show
+collection can overlap canonical entries. Clients use `/artists/{id}/venues`
+for normal browsing and follow each entry's `kind`; `/imported-venues` is the
+separate full imported inventory.
 
 The local full refresh was independently verified against real assignments:
 5,397 pairs across 12 artists and 13,418 show memberships, with zero mismatches.

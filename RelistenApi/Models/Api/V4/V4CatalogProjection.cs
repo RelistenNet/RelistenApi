@@ -143,8 +143,7 @@ public static class V4CatalogProjection
                 ? VenueEntryKind.ArtistVenue
                 : VenueEntryKind.ImportedVenue,
             value.ArtistVenue is { } artistVenue ? ArtistVenue(artistVenue) : null,
-            value.ImportedVenue is { } imported ? ImportedVenue(imported) : null,
-            value.FallbackShowCount
+            value.ImportedVenue is { } imported ? ImportedVenue(imported) : null
         );
 
     public static ArtistVenueResource ArtistVenue(CatalogArtistVenue value) =>
@@ -161,20 +160,11 @@ public static class V4CatalogProjection
     public static ImportedVenueResource ImportedVenue(CatalogImportedVenue value) =>
         ProjectImportedVenue<ImportedVenueResource>(value);
 
-    public static ImportedVenueWithShowCountResource ImportedVenueWithShowCount(
-        CatalogImportedVenue value
-    ) =>
-        ProjectImportedVenue<ImportedVenueWithShowCountResource>(value) with
-        {
-            ShowCount = value.show_count,
-        };
-
     public static ImportedVenueWithShowsResource ImportedVenueWithShows(
         CatalogImportedVenueDetail value
     ) =>
         ProjectImportedVenue<ImportedVenueWithShowsResource>(value.Venue) with
         {
-            ShowCount = value.Shows.Count,
             Shows = value.Shows.Select(ShowSummary).ToArray(),
         };
 
@@ -184,6 +174,7 @@ public static class V4CatalogProjection
         {
             Id = new(value.uuid),
             ArtistId = new(value.artist_uuid),
+            ShowCount = value.show_count,
             Latitude = value.latitude,
             Longitude = value.longitude,
             Name = value.name,

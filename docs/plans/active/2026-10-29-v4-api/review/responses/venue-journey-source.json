@@ -23,6 +23,7 @@
   "created_at": "2026-08-20T09:59:34.489655Z",
   "updated_at": "2004-03-31T10:57:57Z",
   "imported_venue": {
+    "show_count": 0,
     "id": "imported_venue_2r6gyq9br30dq8fn8taxf4n08k",
     "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
     "latitude": null,

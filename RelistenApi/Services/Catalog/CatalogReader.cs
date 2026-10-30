@@ -69,7 +69,7 @@ public sealed class CatalogReader(
             source.ImportedVenue =
                 await session.Connection.QuerySingleOrDefaultAsync<CatalogImportedVenue>(
                     session.Command(
-                        "SELECT v.*,a.uuid artist_uuid FROM venues v JOIN artists a ON a.id=v.artist_id WHERE v.id=@venueId",
+                        CatalogImportedVenueMetadataReader.Select + " WHERE v.id=@venueId",
                         new { venueId },
                         cancellationToken
                     )

@@ -12,6 +12,7 @@ namespace Relisten.Catalog;
 /// The caller owns the snapshot. This reader never loads sources or tracks itself.
 /// </summary>
 public sealed class CatalogShowMetadataReader(
+    CatalogImportedVenueMetadataReader importedVenueMetadata,
     CatalogVenueMetadataReader venueMetadata,
     CatalogArtistVenueMetadataReader artistVenueMetadata
 )
@@ -35,13 +36,7 @@ public sealed class CatalogShowMetadataReader(
             .Distinct()
             .ToArray();
         var venues = (
-            await session.Connection.QueryAsync<CatalogImportedVenue>(
-                session.Command(
-                    "SELECT v.*,a.uuid artist_uuid FROM venues v JOIN artists a ON a.id=v.artist_id WHERE v.id=ANY(@venueIds)",
-                    new { venueIds },
-                    cancellationToken
-                )
-            )
+            await importedVenueMetadata.Read(session, venueIds, cancellationToken)
         ).ToDictionary(x => x.id);
         var yearUuids = shows
             .Where(x => x.year_uuid.HasValue)

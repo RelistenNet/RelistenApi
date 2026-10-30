@@ -126,7 +126,10 @@ GET {{base}}/api/v4/sources/source_0ey8bt709t1kgkmtpmgvq85art
 ### Venue journey: open one playable track
 GET {{base}}/api/v4/source-tracks/track_11be6feqht0xd6q911jmx31nqs
 
-### Unmatched venue fallback in an approved artist
+### Full imported venue inventory, including normalized and unused rows
+GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/imported-venues
+
+### Imported browse target: complete collection including any normalized shows
 GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/imported-venues/imported_venue_78331pxdqjdg434rrgm1d2pnrj
 
 ### Unnormalized artist: imported venue browsing

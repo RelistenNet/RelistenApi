@@ -16,6 +16,7 @@
       "created_at": "2025-08-02T08:40:54.845257Z",
       "updated_at": "2017-09-10T04:26:48Z",
       "imported_venue": {
+        "show_count": 1,
         "id": "imported_venue_3t9p04pkdc9cnxd48njv0xtzcz",
         "artist_id": "artist_26t53xjyrjg4jr1gw929zz2hm6",
         "latitude": null,

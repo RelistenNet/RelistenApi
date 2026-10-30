@@ -69,10 +69,14 @@ an earlier design proposal.
   `global_show_count` sums stored counts for approved-read artists and stays the
   same across artist/year filters. Imported fallback remains separate.
 - Canonical artist venue list entries contain `artist_venue`; canonical detail
-  returns that resource directly. Imported list targets keep base venue metadata;
-  `fallback_show_count` belongs to the query entry and can be smaller than the raw
-  venue's full count. GETs read stored artist counts and sum them for the global
-  value; they do not recount source shows.
+  returns that resource directly. Every imported venue includes its full
+  `show_count`, including embedded show/source venues and imported detail.
+  Include an imported entry when needed to reach unmatched shows; its full
+  collection can overlap canonical
+  entries during partial normalization. Clients always browse `/venues` and
+  follow each entry's `kind`; they do not select a list from artist feature flags.
+  Canonical counts come from stored artist relationships. Imported counts use
+  the full show-level assignments to each imported venue.
 - “Recently updated” retains its imported recording-update meaning. A normalized
   correction still refreshes metadata; it does not move the show into that list.
 - Global venue favorites do not implicitly favorite their shows or add all those
@@ -380,6 +384,11 @@ by accepting this plan.
   `venue.global_show_count`; update venue routes for end-to-end review. Reuse the
   same relationship resource and keep imported labels/fallback. Read stored counts
   with public approval filtering; do not refresh counts during API reads.
+
+- 2026-10-30, Alec: put the full `show_count` on imported venues and remove the
+  separate fallback subset count. Imported browse entries open the same full
+  collection as imported detail, even when it overlaps canonical entries during
+  partial normalization. Keep count meaning consistent for mobile persistence.
 
 ## Outcomes and retrospective
 
