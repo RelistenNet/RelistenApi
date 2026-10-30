@@ -21,12 +21,12 @@ namespace Relisten.Services.Popularity
     public partial class PopularityService
     {
         internal const int DefaultStaleAfterSeconds = 60 * 60;
-        private const int ArtistTrendingPlays48hFloor = 130;
-        private const int ArtistTrendingPlays30dFloor = 1808;
-        private const int ShowTrendingPlays48hFloor = 9;
-        private const int ShowTrendingPlays30dFloor = 7;
-        private const int YearTrendingPlays48hFloor = 12;
-        private const int YearTrendingPlays30dFloor = 67;
+        internal const int ArtistTrendingPlays48hFloor = 130;
+        internal const int ArtistTrendingPlays30dFloor = 1808;
+        internal const int ShowTrendingPlays48hFloor = 9;
+        internal const int ShowTrendingPlays30dFloor = 7;
+        internal const int YearTrendingPlays48hFloor = 12;
+        internal const int YearTrendingPlays30dFloor = 67;
 
         private readonly DbService db;
         private readonly PopularityStore store;
@@ -437,7 +437,7 @@ namespace Relisten.Services.Popularity
             }
         }
 
-        private async Task<
+        internal async Task<
             Dictionary<Guid, CachedShowPopularity>
         > GetShowPopularityCacheMapForArtist(Guid artistUuid, bool allowStale = true)
         {

@@ -54,6 +54,14 @@ namespace Relisten.Services.Popularity
         }
 
         [Queue("default")]
+        public Task RefreshGlobalShowPopularityMap() =>
+            popularityService.RefreshGlobalShowPopularityMap();
+
+        [Queue("default")]
+        public Task RefreshGlobalYearPopularityMap() =>
+            popularityService.RefreshGlobalYearPopularityMap();
+
+        [Queue("default")]
         public Task RefreshPopularArtists(int limit)
         {
             return popularityService.RefreshPopularArtists(limit);

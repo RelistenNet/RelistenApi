@@ -18,7 +18,7 @@ internal sealed class CatalogQueryParameterSchema : IParameterFilter
         )
         {
             schema.Enum = allowed
-                .Values.Select(value => (JsonNode)JsonValue.Create(value.ToString())!)
+                .Values.Select(value => (JsonNode)JsonValue.Create(value?.ToString())!)
                 .ToList();
         }
     }
