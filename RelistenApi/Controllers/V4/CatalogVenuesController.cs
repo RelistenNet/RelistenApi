@@ -36,7 +36,7 @@ public sealed class CatalogVenuesController(
         );
 
     [HttpGet("artists/{artistId}/venues/{venueId}")]
-    [ProducesResponseType(typeof(ArtistVenueResource), 200)]
+    [ProducesResponseType(typeof(ArtistVenueWithShowsResource), 200)]
     public Task<IActionResult> ArtistVenue(
         string artistId,
         string venueId,
@@ -55,33 +55,38 @@ public sealed class CatalogVenuesController(
                             venueId,
                             cancellationToken
                         );
-                        return entry is null ? null : V4CatalogProjection.ArtistVenue(entry);
+                        return entry is null
+                            ? null
+                            : V4CatalogProjection.ArtistVenueWithShows(entry);
                     }
                 )
         );
 
-    [HttpGet("artists/{artistId}/venues/{venueId}/shows")]
-    [ProducesResponseType(typeof(ShowSummaryResource[]), 200)]
-    public Task<IActionResult> ArtistVenueShows(
-        string artistId,
-        string venueId,
+    [HttpGet("artist-venues/{artistVenueId}")]
+    [ProducesResponseType(typeof(ArtistVenueWithShowsResource), 200)]
+    public Task<IActionResult> ArtistVenueById(
+        string artistVenueId,
         CancellationToken cancellationToken
-    ) =>
-        ReadVenue(
-            venueId,
-            () =>
-                Read(
-                    artistId,
-                    ArtistId.Prefix,
-                    async artist =>
-                        (await reader.ReadVenueShows(venueId, artist, cancellationToken))
-                            ?.Select(V4CatalogProjection.ShowSummary)
-                            .ToArray()
-                )
-        );
+    )
+    {
+        try
+        {
+            ArtistVenueId.Parse(artistVenueId);
+        }
+        catch (FormatException)
+        {
+            return Task.FromResult<IActionResult>(InvalidId(ArtistVenueId.Prefix));
+        }
+
+        return Execute(async () =>
+        {
+            var detail = await reader.ReadArtistVenue(artistVenueId, cancellationToken);
+            return detail is null ? null : V4CatalogProjection.ArtistVenueWithShows(detail);
+        });
+    }
 
     [HttpGet("venues/{venueId}")]
-    [ProducesResponseType(typeof(VenueResource), 200)]
+    [ProducesResponseType(typeof(VenueWithShowsResource), 200)]
     public Task<IActionResult> Venue(string venueId, CancellationToken cancellationToken) =>
         ReadVenue(
             venueId,
@@ -89,38 +94,9 @@ public sealed class CatalogVenuesController(
                 Execute(async () =>
                 {
                     var venue = await reader.ReadVenue(venueId, cancellationToken);
-                    return venue is null ? null : V4CatalogProjection.Venue(venue);
+                    return venue is null ? null : V4CatalogProjection.VenueWithShows(venue);
                 })
         );
-
-    [HttpGet("venues/{venueId}/shows")]
-    [ProducesResponseType(typeof(ShowSummaryResource[]), 200)]
-    public Task<IActionResult> VenueShows(
-        string venueId,
-        [FromQuery(Name = "artist_id")] string? artistId,
-        CancellationToken cancellationToken
-    )
-    {
-        Guid? artist = null;
-        // MVC binds an empty value as null; an invalid filter must not broaden the result.
-        if (Request.Query.ContainsKey("artist_id"))
-        {
-            if (!ArtistId.TryParse(artistId, out var parsed))
-            {
-                return Task.FromResult<IActionResult>(InvalidId(ArtistId.Prefix));
-            }
-            artist = parsed.Value;
-        }
-        return ReadVenue(
-            venueId,
-            () =>
-                Execute(async () =>
-                    (await reader.ReadVenueShows(venueId, artist, cancellationToken))
-                        ?.Select(V4CatalogProjection.ShowSummary)
-                        .ToArray()
-                )
-        );
-    }
 
     [HttpGet("artists/{artistId}/imported-venues")]
     [ProducesResponseType(typeof(ImportedVenueResource[]), 200)]
@@ -137,28 +113,21 @@ public sealed class CatalogVenuesController(
                     .ToArray()
         );
 
-    [HttpGet("artists/{artistId}/imported-venues/{importedVenueId}")]
+    [HttpGet("imported-venues/{importedVenueId}")]
     [ProducesResponseType(typeof(ImportedVenueWithShowsResource), 200)]
     public Task<IActionResult> ImportedVenue(
-        string artistId,
         string importedVenueId,
         CancellationToken cancellationToken
-    )
-    {
-        if (!ImportedVenueId.TryParse(importedVenueId, out var venue))
-        {
-            return Task.FromResult<IActionResult>(InvalidId(ImportedVenueId.Prefix));
-        }
-        return Read(
-            artistId,
-            ArtistId.Prefix,
-            async artist =>
+    ) =>
+        Read(
+            importedVenueId,
+            ImportedVenueId.Prefix,
+            async venue =>
             {
-                var detail = await reader.ReadImportedVenue(artist, venue.Value, cancellationToken);
+                var detail = await reader.ReadImportedVenue(venue, cancellationToken);
                 return detail is null ? null : V4CatalogProjection.ImportedVenueWithShows(detail);
             }
         );
-    }
 
     // Normalization's short IDs have their own codec; UUID-backed kinds use the base reader.
     private Task<IActionResult> ReadVenue(string id, Func<Task<IActionResult>> read)

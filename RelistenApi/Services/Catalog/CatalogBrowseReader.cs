@@ -55,6 +55,38 @@ public sealed class CatalogBrowseReader(DbService db, CatalogShowMetadataReader 
         return artist;
     }
 
+    /// <summary>Hydrates detail owners and show artists within the caller's catalog snapshot.</summary>
+    public static async Task<IReadOnlyList<CatalogArtist>> ReadRelatedArtists(
+        CatalogReadSession session,
+        IEnumerable<Guid> artistUuids,
+        CancellationToken cancellationToken
+    )
+    {
+        var uuids = artistUuids.Distinct().ToArray();
+        if (uuids.Length == 0)
+        {
+            return [];
+        }
+
+        // Count only these artists; global venue details must not aggregate the whole catalog.
+        var artists = (
+            await session.Connection.QueryAsync<CatalogArtist>(
+                session.Command(
+                    """
+                    SELECT a.*,
+                        (SELECT count(*)::int FROM shows s WHERE s.artist_id=a.id) show_count,
+                        (SELECT count(*)::int FROM sources src WHERE src.artist_id=a.id) source_count
+                    FROM artists a WHERE a.uuid=ANY(@uuids) ORDER BY a.uuid
+                    """,
+                    new { uuids },
+                    cancellationToken
+                )
+            )
+        ).ToArray();
+        await ReadArtistMetadata(session, artists, cancellationToken);
+        return artists;
+    }
+
     /// <summary>Null means an unknown artist; an empty list means the artist has no years.</summary>
     public async Task<IReadOnlyList<CatalogYear>?> ReadYears(
         Guid artistUuid,

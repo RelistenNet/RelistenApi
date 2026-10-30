@@ -59,33 +59,52 @@ public sealed class CatalogSongReader(
             .ToArray();
     }
 
-    public async Task<CatalogSongDetail?> ReadSong(
+    /// <summary>Metadata and complete recording-backed show membership share one snapshot.</summary>
+    public async Task<CatalogSongWithShows?> ReadSong(
         string songId,
         CancellationToken cancellationToken = default
     )
     {
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
-        var song = await ReadApprovedSong(session, songId, cancellationToken);
+        var song = await ReadApprovedSongDetail(session, songId, cancellationToken);
         if (song is null)
         {
             return null;
         }
-        return (
-            await ReadSongDetails(session, song.artist_uuid, [song.id], cancellationToken)
-        ).Single();
+
+        var membership = await matches.ReadMatches(
+            session,
+            song.artist_uuid,
+            song.id,
+            cancellationToken
+        );
+        var shows = await ReadShows(
+            session,
+            CatalogShowMetadataReader.ShowSelect + " WHERE s.uuid=ANY(@uuids)",
+            new { uuids = membership.Select(row => row.show_uuid).Distinct().ToArray() },
+            cancellationToken
+        );
+        var artists = await CatalogBrowseReader.ReadRelatedArtists(
+            session,
+            shows.Select(show => show.artist_uuid).Append(song.artist_uuid),
+            cancellationToken
+        );
+        return new(song, shows, artists);
     }
 
-    public async Task<IReadOnlyList<CatalogSongTrackMatch>?> ReadTracks(
+    /// <summary>Large file-match collections have their own snapshot and owning song metadata.</summary>
+    public async Task<CatalogSongWithTracks?> ReadTracks(
         string songId,
         CancellationToken cancellationToken = default
     )
     {
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
-        var song = await ReadApprovedSong(session, songId, cancellationToken);
+        var song = await ReadApprovedSongDetail(session, songId, cancellationToken);
         if (song is null)
         {
             return null;
         }
+
         var membership = await matches.ReadMatches(
             session,
             song.artist_uuid,
@@ -104,37 +123,18 @@ public sealed class CatalogSongReader(
         ).ToArray();
         await trackNormalization.Apply(session, tracks, true, cancellationToken);
         var byUuid = tracks.ToDictionary(track => track.uuid);
-        return membership
+        var trackMatches = membership
             .Select(row => new CatalogSongTrackMatch(
                 byUuid[row.track_uuid],
                 row.matching_part_ordinals
             ))
             .ToArray();
-    }
-
-    public async Task<IReadOnlyList<CatalogShow>?> ReadShows(
-        string songId,
-        CancellationToken cancellationToken = default
-    )
-    {
-        await using var session = await CatalogReadSession.Open(db, cancellationToken);
-        var song = await ReadApprovedSong(session, songId, cancellationToken);
-        if (song is null)
-        {
-            return null;
-        }
-        var membership = await matches.ReadMatches(
+        var artists = await CatalogBrowseReader.ReadRelatedArtists(
             session,
-            song.artist_uuid,
-            song.id,
+            tracks.Select(track => track.artist_uuid).Append(song.artist_uuid),
             cancellationToken
         );
-        return await ReadShows(
-            session,
-            CatalogShowMetadataReader.ShowSelect + " WHERE s.uuid=ANY(@uuids)",
-            new { uuids = membership.Select(row => row.show_uuid).Distinct().ToArray() },
-            cancellationToken
-        );
+        return new(song, trackMatches, artists);
     }
 
     public async Task<IReadOnlyList<CatalogImportedSong>?> ReadImportedSongs(
@@ -150,7 +150,6 @@ public sealed class CatalogSongReader(
     }
 
     public async Task<CatalogImportedSongDetail?> ReadImportedSong(
-        Guid artistUuid,
         Guid songUuid,
         CancellationToken cancellationToken = default
     )
@@ -158,8 +157,8 @@ public sealed class CatalogSongReader(
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
         var song = await session.Connection.QuerySingleOrDefaultAsync<CatalogImportedSong>(
             session.Command(
-                ImportedSongSelect + " WHERE a.uuid=@artistUuid AND s.uuid=@songUuid",
-                new { artistUuid, songUuid },
+                ImportedSongSelect + " WHERE s.uuid=@songUuid",
+                new { songUuid },
                 cancellationToken
             )
         );
@@ -177,10 +176,31 @@ public sealed class CatalogSongReader(
                      WHERE p.played_setlist_song_id=@songId AND ss.artist_id=s.artist_id AND ss.date=s.date
                  )
                 """,
-            new { artistUuid, songId = song.id },
+            new { artistUuid = song.artist_uuid, songId = song.id },
             cancellationToken
         );
-        return new(song, shows);
+        var artists = await CatalogBrowseReader.ReadRelatedArtists(
+            session,
+            shows.Select(show => show.artist_uuid).Append(song.artist_uuid),
+            cancellationToken
+        );
+        return new(song, shows, artists);
+    }
+
+    private async Task<CatalogSongDetail?> ReadApprovedSongDetail(
+        CatalogReadSession session,
+        string songId,
+        CancellationToken cancellationToken
+    )
+    {
+        var song = await ReadApprovedSong(session, songId, cancellationToken);
+        if (song is null)
+        {
+            return null;
+        }
+        return (
+            await ReadSongDetails(session, song.artist_uuid, [song.id], cancellationToken)
+        ).Single();
     }
 
     private async Task<HashSet<Guid>> ReadMappedImportedSongs(

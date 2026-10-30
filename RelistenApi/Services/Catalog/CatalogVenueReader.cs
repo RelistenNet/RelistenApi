@@ -148,23 +148,61 @@ public sealed class CatalogVenueReader(
             .ToArray();
     }
 
-    /// <summary>Reads the stored approved artist/place identity, including retained zero-count pairs.</summary>
-    public async Task<CatalogArtistVenue?> ReadArtistVenue(
+    /// <summary>Reads an approved artist/place collection by its stable relationship ID.</summary>
+    public async Task<CatalogArtistVenueDetail?> ReadArtistVenue(
+        string artistVenueId,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await using var session = await CatalogReadSession.Open(db, cancellationToken);
+        var stored = await session.Connection.QuerySingleOrDefaultAsync<CatalogArtistVenue>(
+            session.Command(
+                """
+                SELECT av.artist_uuid,av.venue_id
+                FROM norm.artist_venues av JOIN artists a ON a.uuid=av.artist_uuid
+                JOIN features f ON f.artist_id=a.id AND f.norm_catalogue
+                WHERE av.id=@artistVenueId
+                """,
+                new { artistVenueId },
+                cancellationToken
+            )
+        );
+        return stored is null
+            ? null
+            : await ReadArtistVenue(
+                session,
+                stored.artist_uuid,
+                stored.venue_id,
+                cancellationToken
+            );
+    }
+
+    /// <summary>The artist/place lookup resolves to the same resource as its relationship ID.</summary>
+    public async Task<CatalogArtistVenueDetail?> ReadArtistVenue(
         Guid artistUuid,
         string venueId,
         CancellationToken cancellationToken = default
     )
     {
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
-        if (await ReadArtistId(session, artistUuid, cancellationToken) is null)
-        {
-            return null;
-        }
+        return await ReadArtistVenue(session, artistUuid, venueId, cancellationToken);
+    }
+
+    private async Task<CatalogArtistVenueDetail?> ReadArtistVenue(
+        CatalogReadSession session,
+        Guid artistUuid,
+        string venueId,
+        CancellationToken cancellationToken
+    )
+    {
         var venue = await ReadVenue(session, venueId, cancellationToken);
         if (venue is null)
         {
             return null;
         }
+
+        // A merge resolves to the current canonical pair, never rebinds the old pair ID.
+        // Missing materialized relationships remain missing; reads do not repair counts.
         var relationships = await artistVenueMetadata.Read(
             session,
             [artistUuid],
@@ -172,42 +210,41 @@ public sealed class CatalogVenueReader(
             cancellationToken
         );
         var relationship = relationships.GetValueOrDefault((artistUuid, venue.id));
-        if (relationship is not null)
-        {
-            relationship.Venue = venue;
-        }
-        return relationship;
-    }
-
-    /// <summary>Global venue identity and aliases are independent of artist rollout flags.</summary>
-    public async Task<CatalogVenue?> ReadVenue(
-        string venueId,
-        CancellationToken cancellationToken = default
-    )
-    {
-        await using var session = await CatalogReadSession.Open(db, cancellationToken);
-        return await ReadVenue(session, venueId, cancellationToken);
-    }
-
-    /// <summary>Known parents with no approved assignments return an empty collection.</summary>
-    public async Task<IReadOnlyList<CatalogShow>?> ReadVenueShows(
-        string venueId,
-        Guid? artistUuid = null,
-        CancellationToken cancellationToken = default
-    )
-    {
-        await using var session = await CatalogReadSession.Open(db, cancellationToken);
-        if (
-            artistUuid is { } artist
-            && await ReadArtistId(session, artist, cancellationToken) is null
-        )
+        if (relationship is null)
         {
             return null;
         }
+
+        relationship.Venue = venue;
+        var shows = await ReadVenueShows(session, venue.id, artistUuid, cancellationToken);
+        var artists = await CatalogBrowseReader.ReadRelatedArtists(
+            session,
+            shows.Select(show => show.artist_uuid).Append(artistUuid),
+            cancellationToken
+        );
+        return new(relationship, shows, artists);
+    }
+
+    /// <summary>Global venue identity, aliases, and its complete approved show collection.</summary>
+    public async Task<CatalogVenueDetail?> ReadVenue(
+        string venueId,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await using var session = await CatalogReadSession.Open(db, cancellationToken);
         var venue = await ReadVenue(session, venueId, cancellationToken);
-        return venue is null
-            ? null
-            : await ReadVenueShows(session, venue.id, artistUuid, cancellationToken);
+        if (venue is null)
+        {
+            return null;
+        }
+
+        var shows = await ReadVenueShows(session, venue.id, null, cancellationToken);
+        var artists = await CatalogBrowseReader.ReadRelatedArtists(
+            session,
+            shows.Select(show => show.artist_uuid),
+            cancellationToken
+        );
+        return new(venue, shows, artists);
     }
 
     /// <summary>All artist-owned imported rows, including unused rows with a zero show count.</summary>
@@ -236,9 +273,8 @@ public sealed class CatalogVenueReader(
         ).ToArray();
     }
 
-    /// <summary>Imported venue and its show-level collection; null for missing or foreign rows.</summary>
+    /// <summary>Imported venue and its complete artist-owned show collection.</summary>
     public async Task<CatalogImportedVenueDetail?> ReadImportedVenue(
-        Guid artistUuid,
         Guid venueUuid,
         CancellationToken cancellationToken = default
     )
@@ -246,9 +282,8 @@ public sealed class CatalogVenueReader(
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
         var venue = await session.Connection.QuerySingleOrDefaultAsync<CatalogImportedVenue>(
             session.Command(
-                CatalogImportedVenueMetadataReader.Select
-                    + " WHERE a.uuid=@artistUuid AND v.uuid=@venueUuid",
-                new { artistUuid, venueUuid },
+                CatalogImportedVenueMetadataReader.Select + " WHERE v.uuid=@venueUuid",
+                new { venueUuid },
                 cancellationToken
             )
         );
@@ -260,10 +295,15 @@ public sealed class CatalogVenueReader(
             session,
             CatalogShowMetadataReader.ShowSelect
                 + " WHERE a.uuid=@artistUuid AND s.venue_id=@venueId",
-            new { artistUuid, venueId = venue.id },
+            new { artistUuid = venue.artist_uuid, venueId = venue.id },
             cancellationToken
         );
-        return new(venue, shows);
+        var artists = await CatalogBrowseReader.ReadRelatedArtists(
+            session,
+            shows.Select(show => show.artist_uuid).Append(venue.artist_uuid),
+            cancellationToken
+        );
+        return new(venue, shows, artists);
     }
 
     private async Task<CatalogVenue?> ReadVenue(

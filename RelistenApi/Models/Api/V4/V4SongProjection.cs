@@ -14,6 +14,24 @@ public static partial class V4CatalogProjection
         );
 
     public static SongDetailResource SongDetail(CatalogSongDetail song) =>
+        ProjectSong<SongDetailResource>(song);
+
+    public static SongWithShowsResource SongWithShows(CatalogSongWithShows detail) =>
+        ProjectSong<SongWithShowsResource>(detail.Song) with
+        {
+            Shows = detail.Shows.Select(ShowSummary).ToArray(),
+            Artists = detail.Artists.Select(CatalogBrowseProjection.Artist).ToArray(),
+        };
+
+    public static SongWithTracksResource SongWithTracks(CatalogSongWithTracks detail) =>
+        ProjectSong<SongWithTracksResource>(detail.Song) with
+        {
+            Tracks = detail.Tracks.Select(SongTrackMatch).ToArray(),
+            Artists = detail.Artists.Select(CatalogBrowseProjection.Artist).ToArray(),
+        };
+
+    private static T ProjectSong<T>(CatalogSongDetail song)
+        where T : SongDetailResource, new() =>
         new()
         {
             Id = SongId.Parse(song.id),
@@ -36,6 +54,7 @@ public static partial class V4CatalogProjection
         ProjectImportedSong<ImportedSongWithShowsResource>(detail.Song) with
         {
             Shows = detail.Shows.Select(ShowSummary).ToArray(),
+            Artists = detail.Artists.Select(CatalogBrowseProjection.Artist).ToArray(),
         };
 
     public static SongTrackMatchResource SongTrackMatch(CatalogSongTrackMatch match) =>

@@ -9,7 +9,7 @@ namespace Relisten.Api.Models.Api.V4;
 
 /// <summary>Stable artist/place membership. Its count spans all of the artist's years and recordings.</summary>
 [JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
-public sealed class ArtistVenueResource
+public record ArtistVenueResource
 {
     public ArtistVenueId Id { get; init; }
     public ArtistId ArtistId { get; init; }
@@ -32,4 +32,21 @@ public sealed record ImportedVenueWithShowsResource : ImportedVenueResource
 {
     /// <summary>The complete artist-owned show collection for this imported row.</summary>
     public IReadOnlyList<ShowSummaryResource> Shows { get; init; } = [];
+    public IReadOnlyList<ArtistResource> Artists { get; init; } = [];
+}
+
+/// <summary>A global venue and its complete approved show collection.</summary>
+[JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
+public sealed record VenueWithShowsResource : VenueResource
+{
+    public IReadOnlyList<ShowSummaryResource> Shows { get; init; } = [];
+    public IReadOnlyList<ArtistResource> Artists { get; init; } = [];
+}
+
+/// <summary>An artist/place relationship and its complete approved show collection.</summary>
+[JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
+public sealed record ArtistVenueWithShowsResource : ArtistVenueResource
+{
+    public IReadOnlyList<ShowSummaryResource> Shows { get; init; } = [];
+    public IReadOnlyList<ArtistResource> Artists { get; init; } = [];
 }

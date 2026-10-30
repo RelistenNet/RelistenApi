@@ -35,21 +35,19 @@ public sealed partial class TestV4CatalogHttp
             artistVenue["venue"]!["global_show_count"]!.GetValue<int>().Should().Be(3);
 
             var detail = await GetJson(BrowseArtistPath + "/venues/venue_00000001");
-            JsonNode.DeepEquals(artistVenue, detail).Should().BeTrue();
+            JsonNode.DeepEquals(artistVenue, ResourceMetadata(detail)).Should().BeTrue();
             var entries = (await GetJson(BrowseArtistPath + "/venues")).AsArray();
             entries.Should().ContainSingle();
             JsonNode.DeepEquals(artistVenue, entries[0]!["artist_venue"]).Should().BeTrue();
             var global = await GetJson(CanonicalVenuePath);
-            JsonNode.DeepEquals(global, artistVenue["venue"]).Should().BeTrue();
+            JsonNode.DeepEquals(ResourceMetadata(global), artistVenue["venue"]).Should().BeTrue();
 
             var year = await GetJson(BrowseArtistPath + "/years/by-number/1995");
             year["shows"]!.AsArray().Should().ContainSingle();
             JsonNode.DeepEquals(artistVenue, year["shows"]![0]!["artist_venue"]).Should().BeTrue();
             var earlier = await GetJson(ShowPath(10));
             JsonNode.DeepEquals(artistVenue, earlier["artist_venue"]).Should().BeTrue();
-            var filtered = (
-                await GetJson(CanonicalVenuePath + "/shows?artist_id=" + BrowseArtistId)
-            ).AsArray();
+            var filtered = detail["shows"]!.AsArray();
             filtered.Should().HaveCount(2);
             foreach (var item in filtered)
             {
@@ -85,8 +83,7 @@ public sealed partial class TestV4CatalogHttp
             BrowseArtistPath + "/venues",
             BrowseArtistPath + "/venues/venue_00000001",
             CanonicalVenuePath,
-            CanonicalVenuePath + "/shows",
-            ImportedVenuePath(14, 74),
+            ImportedVenuePath(74),
         };
         var validators = new Dictionary<string, string>();
         foreach (var path in paths)
@@ -124,7 +121,7 @@ public sealed partial class TestV4CatalogHttp
                 .Be(before["artist_venue"]!["id"]!.GetValue<string>());
             show["artist_venue"]!["artist_show_count"]!.GetValue<int>().Should().Be(17);
             show["artist_venue"]!["venue"]!["global_show_count"]!.GetValue<int>().Should().Be(18);
-            (await GetJson(CanonicalVenuePath + "/shows")).AsArray().Should().HaveCount(2);
+            (await GetJson(CanonicalVenuePath))["shows"]!.AsArray().Should().HaveCount(2);
         }
         finally
         {
@@ -157,15 +154,15 @@ public sealed partial class TestV4CatalogHttp
             var show = JsonNode.Parse(await changed.Content.ReadAsStringAsync())!;
             show["artist_venue"]!["artist_show_count"]!.GetValue<int>().Should().Be(1);
             show["artist_venue"]!["venue"]!["global_show_count"]!.GetValue<int>().Should().Be(3);
-            var filtered = (
-                await GetJson(CanonicalVenuePath + "/shows?artist_id=" + BrowseArtistId)
-            ).AsArray();
+            var filtered = (await GetJson(BrowseArtistPath + "/venues/venue_00000001"))[
+                "shows"
+            ]!.AsArray();
             filtered.Should().ContainSingle();
             filtered[0]!["artist_venue"]!["venue"]!["global_show_count"]!
                 .GetValue<int>()
                 .Should()
                 .Be(3);
-            (await GetJson(CanonicalVenuePath + "/shows")).AsArray().Should().HaveCount(3);
+            (await GetJson(CanonicalVenuePath))["shows"]!.AsArray().Should().HaveCount(3);
             (
                 await connection.QueryAsync<string>(
                     "SELECT av::text FROM norm.artist_venues av WHERE venue_id='venue_00000001' ORDER BY id"
@@ -239,6 +236,12 @@ public sealed partial class TestV4CatalogHttp
             var detail = await GetJson(BrowseArtistPath + "/venues/venue_00000001");
             detail["id"]!.GetValue<string>().Should().Be(originalId);
             detail["artist_show_count"]!.GetValue<int>().Should().Be(0);
+            detail["shows"]!.AsArray().Should().BeEmpty();
+            RelatedArtistIds(detail).Should().Equal(BrowseArtistId);
+            JsonNode
+                .DeepEquals(detail, await GetJson("/api/v4/artist-venues/" + originalId))
+                .Should()
+                .BeTrue();
             detail["venue"]!["global_show_count"]!.GetValue<int>().Should().Be(1);
             (await GetJson(BrowseArtistPath + "/venues"))
                 .AsArray()

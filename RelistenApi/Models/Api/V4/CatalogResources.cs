@@ -153,7 +153,7 @@ public sealed class SongResource
 }
 
 [JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
-public sealed class VenueResource
+public record VenueResource
 {
     public VenueId Id { get; init; }
 
