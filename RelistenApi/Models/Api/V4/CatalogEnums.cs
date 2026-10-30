@@ -5,6 +5,16 @@ using Newtonsoft.Json.Converters;
 namespace Relisten.Api.Models.Api.V4;
 
 [JsonConverter(typeof(StringEnumConverter))]
+public enum SongEntryKind
+{
+    [EnumMember(Value = "song")]
+    Song,
+
+    [EnumMember(Value = "imported_song")]
+    ImportedSong,
+}
+
+[JsonConverter(typeof(StringEnumConverter))]
 public enum VenueEntryKind
 {
     [EnumMember(Value = "artist_venue")]

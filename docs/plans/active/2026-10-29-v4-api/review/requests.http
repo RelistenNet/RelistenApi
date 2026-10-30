@@ -126,9 +126,6 @@ GET {{base}}/api/v4/sources/source_0ey8bt709t1kgkmtpmgvq85art
 ### Venue journey: open one playable track
 GET {{base}}/api/v4/source-tracks/track_11be6feqht0xd6q911jmx31nqs
 
-### Full imported venue inventory, including normalized and unused rows
-GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/imported-venues
-
 ### Imported browse target: complete collection including any normalized shows
 GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/imported-venues/imported_venue_78331pxdqjdg434rrgm1d2pnrj
 
@@ -153,3 +150,51 @@ GET {{base}}/api/v4/shows/show_127p0pfc1sgb4p9hdf4agq5dch
 
 ### Venue aliases: imported show label with a canonical venue link
 GET {{base}}/api/v4/shows/show_1vxn1nx36jes73mc3p9e1e04mr
+
+### Song browse: canonical songs plus imported fallbacks
+GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/songs
+
+### Scarlet Begonias: metadata and exact recording counts
+GET {{base}}/api/v4/songs/song_62mhvjyd
+
+### Scarlet Begonias: one result per file, with matching part ordinals
+GET {{base}}/api/v4/songs/song_62mhvjyd/tracks
+
+### Scarlet Begonias: distinct recording-backed shows
+GET {{base}}/api/v4/songs/song_62mhvjyd/shows
+
+### Full imported song inventory, including mapped and unused rows
+GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/imported-songs
+
+### Imported Scarlet Begonias: independent setlist-backed shows
+GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/imported-songs/imported_song_3km7ryr3hc5dm877wmc69zpdb5
+
+### Unmapped Jam: imported fallback, no title inference
+GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/imported-songs/imported_song_3f21yqt0vvbt6ygnh6ca1rqkhf
+
+### Canonical song with no recording matches remains visible
+GET {{base}}/api/v4/songs/song_aaatqpek
+
+### Zero-match song: empty files
+GET {{base}}/api/v4/songs/song_aaatqpek/tracks
+
+### Zero-match song: empty recording-backed shows
+GET {{base}}/api/v4/songs/song_aaatqpek/shows
+
+### Ryan Adams: same browse route without approved normalization
+GET {{base}}/api/v4/artists/artist_1e72h78badf1zvzkvkzcp7kk2a/songs
+
+### Ryan Adams: full imported song inventory
+GET {{base}}/api/v4/artists/artist_1e72h78badf1zvzkvkzcp7kk2a/imported-songs
+
+### Ryan Adams: imported song navigation remains usable
+GET {{base}}/api/v4/artists/artist_1e72h78badf1zvzkvkzcp7kk2a/imported-songs/imported_song_67wce24108kykvzzvxx4pgm9wa
+
+### Song journey: direct playable file is identical
+GET {{base}}/api/v4/source-tracks/track_5zaht0jxrh4mf4sgj8ccq015hw
+
+### Song journey: exact recording
+GET {{base}}/api/v4/sources/source_24ac5ec7w28f4fj00jdgambb69
+
+### Song journey: full show hierarchy contains the same recording
+GET {{base}}/api/v4/shows/show_3n03w01p0513amd3cc3c1fqfwt

@@ -30,8 +30,9 @@ provides Try it out too. Start with the matched and partial tracks, compare
 their full shows, then inspect the venue alias example. Playback URLs and
 titles are imported values; normalized parts describe the file without replacing it.
 
-The expanded C1 browse checkpoint exposes 16 GET routes. Follow the
+The expanded C1 browse checkpoint exposes 22 GET routes. Follow the
 [venue-to-playback walkthrough](../../docs/plans/active/2026-10-29-v4-api/review/venue-source-journey.md)
+and [song-to-playback walkthrough](../../docs/plans/active/2026-10-29-v4-api/review/song-source-journey.md)
 to inspect the resource links. Implemented families are:
 
 - `GET /api/v4/artists` and `/api/v4/artists/{artistId}`: artist list/detail,
@@ -49,6 +50,14 @@ to inspect the resource links. Implemented families are:
 - `GET /api/v4/artists/{artistId}/imported-venues`: all imported rows and show
   counts, including unused rows. Append `/{importedVenueId}` for that row with its
   complete show collection.
+- `GET /api/v4/artists/{artistId}/songs`: canonical songs plus imported fallback
+  entries, selected by the server from approved evidence.
+- `GET /api/v4/songs/{songId}`: canonical metadata and exact recording counts;
+  append `/tracks` for complete files with matching part ordinals or `/shows`
+  for their deduplicated shows.
+- `GET /api/v4/artists/{artistId}/imported-songs`: full imported inventory with
+  distinct setlist-supported catalog show counts; append `/{importedSongId}`
+  for that same imported resource and complete show list.
 - `GET /api/v4/shows/{showId}`: full show with sources, sets, tracks, imported
   venue observations, stored `artist_venue` links, aliases and approved normalization.
 - `GET /api/v4/sources/{sourceId}`: that same complete source resource directly,
@@ -124,3 +133,26 @@ Kinds are `official`, `short`, and `spelling`; date ranges are absent. Show UI u
 the imported venue label and locality and links through `artist_venue.venue.id`.
 Canonical metadata is fallback only when imported data is absent. The request
 collection includes the Oakland/Henry J. Kaiser example.
+
+
+## Song counts and playback
+
+Canonical `matched_track_count` counts distinct active playable files containing
+a resolved part for that song; `matched_show_count` counts their distinct shows.
+`/songs/{id}/tracks` returns each file once with its matching ordinals. The complete
+track is shared with direct track and recording reads, preserving imported titles,
+playback URLs, exact parents, and partial normalization.
+
+Imported `setlist_show_count` counts distinct catalog shows supported by imported
+setlist evidence matched by artist/date. Its detail's show list has that count.
+Setlist-only dates without catalog shows are outside this collection. This count
+can differ from recording-derived discovery and never establishes playable
+matches. Raw inventory remains available even when mapped rows leave the mixed
+browse list. Zero-match canonical songs remain visible.
+
+The server chooses canonical or imported browse entries; mobile follows `kind`.
+Embedded track parts carry compact song references and do not reset discovery
+counts or aliases. All six song reads use direct responses and the same ETag
+and endpoint-specific replacement rules as the other catalog reads. Known songs
+with corrupt canonical chains return no-store 503 responses; imported fallback
+remains available where evidence cannot resolve.

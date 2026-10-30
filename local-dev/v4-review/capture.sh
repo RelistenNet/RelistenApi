@@ -107,7 +107,7 @@ journey_track = next(track for group in venue_source['sets'] for track in group[
 capture('venue-journey-track', '/source-tracks/' + journey_track['id'], 'Venue journey: open one playable track')
 
 raw_entry = next(entry for entry in entries if entry['imported_venue'])
-raw_inventory = capture('imported-venues', '/artists/' + artist_id + '/imported-venues', 'Full imported venue inventory, including normalized and unused rows')
+raw_inventory = json.loads((out / 'imported-venues.json').read_text())
 raw_by_id = {venue['id']: venue for venue in raw_inventory}
 assert all('fallback_show_count' not in entry for entry in entries)
 assert all(entry['imported_venue'] == raw_by_id[entry['imported_venue']['id']] for entry in entries if entry['imported_venue'])
@@ -128,6 +128,46 @@ requests += ['### Wrong resource kind (422)', f'GET {{{{base}}}}/api/v4/source-t
 kaiser = 'show_127p0pfc1sgb4p9hdf4agq5dch'
 capture('kaiser-show', '/shows/' + kaiser, 'Oakland venue: imported label and canonical aliases')
 capture('historical-show', '/shows/' + historical, 'Venue aliases: imported show label with a canonical venue link')
+# Song discovery preserves exact recording matches separately from setlist evidence.
+song_id = 'song_62mhvjyd'
+song_entries = capture('artist-songs', '/artists/' + artist_id + '/songs', 'Song browse: canonical songs plus imported fallbacks')
+song = capture('song', '/songs/' + song_id, 'Scarlet Begonias: metadata and exact recording counts')
+assert next(entry['song'] for entry in song_entries if entry['song'] and entry['song']['id'] == song_id) == song
+song_tracks = capture('song-tracks', '/songs/' + song_id + '/tracks', 'Scarlet Begonias: one result per file, with matching part ordinals')
+song_shows = capture('song-shows', '/songs/' + song_id + '/shows', 'Scarlet Begonias: distinct recording-backed shows')
+assert song['matched_track_count'] == len(song_tracks)
+assert song['matched_show_count'] == len(song_shows)
+assert len({match['track']['id'] for match in song_tracks}) == len(song_tracks)
+assert {match['track']['show_id'] for match in song_tracks} == {show['id'] for show in song_shows}
+for match in song_tracks:
+    track = match['track']
+    assert match['matching_part_ordinals'] == [part['ordinal'] for part in track['normalization']['parts'] if part['state'] == 'matched' and part['song']['id'] == song_id]
+imported_songs = capture('imported-songs', '/artists/' + artist_id + '/imported-songs', 'Full imported song inventory, including mapped and unused rows')
+imported_song_id = typed('imported_song', '73a1f1ec-0e2c-2b68-839f-946193fb3565')
+imported_song = capture('imported-song', '/artists/' + artist_id + '/imported-songs/' + imported_song_id, 'Imported Scarlet Begonias: independent setlist-backed shows')
+assert imported_song['setlist_show_count'] == len(imported_song['shows'])
+assert next(raw for raw in imported_songs if raw['id'] == imported_song_id) == {key: value for key, value in imported_song.items() if key != 'shows'}
+unmatched_song = next(entry['imported_song'] for entry in song_entries if entry['imported_song'] and entry['imported_song']['id'] == typed('imported_song', '6f107d7d-037b-5e8d-e856-2662838bce2f'))
+capture('unmatched-imported-song', '/artists/' + artist_id + '/imported-songs/' + unmatched_song['id'], 'Unmapped Jam: imported fallback, no title inference')
+zero_song = capture('zero-match-song', '/songs/song_aaatqpek', 'Canonical song with no recording matches remains visible')
+assert zero_song['matched_track_count'] == 0 and zero_song['matched_show_count'] == 0
+assert capture('zero-match-song-tracks', '/songs/song_aaatqpek/tracks', 'Zero-match song: empty files') == []
+assert capture('zero-match-song-shows', '/songs/song_aaatqpek/shows', 'Zero-match song: empty recording-backed shows') == []
+raw_artist = typed('artist', '2e38a274-2d4d-787f-bfcf-73fb2c79cc4a')
+raw_songs = capture('disabled-artist-songs', '/artists/' + raw_artist + '/songs', 'Ryan Adams: same browse route without approved normalization')
+raw_song_inventory = capture('disabled-imported-songs', '/artists/' + raw_artist + '/imported-songs', 'Ryan Adams: full imported song inventory')
+assert raw_songs and all(entry['kind'] == 'imported_song' and entry['song'] is None for entry in raw_songs)
+assert [entry['imported_song'] for entry in raw_songs] == raw_song_inventory
+raw_song_detail = capture('disabled-imported-song', '/artists/' + raw_artist + '/imported-songs/' + raw_songs[0]['imported_song']['id'], 'Ryan Adams: imported song navigation remains usable')
+assert raw_song_detail['setlist_show_count'] == len(raw_song_detail['shows'])
+file = song_tracks[0]['track']
+direct_file = capture('song-journey-track', '/source-tracks/' + file['id'], 'Song journey: direct playable file is identical')
+assert direct_file == file
+song_source = capture('song-journey-source', '/sources/' + file['source_id'], 'Song journey: exact recording')
+assert next(track for group in song_source['sets'] for track in group['tracks'] if track['id'] == file['id']) == file
+song_show = capture('song-journey-show', '/shows/' + file['show_id'], 'Song journey: full show hierarchy contains the same recording')
+assert next(source for source in song_show['sources'] if source['id'] == file['source_id']) == song_source
+
 Path('docs/plans/active/2026-10-29-v4-api/review/requests.http').write_text('\n'.join(requests))
 (out / 'scenarios.json').write_text(json.dumps(scenarios, indent=2) + '\n')
 (out / 'request-timings.json').write_text(json.dumps(timings, indent=2) + '\n')

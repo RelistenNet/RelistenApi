@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Npgsql;
+using Relisten.Catalog;
 using Relisten.Identifiers;
 
 namespace Relisten.Controllers.V4;
@@ -30,6 +31,19 @@ public abstract class CatalogControllerBase(ILogger logger) : ControllerBase
             return resource is null
                 ? Failure(404, "not_found", "The requested resource does not exist.")
                 : new CatalogJsonResult(resource);
+        }
+        catch (CatalogNormalizationUnavailableException exception)
+        {
+            logger.LogWarning(
+                exception,
+                "Canonical catalog read failed for {RequestPath}",
+                Request.Path
+            );
+            return Failure(
+                503,
+                "normalization_unavailable",
+                "The normalized catalog is temporarily unavailable."
+            );
         }
         catch (Exception exception) when (exception is NpgsqlException or TimeoutException)
         {

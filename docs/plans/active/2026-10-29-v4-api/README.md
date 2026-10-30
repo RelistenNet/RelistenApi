@@ -1,14 +1,14 @@
 # Deliver the complete v4 catalog and mobile adapter
 
-Status: C1 now adds stored artist–venue identities and scoped counts, 2026-10-30.
+Status: C1 includes venue and song-to-playback navigation, 2026-10-30.
 Implementation and real-response verification are in progress.
 The local API reads the restored production catalog; no production deployment or
 account migration occurred. This is a living ExecPlan: update Progress,
 Discoveries, Decision Log, and Outcomes as work proceeds.
 
 Build and review this in stages. First deliver a running browse and playback API that
-Alec can inspect directly. Review artist/year and venue-to-playback responses,
-then extend song/discovery browsing before account/auth work. The later breaking
+Alec can inspect directly. Review artist/year, venue-to-playback, and song-to-playback responses before
+account/auth work. The later breaking
 account/auth cutover runs against the existing v3 catalog; prove a small normalized
 mobile journey before completing the remaining API/UI.
 The [review guide](review-guide.md) defines five checkpoints and what Alec sees.
@@ -72,8 +72,7 @@ an earlier design proposal.
   returns that resource directly. Every imported venue includes its full
   `show_count`, including embedded show/source venues and imported detail.
   Include an imported entry when needed to reach unmatched shows; its full
-  collection can overlap canonical
-  entries during partial normalization. Clients always browse `/venues` and
+  collection can overlap canonical entries during partial normalization. Clients always browse `/venues` and
   follow each entry's `kind`; they do not select a list from artist feature flags.
   Canonical counts come from stored artist relationships. Imported counts use
   the full show-level assignments to each imported venue.
@@ -181,8 +180,10 @@ Implement mobile's actual queries, not a generic interpreter of all server route
 - [x] Refresh the saved request/capture evidence for the new graph.
 - [ ] Alec reviews the [expanded C1 browsing and playback responses](review/README.md)
   before account/auth work.
-- [ ] Extend the next catalog review to song matches and discovery; these routes
-  remain unimplemented and separate from the venue slice.
+- [x] Add six song browsing/discovery reads for the
+  [song-to-playback review](review/song-source-journey.md).
+- [ ] Alec reviews song counts, exact recording matches, and imported setlist
+  fallback before account/auth work.
 - [ ] C2–C5 remain unstarted pending the C1 response review.
 
 ## Discoveries and changes from the exploration
@@ -203,9 +204,9 @@ apply entrypoint, not only DTO renaming. The in-place account change retains
 The numbers below identify components, not a single deployment. Follow the
 [five review checkpoints](review-guide.md): packages 1/2 and the accepted catalog
 families from package 3 produce browsing and playback HTTP responses first
-(expanded C1). Venue browsing and direct sources are implemented; song/discovery
-review comes next before auth. Package 4 plus mobile account work proves typed auth/library
-against v3 (C2); the minimum of package 5 proves raw/normalized show playback
+(expanded C1). Venue browsing, direct sources, and song/discovery reads are
+implemented; their response review remains the next gate before auth. Package 4
+plus mobile account work proves typed auth/library against v3 (C2); the minimum of package 5 proves raw/normalized show playback
 (C3); package 3 completes route families and their legacy adapters (C4); remaining
 mobile/UI work and release checks finish the change (C5).
 
@@ -259,8 +260,8 @@ Alec reviews complete responses before their design spreads through the code.
 
 ### 3. Complete API families and legacy adapters for C4
 
-The venue/source family is already part of expanded C1. Add song/discovery
-families for API review before accounts. After C3, implement the remaining
+The venue/source and song/discovery families are part of expanded C1 for API
+review before accounts. After C3, implement the remaining
 `endpoints.json` families and legacy adapters. Each family
 gets native v4 routes, common query/results, legacy projections, response fixtures
 and measured compatibility in one coherent change. Complete the pilot family's
@@ -389,6 +390,10 @@ by accepting this plan.
   separate fallback subset count. Imported browse entries open the same full
   collection as imported detail, even when it overlaps canonical entries during
   partial normalization. Keep count meaning consistent for mobile persistence.
+
+- 2026-10-30, Alec: extend the local catalog review through song browsing,
+  exact show/source/track matches, and imported setlist fallback before accounts.
+  Keep recording-derived counts separate from imported setlist counts.
 
 ## Outcomes and retrospective
 

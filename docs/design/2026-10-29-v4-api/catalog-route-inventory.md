@@ -108,15 +108,21 @@ Keeping show detail without nested playable data would fail existing coverage.
 
 | Current registration | Proposed v4 coverage | Inputs, output, and behavior to retain | Evidence |
 | --- | --- | --- | --- |
-| `GET /api/v2/artists/{artistIdOrSlug}/songs` | `GET /api/v4/artists/{artistId}/songs` plus `GET /api/v4/artists/{artistId}/imported-songs` | Normalized browse list is artist-scoped; retain original imported setlist song catalog and its play counts separately. Preserve unmatched imported entries; they cannot disappear merely because no normalized mapping exists. | [Songs:32](../../../RelistenApi/Controllers/SongsController.cs#L32) |
+| `GET /api/v2/artists/{artistIdOrSlug}/songs` | `GET /api/v4/artists/{artistId}/songs` plus `GET /api/v4/artists/{artistId}/imported-songs` | Artist-scoped mixed browse uses approved canonical songs plus imported rows without valid evidence mappings. Canonical counts describe exact active files/shows; imported setlist counts remain separate. The raw inventory preserves mapped and unused imported rows. | [Songs:32](../../../RelistenApi/Controllers/SongsController.cs#L32) |
 | `GET /api/v2/artists/{artistIdOrSlug}/songs/{idAndSlug}` | `GET /api/v4/artists/{artistId}/imported-songs/{importedSongId}` plus resolver | Preserve imported song's setlist-derived show list. Normalized song matches and file membership are additional data, not proof of an identical show list. | [Songs:46](../../../RelistenApi/Controllers/SongsController.cs#L46) |
 | `GET /api/v3/artists/{artistIdOrSlug}/songs/{songIdOrSlug}` | Same imported detail route plus resolver | Preserve UUID/numeric/slug lookup and setlist show links; canonical normalized song detail uses its own short ID. | [Songs:61](../../../RelistenApi/Controllers/SongsController.cs#L61) |
 
 Current setlist show membership comes from `setlist_songs_plays` through
 `setlist_shows`, not normalized track interpretation:
 [SetlistSongService](../../../RelistenApi/Services/Data/SetlistSongService.cs#L67).
-Expose count meaning; do not replace setlist-play evidence with a track count
-under the same name.
+The six-read song checkpoint is documented in the
+[song-to-playback walkthrough](../../plans/active/2026-10-29-v4-api/review/song-source-journey.md).
+Canonical `/songs/{songId}` exposes `matched_track_count` and `matched_show_count`;
+its `/tracks` list returns each file once with matching ordinals, and `/shows`
+deduplicates recording-supported catalog shows. Imported detail exposes
+`setlist_show_count`, counting distinct catalog show IDs matched by artist/date,
+and its corresponding show list. Setlist-only dates without a catalog show do
+not enter that count. These evidence sources remain separate.
 
 ## Tours and eras — 4 registrations, 4 actions
 
