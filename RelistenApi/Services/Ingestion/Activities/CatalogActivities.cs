@@ -81,7 +81,10 @@ public sealed class CatalogActivities(
     public async Task InvalidateArtistCache(ProviderWorkflowContext context)
     {
         using var heartbeat = new ActivityHeartbeat();
-        await rebuild.InvalidateArtistCache(await Resolve(context));
+        await rebuild.InvalidateArtistCache(
+            await Resolve(context),
+            ActivityExecutionContext.Current.CancellationToken
+        );
         RequireActive(context.Execution);
 
         var cancellationToken = ActivityExecutionContext.Current.CancellationToken;
