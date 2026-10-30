@@ -297,8 +297,11 @@ absence of rows does not prove a job never ran.
 V4 uses typed string enums for the closed state/reason, part-state, qualifier,
 song/venue-kind, coordinate-precision and FLAC vocabularies. OpenAPI lists their
 allowed values from the same types used to serialize responses. Nullable values
-remain null; notes and provider labels remain open text. Enum declarations live
-in [CatalogEnums.cs](../../../../RelistenApi/Models/Api/V4/CatalogEnums.cs).
+remain null; notes and provider labels remain open text. Normalization owns
+the shared [domain enums](../../../../Relisten.Normalization/CatalogueVocabulary.cs)
+and their [SQL/JSON token contract](../../../../Relisten.Normalization/README.md).
+V4 consumes those types directly. API response states and recording FLAC values
+remain in [CatalogEnums.cs](../../../../RelistenApi/Models/Api/V4/CatalogEnums.cs).
 
 Part state is `matched` for a resolved canonical song link, `non_song` for
 resolved content with no song, or `unresolved` when `resolved=false`. Unresolved

@@ -177,17 +177,7 @@ public static class V4CatalogProjection
             Id = SongId.Parse(value.id),
             ArtistId = new(value.artist_uuid),
             Name = value.name,
-            Kind = value.kind switch
-            {
-                "song" => SongKind.Song,
-                "jam" => SongKind.Jam,
-                "segment" => SongKind.Segment,
-                "tuning" => SongKind.Tuning,
-                "banter" => SongKind.Banter,
-                "other" => SongKind.Other,
-                null => null,
-                _ => throw new InvalidOperationException("Unsupported SongKind value."),
-            },
+            Kind = value.kind is { } kind ? NormalizationEnums.Parse<SongKind>(kind) : null,
         };
 
     public static VenueResource Venue(CatalogVenue value) =>
@@ -195,40 +185,23 @@ public static class V4CatalogProjection
         {
             Id = VenueId.Parse(value.id),
             Name = value.name,
-            Kind = value.kind switch
-            {
-                "site" => VenueKind.Site,
-                "room" => VenueKind.Room,
-                _ => throw new InvalidOperationException("Unsupported VenueKind value."),
-            },
+            Kind = NormalizationEnums.Parse<VenueKind>(value.kind),
             ParentId = value.parent_id is { } parent ? VenueId.Parse(parent) : null,
             City = value.city,
             Region = value.region,
             Country = value.country,
             Latitude = value.latitude,
             Longitude = value.longitude,
-            CoordinatePrecision = value.coordinate_precision switch
-            {
-                "venue" => VenueCoordinatePrecision.Venue,
-                "city" => VenueCoordinatePrecision.City,
-                null => null,
-                _ => throw new InvalidOperationException(
-                    "Unsupported VenueCoordinatePrecision value."
-                ),
-            },
+            CoordinatePrecision = value.coordinate_precision is { } precision
+                ? NormalizationEnums.Parse<VenueCoordinatePrecision>(precision)
+                : null,
             Names = value.Names.Select(VenueName).ToArray(),
         };
 
     private static VenueNameResource VenueName(CatalogVenueName value) =>
         new(
             value.name,
-            value.kind switch
-            {
-                "official" => VenueNameKind.Official,
-                "short" => VenueNameKind.Short,
-                "spelling" => VenueNameKind.Spelling,
-                _ => throw new InvalidOperationException("Unsupported venue name kind."),
-            },
+            NormalizationEnums.Parse<VenueNameKind>(value.kind),
             value.valid_from is { } from
                 ? DateOnly.ParseExact(from, "yyyy-MM-dd", CultureInfo.InvariantCulture)
                 : null,
@@ -242,7 +215,9 @@ public static class V4CatalogProjection
         {
             Ordinal = value.part,
             Text = value.text,
-            Qualifiers = value.qualifiers.Select(Qualifier).ToArray(),
+            Qualifiers = value
+                .qualifiers.Select(NormalizationEnums.Parse<TrackQualifier>)
+                .ToArray(),
             Notes = value.notes,
             SegueAfter = value.segue_after,
             Song = value.Song is { } song ? Song(song) : null,
@@ -250,25 +225,6 @@ public static class V4CatalogProjection
                 !value.resolved ? TrackPartState.Unresolved
                 : value.Song is not null ? TrackPartState.Matched
                 : TrackPartState.NonSong,
-        };
-
-    private static TrackQualifier Qualifier(string value) =>
-        value switch
-        {
-            "reprise" => TrackQualifier.Reprise,
-            "partial" => TrackQualifier.Partial,
-            "unfinished" => TrackQualifier.Unfinished,
-            "instrumental" => TrackQualifier.Instrumental,
-            "acoustic" => TrackQualifier.Acoustic,
-            "with_guest" => TrackQualifier.WithGuest,
-            "continued" => TrackQualifier.Continued,
-            "tape_flip" => TrackQualifier.TapeFlip,
-            "soundcheck" => TrackQualifier.Soundcheck,
-            "tease" => TrackQualifier.Tease,
-            "intro" => TrackQualifier.Intro,
-            "outro" => TrackQualifier.Outro,
-            "jam" => TrackQualifier.Jam,
-            _ => throw new InvalidOperationException("Unsupported track qualifier."),
         };
 
     public static YearResource Year(CatalogYear value) => ProjectYear<YearResource>(value);

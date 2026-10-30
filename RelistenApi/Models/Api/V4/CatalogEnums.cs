@@ -4,10 +4,9 @@ using Newtonsoft.Json.Converters;
 
 namespace Relisten.Api.Models.Api.V4;
 
-// Closed public vocabularies. EnumMember preserves the wire spelling independently
-// of C# names; Newtonsoft uses these same types when generating OpenAPI schemas.
-// Notes and provider labels remain open text. Database constraints define the
-// normalized kind, precision and qualifier vocabularies.
+// API-owned response states and recording vocabulary. Normalization kinds,
+// precision and qualifiers come directly from Relisten.Normalization.
+// EnumMember preserves wire spelling for JSON and OpenAPI.
 
 [JsonConverter(typeof(StringEnumConverter))]
 public enum TrackNormalizationState
@@ -49,48 +48,6 @@ public enum TrackPartState
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-public enum SongKind
-{
-    [EnumMember(Value = "song")]
-    Song,
-
-    [EnumMember(Value = "jam")]
-    Jam,
-
-    [EnumMember(Value = "segment")]
-    Segment,
-
-    [EnumMember(Value = "tuning")]
-    Tuning,
-
-    [EnumMember(Value = "banter")]
-    Banter,
-
-    [EnumMember(Value = "other")]
-    Other,
-}
-
-[JsonConverter(typeof(StringEnumConverter))]
-public enum VenueKind
-{
-    [EnumMember(Value = "site")]
-    Site,
-
-    [EnumMember(Value = "room")]
-    Room,
-}
-
-[JsonConverter(typeof(StringEnumConverter))]
-public enum VenueCoordinatePrecision
-{
-    [EnumMember(Value = "venue")]
-    Venue,
-
-    [EnumMember(Value = "city")]
-    City,
-}
-
-[JsonConverter(typeof(StringEnumConverter))]
 public enum SourceFlacType
 {
     [EnumMember(Value = "NoFlac")]
@@ -107,60 +64,4 @@ public enum SourceFlacType
 
     [EnumMember(Value = "Unknown")]
     Unknown,
-}
-
-[JsonConverter(typeof(StringEnumConverter))]
-public enum TrackQualifier
-{
-    [EnumMember(Value = "reprise")]
-    Reprise,
-
-    [EnumMember(Value = "partial")]
-    Partial,
-
-    [EnumMember(Value = "unfinished")]
-    Unfinished,
-
-    [EnumMember(Value = "instrumental")]
-    Instrumental,
-
-    [EnumMember(Value = "acoustic")]
-    Acoustic,
-
-    [EnumMember(Value = "with_guest")]
-    WithGuest,
-
-    [EnumMember(Value = "continued")]
-    Continued,
-
-    [EnumMember(Value = "tape_flip")]
-    TapeFlip,
-
-    [EnumMember(Value = "soundcheck")]
-    Soundcheck,
-
-    [EnumMember(Value = "tease")]
-    Tease,
-
-    [EnumMember(Value = "intro")]
-    Intro,
-
-    [EnumMember(Value = "outro")]
-    Outro,
-
-    [EnumMember(Value = "jam")]
-    Jam,
-}
-
-[JsonConverter(typeof(StringEnumConverter))]
-public enum VenueNameKind
-{
-    [EnumMember(Value = "official")]
-    Official,
-
-    [EnumMember(Value = "short")]
-    Short,
-
-    [EnumMember(Value = "spelling")]
-    Spelling,
 }
