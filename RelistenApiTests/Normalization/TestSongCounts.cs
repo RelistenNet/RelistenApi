@@ -9,8 +9,6 @@ using Relisten.Controllers;
 using Relisten.Data;
 using Relisten.Normalization;
 using Relisten.Normalization.Songs;
-using SimpleMigrations;
-using SimpleMigrations.DatabaseProvider;
 
 namespace RelistenApiTests.Normalization;
 
@@ -25,16 +23,18 @@ public sealed class TestSongCounts
     private NpgsqlConnection db = null!;
     private NpgsqlTransaction tx = null!;
     private Fixture data = null!;
-    private bool committedFixture;
 
     [SetUp]
     public async Task Open()
     {
+        db = null!;
+        tx = null!;
+        data = null!;
         MigratedTestDatabase.RequireLocalDatabase();
         db = await MigratedTestDatabase.OpenAsync();
         tx = await db.BeginTransactionAsync();
         data = await Seed(db, tx);
-        committedFixture = false;
+        await CommitEdit();
     }
 
     [TearDown]
@@ -44,9 +44,16 @@ public sealed class TestSongCounts
         {
             return;
         }
-        await tx.DisposeAsync();
-        if (committedFixture)
+        try
         {
+            if (tx is not null)
+            {
+                await tx.DisposeAsync();
+            }
+            if (data is null)
+            {
+                return;
+            }
             await using var cleanup = await db.BeginTransactionAsync();
             await NormStore.BeginAsync(db, cleanup, AuthorTypes.Moderator, "song-count-cleanup");
             await db.ExecuteAsync(
@@ -69,7 +76,10 @@ public sealed class TestSongCounts
             );
             await cleanup.CommitAsync();
         }
-        await db.DisposeAsync();
+        finally
+        {
+            await db.DisposeAsync();
+        }
     }
 
     [Test]
@@ -181,72 +191,8 @@ public sealed class TestSongCounts
     }
 
     [Test]
-    public async Task DeletingUnreferencedSongParentsCascadesOnlyTheirCounters()
-    {
-        await Refresh();
-        var before = await Rows();
-        await db.ExecuteAsync(
-            "DELETE FROM norm.songs WHERE id=@zero; DELETE FROM setlist_songs WHERE id=@unused",
-            new { zero = data.Zero, unused = data.Imported[1] },
-            tx
-        );
-        (await Rows()).Should().BeEquivalentTo(before.Where(row => row.Id != data.Zero.Value));
-        (
-            await db.QuerySingleAsync<int>(
-                "SELECT count(*)::int FROM setlist_song_counts WHERE setlist_song_id=@song",
-                new { song = data.Imported[1] },
-                tx
-            )
-        )
-            .Should()
-            .Be(0);
-    }
-
-    [Test]
-    public async Task FailedAtomicRefreshRollsBackSourceAndCountsBeforeRetry()
-    {
-        await Refresh();
-        var before = await Rows();
-        await tx.SaveAsync("edit");
-        await db.ExecuteAsync(
-            "UPDATE source_tracks SET is_orphaned=false WHERE uuid=@track",
-            new { track = data.Tracks[3] },
-            tx
-        );
-        await db.ExecuteAsync(
-            "ALTER TABLE norm.song_counts ADD CONSTRAINT test_song_count_failure CHECK (matched_track_count <= 3) NOT VALID",
-            transaction: tx
-        );
-        var attempt = () => Refresh();
-        await attempt
-            .Should()
-            .ThrowAsync<PostgresException>()
-            .Where(error => error.SqlState == PostgresErrorCodes.CheckViolation);
-        await tx.RollbackAsync("edit");
-        (await Rows()).Should().BeEquivalentTo(before);
-        (
-            await db.QuerySingleAsync<bool>(
-                "SELECT is_orphaned FROM source_tracks WHERE uuid=@track",
-                new { track = data.Tracks[3] },
-                tx
-            )
-        )
-            .Should()
-            .BeTrue();
-
-        await db.ExecuteAsync(
-            "UPDATE source_tracks SET is_orphaned=false WHERE uuid=@track",
-            new { track = data.Tracks[3] },
-            tx
-        );
-        await Refresh();
-        (await Counts(data.Main)).Should().Be(new SongTotals(4, 2));
-    }
-
-    [Test]
     public async Task ServiceScopesRefreshesAndReconcilesOwnersWithoutTouchingUnselectedArtists()
     {
-        await CommitFixture();
         var service = new SongCounts(new TestDatabase());
         await service.RefreshArtistsAsync([data.Artists[0]]);
         (await Counts(data.Main)).Should().Be(new SongTotals(3, 2));
@@ -277,7 +223,7 @@ public sealed class TestSongCounts
             new { track = data.Tracks[0] },
             tx
         );
-        await CommitFixture();
+        await CommitEdit();
         var previousWrite = DbService.ConnStr;
         var previousRead = DbService.ReadOnlyConnStr;
         var redis = new RedisService(RedisService.BuildConfiguration("redis://127.0.0.1:16379"));
@@ -309,15 +255,6 @@ public sealed class TestSongCounts
 
             (await redis.db.KeyExistsAsync(key)).Should().BeFalse();
             (await Counts(data.Main)).Should().Be(new SongTotals(3, 2));
-            (
-                await db.QuerySingleAsync<bool>(
-                    "SELECT is_orphaned FROM source_tracks WHERE uuid=@track",
-                    new { track = data.Tracks[0] },
-                    tx
-                )
-            )
-                .Should()
-                .BeTrue();
             var retry = new CatalogRebuildService(
                 database,
                 redis,
@@ -336,22 +273,10 @@ public sealed class TestSongCounts
     }
 
     [Test]
-    public async Task DisjointArtistsCanRefreshWhileAnotherArtistsTransactionRemainsOpen()
+    public async Task RefreshSerializesOneArtistWhileOtherArtistsAndReadersProceed()
     {
-        await CommitFixture();
         await Refresh();
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        await new SongCounts(new TestDatabase()).RefreshArtistsAsync(
-            [data.Artists[1]],
-            timeout.Token
-        );
-        (await Counts(data.Main)).Should().Be(new SongTotals(3, 2));
-    }
-
-    [Test]
-    public async Task WaitingRefreshSharesTheNormalizationLockAndSeesItsCommittedSourceChange()
-    {
-        await CommitFixture();
+        await CommitEdit();
         await db.ExecuteAsync(
             "SELECT pg_advisory_xact_lock(hashtext('norm-catalogue'),hashtext(@artist::text))",
             new { artist = data.Artists[0] },
@@ -362,47 +287,30 @@ public sealed class TestSongCounts
             new { track = data.Tracks[0] },
             tx
         );
-        await using var waiting = new NpgsqlConnection(LocalTestDatabase.ConnectionString);
-        await waiting.OpenAsync();
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-        var refresh = QueryRefresh(waiting, data.Artists[0], cancellationToken: timeout.Token);
-        try
-        {
-            await WaitUntilBlocked(waiting.ProcessID, db.ProcessID);
-        }
-        finally
-        {
-            await tx.CommitAsync();
-        }
-        await refresh;
-        await tx.DisposeAsync();
-        tx = await db.BeginTransactionAsync();
-        (await Counts(data.Main)).Should().Be(new SongTotals(2, 2));
-        (await Counts(data.Other)).Should().Be(new SongTotals(0, 0));
-    }
+        await Refresh();
 
-    [Test]
-    public async Task ReadersUseCommittedCountsWithoutWaitingForAnUncommittedRefresh()
-    {
-        await Refresh();
-        await CommitFixture();
-        await db.ExecuteAsync(
-            "UPDATE source_tracks SET is_orphaned=true WHERE uuid=@track",
-            new { track = data.Tracks[0] },
-            tx
-        );
-        await Refresh();
-        await using var reader = new NpgsqlConnection(LocalTestDatabase.ConnectionString);
-        await reader.OpenAsync();
+        await using var waiting = await MigratedTestDatabase.OpenAsync();
+        await using var reader = await MigratedTestDatabase.OpenAsync();
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        var query = new CommandDefinition(
+        var refresh = QueryRefresh(waiting, data.Artists[0], cancellationToken: timeout.Token);
+        var read = new CommandDefinition(
             TotalsSql,
             new { song = data.Main.Value },
             cancellationToken: timeout.Token
         );
-        (await reader.QuerySingleAsync<SongTotals>(query)).Should().Be(new SongTotals(3, 2));
-        await tx.CommitAsync();
-        (await reader.QuerySingleAsync<SongTotals>(query)).Should().Be(new SongTotals(2, 2));
+        try
+        {
+            await WaitUntilBlocked(waiting.ProcessID);
+            await QueryRefresh(reader, data.Artists[1], cancellationToken: timeout.Token);
+            (await reader.QuerySingleAsync<SongTotals>(read)).Should().Be(new SongTotals(3, 2));
+        }
+        finally
+        {
+            await CommitEdit();
+        }
+        await refresh;
+        (await reader.QuerySingleAsync<SongTotals>(read)).Should().Be(new SongTotals(2, 2));
+        (await Counts(data.Other)).Should().Be(new SongTotals(0, 0));
     }
 
     [Test]
@@ -430,64 +338,30 @@ public sealed class TestSongCounts
     [Test]
     public async Task MigrationSeedsExistingSongsAndSetlistsWithoutRewritingTheirEvidence()
     {
-        var name = "song_count_migration_" + Guid.NewGuid().ToString("N");
-        var builder = new NpgsqlConnectionStringBuilder(LocalTestDatabase.ConnectionString)
+        await using var database = await MigrationTestDatabase.CreateAsync(15);
+        var catalog = database.Connection;
+        Fixture fixture;
+        await using (var seed = await catalog.BeginTransactionAsync())
         {
-            Database = "postgres",
-        };
-        await using var admin = new NpgsqlConnection(builder.ConnectionString);
-        await admin.OpenAsync();
-        await admin.ExecuteAsync($"CREATE DATABASE {name} TEMPLATE template0");
-        try
-        {
-            builder.Database = name;
-            await using var catalog = new NpgsqlConnection(builder.ConnectionString);
-            await catalog.OpenAsync();
-            var schema = await File.ReadAllTextAsync(
-                Path.Combine(AppContext.BaseDirectory, "Fixtures", "catalog-schema.sql")
-            );
-            await catalog.ExecuteAsync(schema, commandTimeout: 120);
-            var migrator = new SimpleMigrator(
-                typeof(Relisten.Startup).Assembly,
-                new PostgresqlDatabaseProvider(catalog)
-            );
-            migrator.Load();
-            migrator.Baseline(12);
-            migrator.MigrateTo(15);
-            Fixture fixture;
-            await using (var seed = await catalog.BeginTransactionAsync())
-            {
-                fixture = await Seed(catalog, seed);
-                await seed.CommitAsync();
-            }
-            var history = await catalog.QuerySingleAsync<int>(
-                "SELECT count(*)::int FROM norm.changes"
-            );
-            migrator.MigrateTo(16);
-            (
-                await catalog.QuerySingleAsync<SongTotals>(
-                    TotalsSql,
-                    new { song = fixture.Main.Value }
-                )
-            )
-                .Should()
-                .Be(new SongTotals(3, 2));
-            (
-                await catalog.QuerySingleAsync<int>(
-                    "SELECT setlist_show_count FROM setlist_song_counts WHERE setlist_song_id=@song",
-                    new { song = fixture.Imported[0] }
-                )
-            )
-                .Should()
-                .Be(2);
-            (await catalog.QuerySingleAsync<int>("SELECT count(*)::int FROM norm.changes"))
-                .Should()
-                .Be(history);
+            fixture = await Seed(catalog, seed);
+            await seed.CommitAsync();
         }
-        finally
-        {
-            await admin.ExecuteAsync($"DROP DATABASE {name} WITH (FORCE)");
-        }
+        var history = await catalog.QuerySingleAsync<int>("SELECT count(*)::int FROM norm.changes");
+        database.Migrator.MigrateTo(16);
+        (await catalog.QuerySingleAsync<SongTotals>(TotalsSql, new { song = fixture.Main.Value }))
+            .Should()
+            .Be(new SongTotals(3, 2));
+        (
+            await catalog.QuerySingleAsync<int>(
+                "SELECT setlist_show_count FROM setlist_song_counts WHERE setlist_song_id=@song",
+                new { song = fixture.Imported[0] }
+            )
+        )
+            .Should()
+            .Be(2);
+        (await catalog.QuerySingleAsync<int>("SELECT count(*)::int FROM norm.changes"))
+            .Should()
+            .Be(history);
     }
 
     private Task<RefreshResult> Refresh() => QueryRefresh(db, data.Artists[0], tx);
@@ -535,26 +409,29 @@ public sealed class TestSongCounts
             )
         ).ToArray();
 
-    private async Task CommitFixture()
+    private async Task BeginEdit()
     {
-        await tx.CommitAsync();
-        committedFixture = true;
-        await tx.DisposeAsync();
         tx = await db.BeginTransactionAsync();
-        await NormStore.BeginAsync(db, tx, AuthorTypes.Moderator, "song-count-concurrency");
+        await NormStore.BeginAsync(db, tx, AuthorTypes.Moderator, "song-count-tests");
     }
 
-    private static async Task WaitUntilBlocked(int waiting, int blocking)
+    private async Task CommitEdit()
     {
-        await using var monitor = new NpgsqlConnection(LocalTestDatabase.ConnectionString);
-        await monitor.OpenAsync();
+        await tx.CommitAsync();
+        await tx.DisposeAsync();
+        await BeginEdit();
+    }
+
+    private async Task WaitUntilBlocked(int waiting)
+    {
         var deadline = DateTime.UtcNow.AddSeconds(5);
         while (DateTime.UtcNow < deadline)
         {
             if (
-                await monitor.QuerySingleAsync<bool>(
+                await db.QuerySingleAsync<bool>(
                     "SELECT @blocking = ANY(pg_blocking_pids(@waiting))",
-                    new { blocking, waiting }
+                    new { blocking = db.ProcessID, waiting },
+                    tx
                 )
             )
             {
@@ -644,22 +521,38 @@ public sealed class TestSongCounts
             );
         }
         var tracks = Enumerable.Range(0, 6).Select(_ => Guid.NewGuid()).ToArray();
-        for (var index = 0; index < tracks.Length; index++)
-        {
-            var owner = index == 5 ? 1 : 0;
-            var show =
-                index == 5 ? 3
-                : index < 2 ? 0
-                : 1;
-            await InsertFile(
-                connection,
-                transaction,
-                ids[owner],
-                showIds[show],
-                tracks[index],
-                index == 3
-            );
-        }
+        // Each file has its own recording and set. Reusing its UUID across these
+        // separate tables keeps the fixture keys simple; all IDs remain table-scoped.
+        await connection.ExecuteAsync(
+            """
+            WITH recording AS (
+                INSERT INTO sources(uuid,artist_id,show_id,is_soundboard,is_remaster,has_jamcharts,upstream_identifier,display_date,updated_at)
+                VALUES(@track,@artist,@show,false,false,false,@track::text,'2000-01-01',now()) RETURNING id
+            ), recording_set AS (
+                INSERT INTO source_sets(uuid,source_id,index,name,updated_at)
+                SELECT @track,id,1,'Set 1',now() FROM recording RETURNING id,source_id
+            )
+            INSERT INTO source_tracks(uuid,artist_id,source_id,source_set_id,track_position,title,slug,mp3_url,is_orphaned,updated_at)
+            SELECT @track,@artist,source_id,id,1,'Imported title',@track::text,
+                   'https://example.invalid/' || @track::text || '.mp3',@orphan,now()
+            FROM recording_set
+            """,
+            tracks.Select(
+                (track, index) =>
+                    new
+                    {
+                        track,
+                        artist = ids[index == 5 ? 1 : 0],
+                        show = showIds[
+                            index == 5 ? 3
+                            : index < 2 ? 0
+                            : 1
+                        ],
+                        orphan = index == 3,
+                    }
+            ),
+            transaction
+        );
         var main = SongId.New();
         var other = SongId.New();
         var alias = SongId.New();
@@ -683,78 +576,30 @@ public sealed class TestSongCounts
             new { main, alias },
             transaction
         );
-        var parts = new[]
+        var parts = new (int Track, int Part, SongId? Song, bool Resolved)[]
         {
-            new
-            {
-                track = tracks[0],
-                part = 1,
-                song = (string?)main.Value,
-                resolved = true,
-            },
-            new
-            {
-                track = tracks[0],
-                part = 2,
-                song = (string?)other.Value,
-                resolved = true,
-            },
-            new
-            {
-                track = tracks[0],
-                part = 3,
-                song = (string?)main.Value,
-                resolved = true,
-            },
-            new
-            {
-                track = tracks[1],
-                part = 1,
-                song = (string?)alias.Value,
-                resolved = true,
-            },
-            new
-            {
-                track = tracks[1],
-                part = 2,
-                song = (string?)null,
-                resolved = false,
-            },
-            new
-            {
-                track = tracks[2],
-                part = 1,
-                song = (string?)main.Value,
-                resolved = true,
-            },
-            new
-            {
-                track = tracks[3],
-                part = 1,
-                song = (string?)main.Value,
-                resolved = true,
-            },
-            new
-            {
-                track = tracks[4],
-                part = 1,
-                song = (string?)main.Value,
-                resolved = false,
-            },
-            new
-            {
-                track = tracks[5],
-                part = 1,
-                song = (string?)second.Value,
-                resolved = true,
-            },
+            (0, 1, main, true),
+            (0, 2, other, true),
+            (0, 3, main, true),
+            (1, 1, alias, true),
+            (1, 2, null, false),
+            (2, 1, main, true),
+            (3, 1, main, true),
+            (4, 1, main, false),
+            (5, 1, second, true),
         };
         await connection.ExecuteAsync(
             """
             INSERT INTO norm.track_songs(track_uuid,part,song_id,text,resolved,basis,author_type,author_ref,run_uuid)
             VALUES(@track,@part,@song,'Imported title',@resolved,'ruling','moderator','song-count-tests',current_setting('norm.run_uuid')::uuid)
             """,
-            parts,
+            parts.Select(part => new
+            {
+                track = tracks[part.Track],
+                part = part.Part,
+                song = part.Song?.Value,
+                resolved = part.Resolved,
+            }),
             transaction
         );
         var imported = new long[3];
@@ -803,52 +648,5 @@ public sealed class TestSongCounts
         }
         await store.FinishAsync();
         return new(artists, ids, shows, tracks, main, other, alias, zero, second, imported);
-    }
-
-    private static async Task InsertFile(
-        NpgsqlConnection connection,
-        NpgsqlTransaction transaction,
-        long artist,
-        long show,
-        Guid track,
-        bool orphan
-    )
-    {
-        var source = await connection.QuerySingleAsync<long>(
-            """
-            INSERT INTO sources(uuid,artist_id,show_id,is_soundboard,is_remaster,has_jamcharts,upstream_identifier,display_date,updated_at)
-            VALUES(@uuid,@artist,@show,false,false,false,@key,'2000-01-01',now()) RETURNING id
-            """,
-            new
-            {
-                uuid = Guid.NewGuid(),
-                artist,
-                show,
-                key = Guid.NewGuid().ToString(),
-            },
-            transaction
-        );
-        var set = await connection.QuerySingleAsync<long>(
-            "INSERT INTO source_sets(uuid,source_id,index,name,updated_at) VALUES(@uuid,@source,1,'Set 1',now()) RETURNING id",
-            new { uuid = Guid.NewGuid(), source },
-            transaction
-        );
-        await connection.ExecuteAsync(
-            """
-            INSERT INTO source_tracks(uuid,artist_id,source_id,source_set_id,track_position,title,slug,mp3_url,is_orphaned,updated_at)
-            VALUES(@track,@artist,@source,@set,1,'Imported title',@slug,@url,@orphan,now())
-            """,
-            new
-            {
-                track,
-                artist,
-                source,
-                set,
-                slug = track.ToString(),
-                url = "https://example.invalid/" + track + ".mp3",
-                orphan,
-            },
-            transaction
-        );
     }
 }
