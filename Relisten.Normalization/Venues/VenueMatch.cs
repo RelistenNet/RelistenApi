@@ -249,7 +249,7 @@ public sealed class VenueMatch(INormalizationDatabase db)
             await connection.QueryAsync<(
                 VenueId Id,
                 string Name,
-                string Kind,
+                VenueKind Kind,
                 string? Parent,
                 string City,
                 string? Region,
@@ -306,7 +306,7 @@ public sealed class VenueMatch(INormalizationDatabase db)
 
         // Sites of one name in two towns of a state: a suburb, a move, or two places.
         var questions = venues
-            .Where(v => v.Venue.Kind == VenueKinds.Site)
+            .Where(v => v.Venue.Kind == VenueKind.Site)
             .GroupBy(v => $"same:{v.Name}@{v.Locality.RegionKey}")
             .Where(g => g.Select(v => v.Locality.Key).Distinct().Count() > 1)
             .Select(g =>
@@ -345,7 +345,7 @@ public sealed class VenueMatch(INormalizationDatabase db)
                                 list.Select(v =>
                                     (
                                         v.Venue.Parent == null
-                                            ? v.Venue.Kind
+                                            ? NormalizationEnums.Format(v.Venue.Kind)
                                             : $"room of {v.Venue.Parent}"
                                     ) + $" ({v.Venue.Rows} rows)"
                                 )

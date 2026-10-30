@@ -769,7 +769,7 @@ public static class VenueMatcher
                     new VenueNameRecord(
                         venue,
                         row.Name.Trim(),
-                        VenueNameKinds.Spelling,
+                        VenueNameKind.Spelling,
                         Confidence: confidence
                     )
                 );

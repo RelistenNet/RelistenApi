@@ -10,14 +10,14 @@ namespace Relisten.Normalization;
 public sealed record VenueRecord(
     VenueId Id,
     string Name,
-    string Kind = VenueKinds.Site,
+    VenueKind Kind = VenueKind.Site,
     VenueId? ParentId = null,
     string? City = null,
     string? Region = null,
     string? Country = null,
     double? Latitude = null,
     double? Longitude = null,
-    string? CoordinatePrecision = null,
+    VenueCoordinatePrecision? CoordinatePrecision = null,
     float? Confidence = null
 );
 
@@ -26,7 +26,7 @@ public sealed record VenueRecord(
 public sealed record VenueNameRecord(
     VenueId VenueId,
     string Name,
-    string Kind = VenueNameKinds.Spelling,
+    VenueNameKind Kind = VenueNameKind.Spelling,
     DateOnly? ValidFrom = null,
     DateOnly? ValidTo = null,
     float? Confidence = null
@@ -57,19 +57,6 @@ public static class ShowVenueBasis
 {
     public const string Evidence = "evidence";
     public const string Ruling = "ruling";
-}
-
-public static class VenueKinds
-{
-    public const string Site = "site";
-    public const string Room = "room";
-}
-
-public static class VenueNameKinds
-{
-    public const string Official = "official";
-    public const string Short = "short";
-    public const string Spelling = "spelling";
 }
 
 /// The venue writes (string-theory ddl/002_norm.sql, venues). Same rules as songs: a write
@@ -139,14 +126,20 @@ public sealed partial class NormStore
                 ids = ordered.Select(v => v.Id.Value).ToArray(),
                 names = ordered.Select(v => v.Name).ToArray(),
                 slugs = ordered.Select(v => slugs[v.Id]).ToArray(),
-                kinds = ordered.Select(v => v.Kind).ToArray(),
+                kinds = ordered.Select(v => NormalizationEnums.Format(v.Kind)).ToArray(),
                 parents = ordered.Select(v => v.ParentId?.Value).ToArray(),
                 cities = ordered.Select(v => v.City).ToArray(),
                 regions = ordered.Select(v => v.Region).ToArray(),
                 countries = ordered.Select(v => v.Country).ToArray(),
                 lats = ordered.Select(v => v.Latitude).ToArray(),
                 lngs = ordered.Select(v => v.Longitude).ToArray(),
-                precisions = ordered.Select(v => v.CoordinatePrecision).ToArray(),
+                precisions = ordered
+                    .Select(v =>
+                        v.CoordinatePrecision is { } precision
+                            ? NormalizationEnums.Format(precision)
+                            : null
+                    )
+                    .ToArray(),
                 confidences = ordered.Select(v => v.Confidence).ToArray(),
             },
             tx
@@ -246,7 +239,7 @@ public sealed partial class NormStore
                 venues = rows.Select(r => r.n.VenueId.Value).ToArray(),
                 normalized = rows.Select(r => r.Normalized).ToArray(),
                 names = rows.Select(r => r.n.Name.Trim()).ToArray(),
-                kinds = rows.Select(r => r.n.Kind).ToArray(),
+                kinds = rows.Select(r => NormalizationEnums.Format(r.n.Kind)).ToArray(),
                 froms = rows.Select(r => r.n.ValidFrom?.ToDateTime(TimeOnly.MinValue)).ToArray(),
                 tos = rows.Select(r => r.n.ValidTo?.ToDateTime(TimeOnly.MinValue)).ToArray(),
                 confidences = rows.Select(r => r.n.Confidence).ToArray(),
@@ -438,7 +431,7 @@ public sealed partial class NormStore
             await connection.QueryAsync<(
                 VenueId Id,
                 string Name,
-                string Kind,
+                VenueKind Kind,
                 VenueId? Parent,
                 string? City,
                 string? Region,

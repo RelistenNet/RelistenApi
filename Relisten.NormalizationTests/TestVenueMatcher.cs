@@ -79,7 +79,7 @@ public class TestVenueMatcher
         var garden = new CatalogueVenue(
             VenueId.New(),
             "Madison Square Garden",
-            "site",
+            VenueKind.Site,
             null,
             "New York",
             "NY",
@@ -159,7 +159,7 @@ public class TestVenueMatcher
         var garden = new CatalogueVenue(
             VenueId.New(),
             "Madison Square Garden",
-            "site",
+            VenueKind.Site,
             null,
             "New York",
             "NY",
@@ -168,7 +168,7 @@ public class TestVenueMatcher
         var capitolA = new CatalogueVenue(
             VenueId.New(),
             "Capitol Theatre",
-            "site",
+            VenueKind.Site,
             null,
             "Port Chester",
             "NY",
@@ -177,7 +177,7 @@ public class TestVenueMatcher
         var capitolB = new CatalogueVenue(
             VenueId.New(),
             "Capitol Theatre",
-            "site",
+            VenueKind.Site,
             null,
             "Passaic",
             "NJ",
@@ -297,7 +297,7 @@ public class TestVenueMatcher
         var garden = new CatalogueVenue(
             VenueId.New(),
             "Madison Square Garden",
-            "site",
+            VenueKind.Site,
             null,
             "New York",
             "NY",
@@ -324,7 +324,7 @@ public class TestVenueMatcher
         var known = new CatalogueVenue(
             VenueId.New(),
             "Higher Ground",
-            "site",
+            VenueKind.Site,
             null,
             "Burlington",
             "VT",
@@ -638,7 +638,7 @@ public class TestVenueMatcher
         var garden = new CatalogueVenue(
             VenueId.New(),
             "Madison Square Garden",
-            "site",
+            VenueKind.Site,
             null,
             "New York",
             "NY",
@@ -647,7 +647,7 @@ public class TestVenueMatcher
         var peel = new CatalogueVenue(
             VenueId.New(),
             "The Orange Peel",
-            "site",
+            VenueKind.Site,
             null,
             "Asheville",
             "NC",
@@ -831,7 +831,7 @@ public class TestVenueMatcher
         var peel = new CatalogueVenue(
             VenueId.New(),
             "The Orange Peel",
-            "site",
+            VenueKind.Site,
             null,
             "Asheville",
             "NC",

@@ -24,14 +24,14 @@ public enum PartHint
 public sealed record TitlePart(
     string Text,
     string Key,
-    IReadOnlyList<string> Qualifiers,
+    IReadOnlyList<TrackQualifier> Qualifiers,
     bool SegueAfter,
     PartHint Hint
 )
 {
     public IReadOnlyList<string> Notes { get; init; } = [];
     public string? Bare { get; init; }
-    public string? BareQualifier { get; init; }
+    public TrackQualifier? BareQualifier { get; init; }
 }
 
 /// A parsed track title. Parts is empty when the title carries no song text at all (a bare
@@ -54,34 +54,34 @@ public static partial class TitleParser
 {
     public const string Version = "title-parse/2";
 
-    private static readonly Dictionary<string, string> QualifierWords = new()
+    private static readonly Dictionary<string, TrackQualifier> QualifierWords = new()
     {
-        ["cont"] = "continued",
-        ["contd"] = "continued",
-        ["continued"] = "continued",
-        ["reprise"] = "reprise",
-        ["rep"] = "reprise",
-        ["partial"] = "partial",
-        ["cut"] = "partial",
-        ["fade"] = "partial",
-        ["fade in"] = "partial",
-        ["fade out"] = "partial",
-        ["fades in"] = "partial",
-        ["fades out"] = "partial",
-        ["incomplete"] = "partial",
-        ["fragment"] = "partial",
-        ["tape cut"] = "partial",
-        ["tape flip"] = "tape_flip",
-        ["tape change"] = "tape_flip",
-        ["flip"] = "tape_flip",
-        ["acoustic"] = "acoustic",
-        ["instrumental"] = "instrumental",
-        ["unfinished"] = "unfinished",
-        ["jam"] = "jam",
+        ["cont"] = TrackQualifier.Continued,
+        ["contd"] = TrackQualifier.Continued,
+        ["continued"] = TrackQualifier.Continued,
+        ["reprise"] = TrackQualifier.Reprise,
+        ["rep"] = TrackQualifier.Reprise,
+        ["partial"] = TrackQualifier.Partial,
+        ["cut"] = TrackQualifier.Partial,
+        ["fade"] = TrackQualifier.Partial,
+        ["fade in"] = TrackQualifier.Partial,
+        ["fade out"] = TrackQualifier.Partial,
+        ["fades in"] = TrackQualifier.Partial,
+        ["fades out"] = TrackQualifier.Partial,
+        ["incomplete"] = TrackQualifier.Partial,
+        ["fragment"] = TrackQualifier.Partial,
+        ["tape cut"] = TrackQualifier.Partial,
+        ["tape flip"] = TrackQualifier.TapeFlip,
+        ["tape change"] = TrackQualifier.TapeFlip,
+        ["flip"] = TrackQualifier.TapeFlip,
+        ["acoustic"] = TrackQualifier.Acoustic,
+        ["instrumental"] = TrackQualifier.Instrumental,
+        ["unfinished"] = TrackQualifier.Unfinished,
+        ["jam"] = TrackQualifier.Jam,
         // "(Check)": played at soundcheck, the same day but not part of the show.
-        ["check"] = "soundcheck",
-        ["soundcheck"] = "soundcheck",
-        ["sound check"] = "soundcheck",
+        ["check"] = TrackQualifier.Soundcheck,
+        ["soundcheck"] = TrackQualifier.Soundcheck,
+        ["sound check"] = TrackQualifier.Soundcheck,
     };
 
     private static readonly HashSet<string> NoiseWords =
@@ -139,15 +139,15 @@ public static partial class TitleParser
     ];
 
     // A trailing word that may be a qualifier rather than part of the name.
-    private static readonly Dictionary<string, string> TrailingQualifiers = new()
+    private static readonly Dictionary<string, TrackQualifier> TrailingQualifiers = new()
     {
-        ["reprise"] = "reprise",
-        ["tease"] = "tease",
-        ["intro"] = "intro",
-        ["outro"] = "outro",
+        ["reprise"] = TrackQualifier.Reprise,
+        ["tease"] = TrackQualifier.Tease,
+        ["intro"] = TrackQualifier.Intro,
+        ["outro"] = TrackQualifier.Outro,
         // A jam on the song ("Amazing Grace Jam"); a named jam that is its own song ("Mind
         // Left Body Jam") matches by its exact name first.
-        ["jam"] = "jam",
+        ["jam"] = TrackQualifier.Jam,
     };
 
     private static readonly HashSet<string> SetWords =
@@ -220,15 +220,15 @@ public static partial class TitleParser
         }
 
         // A soundcheck covers the whole track: "(Check) Jam > Leaves" is a soundcheck medley.
-        if (parts.Any(p => p.Qualifiers.Contains("soundcheck")))
+        if (parts.Any(p => p.Qualifiers.Contains(TrackQualifier.Soundcheck)))
         {
             parts = parts
                 .Select(p =>
-                    p.Qualifiers.Contains("soundcheck")
+                    p.Qualifiers.Contains(TrackQualifier.Soundcheck)
                         ? p
                         : p with
                         {
-                            Qualifiers = [.. p.Qualifiers, "soundcheck"],
+                            Qualifiers = [.. p.Qualifiers, TrackQualifier.Soundcheck],
                         }
                 )
                 .ToList();
@@ -294,7 +294,7 @@ public static partial class TitleParser
 
     private static TitlePart? ParsePart(string piece, bool fromFileName)
     {
-        var qualifiers = new List<string>();
+        var qualifiers = new List<TrackQualifier>();
         var notes = new List<string>();
         var text = Parenthetical()
             .Replace(
@@ -336,7 +336,7 @@ public static partial class TitleParser
 
                     if (inner.StartsWith("w ") || inner.StartsWith("with "))
                     {
-                        qualifiers.Add("with_guest");
+                        qualifiers.Add(TrackQualifier.WithGuest);
                         return " ";
                     }
 
@@ -386,7 +386,7 @@ public static partial class TitleParser
         }
 
         string? bare = null;
-        string? bareQualifier = null;
+        TrackQualifier? bareQualifier = null;
         var lastSpace = key.LastIndexOf(' ');
         if (lastSpace > 0 && TrailingQualifiers.TryGetValue(key[(lastSpace + 1)..], out var word))
         {
