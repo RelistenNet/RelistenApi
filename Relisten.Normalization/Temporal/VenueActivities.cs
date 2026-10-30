@@ -125,11 +125,11 @@ public sealed class VenueActivities(
                 && exception is NpgsqlException or TimeoutException
             )
         {
-            // Normalization already committed. Periodic reconciliation repairs failed
-            // count refreshes without retrying otherwise successful model work.
+            // Normalization already committed. Keep successful model work and report
+            // that counts need an explicit refresh rather than rerunning that model work.
             logger.LogWarning(
                 exception,
-                "Artist venue counts need reconciliation after normalization"
+                "Artist venue count refresh failed after normalization; rerun the refresh explicitly"
             );
         }
     }
@@ -154,7 +154,8 @@ public sealed class VenueMatchActivities(
             return null;
         }
 
-        // Best effort: a venue step holding the lock means defer, never keep the import open.
+        // Matching defers if another venue step holds the lock. The separate count
+        // refresh below has its own bounded database wait after matching completes.
         using var heartbeat = new ActivityHeartbeat();
         var result = await match.RunAsync(
             [artist],
@@ -173,7 +174,7 @@ public sealed class VenueMatchActivities(
         {
             logger.LogWarning(
                 exception,
-                "Artist venue counts need reconciliation after matching {Artist}",
+                "Artist venue count refresh failed after matching {Artist}; rerun the refresh explicitly",
                 artist
             );
         }

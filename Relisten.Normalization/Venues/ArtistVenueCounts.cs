@@ -13,8 +13,9 @@ public sealed record ArtistVenueRefreshResult(int ArtistsRefreshed, int Relation
 
 /// <summary>
 /// Refreshes derived artist/venue counts after committed catalog or normalization writes.
-/// Each refresh is atomic and repeatable. Periodic reconciliation repairs changes made
-/// outside these explicit boundaries, including direct admin SQL and failed import hooks.
+/// Each refresh is atomic and repeatable. These hooks use their own connection because
+/// their source work has already committed. Admin edits call the same SQL refresh inside
+/// their source transaction instead, so changes and counts commit together.
 /// </summary>
 public sealed class ArtistVenueCounts(INormalizationDatabase db)
 {
@@ -34,8 +35,8 @@ public sealed class ArtistVenueCounts(INormalizationDatabase db)
     }
 
     /// <summary>
-    /// Recomputes only the supplied artists. A later reconciliation repairs source changes
-    /// committed after this refresh's snapshot, including an interrupted import hook.
+    /// Recomputes only the supplied artists. If a post-write refresh fails, rerun the
+    /// refresh explicitly; there is no background repair schedule.
     /// </summary>
     public async Task<ArtistVenueRefreshResult> RefreshArtistsAsync(
         IReadOnlyCollection<Guid> artists,
