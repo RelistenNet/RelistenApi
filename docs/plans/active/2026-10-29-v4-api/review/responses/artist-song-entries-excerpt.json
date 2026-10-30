@@ -1,0 +1,36 @@
+[
+  {
+    "kind": "song",
+    "song": {
+      "id": "song_62mhvjyd",
+      "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+      "name": "Scarlet Begonias",
+      "kind": "song",
+      "slug": "scarlet-begonias",
+      "original_artist": null,
+      "aliases": [
+        "Scarclet Begonias",
+        "Scarlet",
+        "Scarlet Begonnias",
+        "Scarlett Begoinias"
+      ],
+      "matched_track_count": 3355,
+      "matched_show_count": 332
+    },
+    "imported_song": null
+  },
+  {
+    "kind": "imported_song",
+    "song": null,
+    "imported_song": {
+      "id": "imported_song_3f21yqt0vvbt6ygnh6ca1rqkhf",
+      "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+      "name": "Jam",
+      "slug": "jam",
+      "upstream_identifier": "jam",
+      "setlist_show_count": 177,
+      "created_at": "2017-12-16T10:39:52.43514Z",
+      "updated_at": "2017-05-17T13:08:03Z"
+    }
+  }
+]

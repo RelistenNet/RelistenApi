@@ -43,15 +43,17 @@ caching; exact-target favorites keep merge behavior small.
 Implement packages 1 and 2 for artist/year/show-list navigation, show detail,
 direct source and track reads. Alec expanded C1 to review these with the venue
 family before auth: artist venue groups, canonical metadata and show collections,
-and imported venue fallback detail. The current local API exposes 16 GET routes.
+and imported venue fallback detail. The song family adds six reads, bringing
+the local review to 22 GET routes.
 Cover raw, normalization-disabled, partial and fully interpreted
 fixtures. Alec reviews each family before its contract spreads to the next family
 or mobile work.
 
 Use the [venue-to-playback walkthrough](review/venue-source-journey.md) for the
-current review: artist → venue group → venue's shows → show → source → track.
-Then add the next song/discovery slice for API review. Song discovery, search,
-recent lists, and artist bootstrap are not implemented by the venue slice.
+venue review: artist → venue group → venue's shows → show → source → track.
+Then use the [song-to-playback walkthrough](review/song-source-journey.md):
+artist → song → matched files/shows → source → playable track. Search, recent
+lists, and artist bootstrap remain later catalog work.
 Keep account/auth as a separate checkpoint after the catalog responses settle.
 
 Deliver a repeatable local review setup using the real development API,
@@ -88,6 +90,10 @@ Alec should be able to answer these questions by making requests:
   refresh, do grouped counts match their show collections, including imported
   fallback and cross-artist approved assignments? Does direct source detail match
   that same source inside its full show?
+- Do canonical song counts match exact playable files and their distinct shows?
+  Does a repeated medley song return one file with multiple matching ordinals?
+  Are imported setlist counts and show lists clearly separate from recording
+  matches, including zero-match canonical songs and artists without normalization?
 - Are wrong prefixes, unknown IDs and dependency failures clear?
 - Does an unchanged request return 304? Does a local normalization correction
   return 200 with a changed ETag despite unchanged imported timestamps?

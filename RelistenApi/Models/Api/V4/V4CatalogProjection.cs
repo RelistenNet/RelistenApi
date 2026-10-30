@@ -7,7 +7,7 @@ using Relisten.Normalization;
 namespace Relisten.Api.Models.Api.V4;
 
 /// <summary>Projects materialized catalog facts without further database reads.</summary>
-public static class V4CatalogProjection
+public static partial class V4CatalogProjection
 {
     public static ShowResource Show(CatalogShow value) =>
         ProjectShow<ShowResource>(value) with

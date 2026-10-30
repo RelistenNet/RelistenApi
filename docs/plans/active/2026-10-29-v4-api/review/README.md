@@ -5,17 +5,23 @@ Start the API with `./local-dev/v4-review/run.sh`, then open
 The [local setup](../../../../../local-dev/v4-review/README.md) explains startup,
 captures, the materialized counts, and restoring local approval flags.
 
-The current review adds stored artist–venue identities and two explicit count
-scopes. Shows now expose `artist_venue`, whose `artist_show_count` belongs to that
+The current review includes a [song-to-playback journey](song-source-journey.md)
+as well as stored artist–venue identities and two explicit venue count scopes.
+Song discovery keeps exact recording matches separate from imported setlist
+appearances. Its test and live-capture results belong in the
+[verification log](../verification.md).
+
+Shows now expose `artist_venue`, whose `artist_show_count` belongs to that
 artist and canonical place. Its nested `venue.global_show_count` belongs to the
 shared venue across approved-read artists. The old flat `show.venue` is removed.
 The same relationship resource appears in show summaries, full shows, canonical
 artist-list children, and direct artist venue detail.
 
-The local host is running this graph. The 46-request real-data capture completed,
-and all count, identity, and fallback checks passed.
-The [verification log](../verification.md#stored-artistvenue-response-review-2026-10-30)
-records the acceptance checks; earlier captures describe their recorded revision.
+The local host serves all 22 review routes. The latest 62-request real-data
+capture passed its count, identity, fallback, and song-to-playback checks.
+The [verification log](../verification.md#song-browsing-and-recording-discovery-2026-10-30)
+records the results and the measured artist-wide count latency. Earlier captures
+describe their recorded revision.
 
 Start with Red Rocks and Grateful Dead: the shared venue has 176 shows across
 approved artists; Grateful Dead's relationship has 20 across all its years.
@@ -33,8 +39,8 @@ show response; use its URL for the complete recording hierarchy.
 ## Follow the counts through the catalog
 
 Use the [venue-to-playback walkthrough](venue-source-journey.md): artist venue
-list → relationship detail → venue shows → show → source → track. The existing
-16 GET routes retain their paths. This update changes their shared resource graph.
+list → relationship detail → venue shows → show → source → track. The venue/playback
+routes retain their paths; six song reads extend the local review to 22 GET routes.
 
 1. Open an artist's venue list. A canonical entry has `kind: "artist_venue"` and
    an `artist_venue` child. Its imported alternative has `kind: "imported_venue"`
@@ -74,6 +80,17 @@ const venueId = venue?.id;
 Missing, disabled, unmatched, or unmaterialized relationships return
 `artist_venue: null`, keeping imported fallback usable. A source retains its own
 imported venue observation, which may differ from the show's venue.
+
+## Follow a song to its playable files
+
+Use the [song-to-playback walkthrough](song-source-journey.md) to compare the
+artist browse list, canonical song detail, exact matched files and shows, and
+imported setlist detail. Start with
+[Scarlet Begonias](http://127.0.0.1:43823/api/v4/songs/song_62mhvjyd).
+Compare `matched_track_count` and `matched_show_count` with the complete recording
+lists. Imported `setlist_show_count` describes a separate collection; it can
+legitimately differ. Full live captures and test results are recorded separately
+from this guide.
 
 ## Review the remaining response contracts
 

@@ -23,6 +23,10 @@ internal static class V4CatalogFixture
                     Path.Combine(AppContext.BaseDirectory, "Fixtures", "v4", "catalog.sql")
                 );
                 await connection.ExecuteAsync(sql);
+                var songs = await File.ReadAllTextAsync(
+                    Path.Combine(AppContext.BaseDirectory, "Fixtures", "v4", "songs.sql")
+                );
+                await connection.ExecuteAsync(songs);
                 loaded = true;
             }
         }

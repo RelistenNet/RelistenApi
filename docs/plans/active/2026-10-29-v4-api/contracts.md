@@ -394,20 +394,98 @@ Read compact canonical song data in the same batch/snapshot, avoiding an N+1
 HTTP/SQL query per part. Preserve the whole ordered interpretation on mobile
 as one replacement list; do not turn ordinals into persistent file identities.
 
-Normalized song discovery uses exact resolved track links. `/songs/{id}/tracks`
-returns each file once with matching part ordinals and exact source/show/artist
-parents. `/songs/{id}/shows` deduplicates the shows from those recording matches.
-Name counts `matched_track_count` and `matched_show_count`. Imported setlist
-evidence may map raw song identity, but must not fabricate source/track matches
-or join the normalized recording-show count. The imported-song detail route
-retains its setlist-derived show list and `setlist_show_count` independently.
+### Song browsing and recording discovery
 
-Artist song browse entries use `song` or `imported_song` references. For approved
-artists return canonical song rows plus imported entries lacking a canonical
-evidence mapping. For unapproved artists return imported entries. Preserve
-imported entities and count meaning in bootstrap/lookup even when canonical
-entries replace them in the browse list. Zero recording matches is a legitimate
-canonical song state, not permission to hide raw data.
+`GET /artists/{artistId}/songs` is the browse list for every artist. Each
+`ArtistSongEntryResource` has `kind` (`song` or `imported_song`), nullable `song`,
+and nullable `imported_song`; exactly one target is populated. The server applies
+`features.norm_catalogue` and partial coverage. Clients follow the returned kind
+without selecting a list endpoint from feature flags.
+
+For approved artists, include canonical root songs and imported entries without
+a valid `norm.song_evidence` mapping to that artist's surviving song. An imported
+title alone never establishes a mapping. Invalid merge chains retain imported
+fallback entries. Include canonical songs with zero recording matches. For
+unapproved artists, return imported entries only. The full
+`GET /artists/{artistId}/imported-songs` inventory preserves mapped and unmapped
+rows, including unused songs, even when canonical entries replace them in the
+browse list.
+
+`GET /songs/{songId}` returns `SongDetailResource` directly:
+
+- `id`, `artist_id`, `name`, and nullable `kind` identify the surviving song;
+- `slug` and nullable `original_artist` retain canonical metadata;
+- `aliases` contains distinct alias strings and merged predecessors' names in
+  stable order. Song aliases have no alias-kind field in the normalization schema;
+- `matched_track_count` and `matched_show_count` count exact active recording
+  matches under the rules below.
+
+The `song` child in a canonical browse entry is that same detail resource.
+Track parts retain the compact `SongResource` containing only `id`, `artist_id`,
+`name`, and `kind`. A compact reference does not clear previously stored song
+metadata or set absent counts to zero.
+
+`GET /songs/{songId}/tracks` returns direct list entries shaped as:
+
+```json
+{
+  "track": { "id": "track_<UUID-suffix>", "normalization": {} },
+  "matching_part_ordinals": [1, 3]
+}
+```
+
+The example abbreviates `track`: the actual child is the complete existing
+`TrackResource`, identical to its direct track read. It preserves the imported
+playback title, file URLs, exact artist/show/source/set parents, and full ordered
+normalization. Return each playable file once even when the requested song
+occurs in several parts. `matching_part_ordinals` lists those matched parts in
+ascending order; it does not establish new file identities or audio offsets.
+
+Discovery membership requires a resolved song part, a valid artist-owned
+canonical chain, an active non-orphaned track, and consistent source/set/show/
+artist parents. Unresolved and non-song parts cannot establish a match. A partial
+track can match through its resolved parts; a track whose complete interpretation
+is inconsistent is excluded. Counts use this same recording membership.
+`GET /songs/{songId}/shows` returns distinct show summaries from those recording
+matches, ordered by show date and identity. It does not include shows known only
+through imported setlists.
+
+All three canonical song routes resolve a merged ID to its survivor. Unknown IDs
+or a song owned by an artist without approved reads return 404. Malformed or
+wrong-kind IDs return 422. A known approved song with an invalid canonical chain
+returns a no-store 503 problem; correcting that chain restores normal reads.
+
+### Imported songs and setlist membership
+
+An `ImportedSongResource` contains `id`, `artist_id`, `name`, `slug`,
+`upstream_identifier`, `created_at`, `updated_at`, and `setlist_show_count`.
+`GET /artists/{artistId}/imported-songs/{importedSongId}` returns those fields
+plus `shows`, the complete setlist-supported catalog show-summary collection.
+Foreign artist-owned rows return 404; known songs with no catalog show matches
+return an empty list and a zero count.
+
+`setlist_show_count` counts distinct **catalog show identities** supported by
+`setlist_songs_plays → setlist_shows`, matched by artist and date. Multiple
+imported setlists on one date do not duplicate a catalog show. Distinct catalog
+show IDs on that date remain distinct. A setlist-only date with no catalog show
+is outside this collection and count. The count matches the detail's show list
+and has the same meaning in raw inventory and imported browse entries.
+
+Imported evidence may map song identity, but must not fabricate source/track
+matches or join the canonical recording-show count. Imported detail retains its
+setlist-derived show list even if normalized recording matches differ.
+
+These six routes use the existing direct-response, single-snapshot, payload-ETag,
+and failure contracts. Artist lists replace only their own browse/inventory
+membership. Song track/show lists replace only their exact cached query results;
+imported detail replaces only that imported song's show associations. Upsert
+related resources without deleting favorites, offline files, or other queries.
+
+The implementation separates
+[canonical resolution](../../../../RelistenApi/Services/Catalog/CatalogSongMetadataReader.cs),
+[recording membership and counts](../../../../RelistenApi/Services/Catalog/CatalogSongMatchReader.cs),
+[shared track interpretation](../../../../RelistenApi/Services/Catalog/CatalogTrackNormalizationReader.cs),
+and [song navigation](../../../../RelistenApi/Services/Catalog/CatalogSongReader.cs).
 
 ## Canonical redirects and retirement
 

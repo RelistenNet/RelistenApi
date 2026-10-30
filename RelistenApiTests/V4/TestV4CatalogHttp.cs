@@ -994,7 +994,13 @@ public sealed partial class TestV4CatalogHttp
                 "/api/v4/artists/{artistId}/imported-venues",
                 "/api/v4/artists/{artistId}/imported-venues/{importedVenueId}",
                 "/api/v4/venues/{venueId}",
-                "/api/v4/venues/{venueId}/shows"
+                "/api/v4/venues/{venueId}/shows",
+                "/api/v4/artists/{artistId}/songs",
+                "/api/v4/artists/{artistId}/imported-songs",
+                "/api/v4/artists/{artistId}/imported-songs/{importedSongId}",
+                "/api/v4/songs/{songId}",
+                "/api/v4/songs/{songId}/tracks",
+                "/api/v4/songs/{songId}/shows"
             );
         var legacy = await GetJson("/api-docs/v3/swagger.json");
         legacy["paths"]!

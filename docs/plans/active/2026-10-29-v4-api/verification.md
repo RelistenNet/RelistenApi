@@ -549,3 +549,60 @@ Verification completed locally:
 
 The updated curated response examples are in [review/responses](review/responses/).
 Mobile persistence changes remain planned; no production catalog data changed.
+
+
+## Song browsing and recording discovery, 2026-10-30
+
+Implemented six song reads, bringing the local v4 review to 22 GET operations:
+artist song browse, canonical detail, matched files, matched shows, imported
+inventory, and imported detail. [Song-to-playback review](review/song-source-journey.md)
+links the real URLs and saved examples. Imported setlist evidence remains separate
+from exact recording membership.
+
+Verification completed:
+
+- All 79 v4 HTTP checks passed after the shared-reader refactor and final
+  simplification. The 18 new song cases cover repeated song parts in one file,
+  multiple recordings per show, merged identities/aliases, partial interpretation,
+  orphan/unresolved exclusions, zero-match songs, raw/disabled artists, imported
+  date-and-artist membership, duplicate setlist dates, invalid IDs, count-only and
+  alias ETag changes, dependency failure, and broken-merge recovery.
+- Existing show/source/track HTTP contracts still pass. Discovery uses the same
+  track projection and batched interpretation policy; compact embedded song
+  references retain their four-field contract.
+- The client-only local API was restarted against the restored `relisten_db`.
+  All 62 real-data capture requests passed, including browse/detail equality,
+  one file per result, exact matching part ordinals, complete file/show count
+  equality, exact source/show traversal, imported list/detail equality, an
+  unapproved artist, and a zero-match canonical song.
+- Grateful Dead browse returned 547 entries: 402 canonical songs and 145 imported
+  fallbacks. Scarlet Begonias returned 3,355 files across 332 distinct shows.
+  Its mapped imported song returned 315 catalog shows from setlist evidence.
+  Ryan Adams returned 786 imported entries through the same artist browse route.
+- Normalization table row counts and maximum update timestamps were unchanged
+  before and after the HTTP captures. Readers use read-only snapshots; tests
+  inserted and changed edge cases only in their disposable database.
+- Two independent correctness/readability reviews found no unresolved issues.
+  The simplification pass extracted named evidence-mapping and alias-read phases;
+  the 79 checks passed again after that change. CSharpier, whitespace, response
+  JSON, documentation links, and review-script syntax checks passed.
+
+### Capacity check before rollout
+
+Real local `EXPLAIN ANALYZE` measured 50.675 ms for Scarlet's exact membership
+and counts, and 3,910.799 ms for all 402 Grateful Dead canonical song counts.
+Batched invalid-file validation replaced a correlated per-file check. Moving
+ordinal aggregation did not improve the full-artist query and was discarded.
+
+The HTTP capture measured 5.704 seconds for the complete artist song list,
+including imported setlist counts; imported inventory took 1.394 seconds.
+Scarlet detail took 47 ms, the 3,355-file response 200 ms, and matched shows 77 ms.
+These are individual local observations, not a production load test. The
+artist-wide count cost remains an explicit rollout gate: simplify or optimize
+those reads and verify primary capacity before enabling the mobile v4 transport.
+No generic count cache, new count table, background writer, or extra migration
+was added for this API review checkpoint.
+
+Full JSON, headers, and timings remain in ignored `local-dev/v4-review/.output/`.
+Alec's response acceptance, mobile apply, account/auth migration, and production
+rollout remain pending. Production data and credentials were not changed.
