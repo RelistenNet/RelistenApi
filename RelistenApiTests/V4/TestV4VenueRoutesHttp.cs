@@ -272,15 +272,15 @@ public sealed partial class TestV4CatalogHttp
                 connection,
                 """
                 INSERT INTO norm.venues(id,name,slug,author_type,author_ref,run_uuid)
-                VALUES('venue_00000002','Survivor Venue','review-venue-survivor','importer','v4-review','00000000-0000-0000-0000-000000000099');
+                VALUES('venue_00000991','Survivor Venue','review-venue-survivor','importer','v4-review','00000000-0000-0000-0000-000000000099');
                 INSERT INTO norm.venue_names(venue_id,normalized,name,kind,author_type,author_ref,run_uuid)
-                VALUES('venue_00000002','survivor-alias','Survivor Alias','short','importer','v4-review','00000000-0000-0000-0000-000000000099');
-                UPDATE norm.venues SET merged_into='venue_00000002' WHERE id='venue_00000001';
+                VALUES('venue_00000991','survivor-alias','Survivor Alias','short','importer','v4-review','00000000-0000-0000-0000-000000000099');
+                UPDATE norm.venues SET merged_into='venue_00000991' WHERE id='venue_00000001';
                 """
             );
             var venue = await GetJson(CanonicalVenuePath);
-            venue["id"]!.GetValue<string>().Should().Be("venue_00000002");
-            var direct = await GetJson("/api/v4/venues/venue_00000002");
+            venue["id"]!.GetValue<string>().Should().Be("venue_00000991");
+            var direct = await GetJson("/api/v4/venues/venue_00000991");
             JsonNode.DeepEquals(venue, direct).Should().BeTrue();
             venue["names"]!
                 .AsArray()
@@ -300,7 +300,7 @@ public sealed partial class TestV4CatalogHttp
                 .AsArray()
                 .Select(show => show!["artist_venue"]!["venue"]!["id"]!.GetValue<string>())
                 .Should()
-                .OnlyContain(id => id == "venue_00000002");
+                .OnlyContain(id => id == "venue_00000991");
         }
         finally
         {
@@ -308,8 +308,8 @@ public sealed partial class TestV4CatalogHttp
                 connection,
                 """
                 UPDATE norm.venues SET merged_into=NULL WHERE id='venue_00000001';
-                DELETE FROM norm.venue_names WHERE venue_id='venue_00000002';
-                DELETE FROM norm.venues WHERE id='venue_00000002';
+                DELETE FROM norm.venue_names WHERE venue_id='venue_00000991';
+                DELETE FROM norm.venues WHERE id='venue_00000991';
                 """
             );
         }
