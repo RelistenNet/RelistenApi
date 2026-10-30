@@ -606,3 +606,64 @@ was added for this API review checkpoint.
 Full JSON, headers, and timings remain in ignored `local-dev/v4-review/.output/`.
 Alec's response acceptance, mobile apply, account/auth migration, and production
 rollout remain pending. Production data and credentials were not changed.
+
+
+## Stored song counts and latency, 2026-10-30
+
+The [song-count foundation PR #111](https://github.com/RelistenNet/RelistenApi/pull/111)
+is stacked on artist–venue PR #108, below v4. [Admin PR #3](https://github.com/RelistenNet/relisten-admin/pull/3)
+now refreshes song counts atomically with catalogue edits. The foundation's
+[maintenance contract](../2026-10-30-song-counts/README.md) defines storage,
+locking, repair, and rollout. V4 reads stored counters; recording discovery and
+recounts share `norm.song_recording_matches`.
+
+Completed verification:
+
+- 133 combined API/foundation checks passed: 82 v4 HTTP/snapshot cases and 51
+  song-count, artist–venue, and rebuild checks. Three new HTTP cases prove that
+  stored counter-only corrections invalidate ETags, reads never recount, and
+  live discovery can lead the stored count until explicit refresh repairs it.
+- Admin passed 38 targeted checks, formatting, lint, and type checks. The tests
+  cover atomic source/count commit and rollback, narrow execution grants,
+  same-artist serialization (including uppercase UUID input), disjoint progress,
+  and nonblocking readers. Its broader lab-dependent suite was unavailable.
+- Both independent correctness/readability reviews found no unresolved issues.
+  Recounts reuse the existing artist catalogue lock. There is no new global gate,
+  recurring scan, queue, or per-row source trigger. Ordinary full repairs commit
+  each artist separately; the one-time migration retains its locks until commit.
+- The official worker applied migration 16 to local `relisten_db`, including its
+  seed, in 10.208 seconds. It created 4,539 canonical and 16,606 imported counters,
+  covering every current parent. All 402 canonical and 557 imported Grateful Dead
+  counts matched the saved pre-storage live responses. Normalization row counts,
+  update watermarks, and audit totals/watermarks stayed unchanged.
+- A repeated Grateful Dead recount returned zero changed rows. Ordered checksums
+  of both counter tables, including timestamps, stayed unchanged. Those checksums
+  also remained unchanged after all HTTP captures and timing requests.
+- V4 was restacked with all 19 earlier commits preserved; range-diff showed every
+  replayed patch unchanged. The local client-only preview was restarted. All 62
+  real-data capture requests passed, complete browse/imported bodies matched the
+  pre-storage responses, and the pre-storage artist-list ETag still returned 304.
+  Live Swagger retains the same 22 routes and response schemas.
+
+### Measured response times
+
+Five successive full-body 200 GETs per endpoint used `curl` against the restarted
+local API. These are warm local samples, not production capacity measurements:
+
+| Endpoint | Earlier capture | Stored-read median | Stored-read range |
+| --- | --- | --- | --- |
+| Grateful Dead song browse | 5,704 ms | 18.751 ms | 14.446–27.799 ms |
+| Full imported song inventory | 1,394 ms | 6.252 ms | 5.519–6.627 ms |
+| Scarlet Begonias detail | 47 ms | 6.612 ms | 5.271–8.093 ms |
+
+The separate 62-request capture measured 27.716 ms for artist song browsing and
+10.619 ms for imported inventory. File/show discovery remains live: the complete
+3,355-file response took 269.897 ms and the 332-show response took 87.244 ms in
+that capture. An initial browser revalidation after restart logged 344.670 ms;
+warm medians do not describe cold startup or production load.
+
+Raw timing samples and captures are in ignored
+`local-dev/v4-review/.output/stored-count-timings.json` and
+`request-timings.json`. The expensive artist-wide count aggregation is removed from
+GETs. Production load/capacity validation and mobile apply remain pending.
+No production deployment or database mutation occurred.

@@ -367,17 +367,12 @@ public sealed class CatalogSongReader(
         return shows;
     }
 
-    // Date-based imported evidence does not identify a recording or playable file.
-    // Count distinct catalog show IDs: multiple imported setlists can describe one date.
+    // Imported membership is still read from setlists, but its count is maintained
+    // by the shared rebuild/normalization refresh rather than recomputed by GETs.
     private const string ImportedSongSelect = """
-        SELECT s.*,a.uuid artist_uuid,counts.setlist_show_count
+        SELECT s.*,a.uuid artist_uuid,COALESCE(counts.setlist_show_count,0) setlist_show_count
         FROM setlist_songs s JOIN artists a ON a.id=s.artist_id
-        CROSS JOIN LATERAL (
-            SELECT count(DISTINCT sh.id)::int setlist_show_count FROM setlist_songs_plays p
-            JOIN setlist_shows ss ON ss.id=p.played_setlist_show_id AND ss.artist_id=s.artist_id
-            JOIN shows sh ON sh.artist_id=s.artist_id AND sh.date=ss.date
-            WHERE p.played_setlist_song_id=s.id
-        ) counts
+        LEFT JOIN setlist_song_counts counts ON counts.setlist_song_id=s.id
         """;
 
     private sealed class SongArtist

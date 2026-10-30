@@ -290,6 +290,179 @@ public sealed partial class TestV4CatalogHttp
     }
 
     [Test]
+    public async Task Stored_recording_counter_correction_revalidates_payloads_without_read_side_recount()
+    {
+        var paths = new[] { DiscoverySongPath, SongArtistPath + "/songs" };
+        var validators = new Dictionary<string, string>();
+        foreach (var path in paths)
+        {
+            using var response = await http.GetAsync(path);
+            validators[path] = response.Headers.ETag!.ToString();
+        }
+        var trackBefore = await GetJson("/api/v4/source-tracks/" + CatalogId("track", 341));
+        await using var connection = await MigratedTestDatabase.OpenAsync();
+        try
+        {
+            await connection.ExecuteAsync(
+                """
+                UPDATE norm.song_counts SET matched_track_count=9,matched_show_count=7,
+                    updated_at=clock_timestamp() WHERE song_id='song_00000101'
+                """
+            );
+            var stored = await connection.QuerySingleAsync<string>(
+                "SELECT c::text FROM norm.song_counts c WHERE song_id='song_00000101'"
+            );
+            foreach (var path in paths)
+            {
+                using var response = await Conditional(path, validators[path]);
+                response.StatusCode.Should().Be(HttpStatusCode.OK);
+                response.Headers.ETag!.ToString().Should().NotBe(validators[path]);
+            }
+            var detail = await GetJson(DiscoverySongPath);
+            detail["matched_track_count"]!.GetValue<int>().Should().Be(9);
+            detail["matched_show_count"]!.GetValue<int>().Should().Be(7);
+            var browse = (await GetJson(SongArtistPath + "/songs")).AsArray();
+            JsonNode
+                .DeepEquals(
+                    browse.Single(entry =>
+                        entry!["song"]?["id"]?.GetValue<string>() == "song_00000101"
+                    )!["song"],
+                    detail
+                )
+                .Should()
+                .BeTrue();
+            (await GetJson(DiscoverySongPath + "/tracks")).AsArray().Should().HaveCount(3);
+            (await GetJson(DiscoverySongPath + "/shows")).AsArray().Should().HaveCount(2);
+            JsonNode
+                .DeepEquals(
+                    trackBefore,
+                    await GetJson("/api/v4/source-tracks/" + CatalogId("track", 341))
+                )
+                .Should()
+                .BeTrue();
+            (
+                await connection.QuerySingleAsync<string>(
+                    "SELECT c::text FROM norm.song_counts c WHERE song_id='song_00000101'"
+                )
+            )
+                .Should()
+                .Be(stored);
+        }
+        finally
+        {
+            await connection.ExecuteAsync(
+                "SELECT norm.refresh_song_counts('00000000-0000-0000-0000-000000000301'::uuid)"
+            );
+        }
+    }
+
+    [Test]
+    public async Task Stored_imported_counter_correction_is_shared_by_browse_inventory_and_detail()
+    {
+        var path = ImportedSongPath(301, 352);
+        using var initial = await http.GetAsync(path);
+        var etag = initial.Headers.ETag!.ToString();
+        await using var connection = await MigratedTestDatabase.OpenAsync();
+        try
+        {
+            await connection.ExecuteAsync(
+                """
+                UPDATE setlist_song_counts SET setlist_show_count=7,updated_at=clock_timestamp()
+                WHERE setlist_song_id=925052
+                """
+            );
+            var stored = await connection.QuerySingleAsync<string>(
+                "SELECT c::text FROM setlist_song_counts c WHERE setlist_song_id=925052"
+            );
+            using var changed = await Conditional(path, etag);
+            changed.StatusCode.Should().Be(HttpStatusCode.OK);
+            var detail = JsonNode.Parse(await changed.Content.ReadAsStringAsync())!;
+            detail["setlist_show_count"]!.GetValue<int>().Should().Be(7);
+            var browse = (await GetJson(SongArtistPath + "/songs")).AsArray();
+            browse.Single(entry =>
+                entry!["imported_song"]?["id"]?.GetValue<string>()
+                == CatalogId("imported_song", 352)
+            )!["imported_song"]!["setlist_show_count"]!
+                .GetValue<int>()
+                .Should()
+                .Be(7);
+            var inventory = (await GetJson(SongArtistPath + "/imported-songs")).AsArray();
+            inventory.Single(song =>
+                song!["id"]!.GetValue<string>() == CatalogId("imported_song", 352)
+            )!["setlist_show_count"]!
+                .GetValue<int>()
+                .Should()
+                .Be(7);
+            (
+                await connection.QuerySingleAsync<string>(
+                    "SELECT c::text FROM setlist_song_counts c WHERE setlist_song_id=925052"
+                )
+            )
+                .Should()
+                .Be(stored);
+        }
+        finally
+        {
+            await connection.ExecuteAsync(
+                "SELECT norm.refresh_song_counts('00000000-0000-0000-0000-000000000301'::uuid)"
+            );
+        }
+    }
+
+    [Test]
+    public async Task Recording_discovery_converges_with_stored_counts_only_after_explicit_refresh()
+    {
+        using var initial = await http.GetAsync(DiscoverySongPath);
+        var etag = initial.Headers.ETag!.ToString();
+        await using var connection = await MigratedTestDatabase.OpenAsync();
+        try
+        {
+            await using (var sourceWrite = await connection.BeginTransactionAsync())
+            {
+                await connection.ExecuteAsync(
+                    """
+                    SET LOCAL norm.author_type='importer';
+                    SET LOCAL norm.author_ref='v4-review';
+                    SET LOCAL norm.run_uuid='00000000-0000-0000-0000-000000000099';
+                    UPDATE norm.track_songs SET song_id=NULL,resolved=false,basis='open'
+                    WHERE track_uuid='00000000-0000-0000-0000-000000000343' AND part=1;
+                    """,
+                    transaction: sourceWrite
+                );
+                await sourceWrite.CommitAsync();
+            }
+            // Import hooks run after their source commit. During that gap, discovery
+            // is current but the saved count and its response validator remain unchanged.
+            (await GetJson(DiscoverySongPath + "/tracks"))
+                .AsArray()
+                .Should()
+                .HaveCount(2);
+            (await GetJson(DiscoverySongPath + "/shows")).AsArray().Should().ContainSingle();
+            using var stale = await Conditional(DiscoverySongPath, etag);
+            stale.StatusCode.Should().Be(HttpStatusCode.NotModified);
+
+            await connection.ExecuteAsync(
+                "SELECT norm.refresh_song_counts('00000000-0000-0000-0000-000000000301'::uuid)"
+            );
+            using var refreshed = await Conditional(DiscoverySongPath, etag);
+            refreshed.StatusCode.Should().Be(HttpStatusCode.OK);
+            var detail = JsonNode.Parse(await refreshed.Content.ReadAsStringAsync())!;
+            detail["matched_track_count"]!.GetValue<int>().Should().Be(2);
+            detail["matched_show_count"]!.GetValue<int>().Should().Be(1);
+        }
+        finally
+        {
+            await ChangeNormalization(
+                connection,
+                """
+                UPDATE norm.track_songs SET song_id='song_00000101',resolved=true,basis='ruling'
+                WHERE track_uuid='00000000-0000-0000-0000-000000000343' AND part=1
+                """
+            );
+        }
+    }
+
+    [Test]
     public async Task Song_alias_correction_refreshes_browse_and_detail_without_changing_recording_titles()
     {
         using var initial = await http.GetAsync(DiscoverySongPath);
