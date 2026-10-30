@@ -204,12 +204,33 @@ production data, account/auth code or mobile state changed.
 
 The earlier C1 revision exposed venue name periods and left historical selection
 to clients. Alec superseded that policy on 2026-10-30 and discarded the separate
-venue-history fix branch. The active stack is normalization enums → v4 API.
+venue-history fix branch. The active stack is normalization enums → artist-venue foundation → v4 API.
 
 Show UI displays imported venue name/locality and links through the optional
-canonical `venue`. Canonical name/locality is fallback only when imported data is
+canonical `artist_venue.venue`. Canonical name/locality is fallback only when imported data is
 absent. Canonical resources remain `venue`/`song`; no `venue_display` is required.
 Venue `names` is a deduplicated collection of `{ name, kind }` aliases, including
 retained names from merged venues. Periods and historical display selection are
 out of scope. Alias corrections refresh the resource ETag without changing its
 imported label or recording timestamps. No data repair or backfill was run.
+
+
+## Stored artist–venue resources, 2026-10-30
+
+The [foundation](../2026-10-30-artist-venues/README.md) now stores native short
+relationship IDs, scoped counts, and timestamps. Migration 15 and a full refresh
+were applied to local `relisten_db`: independent comparison matched all 5,397
+pairs and 13,418 assignments across 12 artists. This local operation changed only
+derived storage; production remains unchanged.
+
+The v4 graph replaces `show.venue` with `show.artist_venue.venue`. Relationship
+counts are artist-wide and global venue counts sum approved artists. The global
+value is invariant across artist/year filters. Reads must not create relationships
+or run recounts. Missing materialized relationships preserve imported fallback.
+Current source show lists and stored counts can differ after an unrefreshed write;
+that lag is owned by the write/repair path, not by GET handlers.
+
+Mobile persistence should keep the relationship and global venue as separate
+entities. A query result owns its membership, not the entity's count scope. The
+same nested venue cannot safely alternate between artist and global counts in a
+shared cache.

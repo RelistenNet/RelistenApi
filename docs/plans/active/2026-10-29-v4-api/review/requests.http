@@ -48,6 +48,18 @@ GET {{base}}/api/v4/venues/venue_fp4h900f
 ### Shared venue: shows across approved artists
 GET {{base}}/api/v4/venues/venue_fp4h900f/shows
 
+### Shared venue: artist count beside global count
+GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/venues/venue_fp4h900f
+
+### Shared venue: the artist collection
+GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/venues/venue_fp4h900f/shows
+
+### Shared venue: a show with the same relationship and counts
+GET {{base}}/api/v4/shows/show_0gmtpk4g0pf5yfayb76m0j0k7g
+
+### Shared venue: year summaries keep the full artist and global counts
+GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/years/year_17y4xnqznvcfat3b9kyncexdjg
+
 ### Imported venue: original observations and exact show scope
 GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/imported-venues/imported_venue_01r8jjw47zb4k8fgqb8heqst9w
 

@@ -28,7 +28,7 @@
         "created_at": "2018-07-20T18:10:45.884835Z",
         "updated_at": "2018-01-10T07:24:26Z"
       },
-      "venue": null,
+      "artist_venue": null,
       "year": {
         "id": "year_4hchgy7m3qgkbtrae882fd72y7",
         "artist_id": "artist_26t53xjyrjg4jr1gw929zz2hm6",

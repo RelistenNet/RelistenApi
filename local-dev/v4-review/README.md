@@ -8,9 +8,10 @@ Run from the repository root:
 
 Open <http://127.0.0.1:43823/api-docs-v4>. This is the normal Development API
 with the real controller, reader, serializer and middleware registrations. It
-binds to loopback and uses the restored `relisten_db`; the script never drops,
-seeds or resets it. Development starts no import workers or schedules. Startup
-applies the checkout's catalog migrations as usual; C1 adds no migration.
+binds to loopback and uses the restored `relisten_db`. Development starts no
+import workers or schedules. Startup applies the checkout's catalog migrations.
+The foundation's migration 15 creates and seeds derived relationship rows from
+the real show assignments; it has already been applied to this local database.
 
 In another terminal:
 
@@ -39,15 +40,17 @@ to inspect the resource links. Implemented families are:
   `/by-number/{year}` for year detail with show summaries.
 - `GET /api/v4/artists/{artistId}/shows`: the complete artist show-summary list.
 - `GET /api/v4/artists/{artistId}/venues`: canonical show groups with imported
-  fallback entries and distinct show counts. Append `/{venueId}` for its scoped
-  entry or `/{venueId}/shows` for its artist-filtered shows.
-- `GET /api/v4/venues/{venueId}`: canonical metadata and aliases; append `/shows`
+  fallback entries. Canonical children are stored `artist_venue` resources with
+  `artist_show_count`. Append `/{venueId}` for that direct relationship resource
+  or `/{venueId}/shows` for its artist-filtered shows.
+- `GET /api/v4/venues/{venueId}`: canonical metadata, aliases, and
+  `global_show_count`; append `/shows`
   for approved assignments across artists, optionally filtered by `artist_id`.
 - `GET /api/v4/artists/{artistId}/imported-venues`: all imported rows and show
   counts, including unused rows. Append `/{importedVenueId}` for that row with its
   complete show collection.
 - `GET /api/v4/shows/{showId}`: full show with sources, sets, tracks, imported
-  venue observations, canonical venue aliases and approved normalization.
+  venue observations, stored `artist_venue` links, aliases and approved normalization.
 - `GET /api/v4/sources/{sourceId}`: that same complete source resource directly,
   including its own imported venue and active playable files.
 - `GET /api/v4/source-tracks/{sourceTrackId}`: that same track resource directly,
@@ -89,11 +92,30 @@ No provider imports or normalization jobs are needed for this review.
 Synthetic regression data is confined to disposable test databases under
 `RelistenApiTests/Fixtures/v4/`. Manual review uses the restored records.
 
-Venue resources use `venue` and `song` schema names. Shows expose nullable
-`venue` alongside `imported_venue`; `venue_display` has been removed. A venue's
-`names` contains distinct `{ name, kind }` pairs, including merged aliases;
-kind is `official`, `short`, or `spelling`. Date ranges are not exposed.
-Show UI displays the imported venue label and locality and links to `venue.id`
-when a normalized venue exists. The canonical label is a fallback when imported
-venue data is absent.
-The request collection includes the Oakland/Henry J. Kaiser example.
+## Artist and global venue counts
+
+Show resources expose nullable `artist_venue` alongside `imported_venue`; the old
+flat `show.venue` is removed. The relationship contains its native short ID,
+`artist_id`, stored `artist_show_count`, timestamps, and nested `venue`. That
+shared venue includes `global_show_count`, summing stored counts only for artists
+with approved normalized reads. Its value stays the same across artist/year
+filters. The artist count likewise covers all the artist's shows at that place.
+
+Artist venue lists discriminate `artist_venue` and `imported_venue` targets.
+Canonical children match show relationships and direct artist venue detail.
+Imported targets keep base metadata; the entry's `fallback_show_count` counts
+only its unmatched subset and must not overwrite a raw row's full count. Missing,
+disabled, unmatched, or unmaterialized relationships preserve imported fallback.
+
+The local full refresh was independently verified against real assignments:
+5,397 pairs across 12 artists and 13,418 show memberships, with zero mismatches.
+A second recount changed no IDs, counts, or timestamps. Neither API reads nor
+captures run recounts. Stored counts can lag current show membership after a
+failed write hook or out-of-band repair; use the explicit repair described in the
+[foundation plan](../../docs/plans/active/2026-10-30-artist-venues/README.md).
+
+Venue resources retain distinct `{ name, kind }` aliases, including merged names.
+Kinds are `official`, `short`, and `spelling`; date ranges are absent. Show UI uses
+the imported venue label and locality and links through `artist_venue.venue.id`.
+Canonical metadata is fallback only when imported data is absent. The request
+collection includes the Oakland/Henry J. Kaiser example.
