@@ -291,6 +291,54 @@ the old `artist_import` queue and discard obsolete queued work where appropriate
 Restarting the API in Hangfire mode restores its recurring registrations. Keep committed
 catalog changes. Do not reset Temporal workflows while Hangfire owns ingestion.
 
+## Stored artist venue count refresh
+
+Migration 15 creates stable artist/place identities and stored show counts.
+Foreign keys cascade relationship deletion when an artist or venue is removed.
+It seeds only the derived table; imported rows, accepted normalization decisions,
+and their audit history remain unchanged. `norm.venues` remains the authority for
+venue merges; relationship rows contain canonical counts and no copied redirects.
+
+Apply migration 15 before deploying the companion admin change. Ensure the
+existing `relisten_admin` role has `EXECUTE` on
+`norm.refresh_artist_venues(uuid[])`; the migration and admin role-provisioning
+script provide that narrow grant. The function uses `SECURITY DEFINER` with a
+safe fixed search path. The admin role needs no direct derived-table write grant.
+
+Admin venue edits call the full refresh in the same `withNormRun` transaction,
+before finishing the run and committing. Any refresh failure rolls back the edit,
+run record, and counts. Resolve the failure before retrying the original admin
+operation. Import and normalization activities keep their best-effort post-commit
+refreshes; a database failure is logged and does not undo completed source work.
+
+There is no recurring count job, dedicated Temporal workflow, or pending queue.
+After a failed post-commit hook or an out-of-band SQL repair, an operator with
+execution permission can repair counts explicitly:
+
+```sql
+SELECT * FROM norm.refresh_artist_venues();
+```
+
+An explicit UUID array limits the refresh and its exclusive artist locks to those
+artists. Scoped recounts share the `norm-venues` gate, allowing disjoint artist
+scopes to run concurrently. Overlapping artist scopes serialize. Null or omitted
+input refreshes all current owners under the exclusive venue gate; venue edits
+also hold that gate exclusively. Ordinary reads use snapshots and do not acquire
+these advisory locks. The repair performs database work only, with no provider or
+model requests.
+
+Locks last until transaction end. Use one complete refresh scope per transaction.
+If a transaction will need a full recount, acquire the venue gate exclusively
+before editing source rows, as the admin does; do not upgrade a scoped shared
+gate to exclusive while other scopes run.
+
+For application rollback, keep the additive schema and grant. Older admin builds
+and workers can leave counts stale after source edits; run an explicit refresh
+when repairing them. No down migration deletes identities. This work does not add
+sync revision counters or change v4 responses.
+See the [foundation plan](../plans/active/2026-10-30-artist-venues/README.md) for
+tests and the detailed storage contract.
+
 ## Storage, backups, and recovery
 
 Temporal stores workflow history in its own PostgreSQL persistence and visibility

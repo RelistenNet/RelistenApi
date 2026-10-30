@@ -23,3 +23,30 @@ null song kinds remain valid. Venue proposal fallback rules are unchanged.
 Run `Relisten.NormalizationTests` for parser, matcher, model-answer, and payload
 contracts. `RelistenApiTests/Normalization` exercises SQL writes and reads on
 disposable local databases; see `../local-dev/README.md` for setup.
+
+## Stored artist venue counts
+
+Migration 15 adds `artist_venues`: stable `artist_venue_…` identities and stored
+show counts for artist/place pairs. Counts follow accepted show-level assignments
+resolved to their canonical venue. They do not depend on artist rollout flags or
+the number of recordings. Zero-count rows keep their IDs while both parents
+exist; foreign keys cascade deletion when the artist or venue is removed.
+`norm.venues` owns venue merges. Counts roll up to its canonical venue while an
+existing pair for the merged venue stays at zero. Relationship rows contain no
+copied merge pointer. Creation and update timestamps describe the derived row.
+
+The `ArtistVenueCounts` service attempts refresh after import and normalization
+work commits. The admin app refreshes within its venue-edit transaction, so a
+refresh failure rolls the edit back. Artist-scoped recounts share the venue gate
+and take ordered per-artist locks, so disjoint scopes can run concurrently. Full
+recounts and venue edits use the gate exclusively. The SQL function grants the
+restricted admin role narrow execution access.
+There is no recurring count job or pending queue. Failed post-commit hooks and
+direct SQL changes require an explicit refresh; no background repair cadence is
+promised.
+
+These derived rows have no human-edit or run provenance fields. Normalization
+decisions and their audit history remain authoritative. The foundation changes no
+public API response; v4 can consume the stored relationships in a later change.
+See the [implementation plan](../docs/plans/active/2026-10-30-artist-venues/README.md)
+for ownership, validation, and rollout details.

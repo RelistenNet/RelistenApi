@@ -16,6 +16,7 @@ public static class NormalizationRegistration
         services.AddScoped<Venues.VenueMatch>();
         services.AddScoped<Venues.VenueLlm>();
         services.AddScoped<Venues.VenueHistory>();
+        services.AddScoped<Venues.ArtistVenueCounts>();
         services.AddScoped<NormFlags>();
         services.AddSingleton<NormalizationClient>();
         return services;
