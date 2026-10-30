@@ -1,0 +1,306 @@
+{
+  "artist": {
+    "id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+    "name": "Grateful Dead",
+    "slug": "grateful-dead",
+    "sort_name": "Grateful Dead",
+    "musicbrainz_id": "6faa7ca7-0d99-4a5e-bfa6-1fd5037520c6",
+    "featured": 1,
+    "show_count": 2081,
+    "source_count": 18226,
+    "created_at": "2017-05-19T09:02:11.702744Z",
+    "updated_at": "2019-07-03T18:54:14.164137Z",
+    "capabilities": {
+      "descriptions": true,
+      "eras": false,
+      "multiple_sources": true,
+      "reviews": true,
+      "ratings": true,
+      "tours": true,
+      "taper_notes": true,
+      "source_information": true,
+      "sets": false,
+      "per_show_venues": true,
+      "per_source_venues": true,
+      "venue_coords": false,
+      "songs": true,
+      "years": true,
+      "track_md5s": true,
+      "review_titles": true,
+      "jam_charts": false,
+      "setlist_data_incomplete": false,
+      "track_names": true,
+      "venue_past_names": false,
+      "reviews_have_ratings": true,
+      "track_durations": true,
+      "can_have_flac": true,
+      "normalization": true
+    },
+    "upstream_sources": [
+      {
+        "provider": "archive.org",
+        "upstream_identifier": "GratefulDead",
+        "url": "https://archive.org",
+        "description": "The Live Music Archive, part of the Internet Archive, is a collection of over 170,000 concert recordings in lossless audio formats. The songs are also downloadable or playable in lossy formats such as Ogg Vorbis or MP3. Archive.org is the one hosting the music you are listening to. Reviews and ratings also come from archive.org.",
+        "credit_line": "blah blah blah"
+      },
+      {
+        "provider": "jerrygarcia.com",
+        "upstream_identifier": "grateful_dead",
+        "url": "https://jerrygarcia.com",
+        "description": " jerrygarcia.com has detailed setlist information for all the bands that he was a part. Relisten uses this information to match venues and songs to recordings.",
+        "credit_line": "fix"
+      }
+    ]
+  },
+  "years": [
+    {
+      "id": "year_2sfc6yfqz4yvsdndr674sc5174",
+      "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+      "show_count": 2,
+      "source_count": 2,
+      "duration": 1811,
+      "avg_duration": 905.5,
+      "avg_rating": 8.604166,
+      "year": "1965",
+      "created_at": "2018-10-23T07:01:01.785875Z",
+      "updated_at": "2009-08-12T12:54:33Z"
+    }
+  ],
+  "shows": [
+    {
+      "id": "show_15g8fdzwq4h4k1mgc6qws8gtxv",
+      "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+      "year_id": "year_2sfc6yfqz4yvsdndr674sc5174",
+      "tour_id": null,
+      "date": "1965-11-01T08:00:00Z",
+      "display_date": "1965-11-01",
+      "avg_rating": 7.875,
+      "avg_duration": 727.0,
+      "most_recent_source_updated_at": "2009-08-12T12:54:33Z",
+      "has_soundboard_source": true,
+      "has_streamable_flac_source": false,
+      "source_count": 1,
+      "created_at": "2025-09-05T10:17:45.036361Z",
+      "updated_at": "2026-09-02T09:09:13.473722Z",
+      "imported_venue": {
+        "show_count": 1,
+        "id": "imported_venue_66n1f58wmv1ff5qz8kt97wwftg",
+        "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+        "latitude": null,
+        "longitude": null,
+        "name": "various",
+        "location": "San Francisco, CA",
+        "upstream_identifier": "variousSan Francisco, CA",
+        "slug": "various",
+        "past_names": null,
+        "created_at": "2017-12-16T09:15:01.832893Z",
+        "updated_at": "2017-04-06T23:58:59Z"
+      },
+      "artist_venue": null,
+      "year": {
+        "id": "year_2sfc6yfqz4yvsdndr674sc5174",
+        "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+        "show_count": 2,
+        "source_count": 2,
+        "duration": 1811,
+        "avg_duration": 905.5,
+        "avg_rating": 8.604166,
+        "year": "1965",
+        "created_at": "2018-10-23T07:01:01.785875Z",
+        "updated_at": "2009-08-12T12:54:33Z"
+      },
+      "tour": null,
+      "era": null
+    }
+  ],
+  "tours": [
+    {
+      "id": "tour_6s5scd4m3jar2z3s2rknje9nvv",
+      "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+      "show_count": 1791,
+      "start_date": "1965-12-04T08:00:00Z",
+      "end_date": "1995-07-09T07:00:00Z",
+      "name": "Not Part of a Tour",
+      "slug": "not-part-of-a-tour",
+      "upstream_identifier": "Not Part of a Tour",
+      "created_at": "2017-12-16T10:39:50.97883Z",
+      "updated_at": "2017-05-17T13:07:54Z"
+    }
+  ],
+  "eras": [],
+  "imported_venues": [
+    {
+      "show_count": 0,
+      "id": "imported_venue_61p6hxjyahde85f4nd15b4r3ck",
+      "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+      "latitude": null,
+      "longitude": null,
+      "name": " Fillmore West",
+      "location": "San Francisco, CA",
+      "upstream_identifier": " Fillmore WestSan Francisco, CA",
+      "slug": "fillmore-west",
+      "past_names": null,
+      "created_at": "2021-09-26T15:30:49.010244Z",
+      "updated_at": "2021-09-13T16:52:26Z"
+    }
+  ],
+  "imported_songs": [
+    {
+      "id": "imported_song_5szf9az9sq95efgkjpqy79p8e0",
+      "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+      "name": "(I Can't Get No) Satisfaction",
+      "slug": "i-cant-get-no-satisfaction",
+      "upstream_identifier": "i-cant-get-no-satisfaction",
+      "setlist_show_count": 31,
+      "created_at": "2017-12-16T10:41:28.353793Z",
+      "updated_at": "2017-05-17T13:16:47Z"
+    }
+  ],
+  "venue_entries": [
+    {
+      "kind": "artist_venue",
+      "artist_venue": {
+        "id": "artist_venue_6wr9y64h",
+        "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+        "artist_show_count": 1,
+        "created_at": "2026-10-30T19:25:55.605907Z",
+        "updated_at": "2026-10-30T19:25:55.605907Z",
+        "venue": {
+          "id": "venue_20f3rtm2",
+          "global_show_count": 1,
+          "name": "1984 Studio Material",
+          "kind": "site",
+          "parent_id": null,
+          "city": "San Rafael?",
+          "region": "CA",
+          "country": "US",
+          "latitude": null,
+          "longitude": null,
+          "coordinate_precision": null,
+          "names": [
+            {
+              "name": "1984 Studio Material",
+              "kind": "spelling"
+            }
+          ]
+        }
+      },
+      "imported_venue": null
+    }
+  ],
+  "song_entries": [
+    {
+      "kind": "imported_song",
+      "song": null,
+      "imported_song": {
+        "id": "imported_song_1t3qmwvkccmydgygs7wscme10b",
+        "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+        "name": "(I'm A) Road Runner",
+        "slug": "im-a-road-runner",
+        "upstream_identifier": "im-a-road-runner",
+        "setlist_show_count": 2,
+        "created_at": "2017-12-16T10:42:00.212808Z",
+        "updated_at": "2017-05-17T13:19:06Z"
+      }
+    }
+  ],
+  "artist_venues": [
+    {
+      "id": "artist_venue_02s7ybyt",
+      "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+      "artist_show_count": 1,
+      "created_at": "2026-10-30T19:25:55.608418Z",
+      "updated_at": "2026-10-30T19:25:55.608419Z",
+      "venue": {
+        "id": "venue_dhe3y6gz",
+        "global_show_count": 1,
+        "name": "Oakland County Coliseum*",
+        "kind": "site",
+        "parent_id": null,
+        "city": "Oakland",
+        "region": "CA",
+        "country": "US",
+        "latitude": null,
+        "longitude": null,
+        "coordinate_precision": null,
+        "names": [
+          {
+            "name": "Coliseum Arean",
+            "kind": "spelling"
+          },
+          {
+            "name": "Coliseum Arena",
+            "kind": "spelling"
+          },
+          {
+            "name": "Oakland Coliseum Arena",
+            "kind": "spelling"
+          },
+          {
+            "name": "Oakland County Coliseum*",
+            "kind": "spelling"
+          },
+          {
+            "name": "Oakland-Alameda County Coliseum Arena",
+            "kind": "spelling"
+          }
+        ]
+      }
+    }
+  ],
+  "venues": [
+    {
+      "id": "venue_033dhd5k",
+      "global_show_count": 3,
+      "name": "Iowa Field House",
+      "kind": "site",
+      "parent_id": null,
+      "city": "Iowa City",
+      "region": "IA",
+      "country": "US",
+      "latitude": null,
+      "longitude": null,
+      "coordinate_precision": null,
+      "names": [
+        {
+          "name": "Iowa Field House",
+          "kind": "official"
+        },
+        {
+          "name": "University of Iowa Fieldhouse",
+          "kind": "short"
+        },
+        {
+          "name": "Fieldhouse, U. Of Iowa",
+          "kind": "spelling"
+        },
+        {
+          "name": "Iowa Fieldhouse - University of Iowa",
+          "kind": "spelling"
+        },
+        {
+          "name": "U. of Iowa",
+          "kind": "spelling"
+        },
+        {
+          "name": "UI Field House, University Of Iowa",
+          "kind": "spelling"
+        }
+      ]
+    }
+  ],
+  "songs": [
+    {
+      "id": "song_00yswbj3",
+      "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+      "name": "Goodnight Irene",
+      "kind": "song",
+      "slug": "goodnight-irene",
+      "original_artist": "Lead Belly",
+      "aliases": [],
+      "matched_track_count": 26,
+      "matched_show_count": 2
+    }
+  ]
+}

@@ -767,3 +767,54 @@ samples remain in ignored `local-dev/v4-review/.output/`.
 No production changes, account/auth migration, or mobile runtime changes occurred.
 Review these responses before proceeding to auth. Production load and the future
 mobile transactional replacement behavior remain unverified.
+
+
+## Artist snapshots and saved-reference resolution, 2026-10-30
+
+Migration 17 was applied to local `relisten_db` through the worker’s normal
+migration command. Version 17 is verified. Its 4,539 song and 5,478 venue
+reservations match current canonical row counts; no known deleted rows were
+available to backfill as retired reservations. Real-data captures do not establish
+410 behavior; retirement and restore need the disposable regression fixtures.
+No production database or normalization jobs were changed.
+
+The restarted API exposes 26 paths and 26 operations: 25 GETs and resolver POST.
+The planned manifest remains 59 catalog/operator operations. Positive real-data
+capture passed snapshot/list parity, identical raw/approved snapshot field sets,
+imported fallback, shallow recording references, and unchanged 304 checks for both
+artist snapshots. Full response sizes below are uncompressed JSON. Times are
+individual local full-response samples, not medians or production capacity tests:
+
+| Response | Membership | Body size | Time |
+| --- | --- | --- | --- |
+| Grateful Dead catalog | 2,081 shows, 479 artist-venue rows, 402 songs | 6,509,939 bytes | 234.430 ms |
+| Ryan Adams raw catalog | 581 shows; canonical entity arrays empty | 2,118,717 bytes | 160.747 ms |
+| Mixed resolver batch | 19 references; all 14 entity groups populated | 39,937 bytes | 81.924 ms |
+
+The resolver returned 17 available, one redirected, and one unavailable result in
+input order. Duplicate input references retain duplicate results while entity IDs
+deduplicate. Explicit legacy schemes, complete normalization on returned tracks,
+shallow parent resources, preserved imported identity, and no-store/no-ETag headers
+passed capture assertions. The mixed request includes a partial track. The local
+catalog has no retired reservations, so that status is not claimed by this capture.
+
+[Live snapshot URLs and the resolver request](review/README.md#review-offline-catalog-sync)
+are ready for Alec’s review. Saved JSON selects one entry per domain/entity group;
+complete bodies and timing/header evidence remain in ignored
+`local-dev/v4-review/.output/`. The snapshot intentionally omits full recording
+hierarchies; their validators own track-only changes outside represented catalog
+fields. Mobile transactional apply, production load, account/auth migration, and
+deployment remain unperformed.
+
+Final verification passed 131 combined normalization-store, migration, public-ID,
+and v4 checks. All 12 artist-snapshot/resolver HTTP checks passed again after the
+final fixes. Review found a detached source could be reported available without
+an entity; lookup now requires its show parent, and the focused test covers that
+unavailable result. Fresh SQL and API review found no remaining concerns.
+
+Live OpenAPI requires the root `references` field, limits it to 1–500 items, and
+requires item `kind`, `scheme`, and `id` with closed kind/scheme schemas. Manual
+oversized-body checks passed with both Content-Length and chunked requests: each
+returned a no-store 413 ProblemDetails with `request_too_large`. The resolver’s
+size limit and exception filter own that boundary. Positive response captures
+remain valid after these validation-only fixes. No auth or mobile phase began.

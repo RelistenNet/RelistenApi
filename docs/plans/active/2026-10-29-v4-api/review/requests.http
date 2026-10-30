@@ -204,3 +204,115 @@ GET {{base}}/api/v4/artists/artist_6aaf982021nrst0m68ew1djerc/eras
 
 ### Recording reviews: complete upstream text and ratings
 GET {{base}}/api/v4/sources/source_2cr3tmxwvyxp5g9jxzk1jf944x/reviews
+
+### Approved artist: complete catalog snapshot with imported fallback
+GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/catalog
+
+### Raw artist: the same complete snapshot contract
+GET {{base}}/api/v4/artists/artist_1e72h78badf1zvzkvkzcp7kk2a/catalog
+
+### Resolve saved typed and legacy references (upsert-only patches, no-store)
+POST {{base}}/api/v4/catalog/resolve
+Content-Type: application/json
+
+{
+  "references": [
+    {
+      "kind": "artist",
+      "scheme": "legacy_slug",
+      "id": "grateful-dead"
+    },
+    {
+      "kind": "show",
+      "scheme": "v4",
+      "id": "show_2jn80dqf5ntfxmmkwx11j27gdk"
+    },
+    {
+      "kind": "source",
+      "scheme": "v4",
+      "id": "source_24ac5ec7w28f4fj00jdgambb69"
+    },
+    {
+      "kind": "source_set",
+      "scheme": "v4",
+      "id": "source_set_71nx0hs4bgd0vemarfkcqresqq"
+    },
+    {
+      "kind": "track",
+      "scheme": "legacy_uuid",
+      "id": "790f8388-13ca-ea8f-5bf0-61e4cc13ac0d"
+    },
+    {
+      "kind": "track",
+      "scheme": "v4",
+      "id": "track_3s1y1rg4yaxa7nqw31wk617b0d"
+    },
+    {
+      "kind": "track",
+      "scheme": "v4",
+      "id": "track_3s1y1rg4yaxa7nqw31wk617b0d"
+    },
+    {
+      "kind": "year",
+      "scheme": "v4",
+      "id": "year_59t8nz8n0m6e4c2ej2aq9dbkb9"
+    },
+    {
+      "kind": "tour",
+      "scheme": "legacy_slug",
+      "id": "fall-tour-1997",
+      "artist_id": "artist_6aaf982021nrst0m68ew1djerc"
+    },
+    {
+      "kind": "imported_venue",
+      "scheme": "v4",
+      "id": "imported_venue_01r8jjw47zb4k8fgqb8heqst9w"
+    },
+    {
+      "kind": "imported_song",
+      "scheme": "legacy_uuid",
+      "id": "73a1f1ec-0e2c-2b68-839f-946193fb3565"
+    },
+    {
+      "kind": "setlist_show",
+      "scheme": "legacy_integer",
+      "id": "42221",
+      "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj"
+    },
+    {
+      "kind": "source_review",
+      "scheme": "v4",
+      "id": "source_review_12fwrr2v2e76e4fpftc1bcwm6p"
+    },
+    {
+      "kind": "venue",
+      "scheme": "v4",
+      "id": "venue_wwrsykhn"
+    },
+    {
+      "kind": "song",
+      "scheme": "v4",
+      "id": "song_62mhvjyd"
+    },
+    {
+      "kind": "artist_venue",
+      "scheme": "v4",
+      "id": "artist_venue_h7j8pnj1"
+    },
+    {
+      "kind": "show",
+      "scheme": "v4",
+      "id": "show_00000000000000000000000000"
+    },
+    {
+      "kind": "track",
+      "scheme": "v4",
+      "id": "track_7b6v6pgvzqfvhd0s7avr18bdw5"
+    },
+    {
+      "kind": "venue",
+      "scheme": "v4",
+      "id": "venue_02xnepkw"
+    }
+  ]
+}

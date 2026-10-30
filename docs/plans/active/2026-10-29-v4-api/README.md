@@ -1,6 +1,7 @@
 # Deliver the complete v4 catalog and mobile adapter
 
-Status: C1 includes venue and song-to-playback navigation, 2026-10-30.
+Status: C1 includes playback navigation, artist snapshots, and saved-reference
+resolution, 2026-10-30.
 Implementation and real-response verification are in progress.
 The local API reads the restored production catalog; no production deployment or
 account migration occurred. This is a living ExecPlan: update Progress,
@@ -203,6 +204,8 @@ Implement mobile's actual queries, not a generic interpreter of all server route
   browse resources and separate file-match detail; omit `detail_url`.
 - [x] Add artist tours/eras, direct tour-with-shows, and source reviews for the
   next C1 review; retain source sets only inside source/show responses.
+- [x] Add complete artist snapshots and bounded saved-reference resolution for
+  offline sync review, plus canonical public-ID retirement safety.
 - [ ] C2–C5 remain unstarted pending the C1 response review.
 
 ## Discoveries and changes from the exploration
@@ -427,6 +430,10 @@ by accepting this plan.
 - 2026-10-30, Alec: extend C1 with tours, eras, and source reviews. Tour detail
   uses its own typed ID directly; tour counts describe catalog show assignments.
   Keep source sets embedded, with no direct set lookup.
+
+- 2026-10-30: implement the offline catalog checkpoint with complete artist-owned
+  snapshots and upsert-only saved-reference hydration. Keep recording hierarchies
+  lazy, imported identity intact, and artist metadata cached separately.
 
 ## Outcomes and retrospective
 

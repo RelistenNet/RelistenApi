@@ -139,12 +139,14 @@ not enter that count. These evidence sources remain separate.
 | --- | --- | --- | --- |
 | `GET /api/v2/search` | `GET /api/v4/search` | Preserve `q`, artist scope, and per-category booleans `artists`, `shows`, `songs`, `sources`, `tours`, `venues`; rename UUID filter to typed `artist_id`. Empty/short queries and all-disabled categories yield empty results as today. | [Search:28](../../../RelistenApi/Controllers/SearchController.cs#L28) |
 | `GET /api/v3/search` | `GET /api/v4/search` | Same categories/filter capability, with normalized venues/songs and explicit imported fallback/reference kinds. Returned track objects follow the common `normalization` contract. | [Search:29](../../../RelistenApi/Controllers/SearchController.cs#L29) |
-| `POST /api/v3/catalog/resolve` | `POST /api/v4/catalog/resolve` | Bounded batch, per-reference availability, target entities and parents, not-found and malformed-request distinctions. Preserve current bounds (500 references, 128 KiB) unless explicitly revised. Add typed IDs, merge resolution, contextual normalized candidates and scoped legacy numeric/slug lookups required by this table. | [Catalog:23](../../../RelistenApi/Controllers/CatalogController.cs#L23) |
+| `POST /api/v3/catalog/resolve` | `POST /api/v4/catalog/resolve` | Bounded 1–500 references/128 KiB; explicit typed/legacy schemes, ordered per-reference availability/target, shallow entity patches, and semantic/malformed request distinctions. Preserve imported identity; normalization stays in snapshot/browse data. POST is no-store. | [Catalog:23](../../../RelistenApi/Controllers/CatalogController.cs#L23) |
 
-The expanded resolver is a proposal. The current resolver only accepts typed
-resource names plus canonical UUIDs; it does not already support integer/slug
-schemes. Specify allowed reference kinds and require artist scope where legacy
-identifiers are not global. Avoid an unbounded arbitrary-query endpoint.
+The legacy resolver accepts resource names and UUIDs. The implemented v4
+[resolver contract](../../plans/active/2026-10-29-v4-api/contracts.md#resolver-and-operator-inputs)
+adds a fixed kind/scheme map for typed IDs and legacy UUID/integer/slug lookups.
+Artist-owned integer/slug lookup requires artist context. The bounded response
+echoes each reference and returns shallow entity patches without replacing
+collections or mapping imported identities to canonical ones.
 
 ## Added v4 capabilities
 

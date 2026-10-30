@@ -17,7 +17,7 @@ shared venue across approved-read artists. The old flat `show.venue` is removed.
 The same relationship metadata appears in show summaries, full shows, canonical
 artist-list children, and direct artist venue detail. Only detail adds complete `shows`.
 
-The local host now serves 24 review routes. Venue and song detail destinations
+The local host now serves 26 review routes (25 GETs and one POST). Venue and song detail destinations
 return metadata and complete `shows` together. Direct
 lookups use the resource's ID kind; there is no returned detail URL. Compact
 browse children stay compact. The [contracts](../contracts.md) define replacement
@@ -100,6 +100,40 @@ Compare `matched_track_count` and `matched_show_count` with the complete recordi
 lists. Imported `setlist_show_count` describes a separate collection; it can
 legitimately differ. Full live captures and test results are recorded separately
 from this guide.
+
+## Review offline catalog sync
+
+Open [Grateful Dead’s complete catalog](http://127.0.0.1:43823/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/catalog)
+and [Ryan Adams’ raw catalog](http://127.0.0.1:43823/api/v4/artists/artist_1e72h78badf1zvzkvkzcp7kk2a/catalog).
+Both use the same 12 top-level fields. Compare their artist, show, imported venue,
+imported song, and browse collections with the individual list routes. The
+approved catalog retains imported fallback alongside canonical browse; the raw
+catalog keeps imported browsing usable without invented normalized entities.
+
+A complete snapshot replaces only the artist-owned memberships. Its
+`artist_venues` refreshes available approved relationships, including retained
+zero counts; `venues` and `songs` are shared entity patches. It contains no
+recording hierarchies. Inspect tracks through their own detail routes, whose
+validators own track-normalization changes outside the snapshot fields. A matching
+artist snapshot ETag returns 304. Empty collections still establish complete
+membership; failed fetch/apply preserves the last complete state.
+
+Then run the mixed `POST /catalog/resolve` request in [requests.http](requests.http).
+It includes typed and explicit legacy references, repeated requests, missing IDs,
+and a merged canonical venue from the restored data. Retirement behavior uses
+regression fixtures: the restored catalog currently has no retired reservations.
+Results keep input order and duplicate references; entities deduplicate and include shallow
+parents. Imported targets keep imported identity. Resolve-only patches never clear
+unreturned children or personal membership. The POST is no-store with no ETag.
+
+The [contracts](../contracts.md#complete-artist-snapshots) define ownership and
+validation; the [verification log](../verification.md) records completed checks.
+The saved [approved catalog excerpt](responses/artist-catalog-excerpt.json),
+[raw catalog excerpt](responses/raw-artist-catalog-excerpt.json), and
+[resolver excerpt](responses/resolver-excerpt.json) select one entity per domain
+group. Full arrays live in the real responses and ignored captures. Artist metadata
+is cached separately; the resolver returns artists only when explicitly requested.
+Mobile apply remains future work, and no account/auth changes occur in this review.
 
 ## Tours, eras, and source reviews
 

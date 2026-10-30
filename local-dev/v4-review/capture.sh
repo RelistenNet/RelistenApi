@@ -193,6 +193,84 @@ source_reviews = capture('source-reviews', '/sources/' + review_source_id + '/re
 assert source_reviews and all(review['source_id'] == review_source_id and review['id'].startswith('source_review_') for review in source_reviews)
 assert len({review['id'] for review in source_reviews}) == len(source_reviews)
 
+# Artist snapshots replace complete owned collections; playback stays lazy.
+artist_catalog = capture('artist-catalog', '/artists/' + artist_id + '/catalog', 'Approved artist: complete catalog snapshot with imported fallback')
+raw_catalog = capture('raw-artist-catalog', '/artists/' + raw_artist + '/catalog', 'Raw artist: the same complete snapshot contract')
+expected_catalog_fields = {'artist', 'years', 'shows', 'tours', 'eras', 'imported_venues',
+                           'imported_songs', 'venue_entries', 'song_entries', 'artist_venues', 'venues', 'songs'}
+assert set(artist_catalog) == set(raw_catalog) == expected_catalog_fields
+for field, name in [('artist', 'artist'), ('years', 'years'), ('shows', 'artist-shows'),
+                    ('venue_entries', 'artist-venues'), ('song_entries', 'artist-songs'),
+                    ('imported_venues', 'imported-venues'), ('imported_songs', 'imported-songs')]:
+    assert artist_catalog[field] == json.loads((out / (name + '.json')).read_text())
+assert raw_catalog['song_entries'] == raw_songs and raw_catalog['imported_songs'] == raw_song_inventory
+assert raw_catalog['artist_venues'] == raw_catalog['venues'] == raw_catalog['songs'] == []
+assert all('sources' not in show for body in (artist_catalog, raw_catalog) for show in body['shows'])
+for name, body in [('artist-catalog', artist_catalog), ('raw-artist-catalog', raw_catalog)]:
+    validator = next(line.split(': ', 1)[1] for line in (out / (name + '.headers')).read_text().splitlines() if line.lower().startswith('etag:'))
+    response_code = subprocess.check_output(['curl', '--silent', '--show-error', '-o', '/dev/null',
+                    '-w', '%{http_code}', '-H', 'If-None-Match: ' + validator,
+                    'http://127.0.0.1:43823/api/v4/artists/' + body['artist']['id'] + '/catalog'], text=True)
+    assert response_code == '304'
+
+# Saved references preserve input order while returned entities are deduplicated patches.
+references = [
+    {'kind': 'artist', 'scheme': 'legacy_slug', 'id': 'grateful-dead'},
+    {'kind': 'show', 'scheme': 'v4', 'id': matched['show_id']},
+    {'kind': 'source', 'scheme': 'v4', 'id': file['source_id']},
+    {'kind': 'source_set', 'scheme': 'v4', 'id': file['source_set_id']},
+    {'kind': 'track', 'scheme': 'legacy_uuid', 'id': samples['matched']},
+    {'kind': 'track', 'scheme': 'v4', 'id': typed('track', samples['matched'])},
+    {'kind': 'track', 'scheme': 'v4', 'id': typed('track', samples['matched'])},
+    {'kind': 'year', 'scheme': 'v4', 'id': year['id']},
+    {'kind': 'tour', 'scheme': 'legacy_slug', 'id': phish_tour['slug'], 'artist_id': phish_id},
+    {'kind': 'imported_venue', 'scheme': 'v4', 'id': imported_id},
+    {'kind': 'imported_song', 'scheme': 'legacy_uuid', 'id': '73a1f1ec-0e2c-2b68-839f-946193fb3565'},
+    {'kind': 'setlist_show', 'scheme': 'legacy_integer', 'id': query("SELECT ss.id FROM setlist_shows ss JOIN artists a ON a.id=ss.artist_id WHERE a.uuid='" + artist_uuid + "' ORDER BY ss.id LIMIT 1"), 'artist_id': artist_id},
+    {'kind': 'source_review', 'scheme': 'v4', 'id': source_reviews[0]['id']},
+    {'kind': 'venue', 'scheme': 'v4', 'id': venue_id},
+    {'kind': 'song', 'scheme': 'v4', 'id': song_id},
+    {'kind': 'artist_venue', 'scheme': 'v4', 'id': artist_venue['id']},
+    {'kind': 'show', 'scheme': 'v4', 'id': 'show_00000000000000000000000000'},
+    {'kind': 'track', 'scheme': 'v4', 'id': typed('track', samples['partial'])},
+]
+merged_venue = query('SELECT id FROM norm.venues WHERE merged_into IS NOT NULL ORDER BY id LIMIT 1')
+if merged_venue:
+    references.append({'kind': 'venue', 'scheme': 'v4', 'id': merged_venue})
+retired_id = query('SELECT id FROM norm.public_ids WHERE retired_at IS NOT NULL ORDER BY id LIMIT 1')
+if retired_id:
+    references.append({'kind': retired_id.split('_')[0], 'scheme': 'v4', 'id': retired_id})
+resolver_request = {'references': references}
+(out / 'resolver-request.json').write_text(json.dumps(resolver_request, indent=2) + '\n')
+elapsed = subprocess.check_output(['curl', '--fail', '--silent', '--show-error', '--max-time', '45',
+            '-D', str(out / 'resolver.headers'), '-H', 'Content-Type: application/json',
+            '--data-binary', '@' + str(out / 'resolver-request.json'),
+            'http://127.0.0.1:43823/api/v4/catalog/resolve', '-o', str(out / 'resolver.json'),
+            '--write-out', '%{time_total}'], text=True)
+timings['resolver'] = float(elapsed)
+resolver = json.loads((out / 'resolver.json').read_text())
+assert len(resolver['references']) == len(references)
+for original, resolved in zip(references, resolver['references']):
+    assert all(resolved[key] == value for key, value in original.items())
+assert resolver['references'][5] == resolver['references'][6]
+assert resolver['references'][4]['target'] == resolver['references'][5]['target']
+assert resolver['references'][16]['availability'] == 'unavailable'
+if merged_venue:
+    assert next(result for result in resolver['references'] if result['id'] == merged_venue)['availability'] == 'redirected'
+if retired_id:
+    assert resolver['references'][-1]['availability'] == 'retired'
+for collection in resolver['entities'].values():
+    assert len({entity['id'] for entity in collection}) == len(collection)
+assert all('sources' not in show for show in resolver['entities']['shows'])
+assert all('sets' not in source and 'links' not in source for source in resolver['entities']['sources'])
+assert all('tracks' not in group for group in resolver['entities']['source_sets'])
+assert all('normalization' in track for track in resolver['entities']['tracks'])
+resolver_headers = (out / 'resolver.headers').read_text().lower()
+assert 'cache-control: no-store' in resolver_headers and 'etag:' not in resolver_headers
+requests += ['### Resolve saved typed and legacy references (upsert-only patches, no-store)',
+             'POST {{base}}/api/v4/catalog/resolve', 'Content-Type: application/json', '',
+             json.dumps(resolver_request, indent=2), '']
+
 # Checked-in samples are selected excerpts; .output retains the complete responses.
 review = Path('docs/plans/active/2026-10-29-v4-api/review/responses')
 review.mkdir(parents=True, exist_ok=True)
@@ -214,6 +292,12 @@ for name in ('shared-artist-venue', 'shared-venue',
         continue
     body = json.loads((out / (name + '.json')).read_text())
     save_example(name + '-detail-excerpt', detail_excerpt(body))
+for name, body in [('artist-catalog', artist_catalog), ('raw-artist-catalog', raw_catalog)]:
+    excerpt = {key: value[:1] if isinstance(value, list) else value for key, value in body.items()}
+    save_example(name + '-excerpt', excerpt)
+resolver_excerpt = {'references': resolver['references'],
+                    'entities': {kind: entities[:1] for kind, entities in resolver['entities'].items()}}
+save_example('resolver-excerpt', resolver_excerpt)
 save_example('phish-tours-excerpt', phish_tours[:2])
 save_example('phish-tour-detail-excerpt', detail_excerpt(tour_detail))
 save_example('phish-eras', phish_eras)

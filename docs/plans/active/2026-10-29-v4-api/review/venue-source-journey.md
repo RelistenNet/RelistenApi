@@ -3,7 +3,7 @@
 For Alec and Switz: inspect one artist's venue groups, follow their shows to
 playback, and compare a shared venue across artists. Start the
 [local API](../../../../../local-dev/v4-review/README.md), then open
-[Swagger](http://127.0.0.1:43823/api-docs-v4). This checkpoint has 24 GET routes.
+[Swagger](http://127.0.0.1:43823/api-docs-v4). This checkpoint has 26 routes (25 GETs and one POST).
 Manual review uses restored records; tests use a disposable catalog. Neither
 review path runs ingestion or normalization jobs.
 

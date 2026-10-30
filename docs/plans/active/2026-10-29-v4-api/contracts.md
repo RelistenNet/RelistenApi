@@ -581,62 +581,128 @@ Source sets remain embedded in full source/show responses with their typed IDs
 and tracks. There is deliberately no direct `/source-sets/{sourceSetId}` endpoint;
 clients fetch the owning source to inspect a complete set.
 
+## Complete artist snapshots
+
+`GET /artists/{artistId}/catalog` returns the artist and 11 domain collections:
+`years`, `shows`, `tours`, `eras`, `imported_venues`, `imported_songs`,
+`venue_entries`, `song_entries`, `artist_venues`, `venues`, and `songs`.
+The artist and all collections use one repeatable-read session and one payload
+ETag. The collection resources have the same metadata, counts, ordering, approval,
+and fallback rules as their individual list routes. Show summaries omit recording
+hierarchies: no source, set, or track collections are downloaded in this snapshot.
+Playback detail remains lazy through show/source/track reads.
+
+Mobile atomically applies the artist and its complete artist-owned memberships,
+including empty collections, then saves the ETag. `venue_entries` and `song_entries`
+own visible browse membership. `artist_venues` includes every available approved
+stored relationship, including retained zero-count rows that disappear from browse.
+It upserts relationship entities; `venues` and `songs` likewise upsert shared entity
+patches. An omitted shared entity is not globally deleted. Keep records needed by
+other artists, downloads, queues, favorites, and other query results.
+
+A 304 retains the applied artist snapshot. A failed fetch or apply retains the
+last complete state. Do not use imported parent timestamps to suppress changed
+metadata or membership. The ETag covers only represented fields: a track-part
+correction that changes no catalog field does not change this artist validator.
+Recording endpoints own validators for their returned track normalization.
+Unknown artists return 404; malformed or wrong-kind IDs return 422; a dependency
+failure returns a no-store 503 instead of partially filled collections.
+
 ## Canonical redirects and retirement
 
 Follow `merged_into` to the survivor with bounded cycle detection. Direct lookup
-returns the survivor resource directly, whose ID identifies the result. The
-caller already knows its requested ID; batch resolution explicitly echoes both
-requested reference and canonical target when that mapping is needed. Artist-
-scoped songs cannot cross artist ownership through a merge. Corrupt merge chains
-are logged and cannot hang reads: show/track projections preserve imported
-fallback; direct canonical lookups return dependency-unavailable rather than
-invent a target.
+returns the survivor resource and ID. The resolver explicitly echoes the requested
+reference and target. Song merges cannot cross artist ownership. Broken chains
+never hang reads: embedded projections preserve imported fallback; the resolver
+reports `unavailable` with `normalization_unavailable` for that reference.
 
-Add a small `norm.public_ids` reservation/tombstone table limited to canonical
-`song`/`venue` IDs: `id text PRIMARY KEY`, `kind text`, `last_name text`, and
-nullable `retired_at timestamptz`. Backfill existing canonical rows as active.
-A BEFORE INSERT trigger atomically reserves every newly minted ID by inserting
-its row into this table. The row is never removed on retirement. Its primary key
-refuses any later remint even while deletion is concurrent; a SELECT-only guard
-against a separate tombstone table is insufficient. Current mint/retry behavior
-handles the resulting unique violation.
+Migration 17, [017_public_ids.sql](../../../../Relisten.Normalization/Sql/017_public_ids.sql),
+creates `norm.public_ids` for canonical `song` and `venue` IDs: `id` is the primary
+key, with `kind`, `last_name`, and nullable `retired_at`. It backfills current rows
+and known historical deletions retained in `norm.changes`. The migration locks
+canonical writes while installing the backfill and triggers; ordinary reads remain
+available. Production deployment and capacity are separate rollout checks.
 
-A deletion trigger marks the existing reservation retired and captures the last
-name in the same transaction. The existing human restore/revert context may
-reactivate the exact reservation and restore that row; ordinary minting cannot.
-Validate restore authority and resource kind. A rolled-back deletion does not
-retire the reservation. Retaining one row per canonical ID avoids global/artist
-writer locks and closes both sequential and concurrent reuse.
+Two `AFTER INSERT OR DELETE` triggers reserve or retire the ID in the same source
+transaction. Using `AFTER INSERT` preserves ordinary `INSERT ... ON CONFLICT`
+updates: only an actual insertion attempts a new reservation. A collision still
+rolls back the complete statement before commit. Both insertion and deletion
+acquire the canonical row before its reservation, keeping the same lock order.
+Ordinary random minting cannot reuse an active or retired public ID.
 
-This preserves current matcher cleanup and historical row-image comparisons:
-do not add canonical-row columns or rewrite old change-log JSON for retention.
-Direct lookup of a retired reservation is 410; resolver returns `retired`;
-membership is unaffected. Active merges already retain canonical rows. This is
-one fixed two-kind identity-safety table, not a general provenance/claims system
-or new public editing API.
+A deletion records the last name and retirement timestamp without removing the
+reservation. An explicit human restore/revert may reactivate the same ID under
+the existing validated restore context; ordinary minting cannot. Rollback leaves
+both canonical row and reservation unchanged. There are no new canonical-row
+columns or rewritten historical row images, and no global writer lock in normal
+operation. Keep reservations and triggers when rolling back application code;
+dropping them would reopen saved-ID reuse.
+
+Direct canonical lookup of a known retired ID returns 410. Resolver returns
+`retired` with no target and does not change personal membership. A missing ID
+without retirement evidence is `unavailable`, not assumed retired. Historical
+unlogged or pruned deletions cannot be recovered from this migration. A normalized
+row’s `retired_uuid` is its former UUID identity, not a retirement indicator;
+`legacy_uuid` still looks up an existing row. After that row is deleted, a UUID
+alone cannot identify its public-ID tombstone and resolves as unavailable.
 
 ## Resolver and operator inputs
 
-`POST /api/v4/catalog/resolve` accepts at most 500 references and 128 KiB.
-Each reference supplies `kind`, `scheme`, `id`, and optional `artist_id` context.
-Schemes are `v4`, `legacy_uuid`, `legacy_integer`, `legacy_slug`. Integer/slug
-lookups for artist-owned resources require artist context; an artist lookup is
-global. The numeric calendar year uses its explicit by-number route, not a
-legacy ID parser. The complete resolver must support all 14 catalog kinds where
-their backing identity exists, including nested set/review/setlist-show records.
-The new `artist_venue` kind has a native short v4 identity and no legacy UUID,
-integer, or slug identity. Add its `artist_venues` entity group when implementing that resolver; this C1
-update still navigates relationships through artist/venue lookup. This catalog
-resource does not add a favorite target kind; global venue favorites remain
-`venue` targets.
+`POST /api/v4/catalog/resolve` accepts JSON
+`{ "references": [{ "kind": "track", "scheme": "v4", "id": "track_...", "artist_id": "artist_..." }] }`.
+The batch must contain 1–500 references and fit within 128 KiB. Each item supplies
+`kind`, `scheme`, `id`, and optional artist context. This POST is a read-only
+lookup with `Cache-Control: no-store`, no ETag, and no 304 behavior. All lookups
+and entity hydration share one read session. A database failure returns a no-store
+503 for the request, with no partial batch response.
 
-Per-item results echo the request and give `available`, `unavailable`, `redirected`,
-or `retired`, with canonical target and hydrated entities when available.
-Imported-to-normalized mapping is a separate optional result: `matched`, `unmapped`,
-or `ambiguous`, with show context/candidates. Available imported data stays
-available when not normalized. Never silently choose a canonical venue for a
-conflated imported row. Parent data is enough for existing mobile hydration;
-missing catalog data does not erase account state.
+The 14 kinds are `artist`, `show`, `source`, `source_set`, `track`, `year`, `tour`,
+`imported_venue`, `imported_song`, `setlist_show`, `source_review`, `venue`, `song`,
+and `artist_venue`. Supported schemes follow the fixed
+[lookup map](../../../../RelistenApi/Services/Catalog/CatalogReferenceLookup.cs):
+
+- `v4`: every kind, using its typed public ID.
+- `legacy_uuid`: every kind except `artist_venue`. Canonical songs and venues use
+  their retained former UUID on an existing row.
+- `legacy_integer`: UUID-backed kinds only; no song, venue, or artist-venue short
+  identity accepts this scheme. For years, this means the internal legacy row ID,
+  not the calendar year number.
+- `legacy_slug`: artist, track, tour, imported venue, imported song, venue, and song.
+
+Artist-owned integer/slug lookup requires typed `artist_id` context. Artist and
+venue lookups are global. Optional artist context also restricts available owned
+lookups by other schemes. A global song/venue public-ID tombstone can still be
+classified retired without owner context. The explicit by-number year route
+remains the calendar-year lookup.
+
+OpenAPI publishes closed enums for kind, scheme, and availability. Request tokens
+remain strings until semantic validation so unknown enum values, unsupported
+scheme/kind pairs, invalid IDs/context, and invalid batch size return 422.
+Malformed JSON returns 400 and oversized bodies return 413. Validation runs before
+catalog queries; invalid requests do not return partial per-reference results.
+
+Each response has `references` and `entities`. Each reference result repeats the
+flat `kind`, `scheme`, `id`, and nullable `artist_id`, followed by `availability`
+(`available`, `redirected`, `unavailable`, or `retired`), nullable
+`target: { kind, id }`, and nullable diagnostic `reason`. Input order and duplicates
+are preserved. Available/redirected targets use current typed IDs; entity arrays
+deduplicate by identity in stable order. Unavailable diagnostics include
+`not_found`, `ambiguous`, `disabled`, and `normalization_unavailable`.
+
+`entities` has 14 groups: `artists`, `shows`, `sources`, `source_sets`, `tracks`,
+`years`, `tours`, `imported_venues`, `imported_songs`, `venues`, `songs`,
+`artist_venues`, `source_reviews`, and `setlist_shows`. Required parents are shallow:
+show summaries omit sources; source summaries omit sets and links; set summaries
+omit tracks. Returned tracks retain complete normalization. Artists are returned
+only for explicit artist references because clients cache artists separately.
+Source-set IDs can resolve here despite having no direct GET route.
+
+These are upsert-only entity patches. Never replace unreturned child collections,
+delete catalog rows, or remove library membership from a resolver result.
+Imported identities remain imported, even when normalization exists. There is no
+additional imported-to-canonical mapping result: the artist snapshot and browse
+resources already expose approved normalization without assuming a raw venue has
+one canonical target. Resolving a saved imported target preserves that exact kind.
 
 V4 query names use snake_case: `artist_ids`, `artist_id`, `previous_days`,
 `sort_by`, `delete_old_content`, with other current scalar filters/limits

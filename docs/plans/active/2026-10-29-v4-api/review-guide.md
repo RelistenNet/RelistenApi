@@ -44,7 +44,7 @@ Implement packages 1 and 2 for artist/year/show-list navigation, show detail,
 direct source and track reads. Alec expanded C1 to review these with the venue
 family before auth: artist venue groups, canonical metadata and show collections,
 and imported venue fallback detail. Song discovery extends the review to a
-complete resource-with-shows journey. The current local contract has 24 GET routes.
+complete resource-with-shows journey. The current local contract has 26 routes (25 GETs and one POST).
 Cover raw, normalization-disabled, partial and fully interpreted
 fixtures. Alec reviews each family before its contract spreads to the next family
 or mobile work.
@@ -52,12 +52,16 @@ or mobile work.
 Use the [venue-to-playback walkthrough](review/venue-source-journey.md) for the
 venue review: artist → venue group → venue's shows → show → source → track.
 Then use the [song-to-playback walkthrough](review/song-source-journey.md):
-artist → song → matched files/shows → source → playable track. Search, recent
-lists, and artist bootstrap remain later catalog work.
+artist → song → matched files/shows → source → playable track. Artist snapshots and saved-reference resolution now connect the offline catalog.
+Search and recent lists remain later catalog work.
 Tours, eras, and source reviews complete the next catalog review: open a compact
 Phish tour entry, its direct resource-with-shows detail, ordered era metadata,
 and one source’s complete review list. Source sets stay embedded in sources.
-Keep account/auth as a separate checkpoint after the catalog responses settle.
+Review complete raw/partly normalized artist snapshots against their individual
+collections. Then resolve a mixed batch of saved typed and legacy references.
+Check complete membership replacement versus upsert-only shallow entity patches;
+recording hierarchies remain lazy. Keep account/auth as a separate checkpoint
+after the catalog responses settle.
 Venue and song details return flat metadata and complete `shows`; file-match
 detail returns metadata plus `tracks` without `shows`. Artists come from the
 separately loaded artist catalog, referenced by `artist_id`.
