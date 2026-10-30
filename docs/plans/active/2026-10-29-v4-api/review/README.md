@@ -17,7 +17,7 @@ shared venue across approved-read artists. The old flat `show.venue` is removed.
 The same relationship metadata appears in show summaries, full shows, canonical
 artist-list children, and direct artist venue detail. Only detail adds complete `shows`.
 
-The local host now serves 20 review routes. Venue and song detail destinations
+The local host now serves 24 review routes. Venue and song detail destinations
 return metadata and complete `shows` together. Direct
 lookups use the resource's ID kind; there is no returned detail URL. Compact
 browse children stay compact. The [contracts](../contracts.md) define replacement
@@ -100,6 +100,32 @@ Compare `matched_track_count` and `matched_show_count` with the complete recordi
 lists. Imported `setlist_show_count` describes a separate collection; it can
 legitimately differ. Full live captures and test results are recorded separately
 from this guide.
+
+## Tours, eras, and source reviews
+
+The [request collection](requests.http) adds these live responses:
+
+- [Phish tours](http://127.0.0.1:43823/api/v4/artists/artist_6aaf982021nrst0m68ew1djerc/tours):
+  130 compact tours with catalog show counts.
+- [Fall Tour 1997](http://127.0.0.1:43823/api/v4/tours/tour_4emejbsvpbph76zy5kh1n954vt):
+  direct tour metadata with 21 complete show summaries.
+- [Phish eras](http://127.0.0.1:43823/api/v4/artists/artist_6aaf982021nrst0m68ew1djerc/eras):
+  four ordered metadata entries.
+- [Recording reviews](http://127.0.0.1:43823/api/v4/sources/source_2cr3tmxwvyxp5g9jxzk1jf944x/reviews):
+  361 original reviews, including typed identities and source references.
+
+Saved samples include a [tour detail excerpt](responses/phish-tour-detail-excerpt.json),
+[compact tour inventory excerpt](responses/phish-tours-excerpt.json),
+[era metadata](responses/phish-eras.json), and [source review excerpt](responses/source-reviews-excerpt.json).
+Tour `show_count` has the same catalog-show meaning
+in lists, detail, and embedded show tours. Source sets remain embedded in a
+source’s recording hierarchy; there is no direct source-set endpoint.
+
+Check that a tour needs only its `tour_` ID to open, eras have `order` and `name`
+without IDs, and each review has `source_review_` identity and its `source_`
+parent. The [contracts](../contracts.md#tours-eras-and-source-reviews) define ordering,
+empty results, and exactly which membership mobile will replace. Reviews preserve
+upstream text and ratings. No auth or mobile runtime behavior changes here.
 
 ## Review the remaining response contracts
 

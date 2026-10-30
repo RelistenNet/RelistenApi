@@ -201,6 +201,8 @@ Implement mobile's actual queries, not a generic interpreter of all server route
 - [x] Unify venue/song detail snapshots, add direct imported and artist-venue
   lookups, and verify focused HTTP tests and real local responses. Keep compact
   browse resources and separate file-match detail; omit `detail_url`.
+- [x] Add artist tours/eras, direct tour-with-shows, and source reviews for the
+  next C1 review; retain source sets only inside source/show responses.
 - [ ] C2–C5 remain unstarted pending the C1 response review.
 
 ## Discoveries and changes from the exploration
@@ -230,7 +232,7 @@ mobile/UI work and release checks finish the change (C5).
 Use small PRs with one reviewable outcome. Account/auth and catalog work can be
 developed independently after C1, but deploy the breaking account cutover and
 activate normalized catalog reads separately. C2 does not require normalized
-Realm tables or the full v4 resolver. Keep all 62 routes and global venue favorites
+Realm tables or the full v4 resolver. Keep all planned catalog routes and global venue favorites
 as first-release requirements; an early developer checkpoint is not that release.
 
 ```mermaid
@@ -291,7 +293,7 @@ admission, engine selection and job handles; v4 artist PUT uses route identity
 and atomically updates artist/features/upstream assignments. Commands do not
 become anonymous. Isolate v4 Swagger while preserving mixed legacy operation sets.
 
-C4 requires all 62 operations, every returned track's common normalization DTO,
+C4 requires every catalog operation in the manifest, every returned track's common normalization DTO,
 accepted browse/discovery/resolver examples, legacy compatibility and a fresh
 source-readability review. All existing capabilities remain first-release scope.
 
@@ -422,11 +424,15 @@ by accepting this plan.
   and artist-venue ID lookup; omit `detail_url`. Keep browse compact and song file
   matches separate. Review real responses before account/auth work.
 
+- 2026-10-30, Alec: extend C1 with tours, eras, and source reviews. Tour detail
+  uses its own typed ID directly; tour counts describe catalog show assignments.
+  Keep source sets embedded, with no direct set lookup.
+
 ## Outcomes and retrospective
 
 Planning is complete. Independent feasibility and mobile/account reviewers
 confirmed the corrected plan has no remaining blockers in their reviewed areas.
-The handoff includes 60 catalog/operator endpoints, three in-place library
+The handoff includes 59 catalog/operator endpoints, three in-place library
 endpoints, two profile actions, contracts, five personal review checkpoints,
 migration/rollback steps and verification. The full thread was reread during the
 simplification pass; later decisions supersede the exploration's old epoch,

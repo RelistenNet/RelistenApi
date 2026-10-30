@@ -1,0 +1,26 @@
+[
+  {
+    "id": "tour_7ma3qr1jwwpc70seck6dferdf8",
+    "artist_id": "artist_6aaf982021nrst0m68ew1djerc",
+    "show_count": 1,
+    "start_date": "1983-12-02T08:00:00Z",
+    "end_date": "1983-12-02T08:00:00Z",
+    "name": "1983 Tour",
+    "slug": "1983-tour",
+    "upstream_identifier": "1",
+    "created_at": "2026-08-19T14:25:18.776849Z",
+    "updated_at": "2013-10-08T04:34:44Z"
+  },
+  {
+    "id": "tour_211qggas651tjpsfand6e4yttr",
+    "artist_id": "artist_6aaf982021nrst0m68ew1djerc",
+    "show_count": 2,
+    "start_date": "1984-11-03T08:00:00Z",
+    "end_date": "1984-12-01T08:00:00Z",
+    "name": "1984 Tour",
+    "slug": "1984-tour",
+    "upstream_identifier": "2",
+    "created_at": "2026-08-19T14:25:18.784695Z",
+    "updated_at": "2013-11-26T00:03:57Z"
+  }
+]
