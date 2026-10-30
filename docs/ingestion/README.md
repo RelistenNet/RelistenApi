@@ -150,6 +150,16 @@ activities, not one transaction. Rebuild SQL owns its transactions and can commi
 some derived work before a later step fails. Repeating it must converge. A fresh
 import or standalone rebuild repairs derived data left by an interrupted run.
 
+Stored normalized artist/venue counts follow the same eventual-refresh model.
+Source-table triggers mark affected artists; activities attempt a best-effort
+refresh after catalog or normalization work. A minute schedule retries pending
+artists, and daily reconciliation repairs missed marks. Count refresh failures do
+not fail an otherwise completed import, and counts can briefly differ from the
+current show list. Queue acknowledgment and refreshed counts commit together.
+See the [artist venue foundation plan](../plans/active/2026-10-30-artist-venues/README.md)
+for identity, merge, and recovery contracts. Existing import workflow command
+order and provider deletion rules are unchanged.
+
 Activities heartbeat through HTTP and database waits. Transactions check the
 token and inherited deadline before writes and before commit. Dapper calls have
 bounded SQL timeouts but do not all support immediate cancellation. Cancellation
