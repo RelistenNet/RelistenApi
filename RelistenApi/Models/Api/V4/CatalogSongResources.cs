@@ -9,7 +9,7 @@ namespace Relisten.Api.Models.Api.V4;
 
 /// <summary>Artist-owned canonical song. Counts describe exact active recording matches, not setlist appearances.</summary>
 [JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
-public sealed class SongDetailResource
+public record SongDetailResource
 {
     public SongId Id { get; init; }
     public ArtistId ArtistId { get; init; }
@@ -20,6 +20,22 @@ public sealed class SongDetailResource
     public IReadOnlyList<string> Aliases { get; init; } = [];
     public int MatchedTrackCount { get; init; }
     public int MatchedShowCount { get; init; }
+}
+
+/// <summary>A song and its complete recording-backed show collection.</summary>
+[JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
+public sealed record SongWithShowsResource : SongDetailResource
+{
+    public IReadOnlyList<ShowSummaryResource> Shows { get; init; } = [];
+    public IReadOnlyList<ArtistResource> Artists { get; init; } = [];
+}
+
+/// <summary>A song and its complete playable-file matches, without show membership.</summary>
+[JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
+public sealed record SongWithTracksResource : SongDetailResource
+{
+    public IReadOnlyList<SongTrackMatchResource> Tracks { get; init; } = [];
+    public IReadOnlyList<ArtistResource> Artists { get; init; } = [];
 }
 
 /// <summary>Imported setlist song. The count is distinct catalog shows supported by imported setlist evidence.</summary>
@@ -40,6 +56,7 @@ public record ImportedSongResource
 public sealed record ImportedSongWithShowsResource : ImportedSongResource
 {
     public IReadOnlyList<ShowSummaryResource> Shows { get; init; } = [];
+    public IReadOnlyList<ArtistResource> Artists { get; init; } = [];
 }
 
 /// <summary>Browse target. The server selects canonical or imported identity using approved evidence.</summary>

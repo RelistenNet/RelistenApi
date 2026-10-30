@@ -9,7 +9,20 @@ public sealed record CatalogArtistVenueEntry(
     CatalogImportedVenue? ImportedVenue
 );
 
+public sealed record CatalogVenueDetail(
+    CatalogVenue Venue,
+    IReadOnlyList<CatalogShow> Shows,
+    IReadOnlyList<CatalogArtist> Artists
+);
+
+public sealed record CatalogArtistVenueDetail(
+    CatalogArtistVenue ArtistVenue,
+    IReadOnlyList<CatalogShow> Shows,
+    IReadOnlyList<CatalogArtist> Artists
+);
+
 public sealed record CatalogImportedVenueDetail(
     CatalogImportedVenue Venue,
-    IReadOnlyList<CatalogShow> Shows
+    IReadOnlyList<CatalogShow> Shows,
+    IReadOnlyList<CatalogArtist> Artists
 );

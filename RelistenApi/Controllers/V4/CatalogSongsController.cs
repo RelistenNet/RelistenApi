@@ -36,37 +36,27 @@ public sealed class CatalogSongsController(
         );
 
     [HttpGet("songs/{songId}")]
-    [ProducesResponseType(typeof(SongDetailResource), 200)]
+    [ProducesResponseType(typeof(SongWithShowsResource), 200)]
     public Task<IActionResult> Song(string songId, CancellationToken cancellationToken) =>
         ReadSong(
             songId,
             async () =>
             {
                 var song = await reader.ReadSong(songId, cancellationToken);
-                return song is null ? null : V4CatalogProjection.SongDetail(song);
+                return song is null ? null : V4CatalogProjection.SongWithShows(song);
             }
         );
 
     [HttpGet("songs/{songId}/tracks")]
-    [ProducesResponseType(typeof(SongTrackMatchResource[]), 200)]
+    [ProducesResponseType(typeof(SongWithTracksResource), 200)]
     public Task<IActionResult> Tracks(string songId, CancellationToken cancellationToken) =>
         ReadSong(
             songId,
             async () =>
-                (await reader.ReadTracks(songId, cancellationToken))
-                    ?.Select(V4CatalogProjection.SongTrackMatch)
-                    .ToArray()
-        );
-
-    [HttpGet("songs/{songId}/shows")]
-    [ProducesResponseType(typeof(ShowSummaryResource[]), 200)]
-    public Task<IActionResult> Shows(string songId, CancellationToken cancellationToken) =>
-        ReadSong(
-            songId,
-            async () =>
-                (await reader.ReadShows(songId, cancellationToken))
-                    ?.Select(V4CatalogProjection.ShowSummary)
-                    .ToArray()
+            {
+                var detail = await reader.ReadTracks(songId, cancellationToken);
+                return detail is null ? null : V4CatalogProjection.SongWithTracks(detail);
+            }
         );
 
     [HttpGet("artists/{artistId}/imported-songs")]
@@ -84,28 +74,21 @@ public sealed class CatalogSongsController(
                     .ToArray()
         );
 
-    [HttpGet("artists/{artistId}/imported-songs/{importedSongId}")]
+    [HttpGet("imported-songs/{importedSongId}")]
     [ProducesResponseType(typeof(ImportedSongWithShowsResource), 200)]
     public Task<IActionResult> ImportedSong(
-        string artistId,
         string importedSongId,
         CancellationToken cancellationToken
-    )
-    {
-        if (!ImportedSongId.TryParse(importedSongId, out var song))
-        {
-            return Task.FromResult<IActionResult>(InvalidId(ImportedSongId.Prefix));
-        }
-        return Read(
-            artistId,
-            ArtistId.Prefix,
-            async artist =>
+    ) =>
+        Read(
+            importedSongId,
+            ImportedSongId.Prefix,
+            async song =>
             {
-                var detail = await reader.ReadImportedSong(artist, song.Value, cancellationToken);
+                var detail = await reader.ReadImportedSong(song, cancellationToken);
                 return detail is null ? null : V4CatalogProjection.ImportedSongWithShows(detail);
             }
         );
-    }
 
     private Task<IActionResult> ReadSong<T>(string songId, Func<Task<T?>> read)
         where T : class

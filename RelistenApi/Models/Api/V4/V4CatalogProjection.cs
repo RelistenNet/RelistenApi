@@ -147,6 +147,19 @@ public static partial class V4CatalogProjection
         );
 
     public static ArtistVenueResource ArtistVenue(CatalogArtistVenue value) =>
+        ProjectArtistVenue<ArtistVenueResource>(value);
+
+    public static ArtistVenueWithShowsResource ArtistVenueWithShows(
+        CatalogArtistVenueDetail value
+    ) =>
+        ProjectArtistVenue<ArtistVenueWithShowsResource>(value.ArtistVenue) with
+        {
+            Shows = value.Shows.Select(ShowSummary).ToArray(),
+            Artists = value.Artists.Select(CatalogBrowseProjection.Artist).ToArray(),
+        };
+
+    private static T ProjectArtistVenue<T>(CatalogArtistVenue value)
+        where T : ArtistVenueResource, new() =>
         new()
         {
             Id = ArtistVenueId.Parse(value.id),
@@ -166,6 +179,7 @@ public static partial class V4CatalogProjection
         ProjectImportedVenue<ImportedVenueWithShowsResource>(value.Venue) with
         {
             Shows = value.Shows.Select(ShowSummary).ToArray(),
+            Artists = value.Artists.Select(CatalogBrowseProjection.Artist).ToArray(),
         };
 
     private static T ProjectImportedVenue<T>(CatalogImportedVenue value)
@@ -212,7 +226,17 @@ public static partial class V4CatalogProjection
             Kind = value.kind is { } kind ? NormalizationEnums.Parse<SongKind>(kind) : null,
         };
 
-    public static VenueResource Venue(CatalogVenue value) =>
+    public static VenueResource Venue(CatalogVenue value) => ProjectVenue<VenueResource>(value);
+
+    public static VenueWithShowsResource VenueWithShows(CatalogVenueDetail value) =>
+        ProjectVenue<VenueWithShowsResource>(value.Venue) with
+        {
+            Shows = value.Shows.Select(ShowSummary).ToArray(),
+            Artists = value.Artists.Select(CatalogBrowseProjection.Artist).ToArray(),
+        };
+
+    private static T ProjectVenue<T>(CatalogVenue value)
+        where T : VenueResource, new() =>
         new()
         {
             Id = VenueId.Parse(value.id),

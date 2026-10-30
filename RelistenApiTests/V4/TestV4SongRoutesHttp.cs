@@ -13,8 +13,8 @@ public sealed partial class TestV4CatalogHttp
     private const string DiscoverySongPath = "/api/v4/songs/song_00000101";
     private static string SongArtistPath => ArtistPath(301);
 
-    private static string ImportedSongPath(int artistSuffix, int songSuffix) =>
-        ArtistPath(artistSuffix) + "/imported-songs/" + CatalogId("imported_song", songSuffix);
+    private static string ImportedSongPath(int songSuffix) =>
+        "/api/v4/imported-songs/" + CatalogId("imported_song", songSuffix);
 
     [Test]
     public async Task Song_browse_uses_evidence_mapping_and_preserves_unmatched_same_name_and_zero_match_songs()
@@ -55,7 +55,7 @@ public sealed partial class TestV4CatalogHttp
                 songs.Single(entry =>
                     entry!["song"]!["id"]!.GetValue<string>() == "song_00000101"
                 )!["song"],
-                detail
+                ResourceMetadata(detail)
             )
             .Should()
             .BeTrue();
@@ -64,11 +64,17 @@ public sealed partial class TestV4CatalogHttp
         var empty = await GetJson("/api/v4/songs/song_00000103");
         empty["matched_track_count"]!.GetValue<int>().Should().Be(0);
         empty["matched_show_count"]!.GetValue<int>().Should().Be(0);
-        (await GetJson("/api/v4/songs/song_00000103/tracks")).AsArray().Should().BeEmpty();
-        (await GetJson("/api/v4/songs/song_00000103/shows")).AsArray().Should().BeEmpty();
+        (await GetJson("/api/v4/songs/song_00000103/tracks"))["tracks"]!
+            .AsArray()
+            .Should()
+            .BeEmpty();
+        empty["shows"]!.AsArray().Should().BeEmpty();
 
         var document = await GetJson("/api-docs/v4/swagger.json");
-        AssertSchemaFields(document, "SongDetailResource", detail);
+        AssertSchemaFields(document, "SongWithShowsResource", detail);
+        AssertSchemaFields(document, "SongDetailResource", songs[0]!["song"]!);
+        RelatedArtistIds(detail).Should().Equal(CatalogId("artist", 301));
+        RelatedArtistIds(empty).Should().Equal(CatalogId("artist", 301));
         AssertSchemaFields(document, "ArtistSongEntryResource", entries[0]!);
         EnumValues(document, "ArtistSongEntryResource", "kind")
             .Should()
@@ -78,7 +84,15 @@ public sealed partial class TestV4CatalogHttp
     [Test]
     public async Task Song_tracks_keep_exact_parents_and_all_parts_but_return_each_file_once()
     {
-        var matches = (await GetJson(DiscoverySongPath + "/tracks")).AsArray();
+        var recordingDetail = await GetJson(DiscoverySongPath + "/tracks");
+        var matches = recordingDetail["tracks"]!.AsArray();
+        recordingDetail.AsObject().ContainsKey("shows").Should().BeFalse();
+        RelatedArtistIds(recordingDetail).Should().Equal(CatalogId("artist", 301));
+        var detail = await GetJson(DiscoverySongPath);
+        JsonNode
+            .DeepEquals(ResourceMetadata(recordingDetail), ResourceMetadata(detail))
+            .Should()
+            .BeTrue();
         matches.Should().HaveCount(3);
         matches
             .Select(match => match!["track"]!["id"]!.GetValue<string>())
@@ -125,12 +139,11 @@ public sealed partial class TestV4CatalogHttp
             .Should()
             .Equal(1);
 
-        var shows = (await GetJson(DiscoverySongPath + "/shows")).AsArray();
+        var shows = detail["shows"]!.AsArray();
         shows
             .Select(show => show!["id"]!.GetValue<string>())
             .Should()
             .Equal(CatalogId("show", 311), CatalogId("show", 312));
-        var detail = await GetJson(DiscoverySongPath);
         detail["matched_track_count"]!.GetValue<int>().Should().Be(matches.Count);
         detail["matched_show_count"]!.GetValue<int>().Should().Be(shows.Count);
         var document = await GetJson("/api-docs/v4/swagger.json");
@@ -146,31 +159,22 @@ public sealed partial class TestV4CatalogHttp
             song!["id"]!.GetValue<string>() == CatalogId("imported_song", 351)
         )!;
         imported["setlist_show_count"]!.GetValue<int>().Should().Be(2);
-        var detail = await GetJson(ImportedSongPath(301, 351));
+        var detail = await GetJson(ImportedSongPath(351));
         detail["setlist_show_count"]!.GetValue<int>().Should().Be(2);
         detail["shows"]!
             .AsArray()
             .Select(show => show!["id"]!.GetValue<string>())
             .Should()
             .Equal(CatalogId("show", 311), CatalogId("show", 313));
-        detail
-            .AsObject()
-            .Where(property => property.Key != "shows")
-            .Select(property => property.Key)
-            .Should()
-            .BeEquivalentTo(imported.AsObject().Select(property => property.Key));
-        foreach (var property in imported.AsObject())
-        {
-            JsonNode.DeepEquals(property.Value, detail[property.Key]).Should().BeTrue(property.Key);
-        }
+        JsonNode.DeepEquals(ResourceMetadata(detail), imported).Should().BeTrue();
         foreach (var suffix in new[] { 353, 354 })
         {
-            var empty = await GetJson(ImportedSongPath(301, suffix));
+            var empty = await GetJson(ImportedSongPath(suffix));
             empty["setlist_show_count"]!.GetValue<int>().Should().Be(0);
             empty["shows"]!.AsArray().Should().BeEmpty();
+            RelatedArtistIds(empty).Should().Equal(CatalogId("artist", 301));
         }
-        using var foreign = await http.GetAsync(ImportedSongPath(302, 351));
-        foreign.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        RelatedArtistIds(detail).Should().Equal(CatalogId("artist", 301));
         var document = await GetJson("/api-docs/v4/swagger.json");
         AssertSchemaFields(document, "ImportedSongResource", imported);
         AssertSchemaFields(document, "ImportedSongWithShowsResource", detail);
@@ -191,14 +195,13 @@ public sealed partial class TestV4CatalogHttp
             .GetValue<string>()
             .Should()
             .Be(CatalogId("imported_song", importedSuffix));
-        var detail = await GetJson(ImportedSongPath(artistSuffix, importedSuffix));
+        var detail = await GetJson(ImportedSongPath(importedSuffix));
         detail["setlist_show_count"]!.GetValue<int>().Should().Be(0);
         detail["shows"]!.AsArray().Should().BeEmpty();
     }
 
     [TestCase("/api/v4/songs/song_00000105", HttpStatusCode.NotFound)]
     [TestCase("/api/v4/songs/song_00000105/tracks", HttpStatusCode.NotFound)]
-    [TestCase("/api/v4/songs/song_00000105/shows", HttpStatusCode.NotFound)]
     [TestCase("/api/v4/songs/song_zzzzzzzz", HttpStatusCode.NotFound)]
     [TestCase("/api/v4/songs/venue_00000101", HttpStatusCode.UnprocessableEntity)]
     [TestCase("/api/v4/songs/song_bad/tracks", HttpStatusCode.UnprocessableEntity)]
@@ -222,10 +225,10 @@ public sealed partial class TestV4CatalogHttp
             response.StatusCode.Should().Be(HttpStatusCode.NotFound);
         }
         using var malformed = await http.GetAsync(
-            SongArtistPath + "/imported-songs/" + CatalogId("song", 351)
+            "/api/v4/imported-songs/" + CatalogId("song", 351)
         );
         malformed.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
-        using var unknown = await http.GetAsync(ImportedSongPath(301, 999));
+        using var unknown = await http.GetAsync(ImportedSongPath(999));
         unknown.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
@@ -236,7 +239,6 @@ public sealed partial class TestV4CatalogHttp
         {
             DiscoverySongPath,
             DiscoverySongPath + "/tracks",
-            DiscoverySongPath + "/shows",
             SongArtistPath + "/songs",
         };
         var validators = new Dictionary<string, string>();
@@ -270,7 +272,7 @@ public sealed partial class TestV4CatalogHttp
             var track = await GetJson("/api/v4/source-tracks/" + CatalogId("track", 343));
             JsonNode.DeepEquals(track["updated_at"], original["updated_at"]).Should().BeTrue();
             track["title"]!.GetValue<string>().Should().Be(original["title"]!.GetValue<string>());
-            (await GetJson(ImportedSongPath(301, 351)))["setlist_show_count"]!
+            (await GetJson(ImportedSongPath(351)))["setlist_show_count"]!
                 .GetValue<int>()
                 .Should()
                 .Be(2);
@@ -286,7 +288,7 @@ public sealed partial class TestV4CatalogHttp
             );
         }
         (await GetJson(DiscoverySongPath))["matched_track_count"]!.GetValue<int>().Should().Be(3);
-        (await GetJson(DiscoverySongPath + "/shows")).AsArray().Should().HaveCount(2);
+        (await GetJson(DiscoverySongPath))["shows"]!.AsArray().Should().HaveCount(2);
     }
 
     [Test]
@@ -327,12 +329,15 @@ public sealed partial class TestV4CatalogHttp
                     browse.Single(entry =>
                         entry!["song"]?["id"]?.GetValue<string>() == "song_00000101"
                     )!["song"],
-                    detail
+                    ResourceMetadata(detail)
                 )
                 .Should()
                 .BeTrue();
-            (await GetJson(DiscoverySongPath + "/tracks")).AsArray().Should().HaveCount(3);
-            (await GetJson(DiscoverySongPath + "/shows")).AsArray().Should().HaveCount(2);
+            (await GetJson(DiscoverySongPath + "/tracks"))["tracks"]!
+                .AsArray()
+                .Should()
+                .HaveCount(3);
+            (await GetJson(DiscoverySongPath))["shows"]!.AsArray().Should().HaveCount(2);
             JsonNode
                 .DeepEquals(
                     trackBefore,
@@ -359,7 +364,7 @@ public sealed partial class TestV4CatalogHttp
     [Test]
     public async Task Stored_imported_counter_correction_is_shared_by_browse_inventory_and_detail()
     {
-        var path = ImportedSongPath(301, 352);
+        var path = ImportedSongPath(352);
         using var initial = await http.GetAsync(path);
         var etag = initial.Headers.ETag!.ToString();
         await using var connection = await MigratedTestDatabase.OpenAsync();
@@ -431,20 +436,25 @@ public sealed partial class TestV4CatalogHttp
                 );
                 await sourceWrite.CommitAsync();
             }
-            // Import hooks run after their source commit. During that gap, discovery
-            // is current but the saved count and its response validator remain unchanged.
-            (await GetJson(DiscoverySongPath + "/tracks"))
+            // The detail validator covers live membership even before the import's
+            // post-commit recount. Stored counters retain their independent meaning.
+            (await GetJson(DiscoverySongPath + "/tracks"))["tracks"]!
                 .AsArray()
                 .Should()
                 .HaveCount(2);
-            (await GetJson(DiscoverySongPath + "/shows")).AsArray().Should().ContainSingle();
+            (await GetJson(DiscoverySongPath))["shows"]!.AsArray().Should().ContainSingle();
             using var stale = await Conditional(DiscoverySongPath, etag);
-            stale.StatusCode.Should().Be(HttpStatusCode.NotModified);
+            stale.StatusCode.Should().Be(HttpStatusCode.OK);
+            stale.Headers.ETag!.ToString().Should().NotBe(etag);
+            var current = JsonNode.Parse(await stale.Content.ReadAsStringAsync())!;
+            current["matched_show_count"]!.GetValue<int>().Should().Be(2);
+            current["shows"]!.AsArray().Should().ContainSingle();
+            var membershipEtag = stale.Headers.ETag!.ToString();
 
             await connection.ExecuteAsync(
                 "SELECT norm.refresh_song_counts('00000000-0000-0000-0000-000000000301'::uuid)"
             );
-            using var refreshed = await Conditional(DiscoverySongPath, etag);
+            using var refreshed = await Conditional(DiscoverySongPath, membershipEtag);
             refreshed.StatusCode.Should().Be(HttpStatusCode.OK);
             var detail = JsonNode.Parse(await refreshed.Content.ReadAsStringAsync())!;
             detail["matched_track_count"]!.GetValue<int>().Should().Be(2);
@@ -488,7 +498,7 @@ public sealed partial class TestV4CatalogHttp
                     entries.Single(entry =>
                         entry!["song"]?["id"]?.GetValue<string>() == "song_00000101"
                     )!["song"],
-                    song
+                    ResourceMetadata(song)
                 )
                 .Should()
                 .BeTrue();
@@ -535,7 +545,7 @@ public sealed partial class TestV4CatalogHttp
                 .GetValue<int>()
                 .Should()
                 .Be(0);
-            (await GetJson(ImportedSongPath(301, 351)))["shows"]!.AsArray().Should().HaveCount(2);
+            (await GetJson(ImportedSongPath(351)))["shows"]!.AsArray().Should().HaveCount(2);
         }
         finally
         {
@@ -563,6 +573,6 @@ public sealed partial class TestV4CatalogHttp
         {
             DbService.ConnStr = previous;
         }
-        (await GetJson(DiscoverySongPath + "/tracks")).AsArray().Should().HaveCount(3);
+        (await GetJson(DiscoverySongPath + "/tracks"))["tracks"]!.AsArray().Should().HaveCount(3);
     }
 }

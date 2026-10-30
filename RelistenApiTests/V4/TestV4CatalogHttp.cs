@@ -961,6 +961,18 @@ public sealed partial class TestV4CatalogHttp
             .ToArray();
     }
 
+    private static JsonNode ResourceMetadata(JsonNode detail)
+    {
+        var metadata = detail.DeepClone().AsObject();
+        metadata.Remove("shows");
+        metadata.Remove("artists");
+        metadata.Remove("tracks");
+        return metadata;
+    }
+
+    private static IEnumerable<string> RelatedArtistIds(JsonNode detail) =>
+        detail["artists"]!.AsArray().Select(artist => artist!["id"]!.GetValue<string>());
+
     private static void AssertSchemaFields(JsonNode document, string schema, JsonNode response)
     {
         var properties = document["components"]!["schemas"]![schema]!["properties"]!.AsObject();
@@ -990,17 +1002,15 @@ public sealed partial class TestV4CatalogHttp
                 "/api/v4/sources/{sourceId}",
                 "/api/v4/artists/{artistId}/venues",
                 "/api/v4/artists/{artistId}/venues/{venueId}",
-                "/api/v4/artists/{artistId}/venues/{venueId}/shows",
                 "/api/v4/artists/{artistId}/imported-venues",
-                "/api/v4/artists/{artistId}/imported-venues/{importedVenueId}",
+                "/api/v4/imported-venues/{importedVenueId}",
+                "/api/v4/artist-venues/{artistVenueId}",
                 "/api/v4/venues/{venueId}",
-                "/api/v4/venues/{venueId}/shows",
                 "/api/v4/artists/{artistId}/songs",
                 "/api/v4/artists/{artistId}/imported-songs",
-                "/api/v4/artists/{artistId}/imported-songs/{importedSongId}",
+                "/api/v4/imported-songs/{importedSongId}",
                 "/api/v4/songs/{songId}",
-                "/api/v4/songs/{songId}/tracks",
-                "/api/v4/songs/{songId}/shows"
+                "/api/v4/songs/{songId}/tracks"
             );
         var legacy = await GetJson("/api-docs/v3/swagger.json");
         legacy["paths"]!
