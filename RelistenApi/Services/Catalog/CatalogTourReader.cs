@@ -21,6 +21,15 @@ public sealed class CatalogTourReader(
     )
     {
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
+        return await ReadTours(session, artistUuid, cancellationToken);
+    }
+
+    internal async Task<IReadOnlyList<CatalogTour>?> ReadTours(
+        CatalogReadSession session,
+        Guid artistUuid,
+        CancellationToken cancellationToken
+    )
+    {
         var artistExists = await session.Connection.QuerySingleAsync<bool>(
             session.Command(
                 "SELECT EXISTS(SELECT 1 FROM artists WHERE uuid=@artistUuid)",
@@ -47,6 +56,15 @@ public sealed class CatalogTourReader(
     )
     {
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
+        return await ReadTour(session, tourUuid, cancellationToken);
+    }
+
+    internal async Task<CatalogTourDetail?> ReadTour(
+        CatalogReadSession session,
+        Guid tourUuid,
+        CancellationToken cancellationToken
+    )
+    {
         var tours = await tourMetadata.Read(session, [tourUuid], cancellationToken);
         if (!tours.TryGetValue(tourUuid, out var tour))
         {

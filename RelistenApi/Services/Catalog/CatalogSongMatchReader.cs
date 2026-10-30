@@ -16,11 +16,15 @@ public sealed class CatalogSongMatchReader
 {
     public async Task<IReadOnlyDictionary<string, CatalogSongMatchCounts>> ReadCounts(
         CatalogReadSession session,
-        Guid artistUuid,
+        Guid? artistUuid,
         IReadOnlyList<string>? canonicalIds,
         CancellationToken cancellationToken
     )
     {
+        if (artistUuid is null && canonicalIds is null)
+        {
+            throw new ArgumentException("Song counts require an artist scope or explicit IDs.");
+        }
         if (canonicalIds is { Count: 0 })
         {
             return new Dictionary<string, CatalogSongMatchCounts>();
@@ -32,7 +36,7 @@ public sealed class CatalogSongMatchReader
                 SELECT s.id canonical_id,COALESCE(c.matched_track_count,0) matched_track_count,
                        COALESCE(c.matched_show_count,0) matched_show_count
                 FROM norm.songs s LEFT JOIN norm.song_counts c ON c.song_id=s.id
-                WHERE s.artist_uuid=@artistUuid AND s.merged_into IS NULL
+                WHERE (@artistUuid::uuid IS NULL OR s.artist_uuid=@artistUuid) AND s.merged_into IS NULL
                   AND (@canonicalIds::text[] IS NULL OR s.id=ANY(@canonicalIds))
                 """,
                 new { artistUuid, canonicalIds = canonicalIds?.Distinct().ToArray() },

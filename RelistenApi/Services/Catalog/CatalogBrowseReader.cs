@@ -41,6 +41,15 @@ public sealed class CatalogBrowseReader(DbService db, CatalogShowMetadataReader 
     )
     {
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
+        return await ReadArtist(session, artistUuid, cancellationToken);
+    }
+
+    internal async Task<CatalogArtist?> ReadArtist(
+        CatalogReadSession session,
+        Guid artistUuid,
+        CancellationToken cancellationToken
+    )
+    {
         var artist = await session.Connection.QuerySingleOrDefaultAsync<CatalogArtist>(
             session.Command(
                 ArtistSelect + " WHERE a.uuid=@artistUuid",
@@ -55,6 +64,31 @@ public sealed class CatalogBrowseReader(DbService db, CatalogShowMetadataReader 
         return artist;
     }
 
+    /// <summary>Hydrates only explicitly requested resolver artists, within the caller's snapshot.</summary>
+    internal static async Task<IReadOnlyList<CatalogArtist>> ReadArtists(
+        CatalogReadSession session,
+        IReadOnlyList<Guid> artistUuids,
+        CancellationToken cancellationToken
+    )
+    {
+        var artists = (
+            await session.Connection.QueryAsync<CatalogArtist>(
+                session.Command(
+                    """
+                    SELECT a.*,
+                           (SELECT count(*)::int FROM shows s WHERE s.artist_id=a.id) show_count,
+                           (SELECT count(*)::int FROM sources src WHERE src.artist_id=a.id) source_count
+                    FROM artists a WHERE a.uuid=ANY(@artistUuids) ORDER BY a.uuid
+                    """,
+                    new { artistUuids = artistUuids.ToArray() },
+                    cancellationToken
+                )
+            )
+        ).ToArray();
+        await ReadArtistMetadata(session, artists, cancellationToken);
+        return artists;
+    }
+
     /// <summary>Null means an unknown artist; an empty list means the artist has no years.</summary>
     public async Task<IReadOnlyList<CatalogYear>?> ReadYears(
         Guid artistUuid,
@@ -62,6 +96,15 @@ public sealed class CatalogBrowseReader(DbService db, CatalogShowMetadataReader 
     )
     {
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
+        return await ReadYears(session, artistUuid, cancellationToken);
+    }
+
+    internal async Task<IReadOnlyList<CatalogYear>?> ReadYears(
+        CatalogReadSession session,
+        Guid artistUuid,
+        CancellationToken cancellationToken
+    )
+    {
         if (!await ArtistExists(session, artistUuid, cancellationToken))
         {
             return null;
@@ -84,6 +127,15 @@ public sealed class CatalogBrowseReader(DbService db, CatalogShowMetadataReader 
     )
     {
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
+        return await ReadEras(session, artistUuid, cancellationToken);
+    }
+
+    internal async Task<IReadOnlyList<CatalogEra>?> ReadEras(
+        CatalogReadSession session,
+        Guid artistUuid,
+        CancellationToken cancellationToken
+    )
+    {
         if (!await ArtistExists(session, artistUuid, cancellationToken))
         {
             return null;
@@ -113,6 +165,17 @@ public sealed class CatalogBrowseReader(DbService db, CatalogShowMetadataReader 
     )
     {
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
+        return await ReadYear(session, artistUuid, yearUuid, yearNumber, cancellationToken);
+    }
+
+    internal async Task<CatalogYearDetail?> ReadYear(
+        CatalogReadSession session,
+        Guid artistUuid,
+        Guid? yearUuid,
+        int? yearNumber,
+        CancellationToken cancellationToken
+    )
+    {
         // Imported year labels use four digits, including unusual dates such as 0023.
         var predicate = yearUuid.HasValue ? "y.uuid=@yearUuid" : "y.year=@year";
         var year = await session.Connection.QuerySingleOrDefaultAsync<CatalogYear>(
@@ -144,6 +207,15 @@ public sealed class CatalogBrowseReader(DbService db, CatalogShowMetadataReader 
     )
     {
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
+        return await ReadShows(session, artistUuid, cancellationToken);
+    }
+
+    internal async Task<IReadOnlyList<CatalogShow>?> ReadShows(
+        CatalogReadSession session,
+        Guid artistUuid,
+        CancellationToken cancellationToken
+    )
+    {
         if (!await ArtistExists(session, artistUuid, cancellationToken))
         {
             return null;

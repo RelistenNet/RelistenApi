@@ -13,7 +13,7 @@ using Relisten.Identifiers;
 namespace Relisten.Controllers.V4;
 
 /// <summary>Publishes exactly the JSON used for cache validation, after snapshot disposal.</summary>
-internal sealed class CatalogJsonResult(object resource) : IActionResult
+internal sealed class CatalogJsonResult(object resource, bool cacheable = true) : IActionResult
 {
     private static readonly JsonSerializerSettings Settings = new()
     {
@@ -28,25 +28,28 @@ internal sealed class CatalogJsonResult(object resource) : IActionResult
     public async Task ExecuteResultAsync(ActionContext context)
     {
         var bytes = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(resource, Settings));
-        var etag = new EntityTagHeaderValue(
-            "\"" + Convert.ToHexStringLower(SHA256.HashData(bytes)) + "\"",
-            isWeak: true
-        );
         var response = context.HttpContext.Response;
-        response.Headers.ETag = etag.ToString();
-        response.Headers.CacheControl = "public, no-cache";
-        var validators = context.HttpContext.Request.GetTypedHeaders().IfNoneMatch;
-        if (validators is not null)
+        response.Headers.CacheControl = cacheable ? "public, no-cache" : "no-store";
+        if (cacheable)
         {
-            foreach (var validator in validators)
+            var etag = new EntityTagHeaderValue(
+                "\"" + Convert.ToHexStringLower(SHA256.HashData(bytes)) + "\"",
+                isWeak: true
+            );
+            response.Headers.ETag = etag.ToString();
+            var validators = context.HttpContext.Request.GetTypedHeaders().IfNoneMatch;
+            if (validators is not null)
             {
-                if (
-                    validator == EntityTagHeaderValue.Any
-                    || validator.Compare(etag, useStrongComparison: false)
-                )
+                foreach (var validator in validators)
                 {
-                    response.StatusCode = StatusCodes.Status304NotModified;
-                    return;
+                    if (
+                        validator == EntityTagHeaderValue.Any
+                        || validator.Compare(etag, useStrongComparison: false)
+                    )
+                    {
+                        response.StatusCode = StatusCodes.Status304NotModified;
+                        return;
+                    }
                 }
             }
         }

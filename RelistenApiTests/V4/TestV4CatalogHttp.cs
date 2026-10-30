@@ -327,20 +327,26 @@ public sealed partial class TestV4CatalogHttp
         withoutTour["artist_venue"].Should().BeNull();
     }
 
-    [Test]
-    public async Task Browser_preflight_permits_conditional_catalog_reads()
+    [TestCase("GET", "if-none-match")]
+    [TestCase("POST", "content-type")]
+    public async Task Browser_preflight_permits_catalog_requests(string method, string header)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Options, ShowPath(4));
+        var path = method == "GET" ? ShowPath(4) : "/api/v4/catalog/resolve";
+        using var request = new HttpRequestMessage(HttpMethod.Options, path);
         request.Headers.Add("Origin", "https://review.example");
-        request.Headers.Add("Access-Control-Request-Method", "GET");
-        request.Headers.Add("Access-Control-Request-Headers", "if-none-match");
+        request.Headers.Add("Access-Control-Request-Method", method);
+        request.Headers.Add("Access-Control-Request-Headers", header);
         using var response = await http.SendAsync(request);
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
         response
             .Headers.GetValues("Access-Control-Allow-Headers")
             .Should()
-            .Contain(value => value.Contains("if-none-match", StringComparison.OrdinalIgnoreCase));
-        response.Headers.GetValues("Access-Control-Allow-Methods").Should().Contain("GET");
+            .Contain(value => value.Contains(header, StringComparison.OrdinalIgnoreCase));
+        response
+            .Headers.GetValues("Access-Control-Allow-Methods")
+            .SelectMany(value => value.Split(',', StringSplitOptions.TrimEntries))
+            .Should()
+            .Contain(method);
     }
 
     [Test]
@@ -989,6 +995,8 @@ public sealed partial class TestV4CatalogHttp
             .BeEquivalentTo(
                 "/api/v4/artists",
                 "/api/v4/artists/{artistId}",
+                "/api/v4/artists/{artistId}/catalog",
+                "/api/v4/catalog/resolve",
                 "/api/v4/artists/{artistId}/years",
                 "/api/v4/artists/{artistId}/years/{yearId}",
                 "/api/v4/artists/{artistId}/years/by-number/{year}",

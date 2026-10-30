@@ -17,6 +17,7 @@ namespace Relisten.Controllers.V4;
 [Produces("application/json")]
 [ProducesResponseType(typeof(ProblemDetails), 422)]
 [ProducesResponseType(typeof(ProblemDetails), 404)]
+[ProducesResponseType(typeof(ProblemDetails), 410)]
 [ProducesResponseType(typeof(ProblemDetails), 503)]
 public sealed class CatalogVenuesController(
     CatalogVenueReader reader,

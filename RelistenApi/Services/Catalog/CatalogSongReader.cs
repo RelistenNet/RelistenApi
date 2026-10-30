@@ -25,6 +25,15 @@ public sealed class CatalogSongReader(
     )
     {
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
+        return await ReadArtistSongs(session, artistUuid, cancellationToken);
+    }
+
+    internal async Task<IReadOnlyList<CatalogArtistSongEntry>?> ReadArtistSongs(
+        CatalogReadSession session,
+        Guid artistUuid,
+        CancellationToken cancellationToken
+    )
+    {
         var artist = await ReadArtist(session, artistUuid, cancellationToken);
         if (artist is null)
         {
@@ -66,6 +75,15 @@ public sealed class CatalogSongReader(
     )
     {
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
+        return await ReadSong(session, songId, cancellationToken);
+    }
+
+    internal async Task<CatalogSongWithShows?> ReadSong(
+        CatalogReadSession session,
+        string songId,
+        CancellationToken cancellationToken
+    )
+    {
         var song = await ReadApprovedSongDetail(session, songId, cancellationToken);
         if (song is null)
         {
@@ -94,6 +112,15 @@ public sealed class CatalogSongReader(
     )
     {
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
+        return await ReadTracks(session, songId, cancellationToken);
+    }
+
+    internal async Task<CatalogSongWithTracks?> ReadTracks(
+        CatalogReadSession session,
+        string songId,
+        CancellationToken cancellationToken
+    )
+    {
         var song = await ReadApprovedSongDetail(session, songId, cancellationToken);
         if (song is null)
         {
@@ -127,6 +154,15 @@ public sealed class CatalogSongReader(
     )
     {
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
+        return await ReadImportedSongs(session, artistUuid, cancellationToken);
+    }
+
+    internal async Task<IReadOnlyList<CatalogImportedSong>?> ReadImportedSongs(
+        CatalogReadSession session,
+        Guid artistUuid,
+        CancellationToken cancellationToken
+    )
+    {
         var artist = await ReadArtist(session, artistUuid, cancellationToken);
         return artist is null
             ? null
@@ -139,6 +175,15 @@ public sealed class CatalogSongReader(
     )
     {
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
+        return await ReadImportedSong(session, songUuid, cancellationToken);
+    }
+
+    internal async Task<CatalogImportedSongDetail?> ReadImportedSong(
+        CatalogReadSession session,
+        Guid songUuid,
+        CancellationToken cancellationToken
+    )
+    {
         var song = await session.Connection.QuerySingleOrDefaultAsync<CatalogImportedSong>(
             session.Command(
                 ImportedSongSelect + " WHERE s.uuid=@songUuid",
@@ -248,6 +293,7 @@ public sealed class CatalogSongReader(
         );
         if (owner is null)
         {
+            await CatalogPublicIdentity.RequireNotRetired(session, songId, cancellationToken);
             return null;
         }
         var resolved = await songMetadata.Read(session, [songId], cancellationToken);
@@ -260,9 +306,16 @@ public sealed class CatalogSongReader(
         return song;
     }
 
+    /// <summary>Hydrates approved canonical targets selected by the resolver in this same snapshot.</summary>
+    internal Task<IReadOnlyList<CatalogSongDetail>> ReadSongDetails(
+        CatalogReadSession session,
+        IReadOnlyList<string> ids,
+        CancellationToken cancellationToken
+    ) => ReadSongDetails(session, null, ids.ToArray(), cancellationToken);
+
     private async Task<IReadOnlyList<CatalogSongDetail>> ReadSongDetails(
         CatalogReadSession session,
-        Guid artistUuid,
+        Guid? artistUuid,
         string[]? ids,
         CancellationToken cancellationToken
     )
@@ -272,7 +325,8 @@ public sealed class CatalogSongReader(
                 session.Command(
                     """
                     SELECT id,artist_uuid,name,kind,slug,original_artist FROM norm.songs
-                    WHERE artist_uuid=@artistUuid AND merged_into IS NULL AND (@ids::text[] IS NULL OR id=ANY(@ids))
+                    WHERE (@artistUuid::uuid IS NULL OR artist_uuid=@artistUuid)
+                      AND merged_into IS NULL AND (@ids::text[] IS NULL OR id=ANY(@ids))
                     ORDER BY name COLLATE "C",id
                     """,
                     new { artistUuid, ids },
@@ -305,7 +359,7 @@ public sealed class CatalogSongReader(
 
     private static async Task<ILookup<string, SongAlias>> ReadAliases(
         CatalogReadSession session,
-        Guid artistUuid,
+        Guid? artistUuid,
         string[] songIds,
         CancellationToken cancellationToken
     )
@@ -315,15 +369,15 @@ public sealed class CatalogSongReader(
                 session.Command(
                     """
                     WITH RECURSIVE lineage AS (
-                        SELECT id canonical_id,id,name,1 depth FROM norm.songs
-                        WHERE artist_uuid=@artistUuid AND id=ANY(@songIds)
+                        SELECT id canonical_id,id,name,artist_uuid,1 depth FROM norm.songs
+                        WHERE (@artistUuid::uuid IS NULL OR artist_uuid=@artistUuid) AND id=ANY(@songIds)
                         UNION ALL
-                        SELECT l.canonical_id,s.id,s.name,l.depth+1 FROM lineage l
-                        JOIN norm.songs s ON s.merged_into=l.id AND s.artist_uuid=@artistUuid
+                        SELECT l.canonical_id,s.id,s.name,s.artist_uuid,l.depth+1 FROM lineage l
+                        JOIN norm.songs s ON s.merged_into=l.id AND s.artist_uuid=l.artist_uuid
                         WHERE l.depth<32
                     )
                     SELECT l.canonical_id,a.alias FROM lineage l
-                    JOIN norm.song_aliases a ON a.song_id=l.id AND a.artist_uuid=@artistUuid
+                    JOIN norm.song_aliases a ON a.song_id=l.id AND a.artist_uuid=l.artist_uuid
                     UNION
                     SELECT canonical_id,name alias FROM lineage WHERE id<>canonical_id
                     """,
@@ -368,7 +422,7 @@ public sealed class CatalogSongReader(
 
     // Imported membership is still read from setlists, but its count is maintained
     // by the shared rebuild/normalization refresh rather than recomputed by GETs.
-    private const string ImportedSongSelect = """
+    internal const string ImportedSongSelect = """
         SELECT s.*,a.uuid artist_uuid,COALESCE(counts.setlist_show_count,0) setlist_show_count
         FROM setlist_songs s JOIN artists a ON a.id=s.artist_id
         LEFT JOIN setlist_song_counts counts ON counts.setlist_song_id=s.id

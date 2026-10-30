@@ -39,7 +39,7 @@ public sealed record ShowResource : ShowSummaryResource
 }
 
 [JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
-public sealed class SourceResource
+public record SourceSummaryResource
 {
     public SourceId Id { get; init; }
     public ArtistId ArtistId { get; init; }
@@ -65,12 +65,17 @@ public sealed class SourceResource
     public DateTime CreatedAt { get; init; }
     public DateTime UpdatedAt { get; init; }
     public ImportedVenueResource? ImportedVenue { get; init; }
+}
+
+[JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
+public sealed record SourceResource : SourceSummaryResource
+{
     public IReadOnlyList<SourceSetResource> Sets { get; init; } = [];
     public IReadOnlyList<LinkResource> Links { get; init; } = [];
 }
 
 [JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
-public sealed class SourceSetResource
+public record SourceSetSummaryResource
 {
     public SourceSetId Id { get; init; }
     public SourceId SourceId { get; init; }
@@ -80,6 +85,11 @@ public sealed class SourceSetResource
     public string Name { get; init; } = null!;
     public DateTime CreatedAt { get; init; }
     public DateTime UpdatedAt { get; init; }
+}
+
+[JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
+public sealed record SourceSetResource : SourceSetSummaryResource
+{
     public IReadOnlyList<TrackResource> Tracks { get; init; } = [];
 }
 
