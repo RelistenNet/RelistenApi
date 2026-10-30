@@ -1046,6 +1046,7 @@ public sealed partial class TestV4CatalogHttp
             "SELECT norm.refresh_artist_venues()",
             transaction: transaction
         );
+        await V4CatalogFixture.RefreshSongCounts(connection, transaction);
         await transaction.CommitAsync();
     }
 

@@ -30,8 +30,9 @@ from this walkthrough.
    A show appears once even if several recordings/files match. Follow its ID to
    `/api/v4/shows/{showId}` and compare the playable hierarchy.
 6. Open [the imported song](http://127.0.0.1:43823/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/imported-songs/imported_song_3km7ryr3hc5dm877wmc69zpdb5).
-   `setlist_show_count` matches this resource's complete `shows` list. It describes
-   imported setlist evidence and may differ from the canonical recording count.
+   After a completed refresh, `setlist_show_count` matches this resource's complete
+   `shows` list. It describes imported setlist evidence and may differ from the
+   canonical recording count.
    A setlist association alone never invents a source or playable file.
 
 The current snapshot returns 3,355 Scarlet Begonias files across 332 shows;
@@ -81,12 +82,32 @@ applied data; fetch or apply failure keeps the last complete local state. No
 song browse response implicitly changes favorites or downloaded files.
 
 
-## Local performance limit
+## Stored counts and performance review
 
-The captured full Grateful Dead song browse took 5.704 seconds. It calculates
-all canonical recording counts and imported setlist counts in the request's
-snapshot. Scarlet detail took 47 ms, its complete file list 200 ms, and its
-show list 77 ms. These are single local observations, not production targets.
-Optimize the artist-wide count reads and measure primary capacity before rollout.
-This checkpoint exposes their cost; it does not add a count cache or new writer
-maintenance protocol.
+The earlier capture took 5.704 seconds for the full Grateful Dead song browse
+because it calculated all canonical and imported counts in the request. That
+implementation is superseded by the [stored-count foundation](../../2026-10-30-song-counts/README.md).
+Current timings and local backfill verification belong in the
+[verification log](../verification.md); do not use the earlier measurement as
+the stored-read result.
+
+Canonical and imported counters are saved separately from normalization decisions.
+GETs read those rows and never recount. File/show discovery still reads current
+membership through the shared SQL function. Counts may briefly lag after an
+import commits or remain stale after a failed refresh; an explicit repair brings
+them back into agreement. Admin song edits refresh atomically. Ordinary repairs
+commit one artist at a time under the existing artist lock, and readers take no
+count lock. No background scan or new global lock is required.
+
+A count-only correction must invalidate song detail and browse ETags without
+changing imported timestamps. Refreshing unchanged source data must preserve
+count timestamps and validators. Mobile stores the returned count; its cached
+file/show list is not a replacement aggregate.
+
+
+After migration 16 and the stored-read change, five warm full-body requests gave
+medians of 18.751 ms for artist songs, 6.252 ms for imported inventory, and 6.612 ms
+for Scarlet detail. Response bodies and the old artist-list ETag stayed the same.
+See the [current timing evidence](../verification.md#stored-song-counts-and-latency-2026-10-30)
+for ranges and cold-start limits. The [foundation PR](https://github.com/RelistenNet/RelistenApi/pull/111)
+and [admin PR](https://github.com/RelistenNet/relisten-admin/pull/3) own maintenance.

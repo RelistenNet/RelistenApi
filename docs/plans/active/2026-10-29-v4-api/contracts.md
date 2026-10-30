@@ -445,7 +445,9 @@ Discovery membership requires a resolved song part, a valid artist-owned
 canonical chain, an active non-orphaned track, and consistent source/set/show/
 artist parents. Unresolved and non-song parts cannot establish a match. A partial
 track can match through its resolved parts; a track whose complete interpretation
-is inconsistent is excluded. Counts use this same recording membership.
+is inconsistent is excluded. Counts use this same recording membership at refresh
+time; discovery reads current membership from the shared
+`norm.song_recording_matches` function.
 `GET /songs/{songId}/shows` returns distinct show summaries from those recording
 matches, ordered by show date and identity. It does not include shows known only
 through imported setlists.
@@ -468,12 +470,43 @@ return an empty list and a zero count.
 `setlist_songs_plays → setlist_shows`, matched by artist and date. Multiple
 imported setlists on one date do not duplicate a catalog show. Distinct catalog
 show IDs on that date remain distinct. A setlist-only date with no catalog show
-is outside this collection and count. The count matches the detail's show list
-and has the same meaning in raw inventory and imported browse entries.
+is outside this collection and count. After a successful refresh, the stored
+count matches the detail's show list. The count has the same meaning in raw
+inventory, imported detail, and imported browse entries.
 
 Imported evidence may map song identity, but must not fabricate source/track
 matches or join the canonical recording-show count. Imported detail retains its
 setlist-derived show list even if normalized recording matches differ.
+
+### Stored song counts and refresh ownership
+
+Song reads do not aggregate recording or imported setlist membership to build
+counts. Canonical `matched_track_count` and `matched_show_count` come from
+`norm.song_counts`; imported `setlist_show_count` comes from
+`public.setlist_song_counts`. Each count row belongs to its song through a
+cascading foreign key. It has no separate public identity. A missing row reads as
+zero until its first refresh. Counts stay separate from the audited decisions in
+`norm.songs`; recounting does not create a normalization edit or change imported
+song timestamps.
+
+The [song-count foundation](../2026-10-30-song-counts/README.md) owns maintenance.
+`norm.refresh_song_counts(artist_uuid)` recomputes one artist's canonical and
+imported counts atomically. It uses the same recording-membership function as
+discovery and updates timestamps only when counts change, including transitions
+to zero. It reuses the existing artist-scoped `norm-catalogue` lock. Readers take
+no count lock, and there is no global gate, schedule, queue, or per-row source
+trigger. `SongCounts.RefreshAllAsync` commits each artist separately rather than
+holding locks across a full repair.
+
+Admin song edits refresh in the source transaction, so refresh failure rolls
+back the edit. Imports/rebuilds and normalization refresh after their source
+work commits. During that gap, or after a failed hook or out-of-band SQL edit,
+stored counts can lag the live track/show lists. A GET never repairs them.
+Explicit refresh restores agreement. A count-only correction changes payload
+ETags even when imported timestamps and track interpretations are unchanged.
+Mobile accepts the returned count and does not replace it with a partial local
+list length. A 304 validates the represented stored count, not the freshness of
+all underlying recording membership.
 
 These six routes use the existing direct-response, single-snapshot, payload-ETag,
 and failure contracts. Artist lists replace only their own browse/inventory

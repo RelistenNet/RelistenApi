@@ -76,6 +76,11 @@ an earlier design proposal.
   follow each entry's `kind`; they do not select a list from artist feature flags.
   Canonical counts come from stored artist relationships. Imported counts use
   the full show-level assignments to each imported venue.
+- Canonical song counts come from `norm.song_counts`; imported setlist counts
+  come from `public.setlist_song_counts`. GETs never recount. Live file/show
+  discovery shares the recount's membership function, while saved counts may
+  briefly lag post-commit imports. Admin song edits refresh atomically. Ordinary
+  repairs commit each artist separately under the existing artist-scoped lock.
 - “Recently updated” retains its imported recording-update meaning. A normalized
   correction still refreshes metadata; it does not move the show into that list.
 - Global venue favorites do not implicitly favorite their shows or add all those
@@ -182,6 +187,9 @@ Implement mobile's actual queries, not a generic interpreter of all server route
   before account/auth work.
 - [x] Add six song browsing/discovery reads for the
   [song-to-playback review](review/song-source-journey.md).
+- [x] Stack [stored song counts #111](https://github.com/RelistenNet/RelistenApi/pull/111)
+  below v4, update admin refreshes, backfill locally, and verify the 19 ms warm
+  artist-browse median with unchanged payloads.
 - [ ] Alec reviews song counts, exact recording matches, and imported setlist
   fallback before account/auth work.
 - [ ] C2–C5 remain unstarted pending the C1 response review.
@@ -394,6 +402,11 @@ by accepting this plan.
 - 2026-10-30, Alec: extend the local catalog review through song browsing,
   exact show/source/track matches, and imported setlist fallback before accounts.
   Keep recording-derived counts separate from imported setlist counts.
+
+- 2026-10-30, Alec: store canonical song/file/show counts and imported setlist
+  counts below v4. Reuse the existing artist-scoped lock, keep counts separate
+  from audited song decisions, and avoid schedules, queues, or per-row triggers.
+  Wire v4 to stored reads and remeasure after local backfill.
 
 ## Outcomes and retrospective
 

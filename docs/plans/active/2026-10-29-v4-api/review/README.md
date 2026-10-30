@@ -19,9 +19,10 @@ artist-list children, and direct artist venue detail.
 
 The local host serves all 22 review routes. The latest 62-request real-data
 capture passed its count, identity, fallback, and song-to-playback checks.
-The [verification log](../verification.md#song-browsing-and-recording-discovery-2026-10-30)
-records the results and the measured artist-wide count latency. Earlier captures
-describe their recorded revision.
+The [verification log](../verification.md#stored-song-counts-and-latency-2026-10-30)
+records the results and timing method. Stored counts bring artist song browsing
+to a 19 ms median across five warm local requests, with identical response bodies.
+Earlier captures describe their recorded revision.
 
 Start with Red Rocks and Grateful Dead: the shared venue has 176 shows across
 approved artists; Grateful Dead's relationship has 20 across all its years.

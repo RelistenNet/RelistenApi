@@ -144,7 +144,8 @@ track is shared with direct track and recording reads, preserving imported title
 playback URLs, exact parents, and partial normalization.
 
 Imported `setlist_show_count` counts distinct catalog shows supported by imported
-setlist evidence matched by artist/date. Its detail's show list has that count.
+setlist evidence matched by artist/date. After refresh, its detail's show list
+has that count.
 Setlist-only dates without catalog shows are outside this collection. This count
 can differ from recording-derived discovery and never establishes playable
 matches. Raw inventory remains available even when mapped rows leave the mixed
@@ -156,3 +157,22 @@ counts or aliases. All six song reads use direct responses and the same ETag
 and endpoint-specific replacement rules as the other catalog reads. Known songs
 with corrupt canonical chains return no-store 503 responses; imported fallback
 remains available where evidence cannot resolve.
+
+
+Song counters now come from `norm.song_counts` and `public.setlist_song_counts`,
+seeded by migration 16. Apply that migration through the normal worker migration
+command before starting this v4 build. The [song-count foundation](../../docs/plans/active/2026-10-30-song-counts/README.md)
+describes local backfill, permissions, and repair. GETs never recount. File/show
+membership is live, so counts may lag after imports or failed refreshes. Admin
+song edits refresh atomically; ordinary full repairs commit each artist
+separately using the existing artist lock, with no reader lock or new global gate.
+
+For one explicit repair, use the underlying artist UUID (not the public typed ID):
+
+```sql
+SELECT * FROM norm.refresh_song_counts('77a58ff9-2e01-c59c-b8eb-cff106049b72'::uuid);
+```
+
+Use `SongCounts.RefreshAllAsync` for all artists without retaining artist locks
+across the whole repair. Revalidate an endpoint after repair; a changed represented
+count changes its ETag even when imported timestamps stay the same.
