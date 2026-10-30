@@ -11,7 +11,10 @@ namespace Relisten.Catalog;
 /// Fills show metadata in batches for both navigation summaries and full recording reads.
 /// The caller owns the snapshot. This reader never loads sources or tracks itself.
 /// </summary>
-public sealed class CatalogShowMetadataReader(CatalogVenueMetadataReader venueMetadata)
+public sealed class CatalogShowMetadataReader(
+    CatalogVenueMetadataReader venueMetadata,
+    CatalogArtistVenueMetadataReader artistVenueMetadata
+)
 {
     public async Task Apply(
         CatalogReadSession session,
@@ -132,11 +135,24 @@ public sealed class CatalogShowMetadataReader(CatalogVenueMetadataReader venueMe
             assignments.Select(assignment => assignment.venue_id).ToArray(),
             cancellationToken
         );
+        var canonicalIds = resolved.Values.Select(venue => venue.id).Distinct().ToArray();
+        var relationships = await artistVenueMetadata.Read(
+            session,
+            approvedShows.Values.Select(show => show.artist_uuid).Distinct().ToArray(),
+            canonicalIds,
+            cancellationToken
+        );
         foreach (var assignment in assignments)
         {
-            approvedShows[assignment.show_uuid].Venue = resolved.GetValueOrDefault(
-                assignment.venue_id
-            );
+            var show = approvedShows[assignment.show_uuid];
+            if (
+                resolved.TryGetValue(assignment.venue_id, out var venue)
+                && relationships.TryGetValue((show.artist_uuid, venue.id), out var relationship)
+            )
+            {
+                relationship.Venue = venue;
+                show.ArtistVenue = relationship;
+            }
         }
     }
 

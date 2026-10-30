@@ -65,7 +65,8 @@ internal sealed class CatalogJsonResult(object resource) : IActionResult
             var valueType = Nullable.GetUnderlyingType(type) ?? type;
             return typeof(IUuidCatalogId).IsAssignableFrom(valueType)
                 || valueType == typeof(Relisten.Normalization.VenueId)
-                || valueType == typeof(Relisten.Normalization.SongId);
+                || valueType == typeof(Relisten.Normalization.SongId)
+                || valueType == typeof(Relisten.Normalization.ArtistVenueId);
         }
 
         public override void WriteJson(

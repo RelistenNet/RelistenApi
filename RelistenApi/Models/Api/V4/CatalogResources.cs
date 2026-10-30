@@ -26,7 +26,7 @@ public record ShowSummaryResource
     public DateTime CreatedAt { get; init; }
     public DateTime UpdatedAt { get; init; }
     public ImportedVenueResource? ImportedVenue { get; init; }
-    public VenueResource? Venue { get; init; }
+    public ArtistVenueResource? ArtistVenue { get; init; }
     public YearResource? Year { get; init; }
     public TourResource? Tour { get; init; }
     public EraResource? Era { get; init; }
@@ -154,6 +154,10 @@ public sealed class SongResource
 public sealed class VenueResource
 {
     public VenueId Id { get; init; }
+
+    /// <summary>Stored show memberships across artists approved for normalized reads, independent of request filters.</summary>
+    public int GlobalShowCount { get; init; }
+
     public string Name { get; init; } = null!;
     public VenueKind Kind { get; init; }
     public VenueId? ParentId { get; init; }

@@ -26,6 +26,7 @@ public static class V4CatalogRegistration
         services.AddTransient<CatalogBrowseReader>();
         services.AddTransient<CatalogShowMetadataReader>();
         services.AddTransient<CatalogVenueMetadataReader>();
+        services.AddTransient<CatalogArtistVenueMetadataReader>();
         services.AddTransient<CatalogVenueReader>();
         services.AddCors(options =>
             options.AddPolicy(
@@ -63,6 +64,9 @@ public static class V4CatalogRegistration
         MapId<SourceReviewId>(options);
         options.MapType<Relisten.Normalization.VenueId>(() => ShortId("venue"));
         options.MapType<Relisten.Normalization.SongId>(() => ShortId("song"));
+        options.MapType<Relisten.Normalization.ArtistVenueId>(() =>
+            ShortId(PublicIdPrefixes.ArtistVenue)
+        );
         options.SchemaFilter<NullableCatalogSchemaFilter>();
     }
 

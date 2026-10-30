@@ -14,10 +14,11 @@ namespace Relisten.Catalog;
 public sealed class CatalogVenueReader(
     DbService db,
     CatalogShowMetadataReader showMetadata,
-    CatalogVenueMetadataReader venueMetadata
+    CatalogVenueMetadataReader venueMetadata,
+    CatalogArtistVenueMetadataReader artistVenueMetadata
 )
 {
-    /// <summary>Groups artist shows by approved canonical place, otherwise by their imported venue.</summary>
+    /// <summary>Stored canonical groups plus imported fallback groups for unrepresented shows.</summary>
     public async Task<IReadOnlyList<CatalogArtistVenueEntry>?> ReadArtistVenues(
         Guid artistUuid,
         CancellationToken cancellationToken = default
@@ -29,37 +30,130 @@ public sealed class CatalogVenueReader(
             return null;
         }
 
-        var shows = await ReadShows(
+        var relationships = await artistVenueMetadata.Read(
             session,
-            CatalogShowMetadataReader.ShowSelect + " WHERE a.uuid=@artistUuid",
-            new { artistUuid },
+            [artistUuid],
+            null,
             cancellationToken
         );
-        return shows
-            .Where(show => show.Venue is not null || show.ImportedVenue is not null)
-            .GroupBy(show => show.Venue?.id ?? "imported:" + show.ImportedVenue!.uuid)
-            .Select(group =>
-            {
-                var show = group.First();
-                return new CatalogArtistVenueEntry(
-                    group.Count(),
-                    show.Venue,
-                    show.Venue is null ? show.ImportedVenue : null
-                );
-            })
+        var links = await ReadArtistShowVenueLinks(session, artistUuid, cancellationToken);
+        var venueIds = relationships
+            .Values.Where(row => row.artist_show_count > 0)
+            .Select(row => row.venue_id)
+            .Concat(links.Select(link => link.venue_id).OfType<string>())
+            .Distinct()
+            .ToArray();
+        var venues = await venueMetadata.Read(session, venueIds, cancellationToken);
+        var canonical = CreateCanonicalEntries(relationships.Values, venues);
+        var imported = await ReadImportedFallbackEntries(
+            session,
+            artistUuid,
+            links,
+            venues,
+            relationships,
+            cancellationToken
+        );
+
+        return canonical
+            .Concat(imported)
             .OrderBy(
-                entry => entry.Venue?.name ?? entry.ImportedVenue?.name,
+                entry => entry.ArtistVenue?.Venue.name ?? entry.ImportedVenue?.name,
                 StringComparer.Ordinal
             )
             .ThenBy(
-                entry => entry.Venue?.id ?? entry.ImportedVenue!.uuid.ToString(),
+                entry => entry.ArtistVenue?.id ?? entry.ImportedVenue!.uuid.ToString(),
                 StringComparer.Ordinal
             )
             .ToArray();
     }
 
-    /// <summary>Artist detail exists only when the approved show collection establishes membership.</summary>
-    public async Task<CatalogArtistVenueEntry?> ReadArtistVenue(
+    private static async Task<IReadOnlyList<ArtistShowVenue>> ReadArtistShowVenueLinks(
+        CatalogReadSession session,
+        Guid artistUuid,
+        CancellationToken cancellationToken
+    ) =>
+        // Fallback membership needs only show-level links, not the show's complete
+        // year/source/track hierarchy. Canonical counts remain stored relationship facts.
+        (
+            await session.Connection.QueryAsync<ArtistShowVenue>(
+                session.Command(
+                    """
+                    SELECT s.venue_id imported_venue_id,
+                           CASE WHEN COALESCE(f.norm_catalogue,false) THEN sv.venue_id END venue_id
+                    FROM shows s JOIN artists a ON a.id=s.artist_id
+                    LEFT JOIN features f ON f.artist_id=a.id
+                    LEFT JOIN norm.show_venues sv ON sv.show_uuid=s.uuid
+                    WHERE a.uuid=@artistUuid
+                    """,
+                    new { artistUuid },
+                    cancellationToken
+                )
+            )
+        ).ToArray();
+
+    private static IReadOnlyList<CatalogArtistVenueEntry> CreateCanonicalEntries(
+        IEnumerable<CatalogArtistVenue> relationships,
+        IReadOnlyDictionary<string, CatalogVenue> venues
+    )
+    {
+        var entries = new List<CatalogArtistVenueEntry>();
+        foreach (var relationship in relationships)
+        {
+            if (
+                relationship.artist_show_count > 0
+                && venues.TryGetValue(relationship.venue_id, out var venue)
+                && venue.id == relationship.venue_id
+            )
+            {
+                relationship.Venue = venue;
+                entries.Add(new(null, relationship, null));
+            }
+        }
+        return entries;
+    }
+
+    private static async Task<IReadOnlyList<CatalogArtistVenueEntry>> ReadImportedFallbackEntries(
+        CatalogReadSession session,
+        Guid artistUuid,
+        IReadOnlyList<ArtistShowVenue> links,
+        IReadOnlyDictionary<string, CatalogVenue> venues,
+        IReadOnlyDictionary<(Guid Artist, string Venue), CatalogArtistVenue> relationships,
+        CancellationToken cancellationToken
+    )
+    {
+        var importedCounts = links
+            .Where(link =>
+                link.imported_venue_id.HasValue
+                && (
+                    link.venue_id is null
+                    || !venues.TryGetValue(link.venue_id, out var venue)
+                    || !relationships.ContainsKey((artistUuid, venue.id))
+                )
+            )
+            .GroupBy(link => link.imported_venue_id!.Value)
+            .ToDictionary(group => group.Key, group => group.Count());
+        if (importedCounts.Count == 0)
+        {
+            return [];
+        }
+
+        var imported = await session.Connection.QueryAsync<CatalogImportedVenue>(
+            session.Command(
+                """
+                SELECT v.*,a.uuid artist_uuid FROM venues v JOIN artists a ON a.id=v.artist_id
+                WHERE a.uuid=@artistUuid AND v.id=ANY(@ids)
+                """,
+                new { artistUuid, ids = importedCounts.Keys.ToArray() },
+                cancellationToken
+            )
+        );
+        return imported
+            .Select(venue => new CatalogArtistVenueEntry(importedCounts[venue.id], null, venue))
+            .ToArray();
+    }
+
+    /// <summary>Reads the stored approved artist/place identity, including retained zero-count pairs.</summary>
+    public async Task<CatalogArtistVenue?> ReadArtistVenue(
         Guid artistUuid,
         string venueId,
         CancellationToken cancellationToken = default
@@ -75,8 +169,18 @@ public sealed class CatalogVenueReader(
         {
             return null;
         }
-        var shows = await ReadVenueShows(session, venue.id, artistUuid, cancellationToken);
-        return shows.Count == 0 ? null : new(shows.Count, venue, null);
+        var relationships = await artistVenueMetadata.Read(
+            session,
+            [artistUuid],
+            [venue.id],
+            cancellationToken
+        );
+        var relationship = relationships.GetValueOrDefault((artistUuid, venue.id));
+        if (relationship is not null)
+        {
+            relationship.Venue = venue;
+        }
+        return relationship;
     }
 
     /// <summary>Global venue identity and aliases are independent of artist rollout flags.</summary>
@@ -241,4 +345,10 @@ public sealed class CatalogVenueReader(
                 cancellationToken
             )
         );
+
+    private sealed class ArtistShowVenue
+    {
+        public long? imported_venue_id { get; set; }
+        public string? venue_id { get; set; }
+    }
 }

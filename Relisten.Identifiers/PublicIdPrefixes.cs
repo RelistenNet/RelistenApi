@@ -15,5 +15,6 @@ public static class PublicIdPrefixes
     public const string SetlistShow = "setlist_show";
     public const string SourceReview = "source_review";
     public const string Venue = "venue";
+    public const string ArtistVenue = "artist_venue";
     public const string Song = "song";
 }

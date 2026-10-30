@@ -99,4 +99,6 @@ VALUES (910004,910010,'matched-upstream');
 -- Imported years retain four-digit calendar labels, including early years.
 INSERT INTO years (id,uuid,artist_id,year,show_count,source_count,updated_at)
 VALUES (910023,'00000000-0000-0000-0000-000000000023',910001,'0023',0,0,'2026-01-01T00:00:00Z');
+-- Materialize the same derived relationships that production writes refresh explicitly.
+SELECT norm.refresh_artist_venues();
 COMMIT;
