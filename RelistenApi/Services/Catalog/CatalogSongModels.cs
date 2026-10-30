@@ -42,10 +42,5 @@ public sealed record CatalogSongWithShows(CatalogSongDetail Song, IReadOnlyList<
 
 public sealed record CatalogSongWithTracks(
     CatalogSongDetail Song,
-    IReadOnlyList<CatalogSongTrackMatch> Tracks
-);
-
-public sealed record CatalogSongTrackMatch(
-    CatalogTrack Track,
-    IReadOnlyList<int> MatchingPartOrdinals
+    IReadOnlyList<CatalogTrack> Tracks
 );

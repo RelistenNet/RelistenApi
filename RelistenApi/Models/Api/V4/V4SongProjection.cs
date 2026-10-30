@@ -25,7 +25,7 @@ public static partial class V4CatalogProjection
     public static SongWithTracksResource SongWithTracks(CatalogSongWithTracks detail) =>
         ProjectSong<SongWithTracksResource>(detail.Song) with
         {
-            Tracks = detail.Tracks.Select(SongTrackMatch).ToArray(),
+            Tracks = detail.Tracks.Select(Track).ToArray(),
         };
 
     private static T ProjectSong<T>(CatalogSongDetail song)
@@ -53,9 +53,6 @@ public static partial class V4CatalogProjection
         {
             Shows = detail.Shows.Select(ShowSummary).ToArray(),
         };
-
-    public static SongTrackMatchResource SongTrackMatch(CatalogSongTrackMatch match) =>
-        new(Track(match.Track), match.MatchingPartOrdinals);
 
     private static T ProjectImportedSong<T>(CatalogImportedSong song)
         where T : ImportedSongResource, new() =>

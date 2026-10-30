@@ -138,16 +138,18 @@ song_id = 'song_62mhvjyd'
 song_entries = capture('artist-songs', '/artists/' + artist_id + '/songs', 'Song browse: canonical songs plus imported fallbacks')
 song = capture('song', '/songs/' + song_id, 'Scarlet Begonias: metadata, distinct recording-backed shows')
 assert next(entry['song'] for entry in song_entries if entry['song'] and entry['song']['id'] == song_id) == metadata(song)
-song_track_detail = capture('song-tracks', '/songs/' + song_id + '/tracks', 'Scarlet Begonias: metadata and exact files, with matching part ordinals')
+song_track_detail = capture('song-tracks', '/songs/' + song_id + '/tracks', 'Scarlet Begonias: metadata and exact files as complete track resources')
 song_tracks = song_track_detail['tracks']
 assert 'shows' not in song_track_detail
 assert metadata(song_track_detail) == metadata(song)
-assert len({match['track']['id'] for match in song_tracks}) == len(song_tracks)
-assert {match['track']['show_id'] for match in song_tracks} == {show['id'] for show in song['shows']}
+assert len({track['id'] for track in song_tracks}) == len(song_tracks)
+assert {track['show_id'] for track in song_tracks} == {show['id'] for show in song['shows']}
 capture('user-song', '/songs/song_mbkeejfd', 'Requested song: direct metadata and show collection')
-for match in song_tracks:
-    track = match['track']
-    assert match['matching_part_ordinals'] == [part['ordinal'] for part in track['normalization']['parts'] if part['state'] == 'matched' and part['song']['id'] == song_id]
+requests += ['### Requested song: complete direct track resources',
+             'GET {{base}}/api/v4/songs/song_mbkeejfd/tracks', '']
+for track in song_tracks:
+    assert any(part['state'] == 'matched' and part['song']['id'] == song_track_detail['id']
+               for part in track['normalization']['parts'])
 imported_songs = capture('imported-songs', '/artists/' + artist_id + '/imported-songs', 'Full imported song inventory, including mapped and unused rows')
 imported_song_id = typed('imported_song', '73a1f1ec-0e2c-2b68-839f-946193fb3565')
 imported_song = capture('imported-song', '/imported-songs/' + imported_song_id, 'Imported Scarlet Begonias: independent setlist-backed shows')
@@ -166,7 +168,7 @@ raw_song_inventory = capture('disabled-imported-songs', '/artists/' + raw_artist
 assert raw_songs and all(entry['kind'] == 'imported_song' and entry['song'] is None for entry in raw_songs)
 assert [entry['imported_song'] for entry in raw_songs] == raw_song_inventory
 raw_song_detail = capture('disabled-imported-song', '/imported-songs/' + raw_songs[0]['imported_song']['id'], 'Ryan Adams: imported song navigation remains usable')
-file = song_tracks[0]['track']
+file = song_tracks[0]
 direct_file = capture('song-journey-track', '/source-tracks/' + file['id'], 'Song journey: direct playable file is identical')
 assert direct_file == file
 song_source = capture('song-journey-source', '/sources/' + file['source_id'], 'Song journey: exact recording')
@@ -197,7 +199,7 @@ for name in ('shared-artist-venue', 'shared-venue',
     save_example(name + '-detail-excerpt', detail_excerpt(body))
 save_example('zero-match-song', zero_song)
 save_example('imported-song-metadata-excerpt', metadata(imported_song))
-save_example('song-track-match', next(match for match in song_tracks if match['track']['id'] == 'track_2n09qd0gcm6jye7trwhpa1rys7'))
+save_example('song-track', next(track for track in song_tracks if track['id'] == 'track_2n09qd0gcm6jye7trwhpa1rys7'))
 
 Path('docs/plans/active/2026-10-29-v4-api/review/requests.http').write_text('\n'.join(requests))
 (out / 'scenarios.json').write_text(json.dumps(scenarios, indent=2) + '\n')

@@ -52,7 +52,7 @@ public sealed class CatalogSongMatchReader
             await session.Connection.QueryAsync<CatalogSongMatchRow>(
                 session.Command(
                     """
-                    SELECT track_uuid,show_uuid,matching_part_ordinals
+                    SELECT track_uuid,show_uuid
                     FROM norm.song_recording_matches(@artistUuid,@canonicalIds::text[])
                     ORDER BY show_date,show_uuid,source_uuid,track_position,track_uuid
                     """,
@@ -73,5 +73,4 @@ public sealed class CatalogSongMatchRow
 {
     public Guid track_uuid { get; set; }
     public Guid show_uuid { get; set; }
-    public int[] matching_part_ordinals { get; set; } = [];
 }
