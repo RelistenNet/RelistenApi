@@ -65,9 +65,14 @@ etag = next(line.split(': ', 1)[1] for line in (out / 'matched-track.headers').r
 requests += ['### Revalidate captured matched track (304 unless data changed)',
              'GET {{base}}/api/v4/source-tracks/' + matched['track_id'], 'If-None-Match: ' + etag, '']
 historical = typed('show', '3bed435e-8cd2-764e-3a30-764b82e01298')
-requests += ['### Historical venue: The Crown on 1998-11-14', f'GET {{{{base}}}}/api/v4/shows/{historical}', '',
+requests += ['### Venue name history: The Crown on 1998-11-14', f'GET {{{{base}}}}/api/v4/shows/{historical}', '',
              '### Wrong resource kind (422)', f'GET {{{{base}}}}/api/v4/source-tracks/{historical}', '',
              '### Valid unknown identity (404)', 'GET {{base}}/api/v4/shows/show_00000000000000000000000000', '']
+kaiser = 'show_127p0pfc1sgb4p9hdf4agq5dch'
+requests += ['### Oakland venue: Henry J. Kaiser name periods on 1985-02-18',
+             'GET {{base}}/api/v4/shows/' + kaiser, '']
+subprocess.run(['curl', '--fail', '--silent', '--show-error', '--max-time', '45', '-D', str(out / 'kaiser-show.headers'),
+                'http://127.0.0.1:43823/api/v4/shows/' + kaiser, '-o', str(out / 'kaiser-show.json')], check=True)
 subprocess.run(['curl', '--fail', '--silent', '--show-error', '--max-time', '45', '-D', str(out / 'historical-show.headers'),
                 'http://127.0.0.1:43823/api/v4/shows/' + historical, '-o', str(out / 'historical-show.json')], check=True)
 Path('docs/plans/active/2026-10-29-v4-api/review/requests.http').write_text('\n'.join(requests))

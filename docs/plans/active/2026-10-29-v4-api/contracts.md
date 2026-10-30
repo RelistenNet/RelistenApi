@@ -90,7 +90,7 @@ A list endpoint returns an array of those resources or its documented browse
 entries. Search and grouped ranking endpoints retain their meaningful named
 result groups. Full artist bootstrap returns a direct catalog object with
 `artist`, `years`, `shows`, `tours`, `eras`, `imported_venues`, `imported_songs`,
-`venue_entries`, `song_entries`, `normalized_venues` and `normalized_songs`.
+`venue_entries`, `song_entries`, `venues` and `songs`.
 These are domain collections, not a generic response wrapper.
 
 Sync replacement is a property of each endpoint, not a server-supplied boolean.
@@ -198,13 +198,36 @@ False/missing means imported venue/song browsing and explicit disabled track
 normalization. `norm_venues` is not a read switch. With approval but incomplete
 results, use available accepted links and preserve raw fallback for the rest.
 
-Show DTOs preserve imported scalar metadata and parent links. Add separate
-`imported_venue`, nullable `normalized_venue`, and `venue_display` name/location.
-Resolve the canonical venue through `norm.show_venues`, following merge chains;
-do not assume a shared imported row maps every show to the same place.
-`venue_display.name` uses `norm.venue_name_on` for the show date, then canonical
-current name, then imported label. Keep a source's own imported venue observation
-available even when the show's canonical assignment differs.
+Show DTOs preserve imported scalar metadata and parent links. They expose
+`imported_venue` and nullable `venue`; there is no separate display projection.
+`VenueResource` and `SongResource` name canonical public resources. Imported
+resources retain the explicit `ImportedVenueResource`/`ImportedSongResource`
+names. Internal normalization storage remains in the `norm` schema.
+
+A venue includes `names`: `{ name, kind, valid_from, valid_to }` entries. Kind is
+`official`, `short`, or `spelling`. Date bounds are ISO dates: start inclusive,
+end exclusive, and null for an unbounded end. Preserve stored overlaps, repeated
+name periods and missing bounds; the API does not invent better history.
+Names include retained entries from merged venues. Their deterministic priority
+is the surviving venue first, then increasing merge depth, latest start first,
+then kind/normalized spelling/name/end/original owner as tie-breakers.
+
+Clients choose a display label. For the standard historical label, select the
+first official name whose period contains the machine-readable show `date`;
+`display_date` is presentation text and may contain labels such as `1984-XX-XX`.
+Some imported dates are imputed when a provider supplies an incomplete date.
+Clients can choose a canonical-label fallback for uncertain dates. Fall back to the
+venue's stored canonical `name`, then the imported label. Use venue locality
+where present and imported locality as fallback. Do not infer the current name
+by changing `venue.name` per show: one shared venue has one identity and history
+across dates. Clients may make other display choices from this same data.
+
+Resolve the venue through `norm.show_venues`, following merge chains; do not
+assume a shared imported row maps every show to the same place. Keep a source's
+own imported venue observation available even when its show's assignment differs.
+History is loaded in one batch in the same snapshot, and a change to any
+represented name or period changes the response ETag even if the selected label
+for that particular show would remain unchanged.
 
 Global venue metadata has no single artist owner. Existing canonical IDs remain
 resolvable independently of an artist's current switch. Global venue show lists

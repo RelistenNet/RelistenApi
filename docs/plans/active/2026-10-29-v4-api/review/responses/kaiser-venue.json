@@ -1,0 +1,50 @@
+{
+  "id": "venue_wwrsykhn",
+  "name": "Oakland Auditorium",
+  "kind": "site",
+  "parent_id": null,
+  "city": "Oakland",
+  "region": "CA",
+  "country": "US",
+  "latitude": null,
+  "longitude": null,
+  "coordinate_precision": null,
+  "names": [
+    {
+      "name": "Henry J. Kaiser Convention Center",
+      "kind": "official",
+      "valid_from": null,
+      "valid_to": null
+    },
+    {
+      "name": "Oakland Auditorium",
+      "kind": "official",
+      "valid_from": null,
+      "valid_to": "1984-01-01"
+    },
+    {
+      "name": "Kaiser Center",
+      "kind": "short",
+      "valid_from": null,
+      "valid_to": null
+    },
+    {
+      "name": "Henry J. Kaiser Center",
+      "kind": "spelling",
+      "valid_from": null,
+      "valid_to": null
+    },
+    {
+      "name": "Henry J. Kasier Convention Center",
+      "kind": "spelling",
+      "valid_from": null,
+      "valid_to": null
+    },
+    {
+      "name": "Kaiser Convention Center",
+      "kind": "spelling",
+      "valid_from": null,
+      "valid_to": null
+    }
+  ]
+}

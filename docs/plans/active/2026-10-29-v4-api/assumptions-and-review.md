@@ -198,3 +198,14 @@ leaving shared definitions and required references unchanged. It also found a
 real imported year label `0023`: calendar lookup now pads its numeric argument
 so `/by-number/23` and the typed-year route identify the same resource. No
 production data, account/auth code or mobile state changed.
+
+## Venue identity and name history feedback
+
+For show `show_127p0pfc1sgb4p9hdf4agq5dch` (1985-02-18), the stored venue
+label is Oakland Auditorium while its official period supplies Henry J. Kaiser
+Convention Center. The original API omitted the six stored name rows. Alec
+chose plain public `venue`/`song` names, complete venue names/date periods, and
+removal of `venue_display`; clients now choose the display label. The read
+contract preserves overlaps and open bounds without correcting normalization
+data. Names retained on merged venues are included in deterministic priority
+order, in the same request snapshot. No database data or schema changed.

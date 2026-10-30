@@ -76,3 +76,14 @@ No provider imports or normalization jobs are needed for this review.
 
 Synthetic regression data is confined to disposable test databases under
 `RelistenApiTests/Fixtures/v4/`. Manual review uses the restored records.
+
+Venue resources use `venue` and `song` schema names. Shows expose nullable
+`venue` alongside `imported_venue`; `venue_display` has been removed. A venue's
+`names` includes official, short and spelling entries with date-only bounds
+(start inclusive, end exclusive, null unbounded). Entries preserve stored periods
+and include merged aliases. Clients can select the first date-applicable official
+entry using the machine-readable show `date`, then fall back to the stored
+canonical name and imported observations. `display_date` may be fuzzy, such as
+`1984-XX-XX`; it is not a date parser input. Imported machine dates may be imputed,
+so clients may choose the canonical label for an uncertain date.
+The request collection includes the Oakland/Henry J. Kaiser example.

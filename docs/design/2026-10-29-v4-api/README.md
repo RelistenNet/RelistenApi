@@ -19,6 +19,10 @@ running API responses, isolated account/auth, mobile pilot, complete API and ful
 mobile acceptance. The implementation plan is authoritative; this design retains
 the exploration and its reasoning.
 
+Later C1 feedback names canonical public resources `venue` and `song`, includes
+venue name periods, and removes `venue_display`; clients select the historical
+label. See the authoritative plan contracts for the current response shape.
+
 ## Agreed approach
 
 The v4 API preserves artist → show → source → playable track as the
