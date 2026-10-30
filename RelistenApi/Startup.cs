@@ -473,6 +473,7 @@ namespace Relisten
         {
             settings.DateFormatString = "yyyy'-'MM'-'dd'T'HH':'mm':'ssK";
             settings.DateTimeZoneHandling = DateTimeZoneHandling.Utc;
+            settings.Converters.Add(new NormalizationEnumConverter());
             return settings;
         }
     }

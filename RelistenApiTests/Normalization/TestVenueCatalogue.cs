@@ -848,13 +848,13 @@ public class TestVenueCatalogue
             VenueRecord At(
                 VenueId id,
                 string name,
-                string kind = VenueKinds.Site,
+                VenueKind kind = VenueKind.Site,
                 VenueId? parent = null
             ) => new(id, name, kind, parent, "St. Louis", "MO", "US", Confidence: 0.9f);
             await store.WriteVenuesAsync([
                 At(auditorium, "Kiel Auditorium"),
                 At(opera, "Kiel Opera House"),
-                At(room, "Kiel Opera House", VenueKinds.Room, auditorium),
+                At(room, "Kiel Opera House", VenueKind.Room, auditorium),
             ]);
             await tx.CommitAsync();
             return 0;

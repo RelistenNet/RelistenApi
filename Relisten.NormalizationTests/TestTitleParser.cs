@@ -13,7 +13,11 @@ public class TestTitleParser
             " | ",
             parsed.Parts.Select(p =>
                 p.Key
-                + (p.Qualifiers.Count > 0 ? $" [{string.Join(",", p.Qualifiers)}]" : "")
+                + (
+                    p.Qualifiers.Count > 0
+                        ? $" [{string.Join(",", p.Qualifiers.Select(NormalizationEnums.Format))}]"
+                        : ""
+                )
                 + (p.Hint == PartHint.Noise ? " (noise)" : "")
                 + (p.SegueAfter ? " >" : "")
             )
@@ -87,9 +91,17 @@ public class TestTitleParser
             " | ",
             parsed.Parts.Select(p =>
                 p.Key
-                + (p.Qualifiers.Count > 0 ? $" [{string.Join(",", p.Qualifiers)}]" : "")
+                + (
+                    p.Qualifiers.Count > 0
+                        ? $" [{string.Join(",", p.Qualifiers.Select(NormalizationEnums.Format))}]"
+                        : ""
+                )
                 + (p.Notes.Count > 0 ? $" {{{string.Join(";", p.Notes)}}}" : "")
-                + (p.Bare != null ? $" ~{p.Bare}+{p.BareQualifier}" : "")
+                + (
+                    p.Bare != null
+                        ? $" ~{p.Bare}+{NormalizationEnums.Format(p.BareQualifier!.Value)}"
+                        : ""
+                )
                 + (p.SegueAfter ? " >" : "")
             )
         );
@@ -263,7 +275,9 @@ public class TestTrackMatcher
 
         TrackMatcher
             .Match(state)
-            .Records.Select(r => $"{r.SongId == jam}:{r.Basis}:{string.Join(",", r.Qualifiers!)}")
+            .Records.Select(r =>
+                $"{r.SongId == jam}:{r.Basis}:{string.Join(",", r.Qualifiers!.Select(NormalizationEnums.Format))}"
+            )
             .Should()
             .Equal("True:ruling:soundcheck");
     }
@@ -304,7 +318,7 @@ public class TestTrackMatcher
 
         TrackMatcher
             .Match(state)
-            .Records.Select(r => string.Join(",", r.Qualifiers!))
+            .Records.Select(r => string.Join(",", r.Qualifiers!.Select(NormalizationEnums.Format)))
             .Should()
             .Equal("soundcheck", "soundcheck");
     }
@@ -378,7 +392,7 @@ public class TestTrackMatcher
             "Chalk Dust Torture Reprise",
             "Sweet Emotion",
         }
-            .Select(n => new CatalogueSong(SongId.New(), n, "song"))
+            .Select(n => new CatalogueSong(SongId.New(), n, SongKind.Song))
             .ToList();
         var state = new CatalogueState
         {
@@ -399,7 +413,11 @@ public class TestTrackMatcher
             .Match(state)
             .Records.Select(r =>
                 songs.Single(s => s.Id == r.SongId).Name
-                + (r.Qualifiers is { Count: > 0 } q ? $" [{string.Join(",", q)}]" : "")
+                + (
+                    r.Qualifiers is { Count: > 0 } q
+                        ? $" [{string.Join(",", q.Select(NormalizationEnums.Format))}]"
+                        : ""
+                )
             )
             .Should()
             .Equal(expected);
@@ -595,8 +613,12 @@ public class TestTrackMatcher
             ArtistName = "moe.",
             Songs =
             [
-                new Relisten.Normalization.Songs.CatalogueSong(rebubula, "Rebubula", "song"),
-                new Relisten.Normalization.Songs.CatalogueSong(dragon, "Paper Dragon", "song"),
+                new Relisten.Normalization.Songs.CatalogueSong(rebubula, "Rebubula", SongKind.Song),
+                new Relisten.Normalization.Songs.CatalogueSong(
+                    dragon,
+                    "Paper Dragon",
+                    SongKind.Song
+                ),
             ],
             Aliases = new Dictionary<string, SongId>(),
             UnmappedSetlistSongs = [],

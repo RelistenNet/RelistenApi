@@ -102,6 +102,30 @@ public class TestCatalogueAnswers
             .Should()
             .Throw<CatalogueAnswerException>();
 
+    [TestCase("null")]
+    [TestCase("\"song\"")]
+    public void OptionalKindUsesThePersistedVocabulary(string kind)
+    {
+        var answer = CatalogueRequest.Parse(
+            $$"""{"new_songs": [{"id": "n1", "name": "Sugaree", "kind": {{kind}}, "original_artist": null}], "keys": []}""",
+            Request()
+        );
+
+        answer.NewSongs.Single().Kind.Should().Be(kind == "null" ? null : SongKind.Song);
+    }
+
+    [Test]
+    public void AnUnknownSongKindCannotBecomeAStoredSong() =>
+        FluentActions
+            .Invoking(() =>
+                CatalogueRequest.Parse(
+                    """{"new_songs": [{"id": "n1", "name": "Sugaree", "kind": "unknown", "original_artist": null}], "keys": []}""",
+                    Request()
+                )
+            )
+            .Should()
+            .Throw<CatalogueAnswerException>();
+
     [Test]
     public void AValidAnswerParses()
     {
@@ -110,6 +134,7 @@ public class TestCatalogueAnswers
             Request()
         );
 
+        answer.NewSongs.Single().Kind.Should().Be(SongKind.Jam);
         answer.Keys["sugaree"].SongRefs.Should().Equal("s1");
         answer.Keys["tuning"].SongRefs.Should().BeEmpty();
     }
