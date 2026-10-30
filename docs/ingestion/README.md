@@ -151,11 +151,16 @@ some derived work before a later step fails. Repeating it must converge. A fresh
 import or standalone rebuild repairs derived data left by an interrupted run.
 
 Stored normalized artist/venue counts follow the same eventual-refresh model.
-Source-table triggers mark affected artists; activities attempt a best-effort
-refresh after catalog or normalization work. A minute schedule retries pending
-artists, and daily reconciliation repairs missed marks. Count refresh failures do
-not fail an otherwise completed import, and counts can briefly differ from the
-current show list. Queue acknowledgment and refreshed counts commit together.
+Activities attempt a best-effort refresh after catalog or normalization work
+commits. Count refresh failures are logged and do not fail an otherwise completed
+import. Counts can differ from the current show list until an explicit successful
+refresh; no recurring repair job is registered. The admin app's venue-edit
+transaction includes its refresh and rolls the edit back if that refresh fails.
+Direct SQL repairs must explicitly refresh affected counts. Parent foreign keys
+cascade relationship deletion; count refreshes need no source triggers or pending
+queue. Venue merges remain owned by
+`norm.venues`; the relationship table stores the resulting counts, without copied
+merge pointers.
 See the [artist venue foundation plan](../plans/active/2026-10-30-artist-venues/README.md)
 for identity, merge, and recovery contracts. Existing import workflow command
 order and provider deletion rules are unchanged.
