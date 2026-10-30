@@ -1,6 +1,6 @@
--- Derived artist/place identities and eventually refreshed show counts. Import and
--- normalization activities run recounts after their source work commits. A periodic
--- full recount repairs admin/direct SQL changes and failed best-effort refreshes.
+-- Derived artist/place identities and show counts. Admin edits refresh in their own
+-- transaction; import and normalization activities refresh after committing source work.
+-- Operators can run a full recount after other SQL repairs or failed activity hooks.
 CREATE TABLE norm.artist_venues (
     id                text PRIMARY KEY DEFAULT norm.new_id('artist_venue')
                           CHECK (id ~ '^artist_venue_[0-9a-hjkmnp-tv-z]{8}$'),
@@ -19,14 +19,15 @@ CREATE INDEX artist_venues_venue_id ON norm.artist_venues (venue_id);
 -- norm.venues; copying its redirects here would couple retirement to stale derived data.
 CREATE FUNCTION norm.refresh_artist_venues(artist_filter uuid[] DEFAULT NULL)
 RETURNS TABLE (artists_refreshed integer, relationships_changed integer)
-LANGUAGE plpgsql AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, norm AS $$
 DECLARE
     selected_artists uuid[];
 BEGIN
-    -- Serialize recounts only. Source writers do not acquire this lock, and may commit
-    -- new facts while a recount runs; their later hook or periodic reconciliation repairs
-    -- any brief lag. A separate statement after this lock reads a fresh source snapshot.
-    PERFORM pg_advisory_xact_lock(hashtext('norm-artist-venues'));
+    -- Join the existing venue-write lock before touching derived rows or their FK parents.
+    -- Admin edits already hold it, so their source changes and count refresh commit together.
+    -- A separate count mutex would invert lock order with those transactions. Post-commit
+    -- activity hooks use the same lock; ordinary catalog readers do not acquire it.
+    PERFORM pg_advisory_xact_lock(hashtext('norm-venues'));
 
     -- NULL reconciles every live owner, including stored pairs whose shows disappeared.
     -- An explicit empty array does no work. Missing parents are never invented.
@@ -94,9 +95,15 @@ BEGIN
     RETURN NEXT;
 END $$;
 
--- Existing admin roles keep only their source-table permissions. The application/migration
--- owner runs this derived maintenance function; no security-definer source hooks are needed.
+-- Admin can invoke the owner-controlled refresh without receiving direct writes to derived
+-- rows. Installations that provision the role later grant execution in that provisioning step.
 REVOKE ALL ON FUNCTION norm.refresh_artist_venues(uuid[]) FROM PUBLIC;
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'relisten_admin') THEN
+        GRANT EXECUTE ON FUNCTION norm.refresh_artist_venues(uuid[]) TO relisten_admin;
+    END IF;
+END $$;
 
 -- Seed only the new derived table. No imported rows, normalization decisions, names, or
 -- audit history change. Creation time is materialization time, not first performance date.

@@ -384,16 +384,16 @@ public sealed class TestArtistVenueCounts
     }
 
     [Test]
-    public async Task FailedRefreshRollsBackAllCountChangesAndCanBeRetried()
+    public async Task FailedAtomicEditRollsBackItsSourceAndCountsBeforeRetry()
     {
         await Refresh();
         var before = await Rows();
+        await tx.SaveAsync("failed_edit");
         await db.ExecuteAsync(
             "UPDATE norm.show_venues SET venue_id=@other WHERE show_uuid=@show",
             new { other = data.Other, show = data.Shows[0] },
             tx
         );
-        await tx.SaveAsync("failed_refresh");
         // The typed test ID is safe to place in DDL, which cannot bind a CHECK parameter.
         await db.ExecuteAsync(
             $"ALTER TABLE norm.artist_venues ADD CONSTRAINT test_refresh_failure CHECK (venue_id <> '{data.Other.Value}') NOT VALID",
@@ -404,11 +404,90 @@ public sealed class TestArtistVenueCounts
             .Should()
             .ThrowAsync<PostgresException>()
             .Where(error => error.SqlState == PostgresErrorCodes.CheckViolation);
-        await tx.RollbackAsync("failed_refresh");
+        await tx.RollbackAsync("failed_edit");
         (await Rows()).Should().BeEquivalentTo(before);
+        (
+            await db.QuerySingleAsync<string>(
+                "SELECT venue_id FROM norm.show_venues WHERE show_uuid=@show",
+                new { show = data.Shows[0] },
+                tx
+            )
+        )
+            .Should()
+            .Be(data.Home.Value);
+
+        await db.ExecuteAsync(
+            "UPDATE norm.show_venues SET venue_id=@other WHERE show_uuid=@show",
+            new { other = data.Other, show = data.Shows[0] },
+            tx
+        );
         await Refresh();
         var rows = (await Rows()).Where(row => row.Artist == data.Artists[0]).ToArray();
         rows.Select(row => row.Count).Should().Equal(1, 1);
+    }
+
+    [Test]
+    public async Task MaintenanceRoleCanRefreshWithoutDirectDerivedTableWriteAccess()
+    {
+        var role = "artist_venue_maintenance_" + Guid.NewGuid().ToString("N");
+        await db.ExecuteAsync(
+            $"""
+            CREATE ROLE {role} NOLOGIN;
+            GRANT USAGE ON SCHEMA norm TO {role};
+            GRANT EXECUTE ON FUNCTION norm.refresh_artist_venues(uuid[]) TO {role};
+            SET LOCAL ROLE {role};
+            """,
+            transaction: tx
+        );
+
+        var refreshed = await Refresh();
+
+        refreshed.Should().Be(new RefreshResult(2, 2));
+        var write = () =>
+            db.ExecuteAsync(
+                "UPDATE norm.artist_venues SET artist_show_count=0 WHERE artist_uuid=@artist",
+                new { artist = data.Artists[0] },
+                tx
+            );
+        await write
+            .Should()
+            .ThrowAsync<PostgresException>()
+            .Where(error => error.SqlState == PostgresErrorCodes.InsufficientPrivilege);
+    }
+
+    [Test]
+    public async Task ReadersSeeCommittedCountsWithoutWaitingForAnUncommittedRefresh()
+    {
+        await Refresh();
+        await tx.CommitAsync();
+        committedFixture = true;
+        await tx.DisposeAsync();
+        tx = await db.BeginTransactionAsync();
+        await NormStore.BeginAsync(
+            db,
+            tx,
+            AuthorTypes.Moderator,
+            "artist-venue-atomic-visibility-test"
+        );
+        await db.ExecuteAsync(
+            "UPDATE norm.show_venues SET venue_id=@other WHERE show_uuid=@show",
+            new { other = data.Other, show = data.Shows[0] },
+            tx
+        );
+        await Refresh();
+
+        await using var reader = new NpgsqlConnection(LocalTestDatabase.ConnectionString);
+        await reader.OpenAsync();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var read = new CommandDefinition(
+            "SELECT artist_show_count FROM norm.artist_venues WHERE artist_uuid=@artist AND venue_id=@venue",
+            new { artist = data.Artists[0], venue = data.Home },
+            cancellationToken: timeout.Token
+        );
+
+        (await reader.QuerySingleAsync<int>(read)).Should().Be(2);
+        await tx.CommitAsync();
+        (await reader.QuerySingleAsync<int>(read)).Should().Be(1);
     }
 
     [Test]
@@ -437,14 +516,14 @@ public sealed class TestArtistVenueCounts
     }
 
     [Test]
-    public async Task WaitingRefreshReadsCommittedSourceChangesWithoutBlockingTheSourceWriter()
+    public async Task WaitingRefreshReadsCommittedChangesFromRawSqlOutsideTheVenueMutex()
     {
         await Refresh();
         await tx.CommitAsync();
         committedFixture = true;
         await tx.DisposeAsync();
         tx = await db.BeginTransactionAsync();
-        await Refresh(); // Hold the refresh-only lock through this transaction.
+        await Refresh(); // Hold the shared venue mutex through this transaction.
 
         await using var waiting = new NpgsqlConnection(LocalTestDatabase.ConnectionString);
         await waiting.OpenAsync();
@@ -480,7 +559,7 @@ public sealed class TestArtistVenueCounts
         }
         finally
         {
-            // This transaction only holds the recount lock. Always release it so the
+            // This transaction only holds the venue mutex. Always release it so the
             // waiting refresh can finish, including when a test assertion fails.
             await tx.CommitAsync();
         }

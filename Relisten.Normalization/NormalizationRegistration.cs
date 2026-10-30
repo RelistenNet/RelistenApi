@@ -29,8 +29,7 @@ public static class NormalizationRegistration
         workflows
             .AddWorkflow<SongCatalogueWorkflow>()
             .AddWorkflow<VenueCatalogueWorkflow>()
-            .AddWorkflow<NightlyVenueCatalogueWorkflow>()
-            .AddWorkflow<ArtistVenueRefreshWorkflow>();
+            .AddWorkflow<NightlyVenueCatalogueWorkflow>();
 
     /// Normalization's database steps, on the host's database worker.
     public static ITemporalWorkerServiceOptionsBuilder AddNormalizationActivities(
@@ -39,6 +38,5 @@ public static class NormalizationRegistration
         database
             .AddScopedActivities<SongActivities>()
             .AddScopedActivities<VenueActivities>()
-            .AddScopedActivities<VenueMatchActivities>()
-            .AddScopedActivities<ArtistVenueRefreshActivities>();
+            .AddScopedActivities<VenueMatchActivities>();
 }
