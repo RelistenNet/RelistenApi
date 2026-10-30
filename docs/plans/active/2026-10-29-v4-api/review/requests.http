@@ -60,6 +60,39 @@ GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/shows/recently-upd
 ### Discovery: recently-updated-shows
 GET {{base}}/api/v4/shows/recently-updated?shows=5
 
+### Search and rankings: search
+GET {{base}}/api/v4/search?q=Scarlet&artist_id=artist_3qmp7zjbg1rpebhtyfy43096vj
+
+### Search and rankings: search-venue-alias
+GET {{base}}/api/v4/search?q=The%20Crystal%20Ballrom&artist_id=artist_3qmp7zjbg1rpebhtyfy43096vj
+
+### Search and rankings: popular-artists
+GET {{base}}/api/v4/popular/artists?limit=5
+
+### Search and rankings: trending-artists
+GET {{base}}/api/v4/trending/artists?limit=5
+
+### Search and rankings: popular-years
+GET {{base}}/api/v4/popular/years?limit=5
+
+### Search and rankings: trending-years
+GET {{base}}/api/v4/trending/years?limit=5
+
+### Search and rankings: popular-shows
+GET {{base}}/api/v4/popular/shows?limit=5
+
+### Search and rankings: trending-shows
+GET {{base}}/api/v4/trending/shows?limit=5&window=48h
+
+### Search and rankings: artist-popular-trending
+GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/shows/popular-trending?limit=5
+
+### Search and rankings: popular-trending
+GET {{base}}/api/v4/shows/popular-trending?artist_ids=artist_3qmp7zjbg1rpebhtyfy43096vj&limit=5
+
+### Search and rankings: momentum-shows
+GET {{base}}/api/v4/shows/momentum?artist_ids=artist_3qmp7zjbg1rpebhtyfy43096vj&limit=5
+
 ### Browse: year-by-id
 GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/years/year_59t8nz8n0m6e4c2ej2aq9dbkb9
 

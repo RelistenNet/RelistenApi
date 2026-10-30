@@ -44,7 +44,7 @@ Implement packages 1 and 2 for artist/year/show-list navigation, show detail,
 direct source and track reads. Alec expanded C1 to review these with the venue
 family before auth: artist venue groups, canonical metadata and show collections,
 and imported venue fallback detail. Song discovery extends the review to a
-complete resource-with-shows journey. The current local contract has 39 routes (38 GETs and one POST).
+complete resource-with-shows journey. The current local contract has 49 routes (48 GETs and one POST).
 Cover raw, normalization-disabled, partial and fully interpreted
 fixtures. Alec reviews each family before its contract spreads to the next family
 or mobile work.
@@ -54,7 +54,8 @@ venue review: artist → venue group → venue's shows → show → source → t
 Then use the [song-to-playback walkthrough](review/song-source-journey.md):
 artist → song → matched files/shows → source → playable track. Artist snapshots and saved-reference resolution now connect the offline catalog.
 Date and recent browsing now form the [discovery review](review/discovery-browsing.md).
-Search and popularity/trending rankings remain later catalog work.
+Search, popularity/trending rankings, and momentum now form the
+[search and ranking review](review/search-rankings.md).
 Tours, eras, and source reviews complete the next catalog review: open a compact
 Phish tour entry, its direct resource-with-shows detail, ordered era metadata,
 and one source’s complete review list. Source sets stay embedded in sources.

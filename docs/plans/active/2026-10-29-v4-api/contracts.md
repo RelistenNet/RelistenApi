@@ -190,9 +190,9 @@ Unknown artists/years return 404. Existing artists with no years/shows return
 `[]`. Counts come from the server catalog; full collections are unpaginated.
 All reads use the same snapshot and ETag rules as other v4 reads. Metadata for
 show lists is batched, including normalized venue links and aliases. Legacy
-routes remain unchanged. Redis popularity augmentation and the remaining route
-families follow the [catalog review sequence](review-guide.md); these local
-preview routes do not claim complete legacy capability coverage yet.
+routes retain their response contracts. Search and listening rankings now use
+these v4 resources as described below. Operator/import and live-activity routes
+remain outside this local catalog checkpoint.
 
 ## Artist approval, show venues and raw fallback
 
@@ -712,6 +712,88 @@ NOW()/CURRENT_DATE behavior; record its configured timezone at rollout rather
 than silently switching to a client-local or new hardcoded clock. Callers can
 continue sending explicit month/day. Recent-update sorting remains imported
 recording changes.
+
+### Search and listening rankings
+
+These ten operations are implemented. Search keeps six named categories; rankings
+return direct resource arrays or the documented artist groups. They have ETags
+and `public, no-cache`, with query-result replacement only.
+
+`GET /search` accepts `q`, optional typed `artist_id`, and boolean `artists`,
+`shows`, `songs`, `sources`, `tours`, `venues` (all default true). Trim `q`;
+fewer than three characters or all categories disabled returns six empty arrays.
+Unknown well-formed artist filters return empty results; malformed IDs or query
+values return 422. Match literal case-insensitive substrings, including percent
+and underscore characters. Each category returns at most 20 hits:
+
+- `artists`: ordinary artist resources, including features, ordered by catalog
+  show count descending, then name and ID.
+- `shows`: ordinary summaries, ordered by source count descending, then display
+  date descending and ID. No nested artist or recording hierarchy.
+- `sources`: shallow source summaries, matched on upstream identifier,
+  description, taper notes, source, taper, transferrer, or lineage. Order by
+  weighted rating, duration, display date descending, then ID; null ratings and
+  durations last. Source detail remains lazy.
+- `tours`: ordinary compact tour resources, ordered by show count descending,
+  start date descending, name and ID.
+- `songs`: the existing `kind`/`song`/`imported_song` entries. Approved canonical
+  matches include names and inherited aliases. A matched imported label maps to
+  its canonical song only with valid same-artist evidence; otherwise retain the
+  imported hit. Resolve and deduplicate canonical IDs. Order by each hit's stored
+  show count descending, then name and ID.
+- `venues`: the existing `kind`/`artist_venue`/`imported_venue` entries. Match
+  names, inherited aliases and locality, including imported labels. Prefer valid
+  approved artist/place relationships; retain the full imported collection when
+  any show needs fallback. Empty imported venues remain searchable. Order by
+  artist show count descending, then name and ID. A global search can return
+  separate artist relationships at the same shared venue.
+
+Canonical and imported song/venue candidate queries are each bounded to 20 before
+resolution and combined ranking. This bounds hydration without loading full artist
+inventories; it does not promise exhaustive fuzzy-search relevance. Imported label
+mapping may consolidate several candidates into one canonical hit, so fewer than
+20 results is valid. Feature approval and merge resolution use the same request
+snapshot as the returned catalog metadata. Counts follow the existing resource
+readers; materialized song and artist/place counts are never refreshed by GETs.
+
+`GET /popular/artists` and `/trending/artists` return artist resources plus `rank`
+and `popularity`. `/popular/years` and `/trending/years` do the same for year
+resources. `limit=50` is positive, with no additional v4 cap. Artist/year trending
+uses the existing 48-hour/30-day play floors and trend-ratio order; popular uses
+30-day hot score then plays. IDs break ties. All artists resolve from the normal
+catalog; no separate embedded artist lookup arrays are returned.
+
+`GET /popular/shows` and `/trending/shows` return show summaries plus `rank` and
+`popularity`. They accept `limit=25` (nonpositive resets to 25; larger clamps to 25)
+and `window=30d`, with exactly `48h`, `7d`, `30d` supported. Invalid windows return
+422 rather than silently changing the sort. Hot score and plays in the selected
+window determine order; trending also applies existing play floors and trend-ratio
+ties. These are listening statistics, separate from the rating-based `/shows/top`.
+
+`GET /artists/{artistId}/shows/popular-trending` returns
+`{ artist_id, popular_shows, trending_shows }`, with each list independently limited
+as above. A known artist with no activity has two empty lists; unknown paths are
+404. `GET /shows/popular-trending` returns a direct array of those groups for
+repeated `artist_ids`, sorted by artist ID with duplicates removed. Its per-group
+`limit=10` resets/clamps to 10. Empty input stays empty; unknown filter artists
+are omitted. This array replaces the legacy outer `artists` wrapper.
+
+`GET /shows/momentum` accepts repeated `artist_ids` and the show limit/reset rules.
+Empty input stays empty. Order by organic momentum, raw momentum, 30-day hot
+score, 30-day plays, then show ID. Publish the selected organic score as
+`popularity.momentum_score`; retain the existing raw-score fallback for older maps.
+
+`popularity` contains `momentum_score`, `trend_ratio`, and `windows`, whose keys
+are `48h`, `7d`, `30d`, each with `plays`, `hours`, `hot_score`. Scores retain
+four-decimal rounding. Do not duplicate window counts as top-level fields.
+`rank` is one-based result order. Cached inputs contain IDs and scores, never v4
+catalog bodies. Load each required map once, rank before hydration, then read only
+selected resources in one primary catalog snapshot. Removed or mismatched cached
+references are omitted, so a list can have fewer than its limit. SQL/Redis failure
+returns 503/no-store; it must not publish a successful empty result or validator.
+The asynchronous score snapshot and catalog transaction are separate consistency
+boundaries. Normalization corrections can change the payload/ETag without a new
+score computation.
 
 ### Date and recent show browsing
 

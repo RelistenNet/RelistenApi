@@ -77,6 +77,23 @@ for kind in ['recently-added', 'recently-performed', 'recently-updated']:
     ])
 for name, path in discovery:
     capture(name, path, 'Discovery: ' + name)
+# Search and ranking scores come from real data. Local ranking maps are a separately
+# recorded read-only production aggregate snapshot; the catalog remains the restored DB.
+ranking_requests = [
+    ('search', '/search?q=Scarlet&artist_id=' + artist_id),
+    ('search-venue-alias', '/search?q=The%20Crystal%20Ballrom&artist_id=' + artist_id),
+    ('popular-artists', '/popular/artists?limit=5'),
+    ('trending-artists', '/trending/artists?limit=5'),
+    ('popular-years', '/popular/years?limit=5'),
+    ('trending-years', '/trending/years?limit=5'),
+    ('popular-shows', '/popular/shows?limit=5'),
+    ('trending-shows', '/trending/shows?limit=5&window=48h'),
+    ('artist-popular-trending', '/artists/' + artist_id + '/shows/popular-trending?limit=5'),
+    ('popular-trending', '/shows/popular-trending?artist_ids=' + artist_id + '&limit=5'),
+    ('momentum-shows', '/shows/momentum?artist_ids=' + artist_id + '&limit=5'),
+]
+for name, path in ranking_requests:
+    capture(name, path, 'Search and rankings: ' + name)
 year = json.loads((out / 'year-by-number.json').read_text())
 for name, path in [('year-by-id', '/artists/' + artist_id + '/years/' + year['id']),
                    ('artist-shows', '/artists/' + artist_id + '/shows')]:
@@ -318,6 +335,10 @@ resolver_excerpt = {'references': resolver['references'],
 save_example('resolver-excerpt', resolver_excerpt)
 for name in ['artist-anniversary', 'artist-recently-added']:
     save_example(name + '-excerpt', json.loads((out / (name + '.json')).read_text())[:2])
+for name in ['popular-shows', 'trending-artists', 'momentum-shows']:
+    save_example(name + '-excerpt', json.loads((out / (name + '.json')).read_text())[:1])
+search_result = json.loads((out / 'search.json').read_text())
+save_example('search-excerpt', {kind: entries[:1] for kind, entries in search_result.items()})
 save_example('phish-tours-excerpt', phish_tours[:2])
 save_example('phish-tour-detail-excerpt', detail_excerpt(tour_detail))
 save_example('phish-eras', phish_eras)
