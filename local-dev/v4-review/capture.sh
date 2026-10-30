@@ -176,6 +176,23 @@ assert next(track for group in song_source['sets'] for track in group['tracks'] 
 song_show = capture('song-journey-show', '/shows/' + file['show_id'], 'Song journey: full show hierarchy contains the same recording')
 assert next(source for source in song_show['sources'] if source['id'] == file['source_id']) == song_source
 
+# Complete the recording navigation with tours, embedded eras, and source reviews.
+phish_uuid = query("SELECT uuid FROM artists WHERE slug='phish'")
+phish_id = typed('artist', phish_uuid)
+phish_tours = capture('phish-tours', '/artists/' + phish_id + '/tours', 'Phish: compact tour inventory and catalog show counts')
+phish_tour = next(tour for tour in phish_tours if tour['name'] == 'Fall Tour 1997')
+tour_detail = capture('phish-tour', '/tours/' + phish_tour['id'], 'Phish Fall Tour 1997: direct tour metadata and complete shows')
+assert metadata(tour_detail) == phish_tour
+assert tour_detail['show_count'] == len(tour_detail['shows'])
+assert all(show['artist_id'] == phish_id and show['tour'] == phish_tour for show in tour_detail['shows'])
+phish_eras = capture('phish-eras', '/artists/' + phish_id + '/eras', 'Phish: ordered era metadata, no public era identity')
+assert phish_eras and all(set(era) == {'order', 'name'} for era in phish_eras)
+review_source_uuid = query("SELECT src.uuid FROM sources src JOIN source_reviews r ON r.source_id=src.id GROUP BY src.id ORDER BY count(*) DESC,src.uuid LIMIT 1")
+review_source_id = typed('source', review_source_uuid)
+source_reviews = capture('source-reviews', '/sources/' + review_source_id + '/reviews', 'Recording reviews: complete upstream text and ratings')
+assert source_reviews and all(review['source_id'] == review_source_id and review['id'].startswith('source_review_') for review in source_reviews)
+assert len({review['id'] for review in source_reviews}) == len(source_reviews)
+
 # Checked-in samples are selected excerpts; .output retains the complete responses.
 review = Path('docs/plans/active/2026-10-29-v4-api/review/responses')
 review.mkdir(parents=True, exist_ok=True)
@@ -197,6 +214,10 @@ for name in ('shared-artist-venue', 'shared-venue',
         continue
     body = json.loads((out / (name + '.json')).read_text())
     save_example(name + '-detail-excerpt', detail_excerpt(body))
+save_example('phish-tours-excerpt', phish_tours[:2])
+save_example('phish-tour-detail-excerpt', detail_excerpt(tour_detail))
+save_example('phish-eras', phish_eras)
+save_example('source-reviews-excerpt', source_reviews[:1])
 save_example('zero-match-song', zero_song)
 save_example('imported-song-metadata-excerpt', metadata(imported_song))
 save_example('song-track', next(track for track in song_tracks if track['id'] == 'track_2n09qd0gcm6jye7trwhpa1rys7'))

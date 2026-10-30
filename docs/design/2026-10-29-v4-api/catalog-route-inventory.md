@@ -128,8 +128,8 @@ not enter that count. These evidence sources remain separate.
 
 | Current registration | Proposed v4 coverage | Inputs, output, and behavior to retain | Evidence |
 | --- | --- | --- | --- |
-| `GET /api/v2/artists/{artistIdOrSlug}/tours` | `GET /api/v4/artists/{artistId}/tours` | Artist-owned tour metadata and show counts. | [Tours:29](../../../RelistenApi/Controllers/ToursController.cs#L29) |
-| `GET /api/v2/artists/{artistIdOrSlug}/tours/{idAndSlug}` | `GET /api/v4/artists/{artistId}/tours/{tourId}` plus resolver | Tour and shows; preserve legacy numeric lookup without making integers v4 entity IDs. | [Tours:43](../../../RelistenApi/Controllers/ToursController.cs#L43) |
+| `GET /api/v2/artists/{artistIdOrSlug}/tours` | `GET /api/v4/artists/{artistId}/tours` | Artist-owned tour metadata and counts of assigned catalog shows. | [Tours:29](../../../RelistenApi/Controllers/ToursController.cs#L29) |
+| `GET /api/v2/artists/{artistIdOrSlug}/tours/{idAndSlug}` | `GET /api/v4/tours/{tourId}` plus resolver | Direct tour metadata and complete shows by typed tour ID; preserve legacy numeric lookup without making integers v4 entity IDs. | [Tours:43](../../../RelistenApi/Controllers/ToursController.cs#L43) |
 | `GET /api/v3/artists/{artistIdOrSlug}/tours/{tourIdOrSlug}` | Same typed tour route plus resolver | Preserve full year-leading/numeric slug lookup, including the current preference for full slug before legacy `id-slug` interpretation. | [Tours:58](../../../RelistenApi/Controllers/ToursController.cs#L58) |
 | `GET /api/v2/artists/{artistIdOrSlug}/eras` | `GET /api/v4/artists/{artistId}/eras` | Artist eras in configured `order`, retaining names. Approved: return embedded era metadata with no public era ID or prefix; existing integer keys stay internal. | [Eras:28](../../../RelistenApi/Controllers/ErasControllers.cs#L28), [Era model](../../../RelistenApi/Models/Era.cs#L6) |
 
@@ -157,7 +157,7 @@ routes. Detail reads use one snapshot and payload ETag.
 | --- | --- |
 | `GET /api/v4/artists/{artistId}/shows` | Complete artist show-summary collection outside bootstrap. |
 | `GET /api/v4/sources/{sourceId}` | Direct full source lookup with sets/tracks and typed parents. |
-| `GET /api/v4/source-sets/{sourceSetId}` | Planned direct set metadata with tracks and typed parents. |
+| Source sets (embedded only) | Deliberately omit direct set lookup; full source/show resources retain typed set IDs and complete tracks. |
 | `GET /api/v4/source-tracks/{sourceTrackId}` | Direct playable track, normalization, and typed parents. |
 | `GET /api/v4/venues/{venueId}` | Shared venue metadata, aliases, global count, complete approved cross-artist `shows`. |
 | `GET /api/v4/artist-venues/{artistVenueId}` | Relationship metadata, artist count, complete scoped `shows`. |

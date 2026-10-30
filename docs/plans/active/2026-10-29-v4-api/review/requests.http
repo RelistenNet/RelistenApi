@@ -192,3 +192,15 @@ GET {{base}}/api/v4/sources/source_24ac5ec7w28f4fj00jdgambb69
 
 ### Song journey: full show hierarchy contains the same recording
 GET {{base}}/api/v4/shows/show_3n03w01p0513amd3cc3c1fqfwt
+
+### Phish: compact tour inventory and catalog show counts
+GET {{base}}/api/v4/artists/artist_6aaf982021nrst0m68ew1djerc/tours
+
+### Phish Fall Tour 1997: direct tour metadata and complete shows
+GET {{base}}/api/v4/tours/tour_4emejbsvpbph76zy5kh1n954vt
+
+### Phish: ordered era metadata, no public era identity
+GET {{base}}/api/v4/artists/artist_6aaf982021nrst0m68ew1djerc/eras
+
+### Recording reviews: complete upstream text and ratings
+GET {{base}}/api/v4/sources/source_2cr3tmxwvyxp5g9jxzk1jf944x/reviews

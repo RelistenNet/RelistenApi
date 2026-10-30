@@ -1,0 +1,99 @@
+{
+  "shows": [
+    {
+      "id": "show_7jg9j2p74qjsgcyxjge7v683hn",
+      "artist_id": "artist_6aaf982021nrst0m68ew1djerc",
+      "year_id": "year_5dpc3c7d5h9w4gqwhqded0srjf",
+      "tour_id": "tour_4emejbsvpbph76zy5kh1n954vt",
+      "date": "1997-11-13T08:00:00Z",
+      "display_date": "1997-11-13",
+      "avg_rating": 7.792,
+      "avg_duration": 9912.0,
+      "most_recent_source_updated_at": "2026-10-10T21:43:31Z",
+      "has_soundboard_source": false,
+      "has_streamable_flac_source": false,
+      "source_count": 1,
+      "created_at": "2026-08-19T14:26:52.679597Z",
+      "updated_at": "2026-10-16T19:20:32.970253Z",
+      "imported_venue": {
+        "show_count": 10,
+        "id": "imported_venue_7231qhvcfhvpqww2e53w9c1h92",
+        "artist_id": "artist_6aaf982021nrst0m68ew1djerc",
+        "latitude": 36.10435,
+        "longitude": -115.143093,
+        "name": "Thomas & Mack Center",
+        "location": "Las Vegas, NV",
+        "upstream_identifier": "674",
+        "slug": "thomas-mack-center",
+        "past_names": null,
+        "created_at": "2026-08-19T14:25:20.302347Z",
+        "updated_at": "2026-01-02T02:23:21Z"
+      },
+      "artist_venue": {
+        "id": "artist_venue_gn4npds4",
+        "artist_id": "artist_6aaf982021nrst0m68ew1djerc",
+        "artist_show_count": 10,
+        "created_at": "2026-10-30T19:25:55.621017Z",
+        "updated_at": "2026-10-30T19:25:55.621017Z",
+        "venue": {
+          "id": "venue_e6w9krgv",
+          "global_show_count": 11,
+          "name": "Thomas & Mack Center",
+          "kind": "site",
+          "parent_id": null,
+          "city": "Las Vegas",
+          "region": "NV",
+          "country": "US",
+          "latitude": null,
+          "longitude": null,
+          "coordinate_precision": null,
+          "names": [
+            {
+              "name": "Thomas & Mack Center",
+              "kind": "official"
+            },
+            {
+              "name": "T&M",
+              "kind": "short"
+            }
+          ]
+        }
+      },
+      "year": {
+        "id": "year_5dpc3c7d5h9w4gqwhqded0srjf",
+        "artist_id": "artist_6aaf982021nrst0m68ew1djerc",
+        "show_count": 81,
+        "source_count": 81,
+        "duration": 723823,
+        "avg_duration": 8936.086,
+        "avg_rating": 7.644617,
+        "year": "1997",
+        "created_at": "2026-08-19T14:26:53.559798Z",
+        "updated_at": "2026-10-28T17:27:21Z"
+      },
+      "tour": {
+        "id": "tour_4emejbsvpbph76zy5kh1n954vt",
+        "artist_id": "artist_6aaf982021nrst0m68ew1djerc",
+        "show_count": 21,
+        "start_date": "1997-11-13T08:00:00Z",
+        "end_date": "1997-12-13T08:00:00Z",
+        "name": "Fall Tour 1997",
+        "slug": "fall-tour-1997",
+        "upstream_identifier": "31",
+        "created_at": "2026-08-19T14:25:18.804039Z",
+        "updated_at": "2024-10-26T01:03:18Z"
+      },
+      "era": null
+    }
+  ],
+  "id": "tour_4emejbsvpbph76zy5kh1n954vt",
+  "artist_id": "artist_6aaf982021nrst0m68ew1djerc",
+  "show_count": 21,
+  "start_date": "1997-11-13T08:00:00Z",
+  "end_date": "1997-12-13T08:00:00Z",
+  "name": "Fall Tour 1997",
+  "slug": "fall-tour-1997",
+  "upstream_identifier": "31",
+  "created_at": "2026-08-19T14:25:18.804039Z",
+  "updated_at": "2024-10-26T01:03:18Z"
+}

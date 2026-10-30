@@ -738,3 +738,32 @@ by track ID, identical to direct track lookup, with matched parts referencing th
 root canonical song ID. The user-reported `song_mbkeejfd` returns 1,483 direct
 tracks; its captured ETag revalidated with 304. Matching parts come from each
 track’s `normalization.parts`, with no wrapper or duplicated ordinal field.
+
+
+## Tours, eras, and source reviews, 2026-10-30
+
+All 88 focused v4 HTTP tests passed after adding artist tour inventory, direct
+tour-with-shows detail, artist eras, and source reviews. The current local OpenAPI
+has 24 GET paths and no direct source-set route. The complete planned manifest has
+59 catalog/operator operations; source sets remain embedded in source/show detail.
+The fresh correctness and readability review found no defects. Its suggested
+cleanup moved review projection into the existing catalog projection class; all
+six navigation tests passed again after that move.
+
+The real-data capture passed tour list/detail/embedded count and metadata parity,
+era field shape, and review parent/identity assertions. Phish’s 130 tours returned
+in 9.949 ms; Fall Tour 1997 returned its 21 shows in 16.452 ms; four Phish eras
+returned in 6.388 ms; 361 source reviews returned in 22.705 ms. These are individual
+local full-response samples, not medians or production capacity measurements.
+Tour detail and source review list both returned 304 for their captured ETags.
+
+The tour-count query uses an artist-bounded index scan and measured 10.35 ms in
+the local database plan. Tour counts describe actual catalog show assignments;
+legacy setlist counts remain unchanged. No new counter maintenance or locks were
+introduced. The [review overview](review/README.md#tours-eras-and-source-reviews)
+links the live responses and selected excerpts. Complete bodies, headers, and
+samples remain in ignored `local-dev/v4-review/.output/`.
+
+No production changes, account/auth migration, or mobile runtime changes occurred.
+Review these responses before proceeding to auth. Production load and the future
+mobile transactional replacement behavior remain unverified.

@@ -48,7 +48,7 @@
       "path": "/api/v4/artists/{artistId}/eras",
       "coverage_source": "catalog-route-inventory.md",
       "response_shape": "list",
-      "sync_policy": "artist_collection"
+      "sync_policy": "artist_eras"
     },
     {
       "method": "GET",
@@ -147,13 +147,6 @@
       "coverage_source": "catalog-route-inventory.md",
       "response_shape": "list",
       "sync_policy": "artist_collection"
-    },
-    {
-      "method": "GET",
-      "path": "/api/v4/artists/{artistId}/tours/{tourId}",
-      "coverage_source": "catalog-route-inventory.md",
-      "response_shape": "resource_with_shows",
-      "sync_policy": "detail_shows"
     },
     {
       "method": "GET",
@@ -367,13 +360,6 @@
     },
     {
       "method": "GET",
-      "path": "/api/v4/source-sets/{sourceSetId}",
-      "coverage_source": "catalog-route-inventory.md",
-      "response_shape": "resource",
-      "sync_policy": "full_set"
-    },
-    {
-      "method": "GET",
       "path": "/api/v4/source-tracks/{sourceTrackId}",
       "coverage_source": "catalog-route-inventory.md",
       "response_shape": "resource",
@@ -391,7 +377,14 @@
       "path": "/api/v4/sources/{sourceId}/reviews",
       "coverage_source": "catalog-route-inventory.md",
       "response_shape": "list",
-      "sync_policy": "query_result"
+      "sync_policy": "source_reviews"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/tours/{tourId}",
+      "coverage_source": "catalog-route-inventory.md",
+      "response_shape": "resource_with_shows",
+      "sync_policy": "detail_shows"
     },
     {
       "method": "GET",
@@ -493,14 +486,15 @@
     "artist_catalog": "Replace years/shows/tours/eras/imported_venues/imported_songs/venue_entries/song_entries associations for this artist; normalized_venues/normalized_songs are entity patches, not global replacement sets.",
     "full_show": "Upsert the show and nested sources/sets/tracks; replace active source associations for this show and set/track associations for each fully returned source/set. Retain entity records needed for offline playback and favorites.",
     "full_source": "Upsert source and nested sets/tracks; replace active sets for this source and tracks for each fully returned set. Related artist/show summaries are patches.",
-    "full_set": "Upsert set and tracks; replace active track associations for this set only. Parent summaries are patches.",
     "detail_shows": "Upsert the resource and returned show summaries; replace only this resource’s complete show association list, including an empty list. Save the payload ETag in the same local transaction. Retain shared show entities, downloads, favorites, and other query memberships. Artist-venue ID and artist-plus-venue alias identify the same membership owner.",
     "query_result": "Replace only the cached result of this exact URL and normalized query parameters; upsert returned entities. Never infer absence elsewhere from search/ranking/filtered/limited results.",
     "history": "With after_sequence append/deduplicate by event sequence; without it replace only the cached recent-history window for the exact request. Never delete catalog rows or personal playback history from omissions.",
     "resolver": "Upsert only supplied entities and per-reference availability/redirect results; never replace collections or remove favorite membership.",
     "library_snapshot": "Apply authoritative membership for the authenticated account under the revised in-place library snapshot/cursor contract, not catalog replacement rules.",
     "library_changes": "Apply explicit ordered membership changes and advance the account cursor atomically; omissions do not remove membership.",
-    "detail_tracks": "Upsert song metadata and returned track resources; replace only this song’s complete file-match membership, including an empty list. Save the payload ETag in the same local transaction. This response has no shows property and does not change song-show membership or shared offline entities."
+    "detail_tracks": "Upsert song metadata and returned track resources; replace only this song’s complete file-match membership, including an empty list. Save the payload ETag in the same local transaction. This response has no shows property and does not change song-show membership or shared offline entities.",
+    "artist_eras": "Replace only this artist’s complete ordered era metadata, including an empty list. Eras have no public identity and are not shared entities. Save the ETag with the replacement.",
+    "source_reviews": "Upsert returned review resources and replace this source’s complete review membership, including an empty list. Save its ETag atomically. Other sources, catalog entities, and personal library membership remain unchanged."
   },
   "account_identity_storage": "Canonical full prefixed strings for application-owned IDs and catalog targets; OpenIddict/private surrogate keys remain internal UUIDs.",
   "account_routes": "Change existing /v1/library and /v1/me in place; no parallel library route version."

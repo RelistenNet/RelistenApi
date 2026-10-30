@@ -30,7 +30,7 @@ provides Try it out too. Start with the matched and partial tracks, compare
 their full shows, then inspect the venue alias example. Playback URLs and
 titles are imported values; normalized parts describe the file without replacing it.
 
-The expanded C1 browse checkpoint exposes 20 GET routes. Follow the
+The expanded C1 browse checkpoint exposes 24 GET routes. Follow the
 [venue-to-playback walkthrough](../../docs/plans/active/2026-10-29-v4-api/review/venue-source-journey.md)
 and [song-to-playback walkthrough](../../docs/plans/active/2026-10-29-v4-api/review/song-source-journey.md)
 to inspect the resource links. Implemented families are:
@@ -59,6 +59,12 @@ to inspect the resource links. Implemented families are:
 - `GET /api/v4/artists/{artistId}/imported-songs`: compact full imported inventory.
   `/imported-songs/{importedSongId}` returns that resource with complete
   setlist-supported `shows` directly by ID.
+- `GET /api/v4/artists/{artistId}/tours`: compact tour inventory with actual
+  catalog `show_count`; `/tours/{tourId}` returns metadata plus complete shows.
+- `GET /api/v4/artists/{artistId}/eras`: ordered `{ order, name }` metadata with
+  no era identity. Source sets also stay embedded; there is no direct set lookup.
+- `GET /api/v4/sources/{sourceId}/reviews`: complete imported review resources,
+  newest update first, with typed review/source IDs and original text/ratings.
 - `GET /api/v4/shows/{showId}`: full show with sources, sets, tracks, imported
   venue observations, stored `artist_venue` links, aliases and approved normalization.
 - `GET /api/v4/sources/{sourceId}`: that same complete source resource directly,

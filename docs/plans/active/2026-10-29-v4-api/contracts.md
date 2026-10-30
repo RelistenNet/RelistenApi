@@ -536,6 +536,51 @@ The implementation separates
 [shared track interpretation](../../../../RelistenApi/Services/Catalog/CatalogTrackNormalizationReader.cs),
 and [song navigation](../../../../RelistenApi/Services/Catalog/CatalogSongReader.cs).
 
+## Tours, eras, and source reviews
+
+`GET /artists/{artistId}/tours` returns the artist’s complete compact
+`TourResource[]`, ordered by `start_date` ascending with nulls last, then tour ID.
+Each tour has `id`, `artist_id`, nullable `start_date` and `end_date`, `name`,
+`slug`, `upstream_identifier`, `created_at`, `updated_at`, and `show_count`.
+`GET /tours/{tourId}` accepts its globally unique typed ID directly and returns
+that metadata plus complete `shows`, ordered by imported display date and show ID.
+It needs no artist path parameter. Artist and show references use the separately
+cached artist catalog. Compact list and show-embedded tours omit `shows`.
+
+Tour `show_count` counts catalog shows assigned to both that tour and its owning
+artist. It has the same meaning in list, embedded, and detail responses; the full
+detail’s show membership uses those same assignments. It does not count imported
+setlist appearances. The legacy API’s `shows_on_tour` retains its old meaning.
+No new stored counter or refresh process is needed for this count.
+
+`GET /artists/{artistId}/eras` returns complete ordered `EraResource[]` metadata.
+An era has only `order` and `name`, matching the era embedded in show responses.
+It has no public ID, prefix, or independent detail route. Order is configured era
+order, then name and internal identity to break ties. Mobile replaces the artist’s
+ordered era metadata as a whole; it does not create shared era entities.
+
+`GET /sources/{sourceId}/reviews` returns the complete `SourceReviewResource[]`
+for one source. Each review has `id` (`source_review_`), `source_id` (`source_`),
+nullable `rating`, `title`, and `author`, review text in `review`, and `created_at`
+and `updated_at`. Order is `updated_at` descending, then review ID. Imported review
+text and rating retain their upstream meaning; they are not normalization evidence.
+
+Each request reads in one repeatable-read session. Payload ETags cover the whole
+returned resource or list, including membership and tour counts. A known artist
+or source with no children returns 200 with `[]`; a known empty tour detail returns
+`shows: []`. Missing parents return 404, malformed or wrong-kind IDs return 422,
+and dependency failures return no-store 503. A matching ETag returns 304.
+
+Tour inventory replaces only that artist’s tour membership. Tour detail replaces
+only that tour’s show membership. Reviews replace only that source’s review
+membership. Each complete empty list clears its owned membership. Apply resources,
+owned membership, and the ETag atomically; preserve shared shows, offline files,
+favorites, and other owners’ memberships. Mobile runtime changes remain pending.
+
+Source sets remain embedded in full source/show responses with their typed IDs
+and tracks. There is deliberately no direct `/source-sets/{sourceSetId}` endpoint;
+clients fetch the owning source to inspect a complete set.
+
 ## Canonical redirects and retirement
 
 Follow `merged_into` to the survivor with bounded cycle detection. Direct lookup
