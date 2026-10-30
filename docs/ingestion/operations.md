@@ -291,6 +291,46 @@ the old `artist_import` queue and discard obsolete queued work where appropriate
 Restarting the API in Hangfire mode restores its recurring registrations. Keep committed
 catalog changes. Do not reset Temporal workflows while Hangfire owns ingestion.
 
+## Stored artist venue count refresh
+
+Migration 15 creates stable artist/place identities and a durable pending-artist
+queue. Apply it before deploying workers with `ArtistVenueRefreshWorkflow`.
+It seeds only the new derived table; it does not change imported rows, accepted
+normalization decisions, or their audit history.
+
+After those workers are available, the existing `--register-schedules` command
+creates two missing schedules: `relisten-artist-venues-refresh` runs every minute
+UTC, and `relisten-artist-venues-reconcile` runs daily at 11:00 UTC. New schedules
+are active immediately; existing schedules and their paused state are preserved.
+Both jobs use database work only, with no upstream or model requests.
+
+Count refresh can lag a source write. Database triggers retain the affected
+artists even when an activity's best-effort refresh fails. Inspect the queue age
+with a read-only query:
+
+```sql
+SELECT count(*) AS pending_artists, min(requested_at) AS oldest_request
+FROM norm.artist_venue_refresh_queue;
+```
+
+A source's pending mark can briefly wait for the same artist's queue row while a
+refresh owns it. The source transaction does not perform the recount or wait for
+an entire background workflow. This per-artist serialization prevents lost marks.
+
+A normal workflow run drains up to 20 batches of 100 artists. Busy artists are
+skipped for a later run; failed batches leave their pending rows intact. Retry or
+trigger the refresh schedule after recovery. Trigger the reconciliation schedule
+when all known relationship owners should be rechecked. The programmatic
+`NormalizationClient.RefreshArtistVenuesAsync(reconcile: true)` starts the same
+reconciliation path; there is no dedicated operator CLI flag.
+
+For application rollback, pause these two schedules before stopping their
+workers. Keep the additive schema and pending work. Resume on a compatible worker
+and reconcile; no down migration deletes identities. This work does not add sync
+revision counters or change v4 responses. See the
+[foundation plan](../plans/active/2026-10-30-artist-venues/README.md) for tests and
+the detailed storage contract.
+
 ## Storage, backups, and recovery
 
 Temporal stores workflow history in its own PostgreSQL persistence and visibility
