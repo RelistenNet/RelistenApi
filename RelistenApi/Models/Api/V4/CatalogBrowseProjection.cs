@@ -19,11 +19,11 @@ public static class CatalogBrowseProjection
             SourceCount = value.source_count,
             CreatedAt = value.created_at,
             UpdatedAt = value.updated_at,
-            Capabilities = Capabilities(value.Capabilities),
+            Features = Features(value.Features),
             UpstreamSources = value.UpstreamSources.Select(Provider).ToArray(),
         };
 
-    private static ArtistCapabilitiesResource Capabilities(CatalogCapabilities value) =>
+    private static ArtistFeaturesResource Features(CatalogFeatures value) =>
         new()
         {
             Descriptions = value.descriptions,

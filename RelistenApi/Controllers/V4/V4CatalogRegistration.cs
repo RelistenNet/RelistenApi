@@ -34,6 +34,7 @@ public static class V4CatalogRegistration
         services.AddTransient<CatalogSongMatchReader>();
         services.AddTransient<CatalogSongReader>();
         services.AddTransient<CatalogBrowseReader>();
+        services.AddTransient<CatalogShowDiscoveryReader>();
         services.AddTransient<CatalogArtistSnapshotReader>();
         services.AddTransient<CatalogImportedVenueMetadataReader>();
         services.AddTransient<CatalogShowMetadataReader>();
@@ -80,6 +81,7 @@ public static class V4CatalogRegistration
             ShortId(PublicIdPrefixes.ArtistVenue)
         );
         options.SchemaFilter<NullableCatalogSchemaFilter>();
+        options.ParameterFilter<CatalogQueryParameterSchema>();
         options.SchemaFilter<CatalogResolveRequestSchema>();
         options.OperationFilter<CatalogResolveRequestSchema>();
     }

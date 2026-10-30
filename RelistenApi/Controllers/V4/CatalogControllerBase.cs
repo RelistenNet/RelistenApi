@@ -11,10 +11,15 @@ namespace Relisten.Controllers.V4;
 /// <summary>Owns v4 read validation, dependency failures and response publication.</summary>
 public abstract class CatalogControllerBase(ILogger logger) : ControllerBase
 {
-    protected Task<IActionResult> Read<T>(string id, string prefix, Func<Guid, Task<T?>> read)
+    protected Task<IActionResult> Read<T>(
+        string id,
+        string prefix,
+        Func<Guid, Task<T?>> read,
+        bool cacheable = true
+    )
         where T : class =>
         UuidTypeId.TryParse(id, prefix, out var uuid)
-            ? Execute(() => read(uuid))
+            ? Execute(() => read(uuid), cacheable)
             : Task.FromResult<IActionResult>(InvalidId(prefix));
 
     protected async Task<IActionResult> Execute<T>(Func<Task<T?>> read, bool cacheable = true)
@@ -56,18 +61,19 @@ public abstract class CatalogControllerBase(ILogger logger) : ControllerBase
         }
     }
 
-    protected ObjectResult InvalidId(string prefix) =>
+    protected JsonResult InvalidId(string prefix) =>
         Failure(422, "invalid_id", "Expected a canonical " + prefix + " ID.");
 
-    protected ObjectResult Failure(int status, string code, string title)
+    protected JsonResult Failure(int status, string code, string title)
     {
         Response.Headers.CacheControl = "no-store";
         var problem = new ProblemDetails { Status = status, Title = title };
         problem.Extensions["code"] = code;
-        return new ObjectResult(problem)
+        // JsonResult keeps controller-level Produces(application/json) from overriding errors.
+        return new JsonResult(problem)
         {
             StatusCode = status,
-            ContentTypes = { "application/problem+json" },
+            ContentType = "application/problem+json",
         };
     }
 }

@@ -23,12 +23,12 @@ public sealed class ArtistResource
     public int SourceCount { get; init; }
     public DateTime CreatedAt { get; init; }
     public DateTime UpdatedAt { get; init; }
-    public ArtistCapabilitiesResource Capabilities { get; init; } = null!;
+    public ArtistFeaturesResource Features { get; init; } = null!;
     public IReadOnlyList<ArtistProviderResource> UpstreamSources { get; init; } = [];
 }
 
 [JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
-public sealed class ArtistCapabilitiesResource
+public sealed class ArtistFeaturesResource
 {
     public bool Descriptions { get; init; }
     public bool Eras { get; init; }

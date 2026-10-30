@@ -368,8 +368,9 @@ public sealed partial class TestV4CatalogHttp
         JsonNode.DeepEquals(listed, detail).Should().BeTrue();
         detail["show_count"]!.GetValue<int>().Should().Be(2);
         detail["source_count"]!.GetValue<int>().Should().Be(2);
-        detail["capabilities"]!["normalization"]!.GetValue<bool>().Should().BeTrue();
-        detail["capabilities"]!.AsObject().ContainsKey("id").Should().BeFalse();
+        detail["features"]!["normalization"]!.GetValue<bool>().Should().BeTrue();
+        detail["features"]!.AsObject().ContainsKey("id").Should().BeFalse();
+        detail.AsObject().ContainsKey("capabilities").Should().BeFalse();
         var assignment = detail["upstream_sources"]![0]!;
         assignment["provider"]!.GetValue<string>().Should().Be("review.provider");
         assignment["upstream_identifier"]!.GetValue<string>().Should().Be("matched-upstream");
@@ -778,7 +779,7 @@ public sealed partial class TestV4CatalogHttp
             var (resource, property) in new[]
             {
                 ("TrackResource", "normalization"),
-                ("ArtistResource", "capabilities"),
+                ("ArtistResource", "features"),
             }
         )
         {
@@ -1001,6 +1002,19 @@ public sealed partial class TestV4CatalogHttp
                 "/api/v4/artists/{artistId}/years/{yearId}",
                 "/api/v4/artists/{artistId}/years/by-number/{year}",
                 "/api/v4/artists/{artistId}/shows",
+                "/api/v4/artists/{artistId}/shows/by-date/{showDate}",
+                "/api/v4/artists/{artistId}/shows/on-date",
+                "/api/v4/artists/{artistId}/shows/today",
+                "/api/v4/artists/{artistId}/shows/random",
+                "/api/v4/artists/{artistId}/shows/top",
+                "/api/v4/artists/{artistId}/shows/recently-added",
+                "/api/v4/artists/{artistId}/shows/recently-performed",
+                "/api/v4/artists/{artistId}/shows/recently-updated",
+                "/api/v4/shows/today",
+                "/api/v4/shows/on-date",
+                "/api/v4/shows/recently-added",
+                "/api/v4/shows/recently-performed",
+                "/api/v4/shows/recently-updated",
                 "/api/v4/artists/{artistId}/tours",
                 "/api/v4/artists/{artistId}/eras",
                 "/api/v4/tours/{tourId}",
@@ -1020,6 +1034,19 @@ public sealed partial class TestV4CatalogHttp
                 "/api/v4/songs/{songId}",
                 "/api/v4/songs/{songId}/tracks"
             );
+        var sort = paths["/api/v4/shows/recently-added"]!["get"]!["parameters"]!
+            .AsArray()
+            .Single(parameter => parameter!["name"]!.GetValue<string>() == "sort_by")!;
+        sort["schema"]!["enum"]!
+            .AsArray()
+            .Select(value => value!.GetValue<string>())
+            .Should()
+            .Equal("created_at", "updated_at");
+        paths["/api/v4/shows/recently-added"]!["get"]!["responses"]!["422"]!["content"]!
+            .AsObject()
+            .Select(entry => entry.Key)
+            .Should()
+            .Equal("application/problem+json");
         var legacy = await GetJson("/api-docs/v3/swagger.json");
         legacy["paths"]!
             .AsObject()
