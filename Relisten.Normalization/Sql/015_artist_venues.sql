@@ -22,12 +22,23 @@ RETURNS TABLE (artists_refreshed integer, relationships_changed integer)
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, norm AS $$
 DECLARE
     selected_artists uuid[];
+    artist_lock integer;
 BEGIN
-    -- Join the existing venue-write lock before touching derived rows or their FK parents.
-    -- Admin edits already hold it, so their source changes and count refresh commit together.
-    -- A separate count mutex would invert lock order with those transactions. Post-commit
-    -- activity hooks use the same lock; ordinary catalog readers do not acquire it.
-    PERFORM pg_advisory_xact_lock(hashtext('norm-venues'));
+    IF cardinality(artist_filter) = 0 THEN
+        RETURN QUERY SELECT 0, 0;
+        RETURN;
+    END IF;
+
+    -- Venue writes and full recounts exclude scoped recounts; different artists may recount
+    -- concurrently under the shared gate. Take the gate before artist locks or FK parents.
+    -- Admin venue transactions already hold it exclusively before their source edits.
+    -- Retained transactions acquire their complete artist scope first; choose full scope
+    -- up front if needed, rather than upgrade a shared gate while other scopes run.
+    IF artist_filter IS NULL THEN
+        PERFORM pg_advisory_xact_lock(hashtext('norm-venues'));
+    ELSE
+        PERFORM pg_advisory_xact_lock_shared(hashtext('norm-venues'));
+    END IF;
 
     -- NULL reconciles every live owner, including stored pairs whose shows disappeared.
     -- An explicit empty array does no work. Missing parents are never invented.
@@ -47,6 +58,16 @@ BEGIN
     IF selected_artists IS NULL THEN
         RETURN QUERY SELECT 0, 0;
         RETURN;
+    END IF;
+
+    IF artist_filter IS NOT NULL THEN
+        -- Order actual lock keys, not input UUIDs: even a hash collision must preserve one
+        -- acquisition order. Collisions only serialize extra artists; they cannot mix counts.
+        FOR artist_lock IN
+            SELECT DISTINCT hashtext(id::text) FROM unnest(selected_artists) artists(id) ORDER BY 1
+        LOOP
+            PERFORM pg_advisory_xact_lock(hashtext('norm-artist-venues'), artist_lock);
+        END LOOP;
     END IF;
 
     -- Count each show at its canonical venue. Noncanonical pairs remain at zero, keeping
