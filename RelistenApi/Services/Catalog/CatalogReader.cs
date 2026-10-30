@@ -4,7 +4,6 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
-using Microsoft.Extensions.Logging;
 
 namespace Relisten.Catalog;
 
@@ -14,8 +13,8 @@ namespace Relisten.Catalog;
 /// </summary>
 public sealed class CatalogReader(
     DbService db,
-    ILogger<CatalogReader> logger,
-    CatalogShowMetadataReader metadata
+    CatalogShowMetadataReader metadata,
+    CatalogTrackNormalizationReader trackNormalization
 )
 {
     /// <summary>Returns a complete recording hierarchy, or null when the show is unknown.</summary>
@@ -39,7 +38,7 @@ public sealed class CatalogReader(
 
         await ReadRecordings(session, show, cancellationToken);
         await metadata.Apply(session, [show], cancellationToken);
-        await ApplyNormalization(
+        await trackNormalization.Apply(
             session,
             show.Sources.SelectMany(x => x.Sets).SelectMany(x => x.Tracks).ToArray(),
             show.normalization_enabled,
@@ -77,7 +76,7 @@ public sealed class CatalogReader(
         }
 
         var approved = await NormalizationApproved(session, source.artist_uuid, cancellationToken);
-        await ApplyNormalization(
+        await trackNormalization.Apply(
             session,
             source.Sets.SelectMany(set => set.Tracks).ToArray(),
             approved,
@@ -95,7 +94,8 @@ public sealed class CatalogReader(
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
         var track = await session.Connection.QuerySingleOrDefaultAsync<CatalogTrack>(
             session.Command(
-                TrackSelect + " WHERE t.uuid=@uuid AND NOT t.is_orphaned",
+                CatalogTrackNormalizationReader.TrackSelect
+                    + " WHERE t.uuid=@uuid AND NOT t.is_orphaned",
                 new { uuid },
                 cancellationToken
             )
@@ -106,7 +106,7 @@ public sealed class CatalogReader(
         }
 
         var approved = await NormalizationApproved(session, track.artist_uuid, cancellationToken);
-        await ApplyNormalization(session, [track], approved, cancellationToken);
+        await trackNormalization.Apply(session, [track], approved, cancellationToken);
         return track;
     }
 
@@ -160,7 +160,7 @@ public sealed class CatalogReader(
         var tracks = (
             await session.Connection.QueryAsync<CatalogTrack>(
                 session.Command(
-                    TrackSelect
+                    CatalogTrackNormalizationReader.TrackSelect
                         + " WHERE src.id=ANY(@sourceIds) AND NOT t.is_orphaned ORDER BY t.track_position,t.uuid",
                     new { sourceIds },
                     cancellationToken
@@ -207,116 +207,10 @@ public sealed class CatalogReader(
             )
         );
 
-    private async Task ApplyNormalization(
-        CatalogReadSession session,
-        IReadOnlyList<CatalogTrack> tracks,
-        bool approved,
-        CancellationToken cancellationToken
-    )
-    {
-        if (!approved)
-        {
-            foreach (var track in tracks)
-            {
-                track.Normalization = new("unavailable", "disabled", []);
-            }
-            return;
-        }
-        if (tracks.Count == 0)
-        {
-            return;
-        }
-
-        var uuids = tracks.Select(x => x.uuid).ToArray();
-        var parts = (
-            await session.Connection.QueryAsync<CatalogPart>(
-                session.Command(
-                    "SELECT * FROM norm.track_songs WHERE track_uuid=ANY(@uuids) ORDER BY track_uuid,part",
-                    new { uuids },
-                    cancellationToken
-                )
-            )
-        ).ToArray();
-        var songs = (
-            await session.Connection.QueryAsync<CatalogSong>(
-                session.Command(
-                    """
-                    WITH RECURSIVE chain AS (
-                      SELECT s.*,ARRAY[s.id] path FROM norm.songs s WHERE s.id IN (SELECT song_id FROM norm.track_songs WHERE track_uuid=ANY(@uuids))
-                      UNION ALL
-                      SELECT s.*,c.path || s.id FROM norm.songs s JOIN chain c ON s.id=c.merged_into
-                      WHERE cardinality(c.path)<32 AND NOT s.id=ANY(c.path)
-                    ) SELECT DISTINCT id,artist_uuid,name,kind,merged_into FROM chain
-                    """,
-                    new { uuids },
-                    cancellationToken
-                )
-            )
-        ).ToDictionary(x => x.id);
-        var partsByTrack = parts.ToLookup(x => x.track_uuid);
-        foreach (var track in tracks)
-        {
-            var interpretation = partsByTrack[track.uuid].ToArray();
-            var consistent = true;
-            foreach (var part in interpretation)
-            {
-                if (!part.resolved || part.song_id is null)
-                {
-                    continue;
-                }
-                part.Song = ResolveSong(part.song_id, track.artist_uuid, songs);
-                consistent &= part.Song is not null;
-            }
-            if (!consistent)
-            {
-                logger.LogWarning("Invalid normalized song link for track {TrackUuid}", track.uuid);
-                track.Normalization = new("unavailable", "inconsistent", []);
-            }
-            else if (interpretation.Length > 0)
-            {
-                track.Normalization = new(
-                    interpretation.Any(x => !x.resolved) ? "partial" : "interpreted",
-                    null,
-                    interpretation
-                );
-            }
-        }
-    }
-
-    private static CatalogSong? ResolveSong(
-        string id,
-        Guid artist,
-        IReadOnlyDictionary<string, CatalogSong> songs
-    )
-    {
-        var seen = new HashSet<string>();
-        while (
-            seen.Count < 32
-            && seen.Add(id)
-            && songs.TryGetValue(id, out var song)
-            && song.artist_uuid == artist
-        )
-        {
-            if (song.merged_into is null)
-            {
-                return song;
-            }
-            id = song.merged_into;
-        }
-        return null;
-    }
-
     private const string SourceSelect = """
         SELECT src.*,a.uuid artist_uuid,sh.uuid show_uuid,
                COALESCE(rc.source_review_count,0) review_count
         FROM sources src JOIN artists a ON a.id=src.artist_id JOIN shows sh ON sh.id=src.show_id
         LEFT JOIN source_review_counts rc ON rc.source_id=src.id
-        """;
-
-    private const string TrackSelect = """
-        SELECT t.*, src.uuid source_uuid, sets.uuid source_set_uuid, sh.uuid show_uuid, a.uuid artist_uuid
-        FROM source_tracks t JOIN sources src ON src.id=t.source_id
-        JOIN source_sets sets ON sets.id=t.source_set_id AND sets.source_id=src.id
-        JOIN shows sh ON sh.id=src.show_id JOIN artists a ON a.id=src.artist_id
         """;
 }
