@@ -30,13 +30,16 @@ provides Try it out too. Start with the matched and partial tracks, compare
 their full shows, then inspect the venue alias example. Playback URLs and
 titles are imported values; normalized parts describe the file without replacing it.
 
-The expanded C1 browse checkpoint exposes 26 routes (25 GETs and one POST). Follow the
+The [date and recent browsing review](../../docs/plans/active/2026-10-29-v4-api/review/discovery-browsing.md)
+provides anniversary, exact-date, recent, top-rated, and random-show links.
+
+The expanded C1 browse checkpoint exposes 39 routes (38 GETs and one POST). Follow the
 [venue-to-playback walkthrough](../../docs/plans/active/2026-10-29-v4-api/review/venue-source-journey.md)
 and [song-to-playback walkthrough](../../docs/plans/active/2026-10-29-v4-api/review/song-source-journey.md)
 to inspect the resource links. Implemented families are:
 
 - `GET /api/v4/artists` and `/api/v4/artists/{artistId}`: artist list/detail,
-  counts, capabilities and provider metadata.
+  counts, features and provider metadata.
 - `GET /api/v4/artists/{artistId}/catalog`: complete artist-owned collections and
   shared venue/song entity patches, with one snapshot ETag. Recording hierarchies
   remain lazy. The capture compares approved/partial and raw artist inventories.

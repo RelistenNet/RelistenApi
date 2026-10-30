@@ -1,0 +1,157 @@
+[
+  {
+    "id": "show_0b3jz10vvf8kfgcy2wqzdcah8z",
+    "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+    "year_id": "year_2sh9zwk07sczw54a29atnkxt10",
+    "tour_id": "tour_6s5scd4m3jar2z3s2rknje9nvv",
+    "date": "1969-07-07T07:00:00Z",
+    "display_date": "1969-07-07",
+    "avg_rating": 9.714286,
+    "avg_duration": 6794.0,
+    "most_recent_source_updated_at": "2013-01-21T01:35:54Z",
+    "has_soundboard_source": true,
+    "has_streamable_flac_source": true,
+    "source_count": 2,
+    "created_at": "2018-10-23T07:00:49.513477Z",
+    "updated_at": "2013-01-21T01:35:54Z",
+    "imported_venue": {
+      "show_count": 1,
+      "id": "imported_venue_6qken01ss07j5pxf4yf6v97x2y",
+      "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+      "latitude": null,
+      "longitude": null,
+      "name": "Piedmont Park",
+      "location": "Atlanta, GA, USA",
+      "upstream_identifier": "jerrygarcia.com_Piedmont Park::Atlanta, GA, USA",
+      "slug": "piedmont-park",
+      "past_names": null,
+      "created_at": "2025-12-21T21:48:40.335209Z",
+      "updated_at": "2021-06-15T21:53:11Z"
+    },
+    "artist_venue": {
+      "id": "artist_venue_hb1727ce",
+      "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+      "artist_show_count": 1,
+      "created_at": "2026-10-30T19:25:55.612594Z",
+      "updated_at": "2026-10-30T19:25:55.612594Z",
+      "venue": {
+        "id": "venue_yxj5pztv",
+        "global_show_count": 1,
+        "name": "Piedmont Park",
+        "kind": "site",
+        "parent_id": null,
+        "city": "Atlanta",
+        "region": "GA",
+        "country": "US",
+        "latitude": null,
+        "longitude": null,
+        "coordinate_precision": null,
+        "names": [
+          {
+            "name": "Piedmont Park",
+            "kind": "spelling"
+          }
+        ]
+      }
+    },
+    "year": {
+      "id": "year_2sh9zwk07sczw54a29atnkxt10",
+      "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+      "show_count": 112,
+      "source_count": 329,
+      "duration": 1894869,
+      "avg_duration": 6736.7236,
+      "avg_rating": 8.953999,
+      "year": "1969",
+      "created_at": "2018-10-23T07:01:01.785875Z",
+      "updated_at": "2026-09-07T14:10:43Z"
+    },
+    "tour": {
+      "id": "tour_6s5scd4m3jar2z3s2rknje9nvv",
+      "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+      "show_count": 1791,
+      "start_date": "1965-12-04T08:00:00Z",
+      "end_date": "1995-07-09T07:00:00Z",
+      "name": "Not Part of a Tour",
+      "slug": "not-part-of-a-tour",
+      "upstream_identifier": "Not Part of a Tour",
+      "created_at": "2017-12-16T10:39:50.97883Z",
+      "updated_at": "2017-05-17T13:07:54Z"
+    },
+    "era": null
+  },
+  {
+    "id": "show_0zsenhejxqnt8deabzn5ce3w93",
+    "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+    "year_id": "year_47bwc1mrpq3hh21gjybbjpcmmp",
+    "tour_id": null,
+    "date": "1975-07-07T07:00:00Z",
+    "display_date": "1975-07-07",
+    "avg_rating": 8.0,
+    "avg_duration": 6636.0,
+    "most_recent_source_updated_at": "2019-03-23T23:36:12Z",
+    "has_soundboard_source": true,
+    "has_streamable_flac_source": true,
+    "source_count": 2,
+    "created_at": "2018-10-23T07:00:49.513477Z",
+    "updated_at": "2019-03-23T23:36:12Z",
+    "imported_venue": {
+      "show_count": 8,
+      "id": "imported_venue_1x7czcftp65x6gz5dddh55vv9s",
+      "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+      "latitude": null,
+      "longitude": null,
+      "name": "Ace's Studio",
+      "location": "Mill Valley, CA",
+      "upstream_identifier": "Ace's StudioMill Valley, CA",
+      "slug": "aces-studio",
+      "past_names": null,
+      "created_at": "2017-12-16T09:28:43.478681Z",
+      "updated_at": "2017-04-17T17:25:48Z"
+    },
+    "artist_venue": {
+      "id": "artist_venue_vn3rdahx",
+      "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+      "artist_show_count": 12,
+      "created_at": "2026-10-30T19:25:55.608123Z",
+      "updated_at": "2026-10-30T19:25:55.608123Z",
+      "venue": {
+        "id": "venue_bsdj2nq5",
+        "global_show_count": 12,
+        "name": "Ace's",
+        "kind": "site",
+        "parent_id": null,
+        "city": "Mill Valley",
+        "region": "CA",
+        "country": "US",
+        "latitude": null,
+        "longitude": null,
+        "coordinate_precision": null,
+        "names": [
+          {
+            "name": "Ace's",
+            "kind": "short"
+          },
+          {
+            "name": "Ace's Studio",
+            "kind": "spelling"
+          }
+        ]
+      }
+    },
+    "year": {
+      "id": "year_47bwc1mrpq3hh21gjybbjpcmmp",
+      "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
+      "show_count": 25,
+      "source_count": 63,
+      "duration": 438509,
+      "avg_duration": 8758.413,
+      "avg_rating": 8.406416,
+      "year": "1975",
+      "created_at": "2018-10-23T07:01:01.785875Z",
+      "updated_at": "2026-03-11T21:33:41Z"
+    },
+    "tour": null,
+    "era": null
+  }
+]

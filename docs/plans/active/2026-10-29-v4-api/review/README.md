@@ -5,6 +5,9 @@ Start the API with `./local-dev/v4-review/run.sh`, then open
 The [local setup](../../../../../local-dev/v4-review/README.md) explains startup,
 captures, the materialized counts, and restoring local approval flags.
 
+The [date and recent browsing walkthrough](discovery-browsing.md) connects the
+new discovery lists to full playback, with exact query and mobile apply rules.
+
 The current review includes a [song-to-playback journey](song-source-journey.md)
 as well as stored artist–venue identities and two explicit venue count scopes.
 Song discovery keeps exact recording matches separate from imported setlist
@@ -17,7 +20,7 @@ shared venue across approved-read artists. The old flat `show.venue` is removed.
 The same relationship metadata appears in show summaries, full shows, canonical
 artist-list children, and direct artist venue detail. Only detail adds complete `shows`.
 
-The local host now serves 26 review routes (25 GETs and one POST). Venue and song detail destinations
+The local host now serves 39 review routes (38 GETs and one POST). Venue and song detail destinations
 return metadata and complete `shows` together. Direct
 lookups use the resource's ID kind; there is no returned detail URL. Compact
 browse children stay compact. The [contracts](../contracts.md) define replacement

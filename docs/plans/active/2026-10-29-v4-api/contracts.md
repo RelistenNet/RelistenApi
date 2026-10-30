@@ -167,7 +167,7 @@ Alec expanded C1 to review navigation before auth or mobile work. These reads
 are now part of the local checkpoint:
 
 - `GET /api/v4/artists` and `/artists/{artistId}` return artist identity,
-  counts, capabilities and provider assignments. `capabilities.normalization`
+  counts, features and provider assignments. `features.normalization`
   means approved normalized reads; it does not claim complete coverage. Provider
   names stay open strings, including unknown imported providers. Numeric feature
   and provider-row IDs are not public identities. `featured` retains the imported
@@ -713,6 +713,55 @@ than silently switching to a client-local or new hardcoded clock. Callers can
 continue sending explicit month/day. Recent-update sorting remains imported
 recording changes.
 
+### Date and recent show browsing
+
+These 13 operations are implemented. All lists contain `ShowSummaryResource`,
+with the same imported venue, optional `artist_venue`, and parent typed IDs as
+artist/year browsing. Artists remain in the separately cached artist list.
+
+- `/shows/today` and `/artists/{artistId}/shows/today` accept optional `month`
+  (1–12) and `day` (1–31). Missing components use `CURRENT_DATE` in the read
+  session. `/shows/on-date` and the artist-scoped equivalent require both.
+  Match the stored show date across all years; order by `display_date` ascending,
+  then show UUID. Explicit invalid calendar pairs return 422; February 29 is valid.
+- `/artists/{artistId}/shows/by-date/{showDate}` returns the full show hierarchy
+  for that exact imported `display_date`, including partial labels such as
+  `1995-12-xx`. It is artist-scoped and has the same response as `/shows/{showId}`.
+- `/shows/recently-performed` and `/shows/recently-updated`, and their
+  artist-scoped equivalents, accept positive `shows` and `days`. With neither,
+  return 25. Without `days`, cap `shows` at 250. With `days`, ignore `shows`, cap
+  the window at 90 days, and return all matches strictly after database midnight
+  minus that window. Performed uses `shows.date` and descending `display_date`;
+  updated uses imported `shows.updated_at` for both filtering and sorting.
+  Global routes accept repeated typed `artist_ids` query parameters; omitted or
+  empty means all artists. An unknown, well-formed filter ID contributes no matches.
+- `/shows/recently-added` and its artist-scoped equivalent accept `limit=20`
+  (positive, capped at 200), nonnegative optional `previous_days`, and `sort_by`
+  (`created_at` or `updated_at`, default `created_at`). Read stored
+  `show_source_information.max_created_at` or `.max_updated_at`, respectively,
+  in descending order. With `previous_days`, include timestamps at or after
+  database midnight minus that window; the limit still applies. No recording
+  aggregate means no match. Windows extending before year 1 saturate at that
+  earliest representable catalog timestamp. This differs from imported-show
+  update order above.
+- `/artists/{artistId}/shows/top?limit=25` returns weighted-source rating order,
+  highest first, with null ratings last. `limit` must be positive. All descending
+  lists break ties by show UUID ascending for stable ETags.
+- `/artists/{artistId}/shows/random` returns one full show hierarchy. Unknown or
+  empty artists return 404. The result is `no-store`, has no ETag, and ignores
+  conditional cache validators. Ordinary lists and exact-date details use ETags.
+
+Known empty artist lists return `[]`; unknown artist paths return 404. Malformed
+IDs and invalid query values return 422 ProblemDetails with `no-store`.
+Normalization-only corrections can change returned metadata and ETags, but do
+not change imported date/update/rating rank. GETs never refresh stored aggregates.
+
+Mobile replaces only the cached membership of each exact discovery URL/query,
+including empty lists, and upserts returned show summaries. A limited or filtered
+list never removes shows from the artist snapshot, detail memberships, or personal
+library. Full exact-date and random responses apply the existing `full_show`
+replacement policy to the selected show; random carries no saved validator.
+
 `POST /api/v4/live/play` uses JSON `{ track_id, app_type, client_uuid? }`.
 `client_uuid` retains optional caller-supplied telemetry identity and is not
 authenticated account identity. History uses `after_sequence` and current limit
@@ -720,7 +769,7 @@ bounds; event sequence is not a prefixed catalog ID. Ranking/recent bounds and
 supported sort/window choices are listed in the coverage tables; invalid enum
 values are 422 rather than silently selecting a different sort.
 
-Artist create/update accepts v4 artist fields, embedded capabilities and provider-
+Artist create/update accepts v4 artist fields, embedded features and provider-
 qualified upstream assignments. Numeric database IDs are not writable identities.
 PUT route identity is authoritative; reject a conflicting body ID. Save the
 artist/features/upstream assignments in one `CatalogImportTransaction`. Keep
