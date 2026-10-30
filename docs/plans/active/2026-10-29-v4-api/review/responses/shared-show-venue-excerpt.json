@@ -4,6 +4,7 @@
   "date": "1978-07-07T07:00:00Z",
   "display_date": "1978-07-07",
   "imported_venue": {
+    "show_count": 20,
     "id": "imported_venue_2gmztrmy1hazzhf34wmqv23acm",
     "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
     "latitude": null,

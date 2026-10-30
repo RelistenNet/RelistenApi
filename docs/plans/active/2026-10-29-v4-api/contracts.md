@@ -236,6 +236,13 @@ venue observation even when its show's assignment differs.
 
 ### Count ownership and freshness
 
+Every `ImportedVenueResource` includes `show_count`, including those embedded in
+shows, sources, and browse entries. It counts all show-level assignments to that
+imported venue for its artist. A source's own venue observation does not add a
+show to the count, so a source-only imported venue can have `show_count: 0`.
+Store this full count on the imported entity; it has the same meaning wherever
+that entity appears.
+
 `artist_show_count` comes from `norm.artist_venues`. It counts the artist's shows
 at the canonical venue across all years, not just the current response's shows.
 `global_show_count` sums those stored counts across artists whose
@@ -256,7 +263,9 @@ outside the represented contract.
 
 Canonical artist lists use positive stored relationships. Zero-count rows retain
 their IDs in storage while their parents exist and can be returned by artist detail.
-Imported fallback groups preserve shows without an available approved relationship.
+Imported browse entries keep shows without an available approved relationship
+reachable. Each imported entry represents its full imported show collection;
+with partial normalization, it can overlap canonical entries.
 Never derive these counts from mobile's partial show cache or sum imported venue
 counters. One imported row can contribute shows to several canonical places.
 
@@ -264,13 +273,20 @@ counters. One imported row can contribute shows to several canonical places.
 
 `GET /artists/{artistId}/venues` returns `ArtistVenueEntryResource[]`. Each entry
 has `kind` (`artist_venue` or `imported_venue`), nullable `artist_venue`, nullable
-`imported_venue`, and nullable `fallback_show_count`; exactly one target is
-populated. A canonical target is an `ArtistVenueResource`, with
-`fallback_show_count: null`. An imported target is the base imported venue
-resource, with `fallback_show_count` counting only shows in that fallback group.
-That subset can be smaller than the imported row's full show collection. Keep the
-count on the query entry; do not write it to the imported entity's full
-`show_count`. The wrapper owns no venue identity. Sort by target name, then ID.
+`imported_venue`; exactly one target is populated. A canonical target is an
+`ArtistVenueResource`. An imported target includes `show_count`, counting all
+shows with that imported venue assignment for the artist. Include an imported
+entry if at least one of its shows lacks an available approved relationship.
+Opening that entry returns its complete imported collection, including any shows
+also represented by canonical entries. Its count matches imported list and
+detail routes. The wrapper owns no venue identity or count. Sort by target name,
+then ID.
+
+Clients use this list for every artist; the server applies approval and partial
+coverage. Navigate `artist_venue` entries using `artist_venue.venue.id` at
+`/artists/{artistId}/venues/{venueId}` and `imported_venue` entries using
+`imported_venue.id` at `/artists/{artistId}/imported-venues/{importedVenueId}`.
+Artist feature flags do not select the client route.
 
 `GET /artists/{artistId}/venues/{venueId}` returns the direct
 `ArtistVenueResource`, identical to the canonical child in the list and matching
@@ -290,7 +306,9 @@ with normalization disabled. Global metadata does not require artist membership
 or approval.
 
 `GET /artists/{artistId}/imported-venues` returns flat imported venue resources
-with `show_count`, including unused rows with zero shows.
+with `show_count`, including unused rows with zero shows and rows fully covered
+by normalization. This is the full imported inventory, not the default browse
+list for artists without normalization.
 `GET /artists/{artistId}/imported-venues/{importedVenueId}` returns the imported
 fields plus `show_count` and `shows`. Both count and detail use `shows.artist_id`
 and `shows.venue_id`; a source's different imported venue does not create show
@@ -645,8 +663,10 @@ uses the server's `artist_venue_` key, links the artist to one shared venue, and
 stores `artist_show_count`. `NormalizedVenue` stores `global_show_count`; never
 overwrite it with an artist count, a filtered collection length, or a partial
 mobile cache total. A show links to its `ArtistVenue` when supplied. Query entries
-discriminate the relationship from imported fallback and store the fallback subset
-count separately from the imported venue's full `show_count`. Keep one canonical
+discriminate the relationship from imported fallback. Store the imported target's
+full `show_count` on its imported venue row; browse and detail use the same count.
+Do not sum mixed browse-entry counts to infer an artist total: partially
+normalized imported collections can overlap canonical ones. Keep one canonical
 venue row shared across artists and preserve the imported venue rows for display.
 
 Add an applied query state scoped by endpoint/filters and account where relevant.

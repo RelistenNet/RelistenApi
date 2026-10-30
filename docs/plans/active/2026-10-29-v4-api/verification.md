@@ -487,7 +487,9 @@ Implementation commit: `dfaf7e580`. Verification completed on 2026-10-30:
 - Solution build and repository CSharpier checks passed. Existing dependency-audit
   and nullable-reference warnings remain.
 - Focused HTTP, ID, and Swagger checks: 79 passed, including five new stored-count
-  contracts and the imported fallback subset check.
+  contracts and the then-current imported subset-count contract. That count
+  contract was later replaced by full imported `show_count` in browse entries;
+  use the current contracts and latest verification for that behavior.
 - Combined API, v4, normalization, migration, ingestion, catalog, ID, and Swagger
   checks: 209 passed; two opt-in model/corpus checks skipped.
 - Normalization library: 366 passed.
@@ -506,3 +508,44 @@ Live examples and curated responses are linked from the
 [review overview](review/README.md). Full captures, response headers, and timings
 remain in the ignored `local-dev/v4-review/.output/` directory. Production and
 mobile/account rollout remain outside this local response review.
+
+
+## Full imported venue counts, 2026-10-30
+
+Imported venues now carry the same full `show_count` in mixed browse entries,
+raw inventory, detail, show/year metadata, and sources. The browse wrapper has
+no count field. Include an imported entry when any show needs an imported
+fallback, but open its full collection; partial normalization can therefore
+produce overlap with canonical entries. Mobile must not sum these browse rows.
+
+Verification completed locally:
+
+- All 65 targeted v4 HTTP and Swagger checks passed. The partial
+  fixture has two shows at one imported venue, one normalized: browse, raw
+  inventory, show metadata, and imported detail all report two. Assignment-only
+  normalization changes preserve the full imported count.
+- A new HTTP test moves the normalized show to another imported venue without
+  changing imported timestamps. The remaining browse entry stays present, its
+  full count changes from two to one, and its ETag changes. Detail, source,
+  year, and show reads agree; restoring the assignment recovers the count of two.
+- Source-only venue observations report zero shows. Missing materialized pairs,
+  disabled normalization, broken merge chains, and unused imported rows retain
+  their existing fallback/empty-result behavior.
+- The local API was restarted through `local-dev/v4-review/run.sh`. All 46
+  real-data capture requests succeeded. Grateful Dead's 544 mixed entries omit
+  the removed wrapper count, and every imported child exactly matches its entry
+  in the full imported inventory. A selected detail count matches its show list.
+- Live OpenAPI exposes an integer `ImportedVenueResource.show_count`; the
+  redundant count-only resource and wrapper count are absent. Revalidating a
+  pre-change response returns 200 with a new ETag; revalidating the new response
+  returns 304.
+- The full imported inventory count query used the existing
+  `(artist_id, venue_id)` index with zero heap fetches for Grateful Dead's 2,003
+  imported venues. One local `EXPLAIN ANALYZE` completed in 10.211 ms; this is a
+  local query measurement, not a production latency target.
+- Two independent reviews found no unresolved correctness or readability issues.
+  Repository CSharpier, whitespace, and review-script syntax checks passed.
+  The ordered checksum of stored artist–venue rows was unchanged after HTTP reads.
+
+The updated curated response examples are in [review/responses](review/responses/).
+Mobile persistence changes remain planned; no production catalog data changed.

@@ -14,11 +14,12 @@ namespace Relisten.Catalog;
 public sealed class CatalogVenueReader(
     DbService db,
     CatalogShowMetadataReader showMetadata,
+    CatalogImportedVenueMetadataReader importedVenueMetadata,
     CatalogVenueMetadataReader venueMetadata,
     CatalogArtistVenueMetadataReader artistVenueMetadata
 )
 {
-    /// <summary>Stored canonical groups plus imported fallback groups for unrepresented shows.</summary>
+    /// <summary>Canonical groups plus full imported collections needed to reach unrepresented shows.</summary>
     public async Task<IReadOnlyList<CatalogArtistVenueEntry>?> ReadArtistVenues(
         Guid artistUuid,
         CancellationToken cancellationToken = default
@@ -106,13 +107,13 @@ public sealed class CatalogVenueReader(
             )
             {
                 relationship.Venue = venue;
-                entries.Add(new(null, relationship, null));
+                entries.Add(new(relationship, null));
             }
         }
         return entries;
     }
 
-    private static async Task<IReadOnlyList<CatalogArtistVenueEntry>> ReadImportedFallbackEntries(
+    private async Task<IReadOnlyList<CatalogArtistVenueEntry>> ReadImportedFallbackEntries(
         CatalogReadSession session,
         Guid artistUuid,
         IReadOnlyList<ArtistShowVenue> links,
@@ -121,7 +122,7 @@ public sealed class CatalogVenueReader(
         CancellationToken cancellationToken
     )
     {
-        var importedCounts = links
+        var importedIds = links
             .Where(link =>
                 link.imported_venue_id.HasValue
                 && (
@@ -130,25 +131,20 @@ public sealed class CatalogVenueReader(
                     || !relationships.ContainsKey((artistUuid, venue.id))
                 )
             )
-            .GroupBy(link => link.imported_venue_id!.Value)
-            .ToDictionary(group => group.Key, group => group.Count());
-        if (importedCounts.Count == 0)
+            .Select(link => link.imported_venue_id!.Value)
+            .Distinct()
+            .ToArray();
+        if (importedIds.Length == 0)
         {
             return [];
         }
 
-        var imported = await session.Connection.QueryAsync<CatalogImportedVenue>(
-            session.Command(
-                """
-                SELECT v.*,a.uuid artist_uuid FROM venues v JOIN artists a ON a.id=v.artist_id
-                WHERE a.uuid=@artistUuid AND v.id=ANY(@ids)
-                """,
-                new { artistUuid, ids = importedCounts.Keys.ToArray() },
-                cancellationToken
-            )
-        );
+        // Include the whole imported collection when any of its shows needs a fallback.
+        // Its count and detail remain stable as individual shows gain normalization.
+        var imported = await importedVenueMetadata.Read(session, importedIds, cancellationToken);
         return imported
-            .Select(venue => new CatalogArtistVenueEntry(importedCounts[venue.id], null, venue))
+            .Where(venue => venue.artist_uuid == artistUuid)
+            .Select(venue => new CatalogArtistVenueEntry(null, venue))
             .ToArray();
     }
 
@@ -231,15 +227,8 @@ public sealed class CatalogVenueReader(
         return (
             await session.Connection.QueryAsync<CatalogImportedVenue>(
                 session.Command(
-                    """
-                    SELECT v.*,a.uuid artist_uuid,COALESCE(sc.show_count,0)::int show_count
-                    FROM venues v JOIN artists a ON a.id=v.artist_id
-                    LEFT JOIN (
-                      SELECT venue_id,count(*)::int show_count FROM shows
-                      WHERE artist_id=@artistId GROUP BY venue_id
-                    ) sc ON sc.venue_id=v.id
-                    WHERE v.artist_id=@artistId ORDER BY v.name,v.uuid
-                    """,
+                    CatalogImportedVenueMetadataReader.Select
+                        + " WHERE v.artist_id=@artistId ORDER BY v.name,v.uuid",
                     new { artistId },
                     cancellationToken
                 )
@@ -257,7 +246,8 @@ public sealed class CatalogVenueReader(
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
         var venue = await session.Connection.QuerySingleOrDefaultAsync<CatalogImportedVenue>(
             session.Command(
-                "SELECT v.*,a.uuid artist_uuid FROM venues v JOIN artists a ON a.id=v.artist_id WHERE a.uuid=@artistUuid AND v.uuid=@venueUuid",
+                CatalogImportedVenueMetadataReader.Select
+                    + " WHERE a.uuid=@artistUuid AND v.uuid=@venueUuid",
                 new { artistUuid, venueUuid },
                 cancellationToken
             )

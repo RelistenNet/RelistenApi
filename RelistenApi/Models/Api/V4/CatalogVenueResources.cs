@@ -19,25 +19,16 @@ public sealed class ArtistVenueResource
     public VenueResource Venue { get; init; } = null!;
 }
 
-/// <summary>A browse target: a stored artist/place relationship or an imported fallback group.</summary>
-/// <param name="FallbackShowCount">Show membership of this fallback group, independent of the imported venue's full collection.</param>
+/// <summary>A browse target: a stored artist/place relationship or a complete imported venue collection.</summary>
 [JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
 public sealed record ArtistVenueEntryResource(
     VenueEntryKind Kind,
     ArtistVenueResource? ArtistVenue,
-    ImportedVenueResource? ImportedVenue,
-    int? FallbackShowCount
+    ImportedVenueResource? ImportedVenue
 );
 
 [JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
-public record ImportedVenueWithShowCountResource : ImportedVenueResource
-{
-    /// <summary>Distinct catalog shows whose show-level venue is this imported row.</summary>
-    public int ShowCount { get; init; }
-}
-
-[JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
-public sealed record ImportedVenueWithShowsResource : ImportedVenueWithShowCountResource
+public sealed record ImportedVenueWithShowsResource : ImportedVenueResource
 {
     /// <summary>The complete artist-owned show collection for this imported row.</summary>
     public IReadOnlyList<ShowSummaryResource> Shows { get; init; } = [];

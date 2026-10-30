@@ -123,7 +123,7 @@ public sealed class CatalogVenuesController(
     }
 
     [HttpGet("artists/{artistId}/imported-venues")]
-    [ProducesResponseType(typeof(ImportedVenueWithShowCountResource[]), 200)]
+    [ProducesResponseType(typeof(ImportedVenueResource[]), 200)]
     public Task<IActionResult> ImportedVenues(
         string artistId,
         CancellationToken cancellationToken
@@ -133,7 +133,7 @@ public sealed class CatalogVenuesController(
             ArtistId.Prefix,
             async artist =>
                 (await reader.ReadImportedVenues(artist, cancellationToken))
-                    ?.Select(V4CatalogProjection.ImportedVenueWithShowCount)
+                    ?.Select(V4CatalogProjection.ImportedVenue)
                     .ToArray()
         );
 

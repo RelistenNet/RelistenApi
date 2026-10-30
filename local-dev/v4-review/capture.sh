@@ -107,7 +107,13 @@ journey_track = next(track for group in venue_source['sets'] for track in group[
 capture('venue-journey-track', '/source-tracks/' + journey_track['id'], 'Venue journey: open one playable track')
 
 raw_entry = next(entry for entry in entries if entry['imported_venue'])
-capture('unmatched-imported-venue', '/artists/' + artist_id + '/imported-venues/' + raw_entry['imported_venue']['id'], 'Unmatched venue fallback in an approved artist')
+raw_inventory = capture('imported-venues', '/artists/' + artist_id + '/imported-venues', 'Full imported venue inventory, including normalized and unused rows')
+raw_by_id = {venue['id']: venue for venue in raw_inventory}
+assert all('fallback_show_count' not in entry for entry in entries)
+assert all(entry['imported_venue'] == raw_by_id[entry['imported_venue']['id']] for entry in entries if entry['imported_venue'])
+raw_detail = capture('unmatched-imported-venue', '/artists/' + artist_id + '/imported-venues/' + raw_entry['imported_venue']['id'], 'Imported browse target: complete collection including any normalized shows')
+assert raw_entry['imported_venue'] == {key: value for key, value in raw_detail.items() if key != 'shows'}
+assert raw_detail['show_count'] == len(raw_detail['shows'])
 disabled_track = json.loads((out / 'disabled-track.json').read_text())
 disabled_entries = capture('disabled-artist-venues', '/artists/' + disabled_track['artist_id'] + '/venues', 'Unnormalized artist: imported venue browsing')
 disabled_imported = next(entry['imported_venue'] for entry in disabled_entries if entry['imported_venue'])

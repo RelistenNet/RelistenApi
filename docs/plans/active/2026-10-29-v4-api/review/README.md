@@ -38,9 +38,11 @@ list → relationship detail → venue shows → show → source → track. The 
 
 1. Open an artist's venue list. A canonical entry has `kind: "artist_venue"` and
    an `artist_venue` child. Its imported alternative has `kind: "imported_venue"`
-   and a base imported child. Its `fallback_show_count` counts that entry's
-   unmatched subset; canonical entries set it to null. It must not overwrite the
-   imported venue's full `show_count` from imported-venue routes.
+   and an imported child with its full `show_count`, matching imported detail.
+   Imported entries keep unmatched shows reachable, but their full collections
+   can overlap canonical entries during partial normalization. Use this list for
+   every artist; follow each entry's `kind` instead of inspecting feature flags.
+   Embedded imported venues in show/source responses use that same full count.
 2. Open `/artists/{artistId}/venues/{venueId}`. It returns the direct relationship
    resource, identical to the canonical child in the list. Its native short ID
    maps to `norm.artist_venues`; the artist and venue retain their own IDs.

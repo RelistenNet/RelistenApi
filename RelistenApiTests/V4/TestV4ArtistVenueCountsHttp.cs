@@ -203,7 +203,7 @@ public sealed partial class TestV4CatalogHttp
             var entries = (await GetJson(BrowseArtistPath + "/venues")).AsArray();
             entries.Should().ContainSingle();
             entries[0]!["kind"]!.GetValue<string>().Should().Be("imported_venue");
-            entries[0]!["fallback_show_count"]!.GetValue<int>().Should().Be(2);
+            entries[0]!["imported_venue"]!["show_count"]!.GetValue<int>().Should().Be(2);
             using var missing = await http.GetAsync(BrowseArtistPath + "/venues/venue_00000001");
             missing.StatusCode.Should().Be(HttpStatusCode.NotFound);
             (await GetJson(CanonicalVenuePath))["global_show_count"]!

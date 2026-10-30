@@ -30,8 +30,9 @@ Large collections, response headers, and request timings remain in the ignored
    `artist_venue`, and `imported_venue`, with exactly one target populated. A
    canonical entry has `kind: "artist_venue"`; its child owns the stored ID,
    `artist_id`, `artist_show_count`, timestamps, and nested shared venue.
-   Imported children keep base metadata; `fallback_show_count` on the entry
-   counts its unmatched subset. That can differ from the raw row's full count.
+   Imported children include their full `show_count`, matching imported detail.
+   The server handles approval and partial coverage; clients use this list for
+   every artist and follow the returned `kind`.
 2. For a canonical child, read `/api/v4/artists/{artistId}/venues/{venueId}`.
    The response is the direct relationship resource, equal to the list's child.
    Read `/api/v4/venues/{venueId}` for the shared venue alone: global count,
@@ -63,7 +64,10 @@ For an `imported_venue` browse entry, open
 the imported resource fields plus `show_count` and `shows`. It uses the show's
 artist and imported venue assignment, even when one of those shows has a
 `artist_venue` link. A recording's different venue observation does not add a show
-to this collection.
+to this collection. The count matches the imported child in the browse list.
+That child appears when at least one show needs imported fallback, but opens the
+full imported collection. Its shows can therefore overlap canonical entries
+during partial normalization; do not sum mixed browse counts as an artist total.
 
 The separate `/api/v4/artists/{artistId}/imported-venues` list returns all raw
 venue rows for that artist, including unused rows with `show_count: 0`. V4 derives

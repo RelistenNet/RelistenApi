@@ -107,6 +107,8 @@ public sealed class TrackResource
 [JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
 public record ImportedVenueResource
 {
+    /// <summary>All catalog shows assigned to this imported row, including normalized shows.</summary>
+    public int ShowCount { get; init; }
     public ImportedVenueId Id { get; init; }
     public ArtistId ArtistId { get; init; }
     public double? Latitude { get; init; }
