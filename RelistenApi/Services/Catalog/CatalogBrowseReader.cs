@@ -77,6 +77,33 @@ public sealed class CatalogBrowseReader(DbService db, CatalogShowMetadataReader 
         ).ToArray();
     }
 
+    /// <summary>Eras are ordered artist-owned metadata, without a separate public identity.</summary>
+    public async Task<IReadOnlyList<CatalogEra>?> ReadEras(
+        Guid artistUuid,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await using var session = await CatalogReadSession.Open(db, cancellationToken);
+        if (!await ArtistExists(session, artistUuid, cancellationToken))
+        {
+            return null;
+        }
+
+        return (
+            await session.Connection.QueryAsync<CatalogEra>(
+                session.Command(
+                    """
+                    SELECT e."order",e.name FROM eras e JOIN artists a ON a.id=e.artist_id
+                    WHERE a.uuid=@artistUuid
+                    ORDER BY e."order" NULLS LAST,e.name COLLATE "C" NULLS LAST,e.id
+                    """,
+                    new { artistUuid },
+                    cancellationToken
+                )
+            )
+        ).ToArray();
+    }
+
     /// <summary>Both typed-year and calendar-year lookups are scoped to their owning artist.</summary>
     public async Task<CatalogYearDetail?> ReadYear(
         Guid artistUuid,

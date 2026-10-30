@@ -212,8 +212,11 @@ public sealed class CatalogYear : CatalogTimestamps
 
 public sealed class CatalogTour : CatalogTimestamps
 {
+    public long id { get; set; }
+    public long artist_id { get; set; }
     public Guid uuid { get; set; }
     public Guid artist_uuid { get; set; }
+    public int show_count { get; set; }
     public DateTime? start_date { get; set; }
     public DateTime? end_date { get; set; }
     public string name { get; set; } = null!;
