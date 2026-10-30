@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using FluentAssertions;
 using Relisten.Normalization;
 using Relisten.Normalization.Venues;
@@ -15,7 +17,7 @@ public class TestVenueAnswers
         var garden = new CatalogueVenue(
             VenueId.New(),
             "Madison Square Garden",
-            "site",
+            VenueKind.Site,
             null,
             "New York",
             "NY",
@@ -47,6 +49,28 @@ public class TestVenueAnswers
         $$"""{"new_venues": {{newVenues}}, "spellings": {{spellings}}, "known_names": {{known}}}""";
 
     [Test]
+    public void VenueRecordsReadHistoricalPayloadsAndKeepTheirWireValues()
+    {
+        var id = VenueId.New();
+        var venue = JsonSerializer.Deserialize<VenueRecord>(
+            $$"""{"Id":"{{id}}","Name":"Theater","Kind":"room","CoordinatePrecision":"venue"}"""
+        )!;
+        var name = JsonSerializer.Deserialize<VenueNameRecord>(
+            $$"""{"VenueId":"{{id}}","Name":"The Garden","Kind":"short"}"""
+        )!;
+
+        venue.Kind.Should().Be(VenueKind.Room);
+        venue.CoordinatePrecision.Should().Be(VenueCoordinatePrecision.Venue);
+        name.Kind.Should().Be(VenueNameKind.Short);
+
+        var venueJson = JsonSerializer.SerializeToNode(venue)!;
+        var nameJson = JsonSerializer.SerializeToNode(name)!;
+        ((string?)venueJson["Kind"]).Should().Be("room");
+        ((string?)venueJson["CoordinatePrecision"]).Should().Be("venue");
+        ((string?)nameJson["Kind"]).Should().Be("short");
+    }
+
+    [Test]
     public void AValidAnswerPlacesSpellingsOnKnownAndNewVenues()
     {
         var (request, _) = Request();
@@ -67,12 +91,12 @@ public class TestVenueAnswers
 
         answer.Spellings.Values.Select(s => s.Venue).Should().Equal("v1", "n1", "n2");
         var theater = answer.NewVenues.Single(n => n.Ref == "n1");
-        theater.Kind.Should().Be("room");
+        theater.Kind.Should().Be(VenueKind.Room);
         theater.Names.Single().ValidTo.Should().Be(new DateOnly(2018, 9, 1));
         // A short name has no dates.
         answer
             .NewVenues.Single(n => n.Ref == "n2")
-            .Names.Single(n => n.Kind == "short")
+            .Names.Single(n => n.Kind == VenueNameKind.Short)
             .ValidFrom.Should()
             .BeNull();
     }
@@ -145,7 +169,7 @@ public class TestVenueAnswers
         var oakland = new CatalogueVenue(
             VenueId.New(),
             "Fox Theatre",
-            "site",
+            VenueKind.Site,
             null,
             "Oakland",
             "CA",
@@ -178,7 +202,7 @@ public class TestVenueAnswers
             request
         );
 
-        answer.NewVenues.Single().Kind.Should().Be("room");
+        answer.NewVenues.Single().Kind.Should().Be(VenueKind.Room);
     }
 
     [TestCase("not json")]
@@ -276,7 +300,7 @@ public class TestVenueAnswers
         var oakland = new CatalogueVenue(
             VenueId.New(),
             "Fox Theatre",
-            "site",
+            VenueKind.Site,
             null,
             "Oakland",
             "CA",
@@ -307,11 +331,11 @@ public class TestVenueAnswers
     [Test]
     public void AnOfficialPeriodThatEndsBeforeItStartsIsNoName()
     {
-        var node = System.Text.Json.Nodes.JsonNode.Parse(
+        var node = JsonNode.Parse(
             """{"name": "Spectrum", "kind": "official", "from": "2010", "to": "2010"}"""
         )!;
         VenueRequest.Name(VenueId.New(), node).Should().BeNull();
-        var shortName = System.Text.Json.Nodes.JsonNode.Parse(
+        var shortName = JsonNode.Parse(
             """{"name": "MSG", "kind": "short", "from": "1968", "to": null}"""
         )!;
         VenueRequest.Name(VenueId.New(), shortName)!.ValidFrom.Should().BeNull();
@@ -323,7 +347,7 @@ public class TestVenueAnswers
         var site = new CatalogueVenue(
             VenueId.New(),
             "Three Sisters Park",
-            "site",
+            VenueKind.Site,
             null,
             "Chillicothe",
             "IL",
@@ -332,7 +356,7 @@ public class TestVenueAnswers
         var room = new CatalogueVenue(
             VenueId.New(),
             "Main Stage",
-            "room",
+            VenueKind.Room,
             site.Id,
             "Chillicothe",
             "IL",

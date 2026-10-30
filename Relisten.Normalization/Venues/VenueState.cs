@@ -30,7 +30,7 @@ public sealed record LegacyVenue(
 public sealed record CatalogueVenue(
     VenueId Id,
     string Name,
-    string Kind,
+    VenueKind Kind,
     VenueId? ParentId,
     string? City,
     string? Region,
@@ -134,7 +134,7 @@ public sealed partial class VenueState
             await connection.QueryAsync<(
                 VenueId Id,
                 string Name,
-                string Kind,
+                VenueKind Kind,
                 VenueId? Parent,
                 string? City,
                 string? Region,

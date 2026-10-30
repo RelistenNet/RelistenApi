@@ -42,7 +42,7 @@ public sealed record ExistingPart(
 
 public sealed record CatalogueSetlistSong(Guid Uuid, string Name, string Key, int Plays);
 
-public sealed record CatalogueSong(SongId Id, string Name, string? Kind);
+public sealed record CatalogueSong(SongId Id, string Name, SongKind? Kind);
 
 /// One artist's catalogue as it stands: its tracks (only the unresolved ones unless every
 /// track is asked for, which a rebuild of derived rows needs), its unmapped upstream setlist

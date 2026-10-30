@@ -13,7 +13,7 @@ public sealed record PartDecision(
     IReadOnlyList<SongId> Songs,
     float Confidence,
     string Basis = TrackBasis.Ruling,
-    string? Qualifier = null
+    TrackQualifier? Qualifier = null
 )
 {
     /// For a ruling kept by position: the normalised text it was written for.
@@ -59,7 +59,7 @@ public static class TrackMatcher
         var typoIndex = known.Keys.GroupBy(k => k[0]).ToDictionary(g => g.Key, g => g.ToList());
         var cache = new Dictionary<TitlePart, PartDecision?>();
 
-        PartDecision? Lookup(string key, string? qualifier)
+        PartDecision? Lookup(string key, TrackQualifier? qualifier)
         {
             key = TrackNumberFold.Fold(
                 key,
@@ -206,13 +206,15 @@ public static class TrackMatcher
                 }
 
                 var qualifiers =
-                    decision.Qualifier == null || part.Qualifiers.Contains(decision.Qualifier)
+                    decision.Qualifier is not { } qualifier || part.Qualifiers.Contains(qualifier)
                         ? part.Qualifiers
-                        : [.. part.Qualifiers, decision.Qualifier];
+                        : [.. part.Qualifiers, qualifier];
                 // A part naming several songs (an unparsed "space wrangler walkin") becomes one
                 // record per song, each segueing into the next; a soundcheck covers them all.
-                IReadOnlyList<string> everySong = qualifiers.Contains("soundcheck")
-                    ? ["soundcheck"]
+                IReadOnlyList<TrackQualifier> everySong = qualifiers.Contains(
+                    TrackQualifier.Soundcheck
+                )
+                    ? [TrackQualifier.Soundcheck]
                     : [];
                 var songs =
                     decision.Songs.Count == 0
