@@ -244,7 +244,7 @@ public sealed class CatalogBrowseReader(DbService db, CatalogShowMetadataReader 
         return shows;
     }
 
-    private static Task<bool> ArtistExists(
+    internal static Task<bool> ArtistExists(
         CatalogReadSession session,
         Guid artistUuid,
         CancellationToken cancellationToken
@@ -268,8 +268,8 @@ public sealed class CatalogBrowseReader(DbService db, CatalogShowMetadataReader 
             return;
         }
         var ids = artists.Select(x => x.id).ToArray();
-        var capabilities = (
-            await session.Connection.QueryAsync<CatalogCapabilities>(
+        var features = (
+            await session.Connection.QueryAsync<CatalogFeatures>(
                 session.Command(
                     "SELECT * FROM features WHERE artist_id=ANY(@ids)",
                     new { ids },
@@ -292,7 +292,7 @@ public sealed class CatalogBrowseReader(DbService db, CatalogShowMetadataReader 
         ).ToLookup(x => x.artist_id);
         foreach (var artist in artists)
         {
-            artist.Capabilities = capabilities.GetValueOrDefault(artist.id) ?? new();
+            artist.Features = features.GetValueOrDefault(artist.id) ?? new();
             artist.UpstreamSources = providers[artist.id].ToList();
         }
     }

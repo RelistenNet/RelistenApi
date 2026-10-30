@@ -16,11 +16,11 @@ public sealed class CatalogArtist : CatalogTimestamps
     public int featured { get; set; }
     public int show_count { get; set; }
     public int source_count { get; set; }
-    public CatalogCapabilities Capabilities { get; set; } = new();
+    public CatalogFeatures Features { get; set; } = new();
     public List<CatalogProviderAssignment> UpstreamSources { get; set; } = [];
 }
 
-public sealed class CatalogCapabilities
+public sealed class CatalogFeatures
 {
     public long artist_id { get; set; }
     public bool descriptions { get; set; }

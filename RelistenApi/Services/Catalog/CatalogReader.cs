@@ -24,10 +24,51 @@ public sealed class CatalogReader(
     )
     {
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
+        return await ReadShow(session, "s.uuid=@uuid", new { uuid }, cancellationToken);
+    }
+
+    /// <summary>Exact imported display-date lookup, scoped to the owning artist.</summary>
+    public async Task<CatalogShow?> ReadShowByDate(
+        Guid artistUuid,
+        string showDate,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await using var session = await CatalogReadSession.Open(db, cancellationToken);
+        return await ReadShow(
+            session,
+            "a.uuid=@artistUuid AND s.display_date=@showDate",
+            new { artistUuid, showDate },
+            cancellationToken
+        );
+    }
+
+    /// <summary>Returns one full random show, or null for an unknown/empty artist.</summary>
+    public async Task<CatalogShow?> ReadRandomShow(
+        Guid artistUuid,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await using var session = await CatalogReadSession.Open(db, cancellationToken);
+        return await ReadShow(
+            session,
+            "s.id=(SELECT s.id FROM shows s JOIN artists a ON a.id=s.artist_id WHERE a.uuid=@artistUuid ORDER BY random() LIMIT 1)",
+            new { artistUuid },
+            cancellationToken
+        );
+    }
+
+    private async Task<CatalogShow?> ReadShow(
+        CatalogReadSession session,
+        string predicate,
+        object parameters,
+        CancellationToken cancellationToken
+    )
+    {
         var show = await session.Connection.QuerySingleOrDefaultAsync<CatalogShow>(
             session.Command(
-                CatalogShowMetadataReader.ShowSelect + " WHERE s.uuid=@uuid",
-                new { uuid },
+                CatalogShowMetadataReader.ShowSelect + " WHERE " + predicate,
+                parameters,
                 cancellationToken
             )
         );
