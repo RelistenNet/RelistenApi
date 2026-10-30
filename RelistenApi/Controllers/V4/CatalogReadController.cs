@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
@@ -15,6 +16,7 @@ namespace Relisten.Controllers.V4;
 [Produces("application/json")]
 public sealed class CatalogReadController(
     CatalogReader reader,
+    CatalogSourceReviewReader reviews,
     ILogger<CatalogReadController> logger
 ) : CatalogControllerBase(logger)
 {
@@ -64,5 +66,20 @@ public sealed class CatalogReadController(
                 var track = await reader.ReadTrack(uuid, cancellationToken);
                 return track is null ? null : V4CatalogProjection.Track(track);
             }
+        );
+
+    [HttpGet("sources/{sourceId}/reviews")]
+    [ProducesResponseType(typeof(SourceReviewResource[]), 200)]
+    [ProducesResponseType(typeof(ProblemDetails), 422)]
+    [ProducesResponseType(typeof(ProblemDetails), 404)]
+    [ProducesResponseType(typeof(ProblemDetails), 503)]
+    public Task<IActionResult> Reviews(string sourceId, CancellationToken cancellationToken) =>
+        Read(
+            sourceId,
+            SourceId.Prefix,
+            async uuid =>
+                (await reviews.ReadReviews(uuid, cancellationToken))
+                    ?.Select(V4CatalogProjection.SourceReview)
+                    .ToArray()
         );
 }

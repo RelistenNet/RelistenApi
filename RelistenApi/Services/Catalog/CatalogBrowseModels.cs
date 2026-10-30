@@ -60,3 +60,5 @@ public sealed class CatalogProviderAssignment
 }
 
 public sealed record CatalogYearDetail(CatalogYear Year, IReadOnlyList<CatalogShow> Shows);
+
+public sealed record CatalogTourDetail(CatalogTour Tour, IReadOnlyList<CatalogShow> Shows);

@@ -81,6 +81,19 @@ public static partial class V4CatalogProjection
             Links = value.Links.Select(Link).ToArray(),
         };
 
+    public static SourceReviewResource SourceReview(CatalogSourceReview review) =>
+        new()
+        {
+            Id = new(review.uuid),
+            SourceId = new(review.source_uuid),
+            Rating = review.rating,
+            Title = review.title,
+            Review = review.review,
+            Author = review.author,
+            CreatedAt = review.created_at,
+            UpdatedAt = review.updated_at,
+        };
+
     public static SourceSetResource Set(CatalogSet value) =>
         new()
         {
@@ -296,11 +309,21 @@ public static partial class V4CatalogProjection
             UpdatedAt = value.updated_at,
         };
 
-    public static TourResource Tour(CatalogTour value) =>
+    public static TourResource Tour(CatalogTour value) => ProjectTour<TourResource>(value);
+
+    public static TourWithShowsResource TourWithShows(CatalogTourDetail value) =>
+        ProjectTour<TourWithShowsResource>(value.Tour) with
+        {
+            Shows = value.Shows.Select(ShowSummary).ToArray(),
+        };
+
+    private static T ProjectTour<T>(CatalogTour value)
+        where T : TourResource, new() =>
         new()
         {
             Id = new(value.uuid),
             ArtistId = new(value.artist_uuid),
+            ShowCount = value.show_count,
             StartDate = value.start_date,
             EndDate = value.end_date,
             Name = value.name,

@@ -14,7 +14,8 @@ namespace Relisten.Catalog;
 public sealed class CatalogShowMetadataReader(
     CatalogImportedVenueMetadataReader importedVenueMetadata,
     CatalogVenueMetadataReader venueMetadata,
-    CatalogArtistVenueMetadataReader artistVenueMetadata
+    CatalogArtistVenueMetadataReader artistVenueMetadata,
+    CatalogTourMetadataReader tourMetadata
 )
 {
     public async Task Apply(
@@ -57,19 +58,7 @@ public sealed class CatalogShowMetadataReader(
             .Select(x => x.tour_uuid!.Value)
             .Distinct()
             .ToArray();
-        var tours = (
-            await session.Connection.QueryAsync<CatalogTour>(
-                session.Command(
-                    """
-                    SELECT t.uuid,a.uuid artist_uuid,t.start_date::timestamp start_date,t.end_date::timestamp end_date,
-                           t.name,t.slug,t.upstream_identifier,t.created_at,t.updated_at
-                    FROM tours t JOIN artists a ON a.id=t.artist_id WHERE t.uuid=ANY(@tourUuids)
-                    """,
-                    new { tourUuids },
-                    cancellationToken
-                )
-            )
-        ).ToDictionary(x => x.uuid);
+        var tours = await tourMetadata.Read(session, tourUuids, cancellationToken);
         var showUuids = shows.Select(x => x.uuid).ToArray();
         var eras = (
             await session.Connection.QueryAsync<ShowEra>(

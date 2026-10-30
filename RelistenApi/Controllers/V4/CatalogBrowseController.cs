@@ -73,6 +73,18 @@ public sealed class CatalogBrowseController(
             }
         );
 
+    [HttpGet("{artistId}/eras")]
+    [ProducesResponseType(typeof(EraResource[]), 200)]
+    public Task<IActionResult> Eras(string artistId, CancellationToken cancellationToken) =>
+        Read(
+            artistId,
+            ArtistId.Prefix,
+            async artist =>
+                (await reader.ReadEras(artist, cancellationToken))
+                    ?.Select(V4CatalogProjection.Era)
+                    .ToArray()
+        );
+
     [HttpGet("{artistId}/years/{yearId}")]
     [ProducesResponseType(typeof(YearWithShowsResource), 200)]
     public async Task<IActionResult> Year(

@@ -209,10 +209,13 @@ public record YearResource
 }
 
 [JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
-public sealed class TourResource
+public record TourResource
 {
     public TourId Id { get; init; }
     public ArtistId ArtistId { get; init; }
+
+    /// <summary>Catalog shows assigned to this tour, independent of imported setlist counts.</summary>
+    public int ShowCount { get; init; }
     public DateTime? StartDate { get; init; }
     public DateTime? EndDate { get; init; }
     public string Name { get; init; } = null!;
