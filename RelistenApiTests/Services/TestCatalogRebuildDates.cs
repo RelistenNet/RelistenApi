@@ -5,6 +5,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Relisten;
 using Relisten.Api.Models;
 using Relisten.Data;
+using Relisten.Normalization.Songs;
+using Relisten.Services.Normalization;
 
 namespace RelistenApiTests.Services;
 
@@ -39,7 +41,12 @@ public class TestCatalogRebuildDates
             NullLogger<DbService>.Instance
         );
         redis = new RedisService(RedisService.BuildConfiguration("redis://127.0.0.1:16379"));
-        rebuild = new CatalogRebuildService(db, redis);
+        rebuild = new CatalogRebuildService(
+            db,
+            redis,
+            new SongCounts(new DbServiceNormalizationDatabase(db)),
+            NullLogger<CatalogRebuildService>.Instance
+        );
     }
 
     [OneTimeTearDown]

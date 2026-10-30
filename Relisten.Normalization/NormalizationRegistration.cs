@@ -13,6 +13,7 @@ public static class NormalizationRegistration
         services.AddSingleton<ICatalogueModel, OpenAiCatalogueModel>();
         services.AddScoped<CatalogueLlm>();
         services.AddScoped<CatalogueMatch>();
+        services.AddScoped<SongCounts>();
         services.AddScoped<Venues.VenueMatch>();
         services.AddScoped<Venues.VenueLlm>();
         services.AddScoped<Venues.VenueHistory>();

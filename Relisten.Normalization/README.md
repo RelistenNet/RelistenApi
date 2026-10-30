@@ -50,3 +50,26 @@ decisions and their audit history remain authoritative. The foundation changes n
 public API response; v4 can consume the stored relationships in a later change.
 See the [implementation plan](../docs/plans/active/2026-10-30-artist-venues/README.md)
 for ownership, validation, and rollout details.
+
+## Stored song counts
+
+Migration 16 adds `norm.song_counts` for canonical matched-file/show counts and
+`public.setlist_song_counts` for imported setlist-backed catalog-show counts.
+Both are derived rows with cascading parent keys, zero values, and timestamps
+that change only when their counters change. They carry no normalization run or
+human-edit provenance.
+
+`norm.song_recording_matches` owns exact recording membership for both recounts
+and v4 discovery. `norm.refresh_song_counts` refreshes one artist under the
+existing `norm-catalogue` artist lock; different artists remain independent.
+`SongCounts` processes full repairs one artist/commit at a time, without a global
+refresh lock. Imports, legacy rebuilds, and song normalization attempt refresh
+after their source work commits. Admin song edits refresh atomically with the
+edit; a failure rolls that transaction back.
+
+There is no recurring refresh, pending queue, or per-row source trigger. A failed
+post-commit hook logs the need for explicit repair without repeating successful
+source/model work. Cancellation propagates. Counts can briefly lag membership;
+GETs read counters and never refresh them. See the
+[song-count foundation](../docs/plans/active/2026-10-30-song-counts/README.md) for
+count definitions, maintenance ownership, repair, and rollout order.
