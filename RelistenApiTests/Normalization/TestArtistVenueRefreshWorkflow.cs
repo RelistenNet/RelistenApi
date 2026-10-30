@@ -9,7 +9,7 @@ using Temporalio.Worker;
 
 namespace RelistenApiTests.Normalization;
 
-/// <summary>Exercises the durable orchestration with synthetic activities, never a catalog or model.</summary>
+/// <summary>Exercises reconciliation and retries with synthetic activities, never a catalog or model.</summary>
 [TestFixture, NonParallelizable]
 public sealed class TestArtistVenueRefreshWorkflow
 {
@@ -22,79 +22,42 @@ public sealed class TestArtistVenueRefreshWorkflow
     public async Task StopServer() => await environment.DisposeAsync();
 
     [Test]
-    public async Task DrainAccumulatesCommittedBatchesAndStopsAtAnEmptyBatch()
+    public async Task ReconciliationReturnsTheCommittedRefreshResult()
     {
-        var activities = new RefreshActivities([new(2, 4), new(1, 0)]);
-        var result = await Run(activities, new(BatchSize: 3));
+        var activities = new RefreshActivities(new(3, 4));
+        var result = await Run(activities);
 
-        result.Should().Be(new ArtistVenueRefreshRunResult(2, 3, 4, false));
-        activities.BatchSizes.Should().Equal(3, 3, 3);
-        activities.ReconciliationCalls.Should().Be(0);
+        result.Should().Be(new ArtistVenueRefreshResult(3, 4));
+        activities.Calls.Should().Be(1);
     }
 
     [Test]
-    public async Task ReconciliationRequestsAllOwnersBeforeRefreshing()
+    public async Task FailedRefreshRetriesBeforeReturningTheCommittedResult()
     {
-        var activities = new RefreshActivities([new(1, 2)]);
-        var result = await Run(activities, new(Reconcile: true));
+        var activities = new RefreshActivities(new(2, 3)) { FailuresRemaining = 1 };
+        var result = await Run(activities);
 
-        result.ArtistsRefreshed.Should().Be(1);
-        activities.Events.Should().Equal("reconcile", "refresh", "refresh");
+        result.Should().Be(new ArtistVenueRefreshResult(2, 3));
+        activities.Calls.Should().Be(2);
     }
 
     [Test]
-    public async Task BatchLimitLeavesTheRemainingWorkForTheNextRun()
+    public async Task ExhaustedFailureCanRecoverOnALaterRun()
     {
-        var activities = new RefreshActivities([new(1, 2), new(1, 3), new(1, 4)]);
-        var first = await Run(activities, new(MaxBatches: 2));
-        var second = await Run(activities, new());
-
-        first.Should().Be(new ArtistVenueRefreshRunResult(2, 2, 5, true));
-        second.Should().Be(new ArtistVenueRefreshRunResult(1, 1, 4, false));
-    }
-
-    [Test]
-    public async Task FailedBatchRetriesWithoutCountingTheFailureAsCommittedWork()
-    {
-        var activities = new RefreshActivities([new(2, 3)]) { FailuresRemaining = 1 };
-        var result = await Run(activities, new());
-
-        result.Should().Be(new ArtistVenueRefreshRunResult(1, 2, 3, false));
-        activities.BatchSizes.Should().HaveCount(3); // failed, successful, then empty
-    }
-
-    [Test]
-    public async Task ExhaustedFailureLeavesTheBatchAvailableToALaterRun()
-    {
-        var activities = new RefreshActivities([new(1, 2)]) { FailuresRemaining = 3 };
-        var failed = async () => await Run(activities, new());
+        var activities = new RefreshActivities(new(1, 2)) { FailuresRemaining = 3 };
+        var failed = async () => await Run(activities);
         await failed.Should().ThrowAsync<WorkflowFailedException>();
 
-        var recovered = await Run(activities, new());
-        recovered.Should().Be(new ArtistVenueRefreshRunResult(1, 1, 2, false));
-    }
-
-    [TestCase(0, 1)]
-    [TestCase(1, 0)]
-    public async Task InvalidBoundsFailBeforeRequestingAnyWork(int batchSize, int maxBatches)
-    {
-        var activities = new RefreshActivities([]);
-        var failed = async () => await Run(activities, new(true, batchSize, maxBatches));
-
-        await failed.Should().ThrowAsync<WorkflowFailedException>();
-        activities.Events.Should().BeEmpty();
+        var recovered = await Run(activities);
+        recovered.Should().Be(new ArtistVenueRefreshResult(1, 2));
+        activities.Calls.Should().Be(4);
     }
 
     [Test]
-    public async Task ScheduleRegistrationPreservesOperatorPauseAndCanRunTheRefresh()
+    public async Task ScheduleRegistrationPreservesOperatorPauseAndCanReconcile()
     {
         var client = new NormalizationClient(environment.Client);
-        var ids = new[]
-        {
-            "relisten-norm-venues",
-            "relisten-artist-venues-refresh",
-            "relisten-artist-venues-reconcile",
-        };
+        var ids = new[] { "relisten-norm-venues", "relisten-artist-venues-refresh" };
         await client.RegisterSchedulesAsync();
         try
         {
@@ -104,9 +67,14 @@ public sealed class TestArtistVenueRefreshWorkflow
             }
 
             await client.RegisterSchedulesAsync();
+            foreach (var id in ids)
+            {
+                var saved = await environment.Client.GetScheduleHandle(id).DescribeAsync();
+                saved.Schedule.State.Paused.Should().BeTrue();
+            }
+
             var refresh = environment.Client.GetScheduleHandle("relisten-artist-venues-refresh");
-            (await refresh.DescribeAsync()).Schedule.State.Paused.Should().BeTrue();
-            var activities = new RefreshActivities([new(1, 2)]);
+            var activities = new RefreshActivities(new(1, 2));
             using var workflows = WorkflowWorker();
             using var database = DatabaseWorker(activities);
             await workflows.ExecuteAsync(() =>
@@ -116,10 +84,9 @@ public sealed class TestArtistVenueRefreshWorkflow
                     var id = await activities.Started.Task.WaitAsync(TimeSpan.FromSeconds(20));
                     var result = await environment
                         .Client.GetWorkflowHandle(id)
-                        .GetResultAsync<ArtistVenueRefreshRunResult>()
+                        .GetResultAsync<ArtistVenueRefreshResult>()
                         .WaitAsync(TimeSpan.FromSeconds(20));
-                    result.ArtistsRefreshed.Should().Be(1);
-                    activities.ReconciliationCalls.Should().Be(0);
+                    result.Should().Be(new ArtistVenueRefreshResult(1, 2));
                 })
             );
         }
@@ -132,17 +99,14 @@ public sealed class TestArtistVenueRefreshWorkflow
         }
     }
 
-    private async Task<ArtistVenueRefreshRunResult> Run(
-        RefreshActivities activities,
-        RefreshArtistVenues request
-    )
+    private async Task<ArtistVenueRefreshResult> Run(RefreshActivities activities)
     {
         using var workflows = WorkflowWorker();
         using var database = DatabaseWorker(activities);
         return await workflows.ExecuteAsync(() =>
             database.ExecuteAsync(() =>
                 environment.Client.ExecuteWorkflowAsync(
-                    (ArtistVenueRefreshWorkflow workflow) => workflow.RunAsync(request),
+                    (ArtistVenueRefreshWorkflow workflow) => workflow.RunAsync(),
                     new WorkflowOptions(
                         "artist-venues/test/" + Guid.NewGuid(),
                         NormalizationQueues.Workflows
@@ -166,35 +130,23 @@ public sealed class TestArtistVenueRefreshWorkflow
             new TemporalWorkerOptions(NormalizationQueues.Database).AddAllActivities(activities)
         );
 
-    private sealed class RefreshActivities(IEnumerable<ArtistVenueRefreshResult> batches)
+    private sealed class RefreshActivities(ArtistVenueRefreshResult result)
     {
-        private readonly Queue<ArtistVenueRefreshResult> pending = new(batches);
-        public List<int> BatchSizes { get; } = [];
-        public List<string> Events { get; } = [];
-        public int ReconciliationCalls { get; private set; }
+        public int Calls { get; private set; }
         public int FailuresRemaining { get; set; }
         public TaskCompletionSource<string> Started { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        [Activity("ArtistVenues.RequestReconciliation")]
-        public Task Reconcile()
-        {
-            Events.Add("reconcile");
-            ReconciliationCalls++;
-            return Task.CompletedTask;
-        }
-
-        [Activity("ArtistVenues.RefreshBatch")]
-        public Task<ArtistVenueRefreshResult> Refresh(int batchSize)
+        [Activity("ArtistVenues.RefreshAll")]
+        public Task<ArtistVenueRefreshResult> RefreshAll()
         {
             Started.TrySetResult(ActivityExecutionContext.Current.Info.WorkflowId!);
-            Events.Add("refresh");
-            BatchSizes.Add(batchSize);
+            Calls++;
             if (FailuresRemaining-- > 0)
             {
                 throw new InvalidOperationException("Synthetic database failure");
             }
-            return Task.FromResult(pending.Count == 0 ? new(0, 0) : pending.Dequeue());
+            return Task.FromResult(result);
         }
     }
 }

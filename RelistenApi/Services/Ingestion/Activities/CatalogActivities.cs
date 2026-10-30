@@ -94,11 +94,11 @@ public sealed class CatalogActivities(
                 && exception is NpgsqlException or TimeoutException
             )
         {
-            // Catalog rebuilds already committed. Source triggers retained pending work;
-            // scheduled refresh/reconciliation repairs counts without failing the import.
+            // Catalog rebuilds already committed. Periodic reconciliation repairs a
+            // failed count refresh without failing the completed import.
             logger.LogWarning(
                 exception,
-                "Artist venue counts remain pending after rebuilding {Artist}",
+                "Artist venue counts need reconciliation after rebuilding {Artist}",
                 context.Artist
             );
         }

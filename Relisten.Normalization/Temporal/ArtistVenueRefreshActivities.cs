@@ -4,23 +4,13 @@ using Temporalio.Activities;
 
 namespace Relisten.Normalization.Temporal;
 
-/// <summary>Owns reconciliation requests and one short database refresh per activity attempt.</summary>
+/// <summary>Runs a full count reconciliation without provider or model calls.</summary>
 public sealed class ArtistVenueRefreshActivities(ArtistVenueCounts counts)
 {
-    [Activity("ArtistVenues.RequestReconciliation")]
-    public async Task RequestReconciliation()
+    [Activity("ArtistVenues.RefreshAll")]
+    public async Task<ArtistVenueRefreshResult> RefreshAll()
     {
         using var heartbeat = new ActivityHeartbeat();
-        await counts.RequestAsync(null, ActivityExecutionContext.Current.CancellationToken);
-    }
-
-    [Activity("ArtistVenues.RefreshBatch")]
-    public async Task<ArtistVenueRefreshResult> RefreshBatch(int batchSize)
-    {
-        using var heartbeat = new ActivityHeartbeat();
-        return await counts.RefreshPendingAsync(
-            batchSize,
-            ActivityExecutionContext.Current.CancellationToken
-        );
+        return await counts.RefreshAllAsync(ActivityExecutionContext.Current.CancellationToken);
     }
 }

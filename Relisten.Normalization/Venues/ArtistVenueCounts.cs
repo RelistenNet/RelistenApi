@@ -12,103 +12,51 @@ namespace Relisten.Normalization.Venues;
 public sealed record ArtistVenueRefreshResult(int ArtistsRefreshed, int RelationshipsChanged);
 
 /// <summary>
-/// Refreshes derived artist/venue counts after catalog writes. Pending artists are durable:
-/// each database refresh consumes its queue rows and updates counts in one short transaction.
-/// A failed or canceled statement leaves that work available for a later retry.
+/// Refreshes derived artist/venue counts after committed catalog or normalization writes.
+/// Each refresh is atomic and repeatable. Periodic reconciliation repairs changes made
+/// outside these explicit boundaries, including direct admin SQL and failed import hooks.
 /// </summary>
 public sealed class ArtistVenueCounts(INormalizationDatabase db)
 {
-    private const int BatchSize = 100;
     private const int CommandTimeoutSeconds = 30;
 
     /// <summary>
-    /// Requests a refresh for the supplied artists. Null requests reconciliation of all
-    /// artists with normalized assignments or stored relationships; an empty list does nothing.
-    /// This statement commits before any subsequent refresh starts.
+    /// Recomputes all artists with normalized show assignments or stored relationships.
+    /// Existing zero-count groups are included so removed assignments clear stale counts.
     /// </summary>
-    public async Task RequestAsync(
-        IReadOnlyCollection<Guid>? artists,
+    public async Task<ArtistVenueRefreshResult> RefreshAllAsync(
         CancellationToken cancellationToken = default
     )
     {
-        if (artists is { Count: 0 })
-        {
-            return;
-        }
-
         await using var connection = db.CreateWriteConnection();
         await connection.OpenAsync(cancellationToken);
-        await RequestAsync(connection, artists?.Distinct().ToArray(), cancellationToken);
+        return await RefreshAsync(connection, null, cancellationToken);
     }
 
     /// <summary>
-    /// Refreshes at most one pending batch. Busy artists are skipped, not waited on, and
-    /// remain pending. Callers decide how many batches to drain in a background run.
-    /// </summary>
-    public async Task<ArtistVenueRefreshResult> RefreshPendingAsync(
-        int batchSize = BatchSize,
-        CancellationToken cancellationToken = default
-    )
-    {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(batchSize);
-
-        await using var connection = db.CreateWriteConnection();
-        await connection.OpenAsync(cancellationToken);
-        return await RefreshBatchAsync(connection, null, batchSize, cancellationToken);
-    }
-
-    /// <summary>
-    /// Requests and refreshes only the supplied artists. One pass through bounded batches
-    /// keeps an import hook finite; busy or newly dirtied artists remain for the background retry.
-    /// Completed batches stay committed if a later batch fails or is canceled.
+    /// Recomputes only the supplied artists. A later reconciliation repairs source changes
+    /// committed after this refresh's snapshot, including an interrupted import hook.
     /// </summary>
     public async Task<ArtistVenueRefreshResult> RefreshArtistsAsync(
         IReadOnlyCollection<Guid> artists,
         CancellationToken cancellationToken = default
     )
     {
-        var artistIds = artists.Distinct().ToArray();
-        if (artistIds.Length == 0)
+        if (artists.Count == 0)
         {
             return new(0, 0);
         }
 
         await using var connection = db.CreateWriteConnection();
         await connection.OpenAsync(cancellationToken);
-        await RequestAsync(connection, artistIds, cancellationToken);
 
-        var artistsRefreshed = 0;
-        var relationshipsChanged = 0;
-        foreach (var batch in artistIds.Chunk(BatchSize))
-        {
-            var result = await RefreshBatchAsync(connection, batch, BatchSize, cancellationToken);
-            artistsRefreshed += result.ArtistsRefreshed;
-            relationshipsChanged += result.RelationshipsChanged;
-        }
-
-        return new(artistsRefreshed, relationshipsChanged);
+        return await RefreshAsync(connection, artists.ToArray(), cancellationToken);
     }
 
-    private static Task RequestAsync(
-        NpgsqlConnection connection,
-        Guid[]? artists,
-        CancellationToken cancellationToken
-    ) =>
-        connection.ExecuteAsync(
-            new CommandDefinition(
-                "SELECT norm.request_artist_venue_refresh(@artists::uuid[])",
-                new { artists },
-                commandTimeout: CommandTimeoutSeconds,
-                cancellationToken: cancellationToken
-            )
-        );
-
-    // Each call is an autocommitted statement. Queue locks belong to that transaction,
-    // rather than the source import or an entire multi-batch reconciliation.
-    private static Task<ArtistVenueRefreshResult> RefreshBatchAsync(
+    // Each call is an autocommitted statement, separate from the source write.
+    private static Task<ArtistVenueRefreshResult> RefreshAsync(
         NpgsqlConnection connection,
         Guid[]? artistFilter,
-        int batchSize,
         CancellationToken cancellationToken
     ) =>
         connection.QuerySingleAsync<ArtistVenueRefreshResult>(
@@ -116,9 +64,9 @@ public sealed class ArtistVenueCounts(INormalizationDatabase db)
                 """
                 SELECT artists_refreshed AS "ArtistsRefreshed",
                        relationships_changed AS "RelationshipsChanged"
-                FROM norm.refresh_artist_venues(@artistFilter::uuid[], @batchSize)
+                FROM norm.refresh_artist_venues(@artistFilter::uuid[])
                 """,
-                new { artistFilter, batchSize },
+                new { artistFilter },
                 commandTimeout: CommandTimeoutSeconds,
                 cancellationToken: cancellationToken
             )
