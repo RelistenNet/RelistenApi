@@ -1,7 +1,8 @@
 # Approved public ID prefixes
 
 Status: approved by Alec on 2026-10-29, with `track_` replacing the originally
-proposed playable-track prefix. The remaining names and identity kinds are unchanged.
+proposed playable-track prefix. The stored artist–venue relationship prefix was
+added with the approved foundation on 2026-10-30.
 
 These tables define public catalog and account identity, so they belong in API design.
 Implementation planning will specify codec code, binders, database migrations,
@@ -28,11 +29,13 @@ opaque to clients; this notation describes the server contract.
 | Imported artist-specific song | `imported_song_` | U26 | Existing `SetlistSong.uuid` | [SetlistSong](../../../RelistenApi/Models/SetlistSong.cs) |
 | Imported setlist show | `setlist_show_` | U26 | Existing setlist-show UUID, distinct from recording-backed show | [SetlistShow](../../../RelistenApi/Models/SetlistShow.cs) |
 | Source review | `source_review_` | U26 | Existing source-review UUID | [SourceReview](../../../RelistenApi/Models/SourceReview.cs) |
+| Artist–venue relationship | `artist_venue_` | S8 | Native stored `norm.artist_venues.id` | [Artist-venue foundation](../../plans/active/2026-10-30-artist-venues/README.md) |
 | Shared normalized venue | `venue_` | S8 | Existing normalized ID, unchanged | [NormIds](../../../Relisten.Normalization/NormIds.cs) |
 | Artist-scoped normalized song | `song_` | S8 | Existing normalized ID, unchanged | [NormIds](../../../Relisten.Normalization/NormIds.cs) |
 
-These are 13 approved prefixes, not 13 new database ID schemes. Eleven wrap
-existing UUIDs; two retain the already-merged short IDs. An imported ID never
+These are 14 approved catalog prefixes. Eleven wrap existing UUIDs; venue and
+song IDs retain their existing short identities, and artist–venue relationships
+use native stored short IDs. An imported ID never
 turns into a normalized ID just by changing its prefix: those are different
 entities connected by evidence or show-specific links.
 
@@ -94,7 +97,7 @@ functionality does not require inventing an era UUID.
 | Cursor, token, CSRF value, OIDC identifier | Preserve protocol-defined opaque value |
 | Normalization run, model call, operator review and change-log ID | Internal provenance; no public catalog prefix |
 
-The six account prefixes above are now approved in addition to the 13 catalog
+The six account prefixes above are now approved in addition to the 14 catalog
 prefixes. OAuth tokens, protected cursors, PKCE values and external provider IDs
 retain their protocol-defined formats.
 

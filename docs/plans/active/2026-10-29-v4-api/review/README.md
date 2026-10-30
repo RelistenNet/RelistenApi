@@ -3,95 +3,107 @@
 Start the API with `./local-dev/v4-review/run.sh`, then open
 [Swagger](http://127.0.0.1:43823/api-docs-v4) or run [requests.http](requests.http).
 The [local setup](../../../../../local-dev/v4-review/README.md) explains startup,
-captures and restoring the local approval flags.
+captures, the materialized counts, and restoring local approval flags.
 
-The sample payloads in [responses](responses/) were captured from the restored
-2026-10-29 production catalog. They retain the original titles, playback URLs and
-normalization results. The venue example was reduced to the approved alias-only
-response contract; stored normalization data was not changed. Full shows and
-headers are captured locally in `local-dev/v4-review/.output/`.
+The current review adds stored artist–venue identities and two explicit count
+scopes. Shows now expose `artist_venue`, whose `artist_show_count` belongs to that
+artist and canonical place. Its nested `venue.global_show_count` belongs to the
+shared venue across approved-read artists. The old flat `show.venue` is removed.
+The same relationship resource appears in show summaries, full shows, canonical
+artist-list children, and direct artist venue detail.
 
-## Review navigation and venue-to-playback links
+The local host is running this graph. The 46-request real-data capture completed,
+and all count, identity, and fallback checks passed.
+The [verification log](../verification.md#stored-artistvenue-response-review-2026-10-30)
+records the acceptance checks; earlier captures describe their recorded revision.
 
-Alec expanded this checkpoint before account/auth work. Start with the artist and
-year requests in the collection: artist list → Grateful Dead → years → 1985 by number
-or typed year ID → show summaries. Then use a summary's show ID to retrieve its
-sources and playable tracks. Continue with the
-[venue-to-playback walkthrough](venue-source-journey.md): artist venue groups →
-canonical or imported venue → shows → full source → direct track. Swagger now
-exposes 16 routes, including direct source detail and seven venue reads.
+Start with Red Rocks and Grateful Dead: the shared venue has 176 shows across
+approved artists; Grateful Dead's relationship has 20 across all its years.
 
-The captured [artist response](responses/artist.json) and [year list](responses/years.json)
-show the typed navigation IDs. The restored catalog's Grateful Dead responses agree on 2,081 shows and 18,226
-sources across 31 years. The 1985 detail includes 73 show summaries. Summaries
-omit `sources`; full show detail owns the recording hierarchy. Venue identity and
-aliases are identical in both responses. Show UI displays the imported venue label
-and links to the normalized venue when available. These observations validate the
-local snapshot, not production performance.
+- [Global venue](http://127.0.0.1:43823/api/v4/venues/venue_fp4h900f)
+- [Grateful Dead relationship](http://127.0.0.1:43823/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/venues/venue_fp4h900f)
+- [Show on 1978-07-07](http://127.0.0.1:43823/api/v4/shows/show_0gmtpk4g0pf5yfayb76m0j0k7g)
 
-Artist capabilities and provider metadata are included. The venue slice adds
-grouped artist entries, global and artist-filtered canonical reads, and imported
-fallback collections with counts. Popularity augmentation, song/discovery routes,
-artist bootstrap, account migration and mobile remain later work. Auth stays on
-hold while Alec reviews the catalog journey.
+The saved [relationship response](responses/shared-artist-venue.json),
+[global venue response](responses/shared-venue.json), and
+[show venue excerpt](responses/shared-show-venue-excerpt.json) preserve the same
+IDs and counts. The excerpt includes selected venue-related fields from the full
+show response; use its URL for the complete recording hierarchy.
 
-Review these questions before proceeding:
+## Follow the counts through the catalog
 
-1. Does the [resolved medley](responses/matched-track.json) clearly preserve one
-   playable file and its original title while exposing two normalized songs?
-2. Does the [partial result](responses/partial-track.json) make unresolved text
-   clear? The [longer JRAD example](responses/partial-medley-track.json) shows
-   partial normalization on a real complex title.
-3. Are [raw](responses/raw-track.json) and [disabled](responses/disabled-track.json)
-   states clear and useful? All parent IDs should be typed strings.
-4. Does the show retain its imported venue label and normalized link, with
-   **The Crown** represented as a typed alias in `venue.names`?
-5. Are the complete show/source/set/track hierarchy and error responses usable?
+Use the [venue-to-playback walkthrough](venue-source-journey.md): artist venue
+list → relationship detail → venue shows → show → source → track. The existing
+16 GET routes retain their paths. This update changes their shared resource graph.
 
-The local flags are enabled for all 12 artists with normalized data, as Alec
-requested. Production had none enabled. No normalization results were changed.
+1. Open an artist's venue list. A canonical entry has `kind: "artist_venue"` and
+   an `artist_venue` child. Its imported alternative has `kind: "imported_venue"`
+   and a base imported child. Its `fallback_show_count` counts that entry's
+   unmatched subset; canonical entries set it to null. It must not overwrite the
+   imported venue's full `show_count` from imported-venue routes.
+2. Open `/artists/{artistId}/venues/{venueId}`. It returns the direct relationship
+   resource, identical to the canonical child in the list. Its native short ID
+   maps to `norm.artist_venues`; the artist and venue retain their own IDs.
+3. Open one of that venue's shows and its year. `artist_venue.id` and
+   `artist_show_count` must agree. The relationship count covers all the artist's
+   shows at the venue, even in a single-year response.
+4. Open `/venues/{venueId}` and its cross-artist show list. Compare
+   `global_show_count` with the same venue nested under any artist. Filtering by
+   `artist_id` narrows show membership, never the global venue count.
+5. Keep playing through the show's source and direct track. Imported titles,
+   URLs, exact parents, and track `normalization` remain unchanged.
 
-Earlier C1 verification: solution build passed; 51 focused tests passed, zero skipped
-(including the core browsing journey, typed IDs, snapshot/session behavior and
-legacy Swagger). Tests cover
-normalization corrections with unchanged imported timestamps, merges, failure
-and recovery, nullable IDs, schema agreement, gzip/304 and browser preflight.
-Live requests separately checked real full/partial shows, exact parent links,
-venue aliases, CORS, gzip and unchanged 304s. Fresh review caught and fixed
-Swagger naming, nullable ID serialization and legacy CORS integration issues.
+Counts come from stored relationships and can lag current show membership after
+an interrupted write hook or out-of-band SQL repair. GET requests never repair
+or mint relationships. With an up-to-date full refresh, the counts should agree
+with their complete qualifying show collections. Disabled artists do not
+contribute to the public global count; global venue metadata remains readable
+with a count of zero when no approved artist contributes shows.
 
-The [verification log](../verification.md#venue-to-playback-review-2026-10-30)
-records the venue/source slice separately, including its final build, contract
-tests, and real-data checks. Route counts do not establish complete API coverage.
-
-This qualifies the local C1 response review. It does not qualify production
-capacity, the remaining v4 routes, account migration or mobile rollout.
-
-C1 feedback: closed categorical fields now have typed string enums in OpenAPI,
-including normalization/part states, unavailable reasons, kinds, precision, FLAC
-type and qualifier items. JSON spellings and null values are unchanged. The
-HTTP tests compare advertised enum values with actual responses.
-
-Expanded browsing review also corrected nullable nested-object schemas. Missing
-venues/eras and unresolved song links now admit null without making shared
-resource definitions or required objects nullable.
-
-Venue feedback, revised 2026-10-30: canonical resources remain `venue` and `song`.
-The venue includes deduplicated `{ name, kind }` aliases, where kind is `official`,
-`short`, or `spelling`. Date periods and client historical-name selection have
-been removed. `venue_display` remains absent. The
-[Henry J. Kaiser venue example](responses/kaiser-venue.json) retains the six
-name/kind pairs without their stored date ranges.
-
-For show display, use the imported name and locality, with the canonical venue as
-fallback only when the imported venue is absent. Link that label to the normalized
-venue when present; normalization does not replace the imported label. For example:
+For display, preserve the imported venue name and locality. The canonical label
+is fallback only when imported data is absent:
 
 ```js
-const label = show.imported_venue?.name ?? show.venue?.name;
-const venueId = show.venue?.id; // Canonical navigation target, when available.
+const venue = show.artist_venue?.venue;
+const label = show.imported_venue?.name ?? venue?.name;
+const venueId = venue?.id;
 ```
 
-The venue-history fix branch was discarded. The API branch now builds directly
-on the shared normalization enums branch. No enrichment, historical backfill, or
-normalization data change was run.
+Missing, disabled, unmatched, or unmaterialized relationships return
+`artist_venue: null`, keeping imported fallback usable. A source retains its own
+imported venue observation, which may differ from the show's venue.
+
+## Review the remaining response contracts
+
+- [Resolved medley](responses/matched-track.json): one playable file and its
+  imported title, with ordered normalized song parts.
+- [Partial track](responses/partial-track.json) and [longer JRAD example](responses/partial-medley-track.json):
+  unresolved text remains visible and playable.
+- [Raw](responses/raw-track.json) and [disabled](responses/disabled-track.json)
+  states: imported playback remains usable and parent IDs are typed strings.
+- [Artist venue](responses/artist-venue.json), [direct source](responses/venue-journey-source.json),
+  and [imported fallback](responses/disabled-imported-venue.json): compare direct
+  and nested resource identity without confusing count scopes.
+- [Henry J. Kaiser venue](responses/kaiser-venue.json): deduplicated `{ name, kind }`
+  aliases, including retained merged names. Kinds are `official`, `short`, and
+  `spelling`; no date ranges or `venue_display` are exposed.
+
+OpenAPI must describe the actual graph, nullable relationships, string IDs,
+counts, and closed string enums. Responses remain direct resources/lists with
+weak payload ETags. Count corrections and approval changes can invalidate an ETag
+without changing imported timestamps. No-op recounts preserve it. Database
+failure returns a no-store 503 problem; recovery returns a complete snapshot.
+
+## Local evidence and scope
+
+Alec enabled normalized reads locally for all 12 artists with normalized data.
+Migration 15 and a full refresh were then applied to local `relisten_db`.
+Independent per-show verification matched 5,397 relationships and 13,418 show
+memberships, with no mismatches. A repeated recount preserved IDs, counts, and
+timestamps. The [foundation plan](../../2026-10-30-artist-venues/README.md) owns
+count maintenance and records concurrency, permissions, and repair behavior.
+
+The branch stack is normalization enums → artist-venue foundation → v4 API.
+Production was not changed. This checkpoint qualifies local response review;
+remaining API routes, account migration, mobile rollout, and production capacity
+remain separate work.

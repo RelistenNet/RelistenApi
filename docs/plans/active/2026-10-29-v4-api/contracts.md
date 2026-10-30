@@ -18,7 +18,8 @@ underscore. Reject uppercase, ambiguous characters and wrong resource kinds.
 UUID-backed catalog types and string-backed account types. It has no HTTP,
 database, Temporal or AI dependencies. Hosts own JSON
 converters, route/request validation and SQL binding. Existing normalized
-`VenueId`/`SongId` and their Temporal strings stay in `Relisten.Normalization`;
+`VenueId`/`SongId`/`ArtistVenueId` and their Temporal strings stay in
+`Relisten.Normalization`;
 reuse shared short-format validation rather than copying a second definition.
 Accounts reference this small identifier library, not the normalization worker.
 
@@ -90,7 +91,7 @@ A list endpoint returns an array of those resources or its documented browse
 entries. Search and grouped ranking endpoints retain their meaningful named
 result groups. Full artist bootstrap returns a direct catalog object with
 `artist`, `years`, `shows`, `tours`, `eras`, `imported_venues`, `imported_songs`,
-`venue_entries`, `song_entries`, `venues` and `songs`.
+`venue_entries`, `song_entries`, `artist_venues`, `venues` and `songs`.
 These are domain collections, not a generic response wrapper.
 
 Sync replacement is a property of each endpoint, not a server-supplied boolean.
@@ -100,8 +101,10 @@ that route contract and the request it made. It computes its local request key
 from the endpoint and normalized filters. No returned scope identifier is needed.
 
 - Full artist collection routes replace only that artist/query's association
-  list. Bootstrap replaces only its named artist-owned collections; its normalized
-  entity arrays are patches, not the global canonical catalog.
+  list. Bootstrap replaces only its named artist-owned collections. Its
+  `artist_venues`, `venues`, and `songs` arrays upsert entities; `venue_entries`
+  owns the visible artist-venue query membership. An absent entity patch does
+  not delete a record referenced by another cached query or offline playback.
 - Full show/source/set detail replaces active source/set/track associations only
   for the fully returned owners. Keep entity records needed for offline playback,
   saved references and other query results. Missing shallow parent fields do not
@@ -199,7 +202,15 @@ normalization. `norm_venues` is not a read switch. With approval but incomplete
 results, use available accepted links and preserve raw fallback for the rest.
 
 Show DTOs preserve imported scalar metadata and parent links. They expose
-`imported_venue` and nullable `venue`; there is no separate display projection.
+`imported_venue` and nullable `artist_venue`; the old flat `show.venue` field is
+removed. There is no separate display projection. `ArtistVenueResource` contains:
+
+- `id`: the stored `artist_venue_` identity with an eight-character suffix;
+- `artist_id`: the UUID-backed public artist ID;
+- `artist_show_count`: the stored count for this artist and canonical venue;
+- `created_at` and `updated_at`: the relationship row's timestamps;
+- `venue`: the shared `VenueResource`, including `global_show_count`.
+
 `VenueResource` and `SongResource` name canonical public resources. Imported
 resources retain the explicit `ImportedVenueResource`/`ImportedSongResource`
 names. Internal normalization storage remains in the `norm` schema.
@@ -211,47 +222,72 @@ from merged venues. Return them in deterministic kind/name order. V4 does not
 publish venue-name date ranges or require clients to select a name for a show date.
 
 Show UI renders the imported venue's name and locality. If the imported venue is
-absent, it may fall back to the canonical venue's name and locality. When `venue`
-exists, link the displayed imported label to that normalized venue and use its ID
-for canonical grouping, details, and global favorites. A normalized correction
-must not replace the imported display label. One shared venue retains one identity
-and its alias collection across artists and show dates.
+absent, it may fall back to `artist_venue.venue` metadata. Link that label through
+`artist_venue.venue.id` for canonical details and global favorites. A normalized
+correction must not replace the imported display label. One shared venue retains
+one identity, alias collection, and global count across artist and year queries.
 
-Resolve the venue through `norm.show_venues`, following merge chains; do not
-assume a shared imported row maps every show to the same place. Keep a source's
-own imported venue observation available even when its show's assignment differs.
-Aliases are loaded in one batch in the same snapshot. A change to a represented
-name or alias kind changes the response ETag. A date-only change does not, because
-periods are not part of the response. Neither changes the imported display label.
+Resolve the show assignment through `norm.show_venues`, following venue merge
+chains, then look up the stored artist/canonical-venue pair. Do not assume a shared
+imported row maps every show to the same place. If the assignment or stored pair
+is missing, return `artist_venue: null` and retain imported fallback. Never invent
+a relationship ID or refresh counts during a read. Keep a source's own imported
+venue observation even when its show's assignment differs.
 
-Global venue metadata has no single artist owner. Existing canonical IDs remain
-resolvable independently of an artist's current switch. Global venue show lists
-include only approved artist/show assignments; they cannot infer associations
-for unnormalized artists from similar names. Artist-scoped canonical lists always
-apply both filters. Imported venue detail remains available in its original scope.
+### Count ownership and freshness
 
-Artist venue browse entries discriminate `venue` versus `imported_venue` targets.
-Group approved show assignments by canonical survivor; otherwise group by
-imported venue. Count distinct server catalog shows for the artist. Never sum
-raw venue counts or derive totals from mobile's partial show cache. One raw
-venue can have show-specific assignments to more than one canonical place.
+`artist_show_count` comes from `norm.artist_venues`. It counts the artist's shows
+at the canonical venue across all years, not just the current response's shows.
+`global_show_count` sums those stored counts across artists whose
+`features.norm_catalogue` read flag is enabled. It is the same value wherever the
+shared venue appears, including an artist-filtered or year-filtered response.
+Disabled artists do not contribute to that public count or the global show list.
+Global venue metadata remains resolvable with a zero global count when no approved
+artist contributes shows.
+
+The [artist-venue foundation](../2026-10-30-artist-venues/README.md) owns count
+maintenance. Admin edits refresh atomically; imports use explicit post-write
+hooks. Stored counts can lag current show membership after an interrupted hook or
+out-of-band repair. A read uses the stored values and performs no repair. Count
+corrections, approval changes that alter a global count, and represented alias
+changes alter payload ETags even when imported timestamps are unchanged. An
+unchanged refresh does not change the resource; date-only alias edits remain
+outside the represented contract.
+
+Canonical artist lists use positive stored relationships. Zero-count rows retain
+their IDs in storage while their parents exist and can be returned by artist detail.
+Imported fallback groups preserve shows without an available approved relationship.
+Never derive these counts from mobile's partial show cache or sum imported venue
+counters. One imported row can contribute shows to several canonical places.
 
 ### Implemented venue collections and source detail
 
 `GET /artists/{artistId}/venues` returns `ArtistVenueEntryResource[]`. Each entry
-has `kind` (`venue` or `imported_venue`), `show_count`, nullable `venue`, and
-nullable `imported_venue`; exactly one target is populated. Sort entries by the
-target name, then stable identity. Shows with neither target do not establish a
-venue group. `GET /artists/{artistId}/venues/{venueId}` returns the same entry
-for an artist's approved canonical membership, or 404 when none exists.
+has `kind` (`artist_venue` or `imported_venue`), nullable `artist_venue`, nullable
+`imported_venue`, and nullable `fallback_show_count`; exactly one target is
+populated. A canonical target is an `ArtistVenueResource`, with
+`fallback_show_count: null`. An imported target is the base imported venue
+resource, with `fallback_show_count` counting only shows in that fallback group.
+That subset can be smaller than the imported row's full show collection. Keep the
+count on the query entry; do not write it to the imported entity's full
+`show_count`. The wrapper owns no venue identity. Sort by target name, then ID.
+
+`GET /artists/{artistId}/venues/{venueId}` returns the direct
+`ArtistVenueResource`, identical to the canonical child in the list and matching
+show summaries. The route still takes the global `venue_` ID and resolves merged
+venue IDs before the relationship lookup. It returns 404 for missing, disabled,
+or unavailable relationships. No separate `/artist-venues/{id}` route is added in
+this checkpoint; clients can navigate with the resource's `artist_id` and
+`venue.id` while using its stable relationship ID for persistence.
 
 `GET /venues/{venueId}` returns `VenueResource`, resolving a merged ID to its
 survivor. `GET /venues/{venueId}/shows` returns show summaries for approved
 assignments, with an optional typed `artist_id` filter. The artist-scoped
 `GET /artists/{artistId}/venues/{venueId}/shows` returns the same filtered list.
-Unknown parents return 404. Known parents with no qualifying membership return
-`[]` from show collections, including an artist with normalization disabled.
-Global metadata does not require artist membership or approval.
+Every returned summary uses the same `artist_venue` graph. Unknown parents return
+404. Known parents with no qualifying membership return `[]`, including an artist
+with normalization disabled. Global metadata does not require artist membership
+or approval.
 
 `GET /artists/{artistId}/imported-venues` returns flat imported venue resources
 with `show_count`, including unused rows with zero shows.
@@ -260,7 +296,7 @@ fields plus `show_count` and `shows`. Both count and detail use `shows.artist_id
 and `shows.venue_id`; a source's different imported venue does not create show
 membership. This corrects a legacy cached-count inconsistency without changing
 legacy routes. Imported detail retains all its show-level matches, including
-shows that also have canonical venue assignments. Foreign imported rows return 404.
+shows with an `artist_venue`. Foreign imported rows return 404.
 
 `GET /sources/{sourceId}` returns the same `SourceResource` as full show detail.
 Load only its sets, active non-orphaned tracks, links, and own imported venue in
@@ -396,8 +432,13 @@ Each reference supplies `kind`, `scheme`, `id`, and optional `artist_id` context
 Schemes are `v4`, `legacy_uuid`, `legacy_integer`, `legacy_slug`. Integer/slug
 lookups for artist-owned resources require artist context; an artist lookup is
 global. The numeric calendar year uses its explicit by-number route, not a
-legacy ID parser. All 13 catalog kinds are supported by v4/UUID resolution where
+legacy ID parser. The complete resolver must support all 14 catalog kinds where
 their backing identity exists, including nested set/review/setlist-show records.
+The new `artist_venue` kind has a native short v4 identity and no legacy UUID,
+integer, or slug identity. Add its `artist_venues` entity group when implementing that resolver; this C1
+update still navigates relationships through artist/venue lookup. This catalog
+resource does not add a favorite target kind; global venue favorites remain
+`venue` targets.
 
 Per-item results echo the request and give `available`, `unavailable`, `redirected`,
 or `retired`, with canonical target and hydrated entities when available.
@@ -598,10 +639,15 @@ and query-result writes for the reads mobile uses. The route manifest is a
 server coverage/test baseline, not a universal mobile sync engine.
 
 Keep imported UUID Realm keys; convert IDs only in the v4 request/response adapter.
-Add short-keyed `NormalizedVenue`, `NormalizedSong`, embedded track normalization,
-show-specific display fields, and cached artist browse entries. Query entries
-store server counts and discriminate canonical/imported targets. No duplicate
-canonical entity per artist and no invented public composite IDs.
+Add short-keyed `NormalizedVenue`, `ArtistVenue`, and `NormalizedSong` rows,
+embedded track normalization, and cached artist browse entries. `ArtistVenue`
+uses the server's `artist_venue_` key, links the artist to one shared venue, and
+stores `artist_show_count`. `NormalizedVenue` stores `global_show_count`; never
+overwrite it with an artist count, a filtered collection length, or a partial
+mobile cache total. A show links to its `ArtistVenue` when supplied. Query entries
+discriminate the relationship from imported fallback and store the fallback subset
+count separately from the imported venue's full `show_count`. Keep one canonical
+venue row shared across artists and preserve the imported venue rows for display.
 
 Add an applied query state scoped by endpoint/filters and account where relevant.
 Each request captures its scope generation and account/session fence. Apply

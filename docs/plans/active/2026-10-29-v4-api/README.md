@@ -1,6 +1,7 @@
 # Deliver the complete v4 catalog and mobile adapter
 
-Status: C1 expanded to the venue-to-playback journey, 2026-10-30.
+Status: C1 now adds stored artist–venue identities and scoped counts, 2026-10-30.
+Implementation and real-response verification are in progress.
 The local API reads the restored production catalog; no production deployment or
 account migration occurred. This is a living ExecPlan: update Progress,
 Discoveries, Decision Log, and Outcomes as work proceeds.
@@ -48,7 +49,8 @@ an earlier design proposal.
   same 128 bits in lowercase Crockford base32. Prefixes are `artist_`, `show_`,
   `source_`, `source_set_`, `track_`, `year_`, `tour_`, `imported_venue_`,
   `imported_song_`, `setlist_show_`, `source_review_`; normalized `venue_` and
-  `song_` keep their existing eight-character suffixes. Eras stay embedded.
+  `song_` keep their existing eight-character suffixes. Stored artist–venue
+  relationships use native short `artist_venue_` IDs. Eras stay embedded.
 - Preserve every existing capability; duplicate aliases may consolidate. Admin
   HTML, health, OAuth, profile, and session protocols retain their own paths.
 - Honor `features.norm_catalogue`. Missing/disabled normalization preserves
@@ -59,9 +61,18 @@ an earlier design proposal.
   imported song/show behavior for artists without normalization and unresolved
   imported entries for partial coverage.
 - Show UI renders the imported venue name/locality and links to the normalized
-  venue when present. Canonical name/locality is fallback only when imported data
-  is absent. Venue `names` contains deduplicated `{ name, kind }` aliases, not date
+  venue through `show.artist_venue.venue` when present. Canonical name/locality
+  is fallback only when imported data is absent. Venue `names` contains deduplicated `{ name, kind }` aliases, not date
   periods. Track playback title remains imported.
+- Show summaries and full shows share nullable `artist_venue` resources with
+  stored `artist_show_count` and a nested global venue. That venue's
+  `global_show_count` sums stored counts for approved-read artists and stays the
+  same across artist/year filters. Imported fallback remains separate.
+- Canonical artist venue list entries contain `artist_venue`; canonical detail
+  returns that resource directly. Imported list targets keep base venue metadata;
+  `fallback_show_count` belongs to the query entry and can be smaller than the raw
+  venue's full count. GETs read stored artist counts and sum them for the global
+  value; they do not recount source shows.
 - “Recently updated” retains its imported recording-update meaning. A normalized
   correction still refreshes metadata; it does not move the show into that list.
 - Global venue favorites do not implicitly favorite their shows or add all those
@@ -82,6 +93,13 @@ Legacy readers open separate connections; normalization changes can leave import
 timestamps unchanged; mobile's cache can suppress those changes. V4 therefore
 needs explicit snapshot reads and authoritative apply. Imported UUIDs also identify
 mobile downloads/queues/history, so they remain stored behind the API adapter.
+
+The [artist-venue foundation](../2026-10-30-artist-venues/README.md) is stacked
+between shared normalization enums and v4. Local `relisten_db` is at migration 15.
+Its full refresh was verified against real assignments: 5,397 pairs for 12 artists,
+covering 13,418 show memberships, with zero count mismatches. Production was not
+changed. Current v4 reads use this materialized relationship and retain imported
+fallback when an approved assignment has no stored pair yet.
 
 Production schema, primary capacity, replica topology and deployed migration mode
 remain unverified. They are rollout checks, not assumptions this plan treats as facts.
@@ -154,6 +172,9 @@ Implement mobile's actual queries, not a generic interpreter of all server route
 - [x] Implement the expanded C1 browsing journey and validate the live real-data host.
 - [x] Implement seven venue reads and direct source detail for the C1
   [venue-to-playback journey](review/venue-source-journey.md).
+- [x] Wire stored artist–venue resources and global counts into every C1 show/venue read.
+- [x] Verify count identity, approval scope, ETags, and the real end-to-end responses.
+- [x] Refresh the saved request/capture evidence for the new graph.
 - [ ] Alec reviews the [expanded C1 browsing and playback responses](review/README.md)
   before account/auth work.
 - [ ] Extend the next catalog review to song matches and discovery; these routes
@@ -349,11 +370,16 @@ by accepting this plan.
   UI displays imported venue name/locality and links to the normalized venue
   when present. Return deduplicated `{ name, kind }` aliases without dates.
   No timeline resolution, history backfill, or date-evidence work is required.
-  The active branch stack is normalization enums → v4 API.
+  The active branch stack is normalization enums → artist-venue foundation → v4 API.
 
 - 2026-10-30, Alec: expand the API review with artist venue groups, canonical and
   imported venue details/show lists, and direct source detail. Inspect the
   venue-to-playback journey before the next song/discovery slice and account/auth.
+
+- 2026-10-30, Alec: expose `show.artist_venue.artist_show_count` and nested
+  `venue.global_show_count`; update venue routes for end-to-end review. Reuse the
+  same relationship resource and keep imported labels/fallback. Read stored counts
+  with public approval filtering; do not refresh counts during API reads.
 
 ## Outcomes and retrospective
 
@@ -365,9 +391,11 @@ migration/rollback steps and verification. The full thread was reread during the
 simplification pass; later decisions supersede the exploration's old epoch,
 generic metadata, library versioning and UUID-backed account-storage proposals.
 
-C1 runtime implementation and local HTTP/snapshot checks are complete; see the
-[response review](review/README.md). Canonical ID retention is still scheduled
-before production canonical lookup/favorites; C1 adds no migration. Mobile schema
+Earlier C1 runtime and local HTTP/snapshot checks are recorded in the
+[response review](review/README.md). The stored artist–venue graph is the current
+review update; its final response verification is pending. Migration 15 and the
+full derived-count refresh have been applied to local `relisten_db`. Canonical
+identity/deletion behavior still needs production release qualification. Mobile schema
 upgrades, production load measurements and deployment remain unperformed. Primary capacity and deployment
 configuration are execution gates, not assumed facts. Record implementation
 results here as milestones are completed.

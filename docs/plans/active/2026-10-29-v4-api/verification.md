@@ -455,3 +455,54 @@ before/after invariants, shared codec fixture hashes, mobile schema-upgrade and
 offline journey results, representative query/load measurements, and exact
 rollout/rollback switches and versions. Passing source-level documentation checks
 is not evidence that these runtime release gates have passed.
+
+
+## Stored artist–venue response review, 2026-10-30
+
+The latest contract replaces flat `show.venue` with nullable `artist_venue`, whose
+`artist_show_count` belongs to the artist/place relationship. Nested and direct
+`venue.global_show_count` belongs to the shared venue and includes approved-read
+artists only. Earlier captures and counts above describe their recorded revision;
+refresh the saved evidence before treating it as proof of the new resource graph.
+
+Local migration 15 and full recount were applied to `relisten_db`. Independent
+per-show verification found 5,397 pairs across 12 artists, 13,418 memberships, and
+zero mismatches. A subsequent recount changed no IDs, counts, or timestamps.
+Both cascading parent foreign keys were verified; source assignments were unchanged.
+
+Verification for this v4 update must show:
+
+- One persisted relationship ID and artist-wide count across show detail, year
+  summaries, artist venue list child, and direct artist venue detail.
+- One global count across those nested venues and direct global detail, with
+  disabled artists excluded and no narrowing from artist/year query filters.
+- Imported fallback for disabled, unmatched, and unmaterialized relationships.
+- Read requests leave count storage unchanged; explicit count corrections and
+  approval changes invalidate affected payload ETags, while no-op refreshes do not.
+- Alias merges use the canonical venue and relationship without inventing IDs.
+- OpenAPI advertises the actual nullable graph, string IDs, and integer counts.
+
+Implementation commit: `dfaf7e580`. Verification completed on 2026-10-30:
+
+- Solution build and repository CSharpier checks passed. Existing dependency-audit
+  and nullable-reference warnings remain.
+- Focused HTTP, ID, and Swagger checks: 79 passed, including five new stored-count
+  contracts and the imported fallback subset check.
+- Combined API, v4, normalization, migration, ingestion, catalog, ID, and Swagger
+  checks: 209 passed; two opt-in model/corpus checks skipped.
+- Normalization library: 366 passed.
+- Independent two-pass review found no unresolved issues. The reader cleanup
+  separates lightweight membership, canonical resources, and imported fallbacks.
+- The local API was restarted through the client-only review script, with local
+  database routing, Hangfire workers disabled, and no recurring job registration.
+- All 46 real-data capture requests succeeded. Red Rocks returned a global count
+  of 176; Grateful Dead's stored relationship `artist_venue_344wrm28` returned 20.
+  Its detail, show, year summary, and nested global venue matched exactly.
+- An ordered checksum of all stored relationship IDs, parent keys, counts, and
+  timestamps was unchanged before and after the live requests. Reads did not
+  refresh or mutate count storage.
+
+Live examples and curated responses are linked from the
+[review overview](review/README.md). Full captures, response headers, and timings
+remain in the ignored `local-dev/v4-review/.output/` directory. Production and
+mobile/account rollout remain outside this local response review.

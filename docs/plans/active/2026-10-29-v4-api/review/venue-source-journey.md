@@ -9,11 +9,11 @@ catalog. Neither review path runs ingestion or normalization jobs.
 Start with these live responses from the restored catalog:
 
 - [Grateful Dead venue groups](http://127.0.0.1:43823/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/venues):
-  479 normalized groups and 65 imported fallback groups cover 2,081 shows.
+  canonical artist–venue resources and imported fallback entries share one list.
 - [Oakland artist venue](http://127.0.0.1:43823/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/venues/venue_wwrsykhn)
-  and its [34 shows](http://127.0.0.1:43823/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/venues/venue_wwrsykhn/shows).
+  and its [shows](http://127.0.0.1:43823/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/venues/venue_wwrsykhn/shows).
 - [Red Rocks across artists](http://127.0.0.1:43823/api/v4/venues/venue_fp4h900f/shows):
-  176 shows across 12 approved artists in this snapshot.
+  inspect the shared venue's count and show assignments across approved artists.
 - [One Oakland recording](http://127.0.0.1:43823/api/v4/sources/source_0ey8bt709t1kgkmtpmgvq85art)
   and [one of its tracks](http://127.0.0.1:43823/api/v4/source-tracks/track_11be6feqht0xd6q911jmx31nqs).
 
@@ -26,26 +26,28 @@ Large collections, response headers, and request timings remain in the ignored
 
 ## Follow one normalized venue
 
-1. Read `/api/v4/artists/{artistId}/venues`. Each entry has `kind`, `show_count`,
-   `venue`, and `imported_venue`. Exactly one target is populated. Approved shows
-   group by the surviving normalized venue; unmatched or unapproved shows group
-   by their imported venue. One imported row can therefore contribute shows to
-   different entries.
-2. For a `venue` entry, read `/api/v4/artists/{artistId}/venues/{venueId}`. It
-   returns the same artist-scoped entry and count as the list. Read
-   `/api/v4/venues/{venueId}` for the canonical resource alone: identity, locality,
-   parent venue, and distinct `{ name, kind }` aliases. Merged IDs resolve to the
-   surviving resource, including retained aliases; no name periods are exposed.
-3. Read `/api/v4/artists/{artistId}/venues/{venueId}/shows`. Compare the list length
-   with the entry's `show_count`. These are distinct server catalog shows, not
-   summed imported counters or the mobile cache.
-4. Read `/api/v4/venues/{venueId}/shows` to see approved assignments across artists.
-   Add `?artist_id={artistId}` to recover the same artist-filtered collection.
-   Global venue metadata remains readable when an artist's normalization flag is
-   off; that artist's shows do not appear in the canonical collection.
+1. Read `/api/v4/artists/{artistId}/venues`. Each entry has `kind`,
+   `artist_venue`, and `imported_venue`, with exactly one target populated. A
+   canonical entry has `kind: "artist_venue"`; its child owns the stored ID,
+   `artist_id`, `artist_show_count`, timestamps, and nested shared venue.
+   Imported children keep base metadata; `fallback_show_count` on the entry
+   counts its unmatched subset. That can differ from the raw row's full count.
+2. For a canonical child, read `/api/v4/artists/{artistId}/venues/{venueId}`.
+   The response is the direct relationship resource, equal to the list's child.
+   Read `/api/v4/venues/{venueId}` for the shared venue alone: global count,
+   identity, locality, parent venue, and distinct `{ name, kind }` aliases.
+   Merged IDs resolve to the survivor; no name periods are exposed.
+3. Read `/api/v4/artists/{artistId}/venues/{venueId}/shows`. Every summary's
+   `artist_venue` must match the relationship detail, including its artist-wide
+   count. A year-filtered response retains that same full artist/place count.
+4. Read `/api/v4/venues/{venueId}/shows` for approved assignments across artists.
+   Add `?artist_id={artistId}` to narrow show membership. Nested and direct
+   `global_show_count` stays global under that filter. After a successful count
+   refresh, the full qualifying show lists should agree with their scoped counts.
 5. Open a returned `/api/v4/shows/{showId}`. Display its imported venue label and
-   locality, with `venue.id` as the normalized navigation target when present.
-   The canonical name is fallback only when the imported venue is absent.
+   locality, linking through `artist_venue.venue.id` when present. Canonical name
+   is fallback only when imported data is absent. Missing materialized
+   relationships preserve imported fallback and never trigger a GET-time refresh.
 6. Open `/api/v4/sources/{sourceId}` from that show's `sources`. The resource must
    equal its nested show counterpart, including its own imported venue, links,
    sets, and tracks. Only this source's active files are included. Its source
@@ -60,7 +62,7 @@ For an `imported_venue` browse entry, open
 `/api/v4/artists/{artistId}/imported-venues/{importedVenueId}`. The response contains
 the imported resource fields plus `show_count` and `shows`. It uses the show's
 artist and imported venue assignment, even when one of those shows has a
-normalized link. A recording's different venue observation does not add a show
+`artist_venue` link. A recording's different venue observation does not add a show
 to this collection.
 
 The separate `/api/v4/artists/{artistId}/imported-venues` list returns all raw
@@ -74,9 +76,11 @@ within an approved artist. No canonical venue is fabricated from a similar name.
 ## Check errors and refresh
 
 - A malformed or wrong-kind ID returns 422; an unknown parent or foreign imported
-  venue returns 404. A canonical artist detail with no approved membership also
-  returns 404. A known artist and venue with no qualifying shows returns `[]` from
+  venue returns 404. A canonical artist detail with no approved stored relationship
+  also returns 404. A known artist and venue with no qualifying shows returns `[]` from
   the show collection, including when normalization is disabled.
+- Stored counts can lag show membership after a failed write hook or out-of-band
+  repair. GET requests neither recompute counts nor write relationships.
 - Responses are direct resources or lists with weak ETags. A matching validator
   returns 304. Alias name/kind or show-assignment changes refresh affected JSON;
   date-only alias edits do not, because dates are not represented.

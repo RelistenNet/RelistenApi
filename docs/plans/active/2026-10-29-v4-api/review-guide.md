@@ -82,8 +82,10 @@ Alec should be able to answer these questions by making requests:
   without suggesting that a part is another file?
 - Are raw, disabled and partial results understandable and still playable?
 - Does the show preserve its imported venue label/locality, with a normalized
-  venue link and typed aliases when available?
-- Do grouped venue counts match their show collections, including imported
+  link through `artist_venue.venue` and typed aliases when available?
+- Do stored `artist_show_count` and approved-artist `global_show_count` have the
+  right scopes across show, artist, year, and venue responses? After a successful
+  refresh, do grouped counts match their show collections, including imported
   fallback and cross-artist approved assignments? Does direct source detail match
   that same source inside its full show?
 - Are wrong prefixes, unknown IDs and dependency failures clear?
@@ -95,6 +97,13 @@ validation; weak ETags avoid coupling the JSON hash to compression details.
 Record the accepted build, scenarios and any requested response changes in the
 existing plan Progress section. Do not expand the contract while that feedback
 remains unresolved.
+
+The current artist–venue update replaces the flat show venue link with a stored
+relationship resource. Compare its ID and `artist_show_count` across the show,
+artist venue list child, and direct artist venue detail. Compare its nested
+`venue.global_show_count` with global venue detail and the approved global show
+collection. Artist/year filtering must not narrow that global value. Imported
+fallback remains visible when normalization or its stored relationship is absent.
 
 ## C2 — Rehearse the account/auth change independently
 
