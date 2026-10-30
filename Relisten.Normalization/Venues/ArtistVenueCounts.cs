@@ -24,6 +24,7 @@ public sealed class ArtistVenueCounts(INormalizationDatabase db)
     /// <summary>
     /// Recomputes all artists with normalized show assignments or stored relationships.
     /// Existing zero-count groups are included so removed assignments clear stale counts.
+    /// Full refreshes coordinate exclusively with venue edits and scoped refreshes.
     /// </summary>
     public async Task<ArtistVenueRefreshResult> RefreshAllAsync(
         CancellationToken cancellationToken = default
@@ -35,8 +36,9 @@ public sealed class ArtistVenueCounts(INormalizationDatabase db)
     }
 
     /// <summary>
-    /// Recomputes only the supplied artists. If a post-write refresh fails, rerun the
-    /// refresh explicitly; there is no background repair schedule.
+    /// Recomputes only the supplied artists. Disjoint artist scopes can refresh concurrently;
+    /// overlapping scopes serialize, and venue edits or full refreshes exclude both.
+    /// If a post-write refresh fails, rerun it explicitly; there is no background repair schedule.
     /// </summary>
     public async Task<ArtistVenueRefreshResult> RefreshArtistsAsync(
         IReadOnlyCollection<Guid> artists,

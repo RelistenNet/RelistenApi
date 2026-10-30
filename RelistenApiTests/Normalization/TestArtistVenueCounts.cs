@@ -516,14 +516,149 @@ public sealed class TestArtistVenueCounts
     }
 
     [Test]
-    public async Task WaitingRefreshReadsCommittedChangesFromRawSqlOutsideTheVenueMutex()
+    public async Task DifferentArtistsRefreshConcurrently()
+    {
+        await CommitFixtureAndBeginTransaction();
+        await QueryRefresh(db, [data.Artists[0]], tx);
+        var service = new ArtistVenueCounts(new TestDatabase());
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        // Artist A keeps its transaction open. Artist B must finish before A releases it.
+        var result = await service.RefreshArtistsAsync([data.Artists[1]], timeout.Token);
+
+        result.Should().Be(new ArtistVenueRefreshResult(1, 0));
+        (await Rows()).Select(row => row.Count).Should().BeEquivalentTo(new[] { 2, 1 });
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task FullAndScopedRefreshesExcludeEachOther(bool fullFirst)
+    {
+        await CommitFixtureAndBeginTransaction();
+        await QueryRefresh(db, fullFirst ? null : [data.Artists[0]], tx);
+        await using var waiting = new NpgsqlConnection(LocalTestDatabase.ConnectionString);
+        await waiting.OpenAsync();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var refresh = QueryRefresh(
+            waiting,
+            fullFirst ? [data.Artists[1]] : null,
+            cancellationToken: timeout.Token
+        );
+        try
+        {
+            await WaitUntilBlocked(waiting.ProcessID, db.ProcessID);
+        }
+        finally
+        {
+            await tx.CommitAsync();
+        }
+
+        var result = await refresh;
+        result.ArtistsRefreshed.Should().BeGreaterThanOrEqualTo(fullFirst ? 1 : 2);
+        if (fullFirst)
+        {
+            result.RelationshipsChanged.Should().Be(0);
+        }
+        await tx.DisposeAsync();
+        tx = await db.BeginTransactionAsync();
+        (await Rows()).Select(row => row.Count).Should().BeEquivalentTo(new[] { 2, 1 });
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task VenueWritersAndScopedRefreshesExcludeEachOther(bool writerFirst)
+    {
+        await CommitFixtureAndBeginTransaction();
+        if (writerFirst)
+        {
+            await db.ExecuteAsync(
+                "SELECT pg_advisory_xact_lock(hashtext('norm-venues'))",
+                transaction: tx
+            );
+        }
+        else
+        {
+            await QueryRefresh(db, [data.Artists[0]], tx);
+        }
+
+        await using var waiting = new NpgsqlConnection(LocalTestDatabase.ConnectionString);
+        await waiting.OpenAsync();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        Task operation = writerFirst
+            ? QueryRefresh(waiting, [data.Artists[1]], cancellationToken: timeout.Token)
+            : waiting.ExecuteAsync(
+                new CommandDefinition(
+                    "SELECT pg_advisory_xact_lock(hashtext('norm-venues'))",
+                    cancellationToken: timeout.Token
+                )
+            );
+        try
+        {
+            await WaitUntilBlocked(waiting.ProcessID, db.ProcessID);
+        }
+        finally
+        {
+            await tx.CommitAsync();
+        }
+
+        await operation;
+        await tx.DisposeAsync();
+        tx = await db.BeginTransactionAsync();
+        (await Rows()).Select(row => row.Count).Should().BeEquivalentTo(new[] { 2, 1 });
+    }
+
+    [Test]
+    public async Task OppositeArtistOrdersWaitAndCompleteWithoutDeadlocking()
+    {
+        await CommitFixtureAndBeginTransaction();
+        await QueryRefresh(db, [data.Artists[0]], tx);
+        await using var first = new NpgsqlConnection(LocalTestDatabase.ConnectionString);
+        await using var second = new NpgsqlConnection(LocalTestDatabase.ConnectionString);
+        await first.OpenAsync();
+        await second.OpenAsync();
+        await using var firstTx = await first.BeginTransactionAsync();
+        await using var secondTx = await second.BeginTransactionAsync();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var firstRefresh = QueryRefresh(first, data.Artists, firstTx, timeout.Token);
+        Task<RefreshResult>? secondRefresh = null;
+        try
+        {
+            await WaitUntilBlocked(first.ProcessID, db.ProcessID);
+            secondRefresh = QueryRefresh(
+                second,
+                data.Artists.Reverse().ToArray(),
+                secondTx,
+                timeout.Token
+            );
+            await WaitUntilBlocked(second.ProcessID, db.ProcessID, first.ProcessID);
+        }
+        finally
+        {
+            await tx.CommitAsync();
+        }
+
+        // If each caller locked in input order, one could hold A and wait for B while
+        // the other held B and waited for A. Release each completed transaction in turn.
+        var firstResult = await firstRefresh;
+        await firstTx.CommitAsync();
+        var secondResult = await secondRefresh!;
+        await secondTx.CommitAsync();
+        firstResult.Should().Be(new RefreshResult(2, 0));
+        secondResult.Should().Be(new RefreshResult(2, 0));
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task WaitingRefreshReadsCommittedChangesFromRawSqlOutsideTheVenueMutex(
+        bool partialOverlap
+    )
     {
         await Refresh();
         await tx.CommitAsync();
         committedFixture = true;
         await tx.DisposeAsync();
         tx = await db.BeginTransactionAsync();
-        await Refresh(); // Hold the shared venue mutex through this transaction.
+        await QueryRefresh(db, partialOverlap ? [data.Artists[0]] : data.Artists, tx);
 
         await using var waiting = new NpgsqlConnection(LocalTestDatabase.ConnectionString);
         await waiting.OpenAsync();
@@ -559,7 +694,7 @@ public sealed class TestArtistVenueCounts
         }
         finally
         {
-            // This transaction only holds the venue mutex. Always release it so the
+            // This transaction only holds refresh locks. Always release it so the
             // waiting refresh can finish, including when a test assertion fails.
             await tx.CommitAsync();
         }
@@ -623,8 +758,31 @@ public sealed class TestArtistVenueCounts
         }
     }
 
-    private Task<RefreshResult> Refresh() =>
-        db.QuerySingleAsync<RefreshResult>(RefreshSql, new { artists = data.Artists }, tx);
+    private Task<RefreshResult> Refresh() => QueryRefresh(db, data.Artists, tx);
+
+    private async Task CommitFixtureAndBeginTransaction()
+    {
+        await Refresh();
+        await tx.CommitAsync();
+        committedFixture = true;
+        await tx.DisposeAsync();
+        tx = await db.BeginTransactionAsync();
+    }
+
+    private static Task<RefreshResult> QueryRefresh(
+        NpgsqlConnection connection,
+        Guid[]? artists,
+        NpgsqlTransaction? transaction = null,
+        CancellationToken cancellationToken = default
+    ) =>
+        connection.QuerySingleAsync<RefreshResult>(
+            new CommandDefinition(
+                RefreshSql,
+                new { artists },
+                transaction,
+                cancellationToken: cancellationToken
+            )
+        );
 
     private async Task<Relationship[]> Rows() =>
         (await db.QueryAsync<Relationship>(RowSql, new { artists = data.Artists }, tx)).ToArray();
@@ -703,7 +861,7 @@ public sealed class TestArtistVenueCounts
             transaction
         );
 
-    private static async Task WaitUntilBlocked(int waitingPid, int blockingPid)
+    private static async Task WaitUntilBlocked(int waitingPid, params int[] blockingPids)
     {
         await using var monitor = new NpgsqlConnection(LocalTestDatabase.ConnectionString);
         await monitor.OpenAsync();
@@ -712,8 +870,8 @@ public sealed class TestArtistVenueCounts
         {
             if (
                 await monitor.QuerySingleAsync<bool>(
-                    "SELECT @blockingPid=ANY(pg_blocking_pids(@waitingPid))",
-                    new { blockingPid, waitingPid }
+                    "SELECT pg_blocking_pids(@waitingPid) && @blockingPids",
+                    new { blockingPids, waitingPid }
                 )
             )
             {
@@ -721,7 +879,7 @@ public sealed class TestArtistVenueCounts
             }
             await Task.Delay(20);
         }
-        Assert.Fail("The concurrent refresh did not wait for the active refresh transaction.");
+        Assert.Fail("The concurrent operation did not wait for an active transaction.");
     }
 
     private sealed record Fixture(
