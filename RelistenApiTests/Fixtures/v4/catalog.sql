@@ -44,6 +44,13 @@ INSERT INTO norm.venues (id,name,slug,kind,parent_id,city,region,country,author_
 VALUES ('venue_00000001' ,'Current Arena','review-arena','room','venue_00000003','Philadelphia','PA','US','importer','v4-review','00000000-0000-0000-0000-000000000099');
 INSERT INTO norm.venue_names (venue_id,normalized,name,kind,valid_from,valid_to,author_type,author_ref,run_uuid)
 VALUES ('venue_00000001','historical-arena','Historical Arena','official','1990-01-01','2000-01-01','importer','v4-review','00000000-0000-0000-0000-000000000099');
+-- Preserve open bounds, overlapping periods, repeated names, and non-official aliases.
+INSERT INTO norm.venue_names (venue_id,normalized,name,kind,valid_from,valid_to,author_type,author_ref,run_uuid)
+VALUES ('venue_00000001','original-arena','Original Arena','official','-infinity','1990-01-01','importer','v4-review','00000000-0000-0000-0000-000000000099'),
+       ('venue_00000001','historical-arena','Historical Arena','official','1994-01-01','1996-01-01','importer','v4-review','00000000-0000-0000-0000-000000000099'),
+       ('venue_00000001','current-arena','Current Arena','official','2000-01-01',NULL,'importer','v4-review','00000000-0000-0000-0000-000000000099'),
+       ('venue_00000001','arena','Arena','short','-infinity',NULL,'importer','v4-review','00000000-0000-0000-0000-000000000099'),
+       ('venue_00000001','historical-areena','Historical Areena','spelling','-infinity',NULL,'importer','v4-review','00000000-0000-0000-0000-000000000099');
 INSERT INTO norm.show_venues (show_uuid,venue_id,basis,author_type,author_ref,run_uuid)
 SELECT ('00000000-0000-0000-0000-'||lpad(i::text,12,'0'))::uuid,'venue_00000001','evidence',
        'importer','v4-review','00000000-0000-0000-0000-000000000099'

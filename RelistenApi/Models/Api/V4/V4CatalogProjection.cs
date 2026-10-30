@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Linq;
 using Relisten.Catalog;
 using Relisten.Identifiers;
@@ -37,8 +38,7 @@ public static class V4CatalogProjection
             CreatedAt = value.created_at,
             UpdatedAt = value.updated_at,
             ImportedVenue = value.ImportedVenue is { } imported ? ImportedVenue(imported) : null,
-            NormalizedVenue = value.NormalizedVenue is { } normalized ? Venue(normalized) : null,
-            VenueDisplay = new(value.VenueDisplayName, DisplayLocation(value)),
+            Venue = value.Venue is { } venue ? Venue(venue) : null,
             Year = value.Year is { } year ? Year(year) : null,
             Tour = value.Tour is { } tour ? Tour(tour) : null,
             Era = value.Era is { } era ? Era(era) : null,
@@ -171,7 +171,7 @@ public static class V4CatalogProjection
     public static EraResource Era(CatalogEra value) =>
         new() { Order = value.order, Name = value.name };
 
-    public static NormalizedSongResource Song(CatalogSong value) =>
+    public static SongResource Song(CatalogSong value) =>
         new()
         {
             Id = SongId.Parse(value.id),
@@ -179,27 +179,27 @@ public static class V4CatalogProjection
             Name = value.name,
             Kind = value.kind switch
             {
-                "song" => NormalizedSongKind.Song,
-                "jam" => NormalizedSongKind.Jam,
-                "segment" => NormalizedSongKind.Segment,
-                "tuning" => NormalizedSongKind.Tuning,
-                "banter" => NormalizedSongKind.Banter,
-                "other" => NormalizedSongKind.Other,
+                "song" => SongKind.Song,
+                "jam" => SongKind.Jam,
+                "segment" => SongKind.Segment,
+                "tuning" => SongKind.Tuning,
+                "banter" => SongKind.Banter,
+                "other" => SongKind.Other,
                 null => null,
-                _ => throw new InvalidOperationException("Unsupported NormalizedSongKind value."),
+                _ => throw new InvalidOperationException("Unsupported SongKind value."),
             },
         };
 
-    public static NormalizedVenueResource Venue(CatalogVenue value) =>
+    public static VenueResource Venue(CatalogVenue value) =>
         new()
         {
             Id = VenueId.Parse(value.id),
             Name = value.name,
             Kind = value.kind switch
             {
-                "site" => NormalizedVenueKind.Site,
-                "room" => NormalizedVenueKind.Room,
-                _ => throw new InvalidOperationException("Unsupported NormalizedVenueKind value."),
+                "site" => VenueKind.Site,
+                "room" => VenueKind.Room,
+                _ => throw new InvalidOperationException("Unsupported VenueKind value."),
             },
             ParentId = value.parent_id is { } parent ? VenueId.Parse(parent) : null,
             City = value.city,
@@ -216,7 +216,26 @@ public static class V4CatalogProjection
                     "Unsupported VenueCoordinatePrecision value."
                 ),
             },
+            Names = value.Names.Select(VenueName).ToArray(),
         };
+
+    private static VenueNameResource VenueName(CatalogVenueName value) =>
+        new(
+            value.name,
+            value.kind switch
+            {
+                "official" => VenueNameKind.Official,
+                "short" => VenueNameKind.Short,
+                "spelling" => VenueNameKind.Spelling,
+                _ => throw new InvalidOperationException("Unsupported venue name kind."),
+            },
+            value.valid_from is { } from
+                ? DateOnly.ParseExact(from, "yyyy-MM-dd", CultureInfo.InvariantCulture)
+                : null,
+            value.valid_to is { } to
+                ? DateOnly.ParseExact(to, "yyyy-MM-dd", CultureInfo.InvariantCulture)
+                : null
+        );
 
     public static TrackPartResource Part(CatalogPart value) =>
         new()
@@ -289,18 +308,4 @@ public static class V4CatalogProjection
             CreatedAt = value.created_at,
             UpdatedAt = value.updated_at,
         };
-
-    // Canonical coordinates/locality may be incomplete while imported observations remain useful.
-    private static string? DisplayLocation(CatalogShow show)
-    {
-        if (show.NormalizedVenue is not { } venue)
-        {
-            return show.ImportedVenue?.location;
-        }
-        var location = string.Join(
-            ", ",
-            new[] { venue.city, venue.region, venue.country }.Where(x => !string.IsNullOrEmpty(x))
-        );
-        return location.Length > 0 ? location : show.ImportedVenue?.location;
-    }
 }

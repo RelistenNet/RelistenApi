@@ -29,8 +29,7 @@ public sealed class CatalogShow : CatalogTimestamps
     public int source_count { get; set; }
     public bool normalization_enabled { get; set; }
     public CatalogImportedVenue? ImportedVenue { get; set; }
-    public CatalogVenue? NormalizedVenue { get; set; }
-    public string? VenueDisplayName { get; set; }
+    public CatalogVenue? Venue { get; set; }
     public CatalogYear? Year { get; set; }
     public CatalogTour? Tour { get; set; }
     public CatalogEra? Era { get; set; }
@@ -155,6 +154,18 @@ public sealed class CatalogVenue
     public double? longitude { get; set; }
     public string? coordinate_precision { get; set; }
     public string? merged_into { get; set; }
+    public IReadOnlyList<CatalogVenueName> Names { get; set; } = [];
+}
+
+// Association keys retain the survivor and original owner independently. Name
+// periods remain on merged-away venues and still participate in historical display.
+public sealed class CatalogVenueName
+{
+    public string canonical_venue_id { get; set; } = null!;
+    public string name { get; set; } = null!;
+    public string kind { get; set; } = null!;
+    public string? valid_from { get; set; }
+    public string? valid_to { get; set; }
 }
 
 public sealed class CatalogPart
