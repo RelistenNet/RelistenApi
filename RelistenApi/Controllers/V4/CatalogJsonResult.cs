@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Net.Http.Headers;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
+using Relisten.Api.Models.Api;
 using Relisten.Identifiers;
 
 namespace Relisten.Controllers.V4;
@@ -20,7 +21,7 @@ internal sealed class CatalogJsonResult(object resource) : IActionResult
         {
             NamingStrategy = new SnakeCaseNamingStrategy(),
         },
-        Converters = { new PublicIdConverter() },
+        Converters = { new PublicIdConverter(), new NormalizationEnumConverter() },
         DateTimeZoneHandling = DateTimeZoneHandling.Utc,
     };
 

@@ -8,6 +8,20 @@ Follow [C1–C5 in the review guide](review-guide.md) for Alec's checkpoints.
 Automated checks support those reviews; a green test run does not approve the
 response design or authorize a deployment.
 
+## Shared enum foundation, verified 2026-10-29
+
+`codex/normalization-enums` contains the normalization vocabulary and its existing
+consumers; `codex/v4-api-c1` is based on that branch and uses its types directly.
+The foundation needs no database migration. Its solution build, 365 normalization
+tests, and 65 API/normalization tests passed. Two optional lab tests were skipped.
+An independent review found no remaining correctness or readability issue.
+
+After restacking, the solution build and all 51 focused v4/ID/Swagger tests passed.
+The running local API returned identical JSON for all six real track scenarios,
+the historical-venue show, and the entire v4 OpenAPI document compared with
+captures taken before the change. Existing package advisories and nullable
+warnings remain. No production changes occurred.
+
 ## Main edit locations
 
 API/normalization paths below are relative to this repository. Mobile paths are

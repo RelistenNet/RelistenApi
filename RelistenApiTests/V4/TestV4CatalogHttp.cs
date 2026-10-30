@@ -8,10 +8,12 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Hosting.Internal;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Microsoft.OpenApi;
 using Relisten;
 using Relisten.Controllers.V4;
@@ -49,6 +51,10 @@ public sealed class TestV4CatalogHttp
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.ConfigureKestrel(server => server.Listen(IPAddress.Loopback, 0));
         builder.Services.AddSingleton(db);
+        builder.Services.AddTransient<
+            IConfigureOptions<MvcNewtonsoftJsonOptions>,
+            RelistenApiJsonOptionsWrapper
+        >();
         builder
             .Services.AddControllers(options => options.EnableEndpointRouting = false)
             .AddApplicationPart(typeof(CatalogReadController).Assembly)
