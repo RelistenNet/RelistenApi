@@ -37,8 +37,10 @@ copied merge pointer. Creation and update timestamps describe the derived row.
 
 The `ArtistVenueCounts` service attempts refresh after import and normalization
 work commits. The admin app refreshes within its venue-edit transaction, so a
-refresh failure rolls the edit back. The SQL function uses the existing
-`norm-venues` lock and grants the restricted admin role narrow execution access.
+refresh failure rolls the edit back. Artist-scoped recounts share the venue gate
+and take ordered per-artist locks, so disjoint scopes can run concurrently. Full
+recounts and venue edits use the gate exclusively. The SQL function grants the
+restricted admin role narrow execution access.
 There is no recurring count job or pending queue. Failed post-commit hooks and
 direct SQL changes require an explicit refresh; no background repair cadence is
 promised.
