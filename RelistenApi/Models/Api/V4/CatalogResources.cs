@@ -105,7 +105,7 @@ public sealed class TrackResource
 }
 
 [JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
-public sealed class ImportedVenueResource
+public record ImportedVenueResource
 {
     public ImportedVenueId Id { get; init; }
     public ArtistId ArtistId { get; init; }

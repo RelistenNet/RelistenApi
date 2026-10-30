@@ -4,7 +4,6 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
-using Microsoft.Extensions.Logging;
 
 namespace Relisten.Catalog;
 
@@ -12,7 +11,7 @@ namespace Relisten.Catalog;
 /// Fills show metadata in batches for both navigation summaries and full recording reads.
 /// The caller owns the snapshot. This reader never loads sources or tracks itself.
 /// </summary>
-public sealed class CatalogShowMetadataReader(ILogger<CatalogShowMetadataReader> logger)
+public sealed class CatalogShowMetadataReader(CatalogVenueMetadataReader venueMetadata)
 {
     public async Task Apply(
         CatalogReadSession session,
@@ -117,103 +116,27 @@ public sealed class CatalogShowMetadataReader(ILogger<CatalogShowMetadataReader>
             return;
         }
 
-        // Carry show identity through the merge chain: one imported venue can map
-        // differently on different dates. Cycles and dangling chains preserve fallback.
-        var links = (
-            await session.Connection.QueryAsync<ShowVenue, CatalogVenue, ShowVenue>(
+        // Read show-specific assignments before sharing venue resolution: one imported
+        // venue can map differently for separate shows, even within the same artist.
+        var assignments = (
+            await session.Connection.QueryAsync<ShowVenue>(
                 session.Command(
-                    """
-                    WITH RECURSIVE chain AS (
-                      SELECT sv.show_uuid,v.*,ARRAY[v.id] path
-                      FROM norm.show_venues sv JOIN norm.venues v ON v.id=sv.venue_id
-                      WHERE sv.show_uuid=ANY(@showUuids)
-                      UNION ALL
-                      SELECT c.show_uuid,v.*,c.path || v.id
-                      FROM chain c JOIN norm.venues v ON v.id=c.merged_into
-                      WHERE cardinality(c.path)<32 AND NOT v.id=ANY(c.path)
-                    )
-                    SELECT c.show_uuid,c.id,c.name,c.kind,c.parent_id,c.city,c.region,c.country,
-                           c.latitude,c.longitude,c.coordinate_precision,c.merged_into
-                    FROM chain c
-                    """,
+                    "SELECT show_uuid,venue_id FROM norm.show_venues WHERE show_uuid=ANY(@showUuids)",
                     new { showUuids = approvedShows.Keys.ToArray() },
                     cancellationToken
-                ),
-                (assignment, venue) =>
-                {
-                    assignment.Venue = venue;
-                    return assignment;
-                },
-                splitOn: "id"
+                )
             )
         ).ToArray();
-        foreach (var group in links.GroupBy(x => x.show_uuid))
-        {
-            var survivor = group.SingleOrDefault(x => x.Venue.merged_into is null);
-            if (survivor is null)
-            {
-                logger.LogWarning(
-                    "Invalid normalized venue merge chain for show {ShowUuid}",
-                    group.Key
-                );
-                continue;
-            }
-            var show = approvedShows[group.Key];
-            show.Venue = survivor.Venue;
-        }
-
-        await ReadVenueNames(
+        var resolved = await venueMetadata.Read(
             session,
-            approvedShows
-                .Values.Where(show => show.Venue is not null)
-                .Select(show => show.Venue!)
-                .ToArray(),
+            assignments.Select(assignment => assignment.venue_id).ToArray(),
             cancellationToken
         );
-    }
-
-    private static async Task ReadVenueNames(
-        CatalogReadSession session,
-        IReadOnlyList<CatalogVenue> venues,
-        CancellationToken cancellationToken
-    )
-    {
-        if (venues.Count == 0)
+        foreach (var assignment in assignments)
         {
-            return;
-        }
-
-        // Names are aliases for discovery and details. Imported venue observations
-        // supply show labels; repeated stored periods must not duplicate aliases.
-        var ids = venues.Select(venue => venue.id).Distinct().ToArray();
-        var names = await session.Connection.QueryAsync<CatalogVenueName>(
-            session.Command(
-                """
-                WITH RECURSIVE lineage AS (
-                  SELECT v.id canonical_venue_id,v.id venue_id,0 depth,ARRAY[v.id] path
-                  FROM norm.venues v WHERE v.id=ANY(@ids)
-                  UNION ALL
-                  SELECT f.canonical_venue_id,v.id,f.depth+1,f.path || v.id
-                  FROM lineage f JOIN norm.venues v ON v.merged_into=f.venue_id
-                  WHERE f.depth<20 AND NOT v.id=ANY(f.path)
-                )
-                SELECT DISTINCT f.canonical_venue_id,n.name,n.kind
-                FROM lineage f JOIN norm.venue_names n ON n.venue_id=f.venue_id
-                ORDER BY f.canonical_venue_id,n.kind,n.name
-                """,
-                new { ids },
-                cancellationToken
-            )
-        );
-        var namesByVenue = names
-            .GroupBy(name => name.canonical_venue_id)
-            .ToDictionary(
-                group => group.Key,
-                group => (IReadOnlyList<CatalogVenueName>)group.ToArray()
+            approvedShows[assignment.show_uuid].Venue = resolved.GetValueOrDefault(
+                assignment.venue_id
             );
-        foreach (var venue in venues)
-        {
-            venue.Names = namesByVenue.GetValueOrDefault(venue.id) ?? [];
         }
     }
 
@@ -241,6 +164,6 @@ public sealed class CatalogShowMetadataReader(ILogger<CatalogShowMetadataReader>
     private sealed class ShowVenue
     {
         public Guid show_uuid { get; set; }
-        public CatalogVenue Venue { get; set; } = null!;
+        public string venue_id { get; set; } = null!;
     }
 }

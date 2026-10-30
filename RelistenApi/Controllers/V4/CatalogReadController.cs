@@ -34,6 +34,22 @@ public sealed class CatalogReadController(
             }
         );
 
+    [HttpGet("sources/{sourceId}")]
+    [ProducesResponseType(typeof(SourceResource), 200)]
+    [ProducesResponseType(typeof(ProblemDetails), 422)]
+    [ProducesResponseType(typeof(ProblemDetails), 404)]
+    [ProducesResponseType(typeof(ProblemDetails), 503)]
+    public Task<IActionResult> Source(string sourceId, CancellationToken cancellationToken) =>
+        Read(
+            sourceId,
+            SourceId.Prefix,
+            async uuid =>
+            {
+                var source = await reader.ReadSource(uuid, cancellationToken);
+                return source is null ? null : V4CatalogProjection.Source(source);
+            }
+        );
+
     [HttpGet("source-tracks/{sourceTrackId}")]
     [ProducesResponseType(typeof(TrackResource), 200)]
     [ProducesResponseType(typeof(ProblemDetails), 422)]

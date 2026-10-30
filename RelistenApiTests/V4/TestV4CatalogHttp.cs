@@ -25,7 +25,7 @@ namespace RelistenApiTests.V4;
 /// Synthetic edge cases run only in a disposable test database; no upstream calls run.
 /// </summary>
 [TestFixture, NonParallelizable, Category("LocalIngestion")]
-public sealed class TestV4CatalogHttp
+public sealed partial class TestV4CatalogHttp
 {
     private WebApplication app = null!;
     private HttpClient http = null!;
@@ -973,7 +973,15 @@ public sealed class TestV4CatalogHttp
                 "/api/v4/artists/{artistId}/years/by-number/{year}",
                 "/api/v4/artists/{artistId}/shows",
                 "/api/v4/shows/{showId}",
-                "/api/v4/source-tracks/{sourceTrackId}"
+                "/api/v4/source-tracks/{sourceTrackId}",
+                "/api/v4/sources/{sourceId}",
+                "/api/v4/artists/{artistId}/venues",
+                "/api/v4/artists/{artistId}/venues/{venueId}",
+                "/api/v4/artists/{artistId}/venues/{venueId}/shows",
+                "/api/v4/artists/{artistId}/imported-venues",
+                "/api/v4/artists/{artistId}/imported-venues/{importedVenueId}",
+                "/api/v4/venues/{venueId}",
+                "/api/v4/venues/{venueId}/shows"
             );
         var legacy = await GetJson("/api-docs/v3/swagger.json");
         legacy["paths"]!

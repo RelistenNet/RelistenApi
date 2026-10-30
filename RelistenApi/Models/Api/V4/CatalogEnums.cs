@@ -4,6 +4,16 @@ using Newtonsoft.Json.Converters;
 
 namespace Relisten.Api.Models.Api.V4;
 
+[JsonConverter(typeof(StringEnumConverter))]
+public enum VenueEntryKind
+{
+    [EnumMember(Value = "venue")]
+    Venue,
+
+    [EnumMember(Value = "imported_venue")]
+    ImportedVenue,
+}
+
 // API-owned response states and recording vocabulary. Normalization kinds,
 // precision and qualifiers come directly from Relisten.Normalization.
 // EnumMember preserves wire spelling for JSON and OpenAPI.

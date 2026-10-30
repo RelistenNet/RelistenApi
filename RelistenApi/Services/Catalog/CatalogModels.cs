@@ -102,6 +102,7 @@ public sealed class CatalogTrack : CatalogTimestamps
 
 public sealed class CatalogImportedVenue : CatalogTimestamps
 {
+    public int show_count { get; set; }
     public long id { get; set; }
     public Guid uuid { get; set; }
     public Guid artist_uuid { get; set; }
