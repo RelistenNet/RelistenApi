@@ -9,13 +9,14 @@ using Dapper;
 
 namespace Relisten.Normalization;
 
-/// The public id of a venue or song (string-theory ddl/004_norm_ids.sql): a full-name prefix
-/// and 8 random lowercase Crockford base32 characters, "venue_k3m9x2qa". The API serves them,
-/// so they are short; nothing could derive them stably (names and slugs change), so they are
-/// random. 40 bits leave a collision about once in ten million mints at our sizes. A freshly
-/// minted id is written with NormStore.CreateVenuesAsync / CreateSongsAsync, which have no
-/// conflict clause: the primary key refuses a taken id, the run fails, and the step's retry
-/// mints fresh ones, rather than the write landing on the row that holds the id.
+/// The public id of a venue, song, or artist/venue relationship: a full-name prefix
+/// and 8 random lowercase Crockford base32 characters, "venue_k3m9x2qa". Names and slugs
+/// change; these stored identities do not. Artist/venue pairs keep their minted identity
+/// across count refreshes and zero counts. 40 bits leave a collision about once in ten
+/// million mints at our sizes. The venue/song writers reject a taken id, as does the
+/// artist/venue refresh in SQL. Only conflicts on a relationship's natural pair are benign.
+/// An id collision fails the write, so a retry mints fresh ids rather than landing on the
+/// row that holds the id.
 ///
 /// Each kind is its own type, so a song's id can't stand in for a venue's, and a value is
 /// checked against its prefix when it is made. The database and Temporal see the string.
@@ -72,6 +73,7 @@ public static partial class NormIds
     {
         SqlMapper.AddTypeHandler(new DapperHandler<VenueId>());
         SqlMapper.AddTypeHandler(new DapperHandler<SongId>());
+        SqlMapper.AddTypeHandler(new DapperHandler<ArtistVenueId>());
     }
 
     private sealed class DapperHandler<T> : SqlMapper.TypeHandler<T>
@@ -140,6 +142,24 @@ public readonly record struct SongId : INormId<SongId>, IComparable<SongId>
     public static SongId New() => NormIds.New<SongId>();
 
     public int CompareTo(SongId other) => string.CompareOrdinal(Value, other.Value);
+
+    public override string ToString() => Value;
+}
+
+[JsonConverter(typeof(NormIds.JsonConverter<ArtistVenueId>))]
+public readonly record struct ArtistVenueId : INormId<ArtistVenueId>, IComparable<ArtistVenueId>
+{
+    private ArtistVenueId(string value) => Value = value;
+
+    public static string Prefix => "artist_venue";
+
+    public string Value { get; }
+
+    public static ArtistVenueId Parse(string value) => new(NormIds.Checked<ArtistVenueId>(value));
+
+    public static ArtistVenueId New() => NormIds.New<ArtistVenueId>();
+
+    public int CompareTo(ArtistVenueId other) => string.CompareOrdinal(Value, other.Value);
 
     public override string ToString() => Value;
 }

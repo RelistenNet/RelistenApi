@@ -3,8 +3,9 @@ using System.IO;
 
 namespace Relisten.Normalization;
 
-/// The norm DDL, embedded from Sql/: copied verbatim from RelistenNet/string-theory ddl/, so it
-/// stays diffable. RelistenApi's migrations run it in the shared migration sequence.
+/// Embedded normalization DDL. Files 013/014 retain their string-theory sources;
+/// later migrations also own derived catalog storage here. RelistenApi runs these
+/// files in its shared migration sequence.
 public static class NormalizationSql
 {
     public static string Read(string fileName)

@@ -4,8 +4,8 @@ using SimpleMigrations;
 
 namespace Migrations;
 
-// Runs files embedded from Migrations/Sql. The norm, media and reality schemas are copied
-// verbatim from the ratified DDL in RelistenNet/string-theory (ddl/), so they stay diffable.
+// Runs embedded schema files. The original norm, media and reality DDL retains its
+// string-theory source; later migrations can also own derived catalog storage here.
 public abstract class SqlFileMigration : Migration
 {
     protected void ExecuteSqlFile(string fileName)

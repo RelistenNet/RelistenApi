@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
+using Npgsql;
 using Relisten.Normalization.Venues;
 using Temporalio.Activities;
 
@@ -23,24 +25,37 @@ public sealed record VenueForgetInput(
 
 /// The venue catalogue's steps. Each reads the catalogue fresh, so a resumed run continues
 /// from what earlier steps committed.
-public sealed class VenueActivities(VenueMatch match, VenueLlm llm, VenueHistory history)
+public sealed class VenueActivities(
+    VenueMatch match,
+    VenueLlm llm,
+    VenueHistory history,
+    ArtistVenueCounts counts,
+    ILogger<VenueActivities> logger
+)
 {
     [Activity("Venues.History")]
     public async Task<VenueHistoryResult> History(int minShows, IReadOnlyList<Guid>? artists)
     {
         using var heartbeat = new ActivityHeartbeat();
-        return await history.RunChunkAsync(
+        var result = await history.RunChunkAsync(
             minShows,
             ActivityExecutionContext.Current.CancellationToken,
             artists
         );
+        await RefreshCountsAsync();
+        return result;
     }
 
     [Activity("Venues.Match")]
     public async Task<VenueMatchResult> Match(IReadOnlyList<Guid>? artists)
     {
         using var heartbeat = new ActivityHeartbeat();
-        return await match.RunAsync(artists, ActivityExecutionContext.Current.CancellationToken);
+        var result = await match.RunAsync(
+            artists,
+            ActivityExecutionContext.Current.CancellationToken
+        );
+        await RefreshCountsAsync();
+        return result;
     }
 
     /// A re-ask or rematch run's first step: choose the placements to forget (reads only).
@@ -61,11 +76,13 @@ public sealed class VenueActivities(VenueMatch match, VenueLlm llm, VenueHistory
     public async Task<int> Forget(IReadOnlyList<Guid> rows, bool reask)
     {
         using var heartbeat = new ActivityHeartbeat();
-        return await match.ForgetAsync(
+        var result = await match.ForgetAsync(
             rows,
             reask,
             ActivityExecutionContext.Current.CancellationToken
         );
+        await RefreshCountsAsync();
+        return result;
     }
 
     /// Its last: the venues the forgotten rows left with nothing.
@@ -73,26 +90,56 @@ public sealed class VenueActivities(VenueMatch match, VenueLlm llm, VenueHistory
     public async Task<int> Retire(IReadOnlyList<VenueId> venues)
     {
         using var heartbeat = new ActivityHeartbeat();
-        return await match.RetireAsync(venues, ActivityExecutionContext.Current.CancellationToken);
+        var result = await match.RetireAsync(
+            venues,
+            ActivityExecutionContext.Current.CancellationToken
+        );
+        await RefreshCountsAsync();
+        return result;
     }
 
     [Activity("Venues.Chunk")]
     public async Task<VenueChunkResult> Chunk(VenueChunkInput input)
     {
         using var heartbeat = new ActivityHeartbeat();
-        return await llm.RunChunkAsync(
+        var result = await llm.RunChunkAsync(
             input.Artists,
             input.Skip,
             ActivityExecutionContext.Current.CancellationToken,
             input.MayRetry,
             input.Parallel
         );
+        await RefreshCountsAsync();
+        return result;
+    }
+
+    private async Task RefreshCountsAsync()
+    {
+        var cancellationToken = ActivityExecutionContext.Current.CancellationToken;
+        try
+        {
+            await counts.RefreshPendingAsync(cancellationToken: cancellationToken);
+        }
+        catch (Exception exception)
+            when (!cancellationToken.IsCancellationRequested
+                && exception is NpgsqlException or TimeoutException
+            )
+        {
+            // Normalization already committed. The durable queue keeps failed/busy
+            // artists pending for the scheduled refresh rather than failing model work.
+            logger.LogWarning(exception, "Artist venue counts remain pending after normalization");
+        }
     }
 }
 
 /// The venue steps that never call the model, so they run without OpenAI settings: the match
 /// after an artist's import, and the nightly run's artists.
-public sealed class VenueMatchActivities(VenueMatch match, NormFlags flags)
+public sealed class VenueMatchActivities(
+    VenueMatch match,
+    NormFlags flags,
+    ArtistVenueCounts counts,
+    ILogger<VenueMatchActivities> logger
+)
 {
     /// After an artist's import: the free match for its new rows, when the artist's venues
     /// are switched on (features.norm_venues); null when they aren't.
@@ -106,11 +153,28 @@ public sealed class VenueMatchActivities(VenueMatch match, NormFlags flags)
 
         // Best effort: a venue step holding the lock means defer, never keep the import open.
         using var heartbeat = new ActivityHeartbeat();
-        return await match.RunAsync(
+        var result = await match.RunAsync(
             [artist],
             ActivityExecutionContext.Current.CancellationToken,
             wait: false
         );
+        var cancellationToken = ActivityExecutionContext.Current.CancellationToken;
+        try
+        {
+            await counts.RefreshArtistsAsync([artist], cancellationToken);
+        }
+        catch (Exception exception)
+            when (!cancellationToken.IsCancellationRequested
+                && exception is NpgsqlException or TimeoutException
+            )
+        {
+            logger.LogWarning(
+                exception,
+                "Artist venue counts remain pending after matching {Artist}",
+                artist
+            );
+        }
+        return result;
     }
 
     /// The artists whose venues are switched on, for the nightly run.
