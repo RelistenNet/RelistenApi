@@ -13,6 +13,7 @@
       "has_soundboard_source": true,
       "has_streamable_flac_source": true,
       "source_count": 1,
+      "popularity": null,
       "created_at": "2025-08-02T08:40:54.845257Z",
       "updated_at": "2017-09-10T04:26:48Z",
       "imported_venue": {

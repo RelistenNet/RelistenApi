@@ -210,6 +210,8 @@ Implement mobile's actual queries, not a generic interpreter of all server route
   random show browsing with focused HTTP tests and real-data review links.
 - [x] Complete the ten search/popularity/trending/momentum reads and verify
   current metadata against real ranking aggregates from the read-only replica.
+- [x] Publish artist-local popularity through the shared show enrichment and
+  projection, preserving separate ranking selection and score-only ETags.
 - [ ] C2–C5 remain unstarted pending the C1 response review.
 
 ## Discoveries and changes from the exploration
@@ -446,6 +448,10 @@ by accepting this plan.
 - 2026-10-30, Alec: implement search and all listening-ranking reads before auth.
   Use a real aggregate snapshot for local review; update `AGENTS.md` when
   production access instructions do not match the available context.
+
+- 2026-10-30, Alec: every returned show includes artist-local popularity. Global
+  and organic ranking inputs control order without overwriting shared metrics;
+  enrich/project once across all route families.
 
 ## Outcomes and retrospective
 

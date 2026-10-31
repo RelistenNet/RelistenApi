@@ -12,6 +12,27 @@
     "has_soundboard_source": false,
     "has_streamable_flac_source": true,
     "source_count": 26,
+    "popularity": {
+      "momentum_score": 0.5866,
+      "trend_ratio": 0.7902,
+      "windows": {
+        "48h": {
+          "plays": 36,
+          "hours": 4.8417,
+          "hot_score": 6.0
+        },
+        "7d": {
+          "plays": 30,
+          "hours": 3.7511,
+          "hot_score": 5.4772
+        },
+        "30d": {
+          "plays": 1851,
+          "hours": 240.9864,
+          "hot_score": 43.0232
+        }
+      }
+    },
     "created_at": "2018-10-23T07:00:49.513477Z",
     "updated_at": "2026-10-28T07:01:00.311054Z",
     "imported_venue": {
@@ -93,6 +114,27 @@
     "has_soundboard_source": true,
     "has_streamable_flac_source": true,
     "source_count": 32,
+    "popularity": {
+      "momentum_score": 0.4048,
+      "trend_ratio": 0.2136,
+      "windows": {
+        "48h": {
+          "plays": 34,
+          "hours": 4.4114,
+          "hot_score": 5.831
+        },
+        "7d": {
+          "plays": 154,
+          "hours": 19.5072,
+          "hot_score": 12.4097
+        },
+        "30d": {
+          "plays": 781,
+          "hours": 99.4114,
+          "hot_score": 27.9464
+        }
+      }
+    },
     "created_at": "2018-10-23T07:00:49.513477Z",
     "updated_at": "2026-10-25T07:01:14.669591Z",
     "imported_venue": {

@@ -944,3 +944,63 @@ Current timings and complete response headers/bodies are refreshed by the review
 capture script. Production input-cache miss/stale behavior remains asynchronous
 and separate from the request's catalog snapshot. Redis/SQL failures return
 503/no-store; no partial successful result or validator is published.
+
+### Shared artist-local show popularity — 2026-10-30
+
+Commit `c90c069a9` publishes nullable `popularity` on the shared show summary and
+full-show resource. Artist/year lists, song/venue/tour details, date/recent lists,
+search, snapshots, resolver parents, full shows and rankings use one enrichment
+and projection. A missing artist-map entry stays `null`; normalization approval
+does not control metrics. Ranked shows inherit the field and add only `rank`.
+Global scores and organic momentum choose ordering without overwriting the
+returned raw artist-local momentum score.
+
+`CatalogShowPopularityReader` is request-scoped and shares each artist's raw map
+between ranking selection and show enrichment. Catalog SQL retains its existing
+primary repeatable-read transaction. The score cache remains an asynchronous
+input with its existing miss/stale refresh behavior. A failed request does not
+retain its memoized fault into a later request. Cancellation stops waiting while
+an already-started input refresh may complete. No schema, auth, account, or
+production configuration changed.
+
+The focused v4/popularity suite passes all 148 checks. The existing ranking HTTP
+fixture was extended rather than adding another host or fixture builder. It uses
+deliberately different global, raw local and organic scores to verify cross-route
+field equality and unchanged window/organic ordering. It also checks a raw
+artist with activity, a missing entry, score-only ETag changes on rankings and
+artist snapshots, and fresh-request recovery. The later test simplification
+reuses cache DTOs and names the cross-route assertion phase; its focused rerun
+passes. Redis fixture keys are restored and remain isolated in DB 15.
+
+Two-pass independent review found one error-boundary gap: stale score inputs can
+trigger a Hangfire refresh enqueue, whose wrapped storage exception escaped as
+500. The focused regression reproduced 500 with the handler excluded; adding
+`BackgroundJobClientException` to the existing dependency boundary produces
+503/no-store without an ETag and then recovers on a fresh request. No new retry,
+queue, or best-effort refresh policy was introduced. No other review findings
+remained. Formatter and diff checks passed.
+
+Alec's approved local real-data review snapshot was expanded using the production
+read-only replica and the existing show aggregate/scoring rules. The batch export
+was partitioned by artist before computing momentum: 62,650 show entries across
+2,814 artists, plus valid empty maps for 1,552 other local catalog artists. Only
+local Redis DB 0 was updated. The capture at 2026-10-31 00:02 UTC (October 30,
+5:02 p.m. Pacific) is recorded separately under `artistLocalShows` in ignored
+`ranking-snapshot-provenance.json`; original local values remain backed up.
+Production was not changed and no synthetic play events were added.
+
+The regenerated capture checks every encountered show for a `popularity` field
+and compares repeated IDs across routes against the fixed local input snapshot.
+It verified 4,513 unique show IDs, 3,188 with metrics; remaining entries are null.
+Full captures and `shared-popularity-review.json` are ignored local artifacts;
+checked-in excerpts now show the shared field. Explicit HTTP comparison with
+direct show details also confirmed equality for artist, song, venue, date and
+ranking results.
+
+Single warm capture samples: artist shows 78 ms, complete artist snapshot 146 ms,
+Scarlet Begonias detail 93 ms, shared Red Rocks detail 53 ms, July 7 anniversary
+15 ms, global today 273 ms, five popular shows 100 ms and momentum 27 ms. These
+are development-machine samples, not percentiles or production load evidence.
+The global default date crossed UTC midnight during this review; it uses the
+unchanged database-session date contract. No server-side response cache, generic
+revision mechanism or additional locks were added.

@@ -23,6 +23,11 @@ shared venue across approved-read artists. The old flat `show.venue` is removed.
 The same relationship metadata appears in show summaries, full shows, canonical
 artist-list children, and direct artist venue detail. Only detail adds complete `shows`.
 
+Every returned show now includes `popularity`, using the same raw artist-local
+metrics in browse, detail, snapshot, resolver and ranking responses. Ranked shows
+add only `rank`. Global and organic scores control order without replacing the
+shared show's metrics. Missing activity is `null`; score refreshes change ETags.
+
 The local host now serves 49 review routes (48 GETs and one POST). Venue and song detail destinations
 return metadata and complete `shows` together. Direct
 lookups use the resource's ID kind; there is no returned detail URL. Compact
