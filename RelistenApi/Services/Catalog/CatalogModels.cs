@@ -33,6 +33,7 @@ public sealed class CatalogShow : CatalogTimestamps
     public CatalogYear? Year { get; set; }
     public CatalogTour? Tour { get; set; }
     public CatalogEra? Era { get; set; }
+    public Relisten.Api.Models.PopularityMetrics? Popularity { get; set; }
     public List<CatalogSource> Sources { get; set; } = [];
 }
 

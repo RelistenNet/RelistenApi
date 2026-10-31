@@ -3,6 +3,8 @@ using System.Reflection;
 using System.Text.Json.Nodes;
 using Dapper;
 using FluentAssertions;
+using Hangfire;
+using Relisten.Api.Models;
 using Relisten.Services.Popularity;
 using StackExchange.Redis;
 
@@ -117,49 +119,52 @@ public sealed partial class TestV4CatalogHttp
             "popularity:shows:map:30d-48h",
             "popularity:years:map:30d-48h",
             $"popularity:artist:{Guid.Parse("00000000-0000-0000-0000-000000000014")}:shows:map:30d-48h",
+            $"popularity:artist:{Guid.Parse("00000000-0000-0000-0000-000000000011")}:shows:map:30d-48h",
         };
         var previous = new Dictionary<string, RedisValue>();
         foreach (var key in keys)
+        {
             previous[key] = await rankingRedis.db.StringGetAsync(key);
+        }
         try
         {
-            object Metrics(int month, int week, int hours, double momentum = 0.1) =>
-                new
+            CachedShowPopularity Metrics(int month, int week, int hours, double momentum = 0.1) =>
+                new()
                 {
-                    windows = new Dictionary<string, object>
+                    windows = new PopularityWindows
                     {
-                        ["30d"] = new
+                        days_30d = new()
                         {
                             plays = month,
                             hours = 1,
                             hot_score = month,
                         },
-                        ["7d"] = new
+                        days_7d = new()
                         {
                             plays = week,
                             hours = 1,
                             hot_score = week,
                         },
-                        ["48h"] = new
+                        hours_48h = new()
                         {
                             plays = hours,
                             hours = 1,
                             hot_score = hours,
                         },
                     },
-                    trend_ratio = 2.0,
+                    trend_ratio = 2,
                     momentum_score = momentum,
                     plays_6h = 1,
                     plays_90d = 100,
-                    momentum = new { raw = momentum, organic = 1 - momentum },
+                    momentum = new() { raw = momentum, organic = 1 - momentum },
                 };
-            async Task Put(string key, object data) =>
+            async Task Put(string key, object data, bool stale = false) =>
                 await rankingRedis.db.StringSetAsync(
                     key,
                     Newtonsoft.Json.JsonConvert.SerializeObject(
                         new
                         {
-                            generated_at = DateTime.UtcNow,
+                            generated_at = stale ? DateTime.UtcNow.AddHours(-2) : DateTime.UtcNow,
                             stale_after_seconds = 3600,
                             data,
                         }
@@ -177,8 +182,29 @@ public sealed partial class TestV4CatalogHttp
                     [Guid.Parse("00000000-0000-0000-0000-000000000014")] = Metrics(2000, 100, 200),
                 }
             );
-            await Put(keys[1], showMap);
+            // Global momentum is a different comparison population. It must not leak
+            // into the same show's artist-local resource fields.
+            await Put(
+                keys[1],
+                new Dictionary<Guid, object>
+                {
+                    [Guid.Parse("00000000-0000-0000-0000-000000000004")] = Metrics(
+                        100,
+                        10,
+                        20,
+                        0.4
+                    ),
+                    [Guid.Parse("00000000-0000-0000-0000-000000000010")] = Metrics(50, 40, 5, 0.5),
+                }
+            );
             await Put(keys[3], showMap);
+            await Put(
+                keys[4],
+                new Dictionary<Guid, object>
+                {
+                    [Guid.Parse("00000000-0000-0000-0000-000000000001")] = Metrics(25, 10, 5, 0.3),
+                }
+            );
             await Put(
                 keys[2],
                 new Dictionary<Guid, object>
@@ -210,22 +236,98 @@ public sealed partial class TestV4CatalogHttp
                 .GetValue<string>()
                 .Should()
                 .StartWith("year_");
+            var expectedPopularity = (await GetJson(ShowPath(4)))["popularity"]!;
+            expectedPopularity["momentum_score"]!.GetValue<double>().Should().Be(0.9);
+            await AssertArtistLocalPopularityAcrossRoutes(expectedPopularity);
+            JsonNode.DeepEquals(grouped["popularity"], expectedPopularity).Should().BeTrue();
+            var resolved = await Resolve(Reference("show", "v4", ShowId(4)));
+            JsonNode
+                .DeepEquals(resolved["entities"]!["shows"]![0]!["popularity"], expectedPopularity)
+                .Should()
+                .BeTrue();
+            var raw = await GetJson(ShowPath(1));
+            raw["artist_venue"].Should().BeNull();
+            raw["popularity"]!["momentum_score"]!.GetValue<double>().Should().Be(0.3);
+            var rawList = await GetJson("/api/v4/artists/" + CatalogId("artist", 11) + "/shows");
+            JsonNode.DeepEquals(rawList[0]!["popularity"], raw["popularity"]).Should().BeTrue();
+            var noActivity = await GetJson(ShowPath(2));
+            noActivity.AsObject().ContainsKey("popularity").Should().BeTrue();
+            noActivity["popularity"].Should().BeNull();
             using var ranked = await http.GetAsync("/api/v4/popular/shows");
             using var unchanged = await Conditional(
                 "/api/v4/popular/shows",
                 ranked.Headers.ETag!.ToString()
             );
             unchanged.StatusCode.Should().Be(HttpStatusCode.NotModified);
+            using var artistSnapshot = await http.GetAsync(BrowseArtistPath + "/catalog");
+            showMap[Guid.Parse("00000000-0000-0000-0000-000000000004")] = Metrics(100, 10, 20, 0.7);
+            await Put(keys[3], showMap);
+            using var changed = await Conditional(
+                "/api/v4/popular/shows",
+                ranked.Headers.ETag!.ToString()
+            );
+            changed.StatusCode.Should().Be(HttpStatusCode.OK);
+            using var changedSnapshot = await Conditional(
+                BrowseArtistPath + "/catalog",
+                artistSnapshot.Headers.ETag!.ToString()
+            );
+            changedSnapshot.StatusCode.Should().Be(HttpStatusCode.OK);
+            var updated = (await GetJson(ShowPath(4)))["popularity"]!;
+            updated["momentum_score"]!.GetValue<double>().Should().Be(0.7);
+            await Put(keys[3], showMap, stale: true);
+            using var unavailable = await Conditional(BrowseArtistPath + "/shows", "*");
+            unavailable.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+            unavailable.Headers.CacheControl!.NoStore.Should().BeTrue();
+            unavailable.Headers.ETag.Should().BeNull();
+            await Put(keys[3], showMap);
+            (await GetJson(ShowPath(4)))["popularity"]!["momentum_score"]!
+                .GetValue<double>()
+                .Should()
+                .Be(0.7);
         }
         finally
         {
             foreach (var (key, value) in previous)
             {
                 if (value.IsNull)
+                {
                     await rankingRedis.db.KeyDeleteAsync(key);
+                }
                 else
+                {
                     await rankingRedis.db.StringSetAsync(key, value);
+                }
             }
+        }
+    }
+
+    private async Task AssertArtistLocalPopularityAcrossRoutes(JsonNode expectedPopularity)
+    {
+        foreach (
+            var (path, field) in new[]
+            {
+                (BrowseArtistPath + "/shows", (string?)null),
+                (BrowseArtistPath + "/years/by-number/1995", "shows"),
+                (BrowseArtistPath + "/catalog", "shows"),
+                ("/api/v4/songs/song_00000003", "shows"),
+                ("/api/v4/venues/venue_00000001", "shows"),
+                (BrowseArtistPath + "/venues/venue_00000001", "shows"),
+                ("/api/v4/imported-venues/" + CatalogId("imported_venue", 74), "shows"),
+                ("/api/v4/tours/" + CatalogId("tour", 84), "shows"),
+                ($"/api/v4/search?q=1995-12-31&artist_id={BrowseArtistId}", "shows"),
+                (BrowseArtistPath + "/shows/on-date?month=12&day=31", null),
+                (BrowseArtistPath + "/shows/recently-performed", null),
+                ("/api/v4/popular/shows", null),
+                ("/api/v4/trending/shows", null),
+                ($"/api/v4/shows/momentum?artist_ids={BrowseArtistId}", null),
+                (BrowseArtistPath + "/shows/popular-trending", "popular_shows"),
+            }
+        )
+        {
+            var body = await GetJson(path);
+            var list = (field is null ? body : body[field])!.AsArray();
+            var show = list.Single(item => item!["id"]!.GetValue<string>() == ShowId(4))!;
+            JsonNode.DeepEquals(show["popularity"], expectedPopularity).Should().BeTrue(path);
         }
     }
 
@@ -244,8 +346,9 @@ public sealed partial class TestV4CatalogHttp
     public class UnexpectedRankingRefresh : DispatchProxy
     {
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) =>
-            throw new InvalidOperationException(
-                "Fresh ranking fixture must not enqueue background work"
+            throw new BackgroundJobClientException(
+                "Ranking refresh job storage is unavailable in this fixture",
+                new InvalidOperationException("Fixture job storage failure")
             );
     }
 }

@@ -15,7 +15,8 @@ public sealed class CatalogShowMetadataReader(
     CatalogImportedVenueMetadataReader importedVenueMetadata,
     CatalogVenueMetadataReader venueMetadata,
     CatalogArtistVenueMetadataReader artistVenueMetadata,
-    CatalogTourMetadataReader tourMetadata
+    CatalogTourMetadataReader tourMetadata,
+    CatalogShowPopularityReader popularity
 )
 {
     public async Task Apply(
@@ -89,6 +90,7 @@ public sealed class CatalogShowMetadataReader(
         }
 
         await ApplyVenues(session, shows, cancellationToken);
+        await popularity.Apply(shows, cancellationToken);
     }
 
     private async Task ApplyVenues(

@@ -13,18 +13,19 @@ public sealed record CatalogRanked<T>(T Resource, PopularityMetrics Metrics);
 
 public sealed record CatalogArtistRankings(
     Guid ArtistUuid,
-    IReadOnlyList<CatalogRanked<CatalogShow>> PopularShows,
-    IReadOnlyList<CatalogRanked<CatalogShow>> TrendingShows
+    IReadOnlyList<CatalogShow> PopularShows,
+    IReadOnlyList<CatalogShow> TrendingShows
 );
 
 /// <summary>
-/// Ranking maps are asynchronous inputs, loaded once before opening the catalog
-/// snapshot. Hydrates current metadata here so cached ranks never freeze venues.
+/// Ranking maps are asynchronous inputs, shared once per request. Catalog
+/// metadata uses one read snapshot, so cached ranks never freeze show resources.
 /// </summary>
 public sealed class CatalogRankingReader(
     DbService db,
     PopularityService popularity,
-    CatalogShowMetadataReader metadata
+    CatalogShowMetadataReader metadata,
+    CatalogShowPopularityReader showPopularity
 )
 {
     public async Task<IReadOnlyList<CatalogRanked<CatalogArtist>>> ReadArtists(
@@ -92,7 +93,7 @@ public sealed class CatalogRankingReader(
             .ToArray();
     }
 
-    public async Task<IReadOnlyList<CatalogRanked<CatalogShow>>> ReadShows(
+    public async Task<IReadOnlyList<CatalogShow>> ReadShows(
         bool trending,
         int limit,
         PopularitySortWindow window,
@@ -122,7 +123,7 @@ public sealed class CatalogRankingReader(
         await metadata.Apply(session, shows.Values.ToArray(), cancellationToken);
         return selected
             .Where(item => shows.ContainsKey(item.Resource))
-            .Select(item => new CatalogRanked<CatalogShow>(shows[item.Resource], item.Metrics))
+            .Select(item => shows[item.Resource])
             .ToArray();
     }
 
@@ -137,7 +138,12 @@ public sealed class CatalogRankingReader(
         var maps = new Dictionary<Guid, Dictionary<Guid, PopularityMetrics>>();
         foreach (var artist in artists.Distinct().Order())
         {
-            maps[artist] = await popularity.GetShowPopularityMapForArtist(artist);
+            maps[artist] = (
+                await showPopularity.ReadMap(artist).WaitAsync(cancellationToken)
+            ).ToDictionary(
+                entry => entry.Key,
+                entry => CachedShowPopularityMapper.ToPopularityMetrics(entry.Value)
+            );
         }
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
         var owners = (
@@ -195,7 +201,7 @@ public sealed class CatalogRankingReader(
             .ToArray();
     }
 
-    public async Task<IReadOnlyList<CatalogRanked<CatalogShow>>> ReadMomentum(
+    public async Task<IReadOnlyList<CatalogShow>> ReadMomentum(
         Guid[] artists,
         int limit,
         CancellationToken cancellationToken
@@ -204,7 +210,7 @@ public sealed class CatalogRankingReader(
         var candidates = new Dictionary<Guid, (Guid Artist, CachedShowPopularity Cached)>();
         foreach (var artist in artists.Distinct().Order())
         {
-            var map = await popularity.GetShowPopularityCacheMapForArtist(artist);
+            var map = await showPopularity.ReadMap(artist).WaitAsync(cancellationToken);
             foreach (var (id, cached) in map)
             {
                 candidates.TryAdd(id, (artist, cached));
@@ -232,13 +238,7 @@ public sealed class CatalogRankingReader(
             .Where(id =>
                 shows.TryGetValue(id, out var show) && show.artist_uuid == candidates[id].Artist
             )
-            .Select(id =>
-            {
-                var cached = candidates[id].Cached;
-                var metrics = CachedShowPopularityMapper.ToPopularityMetrics(cached);
-                metrics.momentum_score = CachedShowPopularityMapper.GetRankingMomentumScore(cached);
-                return new CatalogRanked<CatalogShow>(shows[id], metrics);
-            })
+            .Select(id => shows[id])
             .ToArray();
     }
 
@@ -264,23 +264,24 @@ public sealed class CatalogRankingReader(
         return shows;
     }
 
-    private static IEnumerable<CatalogRanked<CatalogShow>> RankShows(
+    private static IEnumerable<CatalogShow> RankShows(
         IEnumerable<CatalogShow> shows,
         IReadOnlyDictionary<Guid, PopularityMetrics> map,
         bool trending,
         PopularitySortWindow window
     ) =>
         Rank(
-            shows
-                .Where(show => map.ContainsKey(show.uuid))
-                .Select(show => new CatalogRanked<CatalogShow>(show, map[show.uuid])),
-            trending,
-            PopularityService.ShowTrendingPlays48hFloor,
-            PopularityService.ShowTrendingPlays30dFloor,
-            window,
-            show => show.uuid,
-            trendByRatio: false
-        );
+                shows
+                    .Where(show => map.ContainsKey(show.uuid))
+                    .Select(show => new CatalogRanked<CatalogShow>(show, map[show.uuid])),
+                trending,
+                PopularityService.ShowTrendingPlays48hFloor,
+                PopularityService.ShowTrendingPlays30dFloor,
+                window,
+                show => show.uuid,
+                trendByRatio: false
+            )
+            .Select(item => item.Resource);
 
     private static IOrderedEnumerable<CatalogRanked<T>> Rank<T>(
         IEnumerable<CatalogRanked<T>> items,
