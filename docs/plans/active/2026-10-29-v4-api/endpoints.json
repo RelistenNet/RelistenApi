@@ -90,7 +90,7 @@
       "path": "/api/v4/artists/{artistId}/shows/popular-trending",
       "coverage_source": "other-route-inventory.md",
       "response_shape": "ranking_groups",
-      "sync_policy": "query_result"
+      "sync_policy": "transient_ranking"
     },
     {
       "method": "GET",
@@ -265,21 +265,21 @@
       "path": "/api/v4/popular/artists",
       "coverage_source": "other-route-inventory.md",
       "response_shape": "list",
-      "sync_policy": "query_result"
+      "sync_policy": "transient_ranking"
     },
     {
       "method": "GET",
       "path": "/api/v4/popular/shows",
       "coverage_source": "other-route-inventory.md",
       "response_shape": "list",
-      "sync_policy": "query_result"
+      "sync_policy": "transient_ranking"
     },
     {
       "method": "GET",
       "path": "/api/v4/popular/years",
       "coverage_source": "other-route-inventory.md",
       "response_shape": "list",
-      "sync_policy": "query_result"
+      "sync_policy": "transient_ranking"
     },
     {
       "method": "GET",
@@ -293,7 +293,7 @@
       "path": "/api/v4/shows/momentum",
       "coverage_source": "other-route-inventory.md",
       "response_shape": "list",
-      "sync_policy": "query_result"
+      "sync_policy": "transient_ranking"
     },
     {
       "method": "GET",
@@ -307,7 +307,7 @@
       "path": "/api/v4/shows/popular-trending",
       "coverage_source": "other-route-inventory.md",
       "response_shape": "ranking_groups",
-      "sync_policy": "query_result"
+      "sync_policy": "transient_ranking"
     },
     {
       "method": "GET",
@@ -391,21 +391,21 @@
       "path": "/api/v4/trending/artists",
       "coverage_source": "other-route-inventory.md",
       "response_shape": "list",
-      "sync_policy": "query_result"
+      "sync_policy": "transient_ranking"
     },
     {
       "method": "GET",
       "path": "/api/v4/trending/shows",
       "coverage_source": "other-route-inventory.md",
       "response_shape": "list",
-      "sync_policy": "query_result"
+      "sync_policy": "transient_ranking"
     },
     {
       "method": "GET",
       "path": "/api/v4/trending/years",
       "coverage_source": "other-route-inventory.md",
       "response_shape": "list",
-      "sync_policy": "query_result"
+      "sync_policy": "transient_ranking"
     },
     {
       "method": "GET",
@@ -494,7 +494,8 @@
     "library_changes": "Apply explicit ordered membership changes and advance the account cursor atomically; omissions do not remove membership.",
     "detail_tracks": "Upsert song metadata and returned track resources; replace only this song’s complete file-match membership, including an empty list. Save the payload ETag in the same local transaction. This response has no shows property and does not change song-show membership or shared offline entities.",
     "artist_eras": "Replace only this artist’s complete ordered era metadata, including an empty list. Eras have no public identity and are not shared entities. Save the ETag with the replacement.",
-    "source_reviews": "Upsert returned review resources and replace this source’s complete review membership, including an empty list. Save its ETag atomically. Other sources, catalog entities, and personal library membership remain unchanged."
+    "source_reviews": "Upsert returned review resources and replace this source’s complete review membership, including an empty list. Save its ETag atomically. Other sources, catalog entities, and personal library membership remain unchanged.",
+    "transient_ranking": "Use only as a transient online ranking view; do not apply its context-dependent popularity or entity membership to the persisted offline catalog. ETags support online revalidation. Open resources through their ordinary detail routes for catalog apply."
   },
   "account_identity_storage": "Canonical full prefixed strings for application-owned IDs and catalog targets; OpenIddict/private surrogate keys remain internal UUIDs.",
   "account_routes": "Change existing /v1/library and /v1/me in place; no parallel library route version."

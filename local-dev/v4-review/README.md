@@ -216,10 +216,11 @@ the review snapshot in DB 0. Production keeps the existing asynchronous score
 refresh behavior. If the local snapshot becomes stale, refresh it from real aggregates
 before comparing scores; the local empty telemetry cannot reconstruct them.
 
-Show resources now include nullable artist-local `popularity` on every route.
-The same request-scoped map reader serves ranking selection and shared show
-enrichment, and one projection publishes it. Global/organic ranking scores affect
-order only. Score-only refreshes change payload ETags, including artist snapshots.
+Every show resource includes nullable `popularity` from its endpoint's context:
+artist-local on ordinary catalog reads and artist groups, global on global
+popular/trending, organic/fallback on momentum. Shared enrichment accepts the
+ranking's loaded map, avoiding extra artist reads. Ranking views are transient on
+mobile; they never overwrite offline show data. Their ETags use their own inputs.
 
 The expanded real artist-local snapshot contains 62,650 show metrics across 2,814
 artists, with fresh empty maps for 1,552 other local artists that had no matching

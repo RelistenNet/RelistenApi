@@ -1004,3 +1004,49 @@ are development-machine samples, not percentiles or production load evidence.
 The global default date crossed UTC midnight during this review; it uses the
 unchanged database-session date contract. No server-side response cache, generic
 revision mechanism or additional locks were added.
+
+### Contextual popularity simplification — 2026-10-30
+
+Commit `6bfd82dc3` supersedes the uniform artist-local ranking rule from the
+previous checkpoint. Alec clarified that mobile ranking views are transient and
+do not sync into the offline catalog. Ordinary show resources and artist ranking
+groups retain raw artist-local metrics. Global popular/trending resources publish
+the global metrics already used for their selection. Momentum publishes its
+organic selection score with the existing raw fallback.
+
+Shared show enrichment now accepts an optional loaded score map. Rankings supply
+it; ordinary batches load once per artist. The request-scoped map reader and its
+registration were removed. There is still one nullable field and one projection,
+with no new response wrapper, context field, schema migration, or mobile runtime
+change. The nine ranking operations now declare `transient_ranking` in the plan's
+endpoint manifest; their context-dependent scores and entity membership must not
+be applied to persisted mobile catalog records. ETags remain available for online
+revalidation. Search and ordinary resource/detail apply policies remain intact.
+
+All 148 focused v4/popularity checks pass. The existing fixture now verifies:
+
+- Ordinary copies remain artist-local; global responses return deliberately
+  different global scores, and momentum publishes its organic scores in order.
+- An artist-score refresh changes the ordinary snapshot ETag while leaving the
+  global ranking ETag unchanged. A global-score refresh changes that ranking ETag.
+- Global ranking reads succeed while an unused stale artist map would fail its
+  refresh enqueue; ordinary reads still return 503/no-store and recover on retry.
+- Shared normalization, raw fallback, typed identities, ownership, and missing
+  activity behavior remain unchanged.
+
+Two-pass independent review found no code issues. One contradictory sentence in
+the search/ranking apply documentation was corrected to distinguish search-query
+apply from transient rankings. The simplicity pass retained the supplied-map
+interface and removed the request-lifetime machinery. Formatter, diff, JSON and
+local-link checks passed.
+
+The API was restarted against the existing real-data catalog and metric snapshots.
+Direct live comparisons against local Redis confirmed global popular metrics match
+the global input map, momentum fields match organic/fallback inputs, and ordinary
+show details still match raw artist-local inputs. No production data was changed.
+The capture script was refreshed: it requires a popularity field on show resources
+and compares score equality only among ordinary catalog copies, not transient
+ranking contexts. Resolver checks target entity shows rather than input-reference
+objects. It verified 4,508 ordinary show IDs, 3,183 with metrics. Complete bodies,
+headers and input provenance remain in ignored output; checked-in ranking excerpts
+now reflect the restored global/organic semantics.

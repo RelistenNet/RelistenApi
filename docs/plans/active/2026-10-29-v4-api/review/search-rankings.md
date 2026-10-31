@@ -37,18 +37,19 @@ selects one hit per category; full captured bodies are in the ignored output fol
 - [Grouped artist selection](http://127.0.0.1:43823/api/v4/shows/popular-trending?artist_ids=artist_3qmp7zjbg1rpebhtyfy43096vj&artist_ids=artist_6aaf982021nrst0m68ew1djerc&limit=5).
 - [Momentum across those artists](http://127.0.0.1:43823/api/v4/shows/momentum?artist_ids=artist_3qmp7zjbg1rpebhtyfy43096vj&artist_ids=artist_6aaf982021nrst0m68ew1djerc&limit=5).
 
-Show popularity now appears on every show resource, including artist, song, venue,
-date, snapshot, resolver and full-show responses. Ranking entries add one-based
-`rank`; artist/year ranking entries also include `popularity`. The latter contains `momentum_score`, `trend_ratio`, and the
-`48h`/`7d`/`30d` windows of plays, hours and hot score. No duplicate top-level
-window counts are needed. Artist metadata retains `features`.
+Every show response includes `popularity`; ranked shows add `rank`. Ordinary show
+reads and artist ranking groups use raw artist-local metrics. Global popular and
+trending lists use global metrics, and momentum publishes its organic/fallback
+score. All use the same projection of `momentum_score`, `trend_ratio`, and the
+`48h`/`7d`/`30d` windows of plays, hours and hot score. Missing entries are `null`.
+Artist metadata retains `features`.
 
-A show's published `momentum_score` is always raw and artist-local. Global and
-organic momentum scores select ordering only; they never overwrite that shared
-field. Compare a listed show with its direct show-ID response: its `popularity`
-should match exactly while the input maps remain unchanged. A missing artist-map
-entry yields `null`, independent of normalization approval. Score-only refreshes
-change response ETags, including full artist-snapshot ETags.
+Compare a global ranking with direct show detail: different momentum scores are
+expected because they describe different comparison contexts. Compare ordinary
+artist, song and venue copies with direct detail: those use the same artist-local
+map. The ranking reader supplies the map it already loaded, so global ranking
+responses need no additional artist-map reads. The request-scoped score cache has
+been removed.
 
 The show `window` query offers those three values in Swagger. The existing hot
 score, play floors, and organic momentum rules are preserved. Artist/year
@@ -79,9 +80,13 @@ scoring runner are local review artifacts. Production uses its normal map miss/s
 refresh behavior, not this review snapshot. The correct context and read-only
 connection command are now recorded in [AGENTS.md](../../../../../AGENTS.md).
 
-Mobile replaces only the exact cached query result and upserts supplied resource
-fields. A ranking never deletes artist inventory or detail memberships. A
-normalization correction can update returned venues and ETags while listening
-scores remain the same. Redis/SQL failures return 503/no-store, not successful
-empty lists. Grouped and momentum requests with no `artist_ids` intentionally
-return empty arrays.
+Search and ordinary catalog queries can replace their exact cached query results
+and upsert supplied fields under the endpoint contract. Popular/trending/momentum
+results are transient online views: keep them out of the persisted show catalog
+and offline membership. Open a selected resource's ordinary detail route to apply
+catalog data. ETags still support online revalidation of rankings.
+
+A normalization correction can change ranking metadata and ETags without changing
+scores. Score-source or refresh failures return 503/no-store, not successful empty
+lists. Grouped and momentum requests with no `artist_ids` intentionally return
+empty arrays.

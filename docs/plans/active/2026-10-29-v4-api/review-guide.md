@@ -21,6 +21,10 @@ identify downloaded files, queues and history. Account/auth IDs become canonical
 typed strings, including storage, while framework and provider IDs retain their
 existing meanings. These boundaries keep conversion out of feature code.
 
+Rankings remain transient online views on mobile. Their global or organic scores
+never update the persisted show catalog; ordinary detail and artist snapshots
+supply artist-local data for offline apply.
+
 Ordinary responses are direct resources or lists. Every track has one
 `normalization` object; its imported playback title and file remain authoritative.
 Use weak HTTP ETags over deterministic JSON for refresh. Endpoint contracts
