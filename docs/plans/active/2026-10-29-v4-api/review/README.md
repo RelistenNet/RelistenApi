@@ -8,6 +8,9 @@ captures, the materialized counts, and restoring local approval flags.
 The [search and ranking walkthrough](search-rankings.md) covers the final ten
 mobile-facing catalog reads and the real aggregate snapshot used locally.
 
+The [play reporting and public activity walkthrough](live-activity.md) covers
+typed play reports and sequence polling through the existing telemetry table.
+
 The [date and recent browsing walkthrough](discovery-browsing.md) connects the
 new discovery lists to full playback, with exact query and mobile apply rules.
 
@@ -29,7 +32,7 @@ momentum. Ranking views stay transient on mobile and do not update the offline
 catalog. All paths share enrichment and projection, with supplied maps reused.
 Missing activity is `null`; score refreshes change the relevant ETags.
 
-The local host now serves 49 review routes (48 GETs and one POST). Venue and song detail destinations
+The local host now serves 51 review operations (49 GETs and two POSTs). Venue and song detail destinations
 return metadata and complete `shows` together. Direct
 lookups use the resource's ID kind; there is no returned detail URL. Compact
 browse children stay compact. The [contracts](../contracts.md) define replacement
