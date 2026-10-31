@@ -47,9 +47,11 @@ Artist metadata retains `features`.
 Compare a global ranking with direct show detail: different momentum scores are
 expected because they describe different comparison contexts. Compare ordinary
 artist, song and venue copies with direct detail: those use the same artist-local
-map. The ranking reader supplies the map it already loaded, so global ranking
-responses need no additional artist-map reads. The request-scoped score cache has
-been removed.
+scores. The ranking reader selects stored SQL rows before loading catalog
+resources, and supplies those metrics to shared enrichment. Ordinary lists read
+only the required score rows in one SQL batch. V4 uses no Redis score reads or
+request-scoped score cache. The [stored-popularity checkpoint](stored-popularity.md)
+records the real-data parity and performance comparison.
 
 The show `window` query offers those three values in Swagger. The existing hot
 score, play floors, and organic momentum rules are preserved. Artist/year
@@ -76,8 +78,10 @@ from the restored local PostgreSQL database, so missing references are omitted.
 Ignored `local-dev/v4-review/.output/ranking-snapshot-provenance.json` records the
 source, capture time and map sizes; `ranking-cache-before-snapshot.json` preserves
 previous local values. The raw aggregate JSON files, including the all-artist show export, and temporary
-scoring runner are local review artifacts. Production uses its normal map miss/stale
-refresh behavior, not this review snapshot. The correct context and read-only
+scoring runner are local review artifacts. The same real maps have now been
+published into local Postgres through the production population writer. V4 reads
+those stored rows. Production refresh jobs publish to both Postgres and Redis;
+v4 requests never calculate or enqueue refreshes. The correct context and read-only
 connection command are now recorded in [AGENTS.md](../../../../../AGENTS.md).
 
 Search and ordinary catalog queries can replace their exact cached query results
@@ -87,6 +91,6 @@ and offline membership. Open a selected resource's ordinary detail route to appl
 catalog data. ETags still support online revalidation of rankings.
 
 A normalization correction can change ranking metadata and ETags without changing
-scores. Score-source or refresh failures return 503/no-store, not successful empty
-lists. Grouped and momentum requests with no `artist_ids` intentionally return
+scores. SQL read failures return 503/no-store. Background refresh failures retain the
+last successful stored values; an unpopulated ranking is empty. Grouped and momentum requests with no `artist_ids` intentionally return
 empty arrays.
