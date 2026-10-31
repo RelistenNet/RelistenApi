@@ -56,6 +56,8 @@ public sealed class StoredPopularity
             momentum_score = organic ? organic_momentum_score ?? momentum_score : momentum_score,
         };
 
+    // Window DTOs round in both caches. Metric maps also round their scalar scores;
+    // the artist-local show cache retains full-precision raw/organic scores.
     internal static StoredPopularity From(
         Guid id,
         PopularityMetrics value,

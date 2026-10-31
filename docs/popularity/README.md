@@ -6,9 +6,12 @@ Postgres rows, selecting ranked IDs in SQL and enriching only returned shows.
 
 ## Ownership and publication
 
-`PopularityService` owns the existing calculations. Each calculation publishes
+`PopularityService` owns the existing calculations. Each metric-map calculation publishes
 its full population through `PopularityStore` before the caller writes its
-Redis cache. This covers explicit refreshes and legacy cache misses.
+Redis cache. This covers explicit map refreshes and map cache misses. Legacy response caches
+keep their existing contracts. In particular, legacy artist lists calculate
+percentiles over 30-day-active artists, while the artist metric map spans 90
+days. Their separate calculations preserve that distinction.
 
 - `artist_popularity`: global artist metrics.
 - `show_popularity`: separate global and artist-local rows for each show.
@@ -65,6 +68,10 @@ updates its refresh record.
 3. Enable the normal hourly job and monitor its duration and failures. The first
    full refresh has more work than a cache hit: it invokes the existing scoped
    calculations for each active artist sequentially, without concurrent scans.
+   Measure that full job on real telemetry before accepting its hourly budget.
+   Read-only samples measured the show calculation at 885 ms for Grateful Dead
+   and 1.3 ms for one artist with a single active show; these do not establish
+   the complete job duration.
 4. Deploy v4 after backfill. Missing show metrics are `null`; an unpopulated
    ranking is empty. GETs do not calculate or repair derived state.
 
