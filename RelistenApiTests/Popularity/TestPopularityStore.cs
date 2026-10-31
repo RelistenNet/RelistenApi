@@ -199,6 +199,31 @@ public sealed class TestPopularityStore
         await store.ReplaceGlobalShows(new Dictionary<Guid, PopularityMetrics>(), DateTime.UtcNow);
         await request.EnqueueStale(CancellationToken.None);
         jobs.Batches.Should().ContainSingle();
+
+        // Catalog repair can move a show. Stale rows for its former owner must
+        // not keep requesting refreshes when that owner has no targets left.
+        await connection.ExecuteAsync(
+            """
+            UPDATE show_popularity SET generated_at=now()-interval '2 hours' WHERE uuid=@show AND NOT is_global;
+            UPDATE shows SET artist_id=(SELECT id FROM artists WHERE uuid=@emptyArtist) WHERE uuid=@show;
+            """,
+            new { show, emptyArtist }
+        );
+        try
+        {
+            var movedJobs = new RecordingPopularityJobs();
+            var moved = new PopularityRefreshRequest(db, movedJobs);
+            moved.Require(PopularityPopulationKind.Show, artist);
+            await moved.EnqueueStale(CancellationToken.None);
+            movedJobs.Batches.Should().BeEmpty();
+        }
+        finally
+        {
+            await connection.ExecuteAsync(
+                "UPDATE shows SET artist_id=(SELECT id FROM artists WHERE uuid=@artist) WHERE uuid=@show",
+                new { artist, show }
+            );
+        }
     }
 
     [Test]
