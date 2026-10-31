@@ -139,10 +139,11 @@ public sealed class TestPopularityStore
         options.DefaultDatabase = 14;
         var redis = new RedisService(options);
         var cache = new PopularityCacheService(redis);
+        var jobs = System.Reflection.DispatchProxy.Create<IBackgroundJobClient, NoRefresh>();
         var service = new PopularityService(
             db,
             cache,
-            System.Reflection.DispatchProxy.Create<IBackgroundJobClient, NoRefresh>(),
+            jobs,
             NullLogger<PopularityService>.Instance
         );
         var key = $"popularity:artist:{artist}:shows:map:30d-48h";
@@ -197,6 +198,16 @@ public sealed class TestPopularityStore
                 .BeEquivalentTo(new[] { true, false });
 
             // A failure in the second store cannot undo a committed Postgres publication.
+            await connection.ExecuteAsync(
+                "INSERT INTO source_track_plays(created_at,source_track_uuid,app_type) VALUES (now()-interval '4 hours',@track,0)",
+                new { track }
+            );
+            await connection.ExecuteAsync(
+                "CALL refresh_continuous_aggregate('source_track_plays_daily',NULL,NULL)"
+            );
+            await connection.ExecuteAsync(
+                "CALL refresh_continuous_aggregate('source_track_plays_hourly',NULL,NULL)"
+            );
             redis.connection.Dispose();
             await FluentActions
                 .Awaiting(() => service.RefreshShowPopularityMapForArtist(artist))
@@ -209,7 +220,21 @@ public sealed class TestPopularityStore
                 )
             )
                 .Should()
-                .Be(2);
+                .Be(3);
+
+            redis = new RedisService(options);
+            cache = new PopularityCacheService(redis);
+            service = new PopularityService(
+                db,
+                cache,
+                jobs,
+                NullLogger<PopularityService>.Instance
+            );
+            await service.RefreshShowPopularityMapForArtist(artist);
+            (await cache.GetAsync<Dictionary<Guid, CachedShowPopularity>>(key))
+                .Entry!.data[show]
+                .windows.days_30d.plays.Should()
+                .Be(3);
         }
         finally
         {

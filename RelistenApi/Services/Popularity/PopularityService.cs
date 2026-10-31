@@ -841,6 +841,8 @@ namespace Relisten.Services.Popularity
             return map;
         }
 
+        // Legacy artist lists normalize only 30-day-active artists. The metric
+        // map spans 90 days; keep this calculation to preserve legacy scores.
         private async Task<IReadOnlyList<PopularArtistListItem>> ComputePopularArtists(int limit)
         {
             var rows = await db.WithConnection(con =>
