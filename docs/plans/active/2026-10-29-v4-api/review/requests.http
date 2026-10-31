@@ -9,6 +9,12 @@ GET {{base}}/api/v4/live/history?limit=20
 ### Poll activity after the last returned event sequence
 GET {{base}}/api/v4/live/history?after_sequence=0&limit=20
 
+### Public activity for one artist (filter before limit)
+GET {{base}}/api/v4/live/history?artist_ids=artist_3qmp7zjbg1rpebhtyfy43096vj&limit=1
+
+### Public activity for selected artists (repeat the query key)
+GET {{base}}/api/v4/live/history?artist_ids=artist_3qmp7zjbg1rpebhtyfy43096vj&artist_ids=artist_6aaf982021nrst0m68ew1djerc&limit=20
+
 ### Record a local play (writes telemetry; does not write account history)
 POST {{base}}/api/v4/live/play
 Content-Type: application/json

@@ -248,6 +248,74 @@ public sealed partial class TestV4CatalogHttp
         }
     }
 
+    [Test]
+    public async Task Artist_activity_filters_before_limits_and_cursor_paging()
+    {
+        var clientUuid = Guid.NewGuid();
+        var artist = CatalogId("artist", 11);
+        await using var connection = await MigratedTestDatabase.OpenAsync();
+        try
+        {
+            var sequences = (
+                await connection.QueryAsync<int>(
+                    """
+                    INSERT INTO source_track_plays (source_track_uuid,user_uuid,app_type)
+                    VALUES ('00000000-0000-0000-0000-000000000041',@clientUuid,2),
+                           ('00000000-0000-0000-0000-000000000044',@clientUuid,2),
+                           ('00000000-0000-0000-0000-000000000041',@clientUuid,2),
+                           ('00000000-0000-0000-0000-000000000044',@clientUuid,2)
+                    RETURNING id
+                    """,
+                    new { clientUuid }
+                )
+            ).ToArray();
+            var filtered = $"/api/v4/live/history?artist_ids={artist}";
+            var latest = (await GetJson(filtered + "&limit=1")).AsArray().Single()!;
+            latest["sequence"]!.GetValue<int>().Should().Be(sequences[2]);
+            latest["track"]!["artist_id"]!.GetValue<string>().Should().Be(artist);
+            latest["track"]!["normalization"]!["state"]!
+                .GetValue<string>()
+                .Should()
+                .Be("unavailable");
+            var next = (await GetJson(filtered + $"&after_sequence={sequences[0]}&limit=1"))
+                .AsArray()
+                .Single()!;
+            next["sequence"]!.GetValue<int>().Should().Be(sequences[2]);
+            (await GetJson(filtered + $"&after_sequence={sequences[2]}"))
+                .AsArray()
+                .Should()
+                .BeEmpty();
+
+            // Repeated keys mean any selected artist; duplicate IDs do not duplicate events.
+            var combined = (
+                await GetJson(filtered + $"&artist_ids={BrowseArtistId}&artist_ids={artist}")
+            ).AsArray();
+            combined.Select(item => item!["sequence"]!.GetValue<int>()).Should().Equal(sequences);
+            combined[1]!["track"]!["normalization"]!["state"]!
+                .GetValue<string>()
+                .Should()
+                .Be("interpreted");
+            (await GetJson("/api/v4/live/history?limit=1")).AsArray().Single()!["sequence"]!
+                .GetValue<int>()
+                .Should()
+                .Be(sequences[3]);
+            (await GetJson($"/api/v4/live/history?artist_ids={CatalogId("artist", 999999)}"))
+                .AsArray()
+                .Should()
+                .BeEmpty();
+        }
+        finally
+        {
+            await connection.ExecuteAsync(
+                "DELETE FROM source_track_plays WHERE user_uuid=@clientUuid",
+                new { clientUuid }
+            );
+        }
+    }
+
+    [TestCase("artist_ids=")]
+    [TestCase("artist_ids=track_0000000000000000000000001c")]
+    [TestCase("artist_ids=artist_0000000000000000000000000b&artist_ids=bad")]
     [TestCase("after_sequence=-1")]
     [TestCase("after_sequence=abc")]
     [TestCase("limit=0")]

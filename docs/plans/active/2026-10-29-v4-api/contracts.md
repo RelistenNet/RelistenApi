@@ -935,12 +935,30 @@ and `after_sequence` must be a nonnegative 32-bit integer. Invalid query values
 return 422. Empty results are `[]`. Both endpoints use `Cache-Control: no-store`
 and emit no ETag.
 
+`sequence` is the existing `source_track_plays.id`, identifying one play report.
+The same track reported twice has two sequences. Poll with the last returned
+sequence in `after_sequence`. Gaps are normal. This public global counter can
+reveal approximate cumulative insert volume; it is not an opaque cursor or an
+exact count of retained plays. The legacy history route exposes the same IDs.
+
+History accepts repeated `artist_ids` query keys with canonical `artist_` IDs,
+for example `?artist_ids=artist_…&artist_ids=artist_…&limit=20`. Omit the filter
+for all artists. When present, return events belonging to any selected artist;
+duplicate IDs do not duplicate events. Empty values and malformed/wrong-kind IDs
+return 422. A valid unknown artist or an artist with no recent plays contributes
+no events, so a selection with no matches returns `[]` without a separate artist
+existence lookup. Apply this scope in the event SQL before LIMIT, for both initial
+windows and `after_sequence` polling. Normalization approval does not restrict
+artist selection: imported-only artists remain usable.
+
 This preserves best-effort public activity, not a durable change feed: replica
 delay, overlapping insert commits, the one-hour window, and removed recordings can
 cause omissions. Clients append/deduplicate by sequence when polling; periodically
 reload the recent window without a cursor. A full reload replaces only that
-window. It never deletes catalog records or personal listening history. Account
-history remains separate. V2 routes retain their request/response formats and
+window for its selected artists. Changing the artist selection starts a new
+window without reusing the previous selection's cursor. It never deletes catalog
+records or personal listening history. Account history remains separate.
+V2 routes retain their request/response formats and
 share telemetry storage; their recent-event selection now also follows sequence
 order so cursor paging does not skip a lower sequence with a later timestamp.
 

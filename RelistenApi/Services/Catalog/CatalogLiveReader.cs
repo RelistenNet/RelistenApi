@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -22,6 +23,7 @@ public sealed class CatalogLiveReader(
     public async Task<IReadOnlyList<CatalogLiveEvent>> ReadHistory(
         int? afterSequence,
         int limit,
+        Guid[] artistUuids,
         CancellationToken cancellationToken
     )
     {
@@ -30,6 +32,7 @@ public sealed class CatalogLiveReader(
                 afterSequence,
                 limit,
                 publicActivityOnly: true,
+                artistUuids: artistUuids.Length == 0 ? null : artistUuids,
                 cancellationToken: cancellationToken
             )
         ).ToArray();

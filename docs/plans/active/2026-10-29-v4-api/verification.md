@@ -1131,3 +1131,25 @@ No migration, scheduler, queue protocol, or lock was introduced. V2 request and
 response shapes remain; shared recent-event selection now follows its integer
 cursor order. Tests and the rehearsal wrote only to local databases. Production
 data and clients are unchanged.
+
+## 2026-10-31 — Filter public activity by artist
+
+History now accepts repeated `artist_ids` keys. Typed IDs are parsed once and
+deduplicated; the existing event eligibility query filters by artist before its
+limit. Omitted IDs keep the global feed. Unknown valid IDs contribute no events;
+empty, malformed, and wrong-kind values return 422. No extra query, schema change,
+or client change was introduced.
+
+The existing HTTP fixture passes **137 cases**. Seven focused cases cover an
+interleaved-artist regression plus invalid query inputs: initial and cursor
+limits, any-of selection, duplicate IDs, unknown IDs, imported-only and normalized
+artists, and unchanged unfiltered behavior. Both independent review passes found
+no issues; the simplicity pass retained direct parsing and the existing SQL.
+
+After restarting the local API, real-data requests returned all four review plays,
+the one older Grateful Dead event with `limit=1`, and both Grateful Dead/Phish events
+when selected together. Polling past the selected artist's event returned `[]`;
+empty and wrong-kind filters returned 422. OpenAPI exposes `artist_ids` as a query
+array. The four local review plays remain until the one-hour window expires.
+The public integer sequence remains the legacy event ID; its counter disclosure
+is now explicit in the contract. Opaque cursor design is separate from this filter.
