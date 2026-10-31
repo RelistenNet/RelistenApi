@@ -72,7 +72,7 @@ population through `PopularityStore` before the caller writes Redis. This covers
 explicit map refreshes and map cache misses. Legacy artist lists retain their
 separate 30-day-active comparison population; their metric map spans 90 days.
 
-Publication uses one sorted bulk upsert in a transaction. It joins calculated
+Publication uses one atomic sorted bulk upsert. It joins calculated
 results onto all current catalog targets, filling missing calculations with
 zero counters and null momentum. A row updates only when the incoming
 `generated_at` is at least its stored timestamp. Older calculations finishing

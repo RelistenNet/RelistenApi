@@ -10,7 +10,7 @@ using Relisten.Api.Models;
 namespace Relisten.Services.Popularity;
 
 /// <summary>
-/// Publishes a complete calculated population in one transaction, including
+/// Publishes a complete calculated population in one atomic statement, including
 /// inactive targets. Per-row timestamps reject late older calculations. Sorted
 /// upserts keep overlapping publications in the same row-lock order.
 /// </summary>
@@ -135,7 +135,6 @@ public sealed class PopularityStore(DbService db)
         var rows = JsonConvert.SerializeObject(values);
         await using var connection = db.CreateConnection(longTimeout: false, readOnly: false);
         await connection.OpenAsync();
-        await using var transaction = await connection.BeginTransactionAsync();
         var ownerJoin = kind == "artist" ? "" : " JOIN artists a ON a.id=entity.artist_id";
         var ownerColumns = kind == "artist" ? "" : ",artist_uuid,is_global";
         var ownerValues = kind == "artist" ? "" : ",a.uuid,@isGlobal";
@@ -181,10 +180,8 @@ public sealed class PopularityStore(DbService db)
                 artist,
                 isGlobal = artist is null,
                 generatedAt,
-            },
-            transaction
+            }
         );
-        await transaction.CommitAsync();
     }
 
     private const string Columns =
