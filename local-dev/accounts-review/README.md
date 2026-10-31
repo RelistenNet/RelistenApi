@@ -48,6 +48,23 @@ The script leaves Alice's native session active for review and logs out the
 secondary account and browser session. Direct browser navigation to an account
 URL requires authentication; the GET command supplies the local credential.
 
+## Inspect the browser flow in Chrome
+
+Start the existing web relay in another terminal:
+
+```sh
+cd ../relisten-web
+pnpm dev
+```
+
+Open <https://web.relisten.localhost:5173/auth/session/start?return_to=%2Fbrowser-session-development>
+and choose **Alice**. In the same Chrome session, open `/v1/me` and
+`/v1/library/snapshot` on `https://web.relisten.localhost:5173` to inspect real
+cookie-authenticated responses. The plain development page is a sign-in landing
+page; it does not implement the new account client. No frontend edits are needed
+for API inspection. The [checkpoint](../../docs/plans/active/2026-10-29-v4-api/review/accounts.md#chrome-verification-and-focused-diff-review--october-31)
+records the browser and native-protocol checks performed through Chrome.
+
 ## Recreate the migration rehearsal
 
 Use a **new** local database. Do not point these commands at `relisten_db` or a
