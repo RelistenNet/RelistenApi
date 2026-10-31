@@ -146,8 +146,10 @@ public sealed class TestPopularityStore
     [Test]
     public async Task Stale_and_missing_populations_queue_once_while_fresh_empty_results_do_not()
     {
+        // Other integration fixtures may have published the global population.
+        // This case specifically exercises a missing global population.
         await connection.ExecuteAsync(
-            "DELETE FROM show_popularity WHERE artist_uuid=@artist AND NOT is_global; DELETE FROM year_popularity WHERE artist_uuid=@artist AND NOT is_global",
+            "DELETE FROM show_popularity WHERE is_global OR artist_uuid=@artist; DELETE FROM year_popularity WHERE artist_uuid=@artist AND NOT is_global",
             new { artist }
         );
         await store.ReplaceArtistShows(

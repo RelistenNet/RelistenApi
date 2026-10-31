@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -16,6 +17,32 @@ namespace Relisten.Services.Popularity;
 /// </summary>
 public sealed class PopularityStore(DbService db)
 {
+    /// <summary>Reads only selected artist-local show scores in the caller's connection/snapshot.</summary>
+    internal static async Task<
+        IReadOnlyDictionary<Guid, PopularityMetrics>
+    > ReadArtistLocalShowMetrics(
+        IDbConnection connection,
+        Guid[] ids,
+        IDbTransaction? transaction = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var rows = await connection.QueryAsync<StoredPopularity>(
+            new CommandDefinition(
+                """
+                SELECT p.* FROM show_popularity p
+                JOIN shows s ON s.uuid=p.uuid JOIN artists a ON a.id=s.artist_id
+                WHERE NOT p.is_global AND p.uuid=ANY(@ids) AND p.artist_uuid=a.uuid AND p.momentum_score IS NOT NULL
+                """,
+                new { ids },
+                transaction,
+                commandTimeout: 30,
+                cancellationToken: cancellationToken
+            )
+        );
+        return rows.ToDictionary(row => row.uuid, row => row.ToMetrics()!);
+    }
+
     public Task ReplaceArtists(
         IReadOnlyDictionary<Guid, PopularityMetrics> map,
         DateTime generatedAt
@@ -71,10 +98,14 @@ public sealed class PopularityStore(DbService db)
 
     internal async Task<PopularityPopulation[]> ReadStale(
         IReadOnlyList<PopularityPopulation> populations,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        bool preferReplica = false
     )
     {
-        await using var connection = db.CreateConnection(longTimeout: false, readOnly: false);
+        await using var connection = db.CreateConnection(
+            longTimeout: false,
+            readOnly: preferReplica
+        );
         await connection.OpenAsync(cancellationToken);
         // A publication stamps every current target in its population atomically,
         // including inactive rows. One representative row therefore supplies age.
