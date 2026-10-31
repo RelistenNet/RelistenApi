@@ -5,13 +5,24 @@ public static class FavoriteCatalogTypes
     public const string Artist = "artist";
     public const string Show = "show";
     public const string Source = "source";
-    public const string SourceTrack = "source_track";
+    public const string Track = "track";
+    public const string ImportedSong = "imported_song";
+    public const string ImportedVenue = "imported_venue";
     public const string Song = "song";
     public const string Tour = "tour";
     public const string Venue = "venue";
 
     public static bool IsSupported(string? value) =>
-        value is Artist or Show or Source or SourceTrack or Song or Tour or Venue;
+        value
+            is Artist
+                or Show
+                or Source
+                or Track
+                or ImportedSong
+                or ImportedVenue
+                or Song
+                or Tour
+                or Venue;
 }
 
 public static class FavoriteDesiredStates

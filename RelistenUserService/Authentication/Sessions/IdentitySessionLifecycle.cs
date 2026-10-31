@@ -18,7 +18,7 @@ public sealed class IdentitySessionLifecycle(
     public static readonly TimeSpan TouchInterval = TimeSpan.FromHours(1);
 
     public async Task<IssuedIdentitySession> CreateAuthSsoAsync(
-        Guid userId,
+        UserId userId,
         CancellationToken cancellationToken
     )
     {
@@ -28,7 +28,7 @@ public sealed class IdentitySessionLifecycle(
         return await CreateAsync(
             new IdentitySession
             {
-                Id = Guid.CreateVersion7(now),
+                Id = SessionId.New(),
                 UserId = user.Id,
                 Purpose = IdentitySessionPurposes.AuthSso,
                 SecurityVersion = user.SecurityVersion,
@@ -45,8 +45,8 @@ public sealed class IdentitySessionLifecycle(
     }
 
     public async Task<IssuedIdentitySession> CreateWebAsync(
-        Guid userId,
-        Guid authSsoSessionId,
+        UserId userId,
+        SessionId authSsoSessionId,
         string webOrigin,
         CancellationToken cancellationToken
     )
@@ -67,7 +67,7 @@ public sealed class IdentitySessionLifecycle(
                 $"""
                 SELECT *
                 FROM identity.sessions
-                WHERE id = {authSsoSessionId}
+                WHERE id = {authSsoSessionId.Value}
                 FOR UPDATE
                 """
             )
@@ -93,7 +93,7 @@ public sealed class IdentitySessionLifecycle(
         var session = await CreateAsync(
             new IdentitySession
             {
-                Id = Guid.CreateVersion7(now),
+                Id = SessionId.New(),
                 UserId = user.Id,
                 Purpose = IdentitySessionPurposes.Web,
                 SecurityVersion = user.SecurityVersion,
@@ -159,8 +159,8 @@ public sealed class IdentitySessionLifecycle(
     }
 
     public async Task<AuthenticatedIdentitySession?> ValidateAuthSsoBootstrapAsync(
-        Guid sessionId,
-        Guid userId,
+        SessionId sessionId,
+        UserId userId,
         CancellationToken cancellationToken
     )
     {
@@ -199,7 +199,7 @@ public sealed class IdentitySessionLifecycle(
     }
 
     public async Task RevokeWebAndParentAsync(
-        Guid webSessionId,
+        SessionId webSessionId,
         CancellationToken cancellationToken
     )
     {
@@ -222,7 +222,7 @@ public sealed class IdentitySessionLifecycle(
                 $"""
                 SELECT *
                 FROM identity.sessions
-                WHERE id = {session.AuthSsoSessionId}
+                WHERE id = {session.AuthSsoSessionId!.Value.Value}
                 FOR UPDATE
                 """
             )
@@ -318,7 +318,7 @@ public sealed class IdentitySessionLifecycle(
         );
     }
 
-    private async Task<User> LoadActiveUserAsync(Guid userId, CancellationToken cancellationToken)
+    private async Task<User> LoadActiveUserAsync(UserId userId, CancellationToken cancellationToken)
     {
         var user = await dbContext.Users.SingleOrDefaultAsync(
             candidate => candidate.Id == userId,
@@ -420,18 +420,18 @@ public sealed class IdentitySessionLifecycle(
 }
 
 public sealed class IssuedIdentitySession(
-    Guid sessionId,
+    SessionId sessionId,
     DateTimeOffset expiresAt,
     string cookieValue
 )
 {
-    public Guid SessionId { get; } = sessionId;
+    public SessionId SessionId { get; } = sessionId;
     public DateTimeOffset ExpiresAt { get; } = expiresAt;
     public string CookieValue { get; } = cookieValue;
 }
 
 public sealed record AuthenticatedIdentitySession(
-    Guid SessionId,
+    SessionId SessionId,
     User User,
     string? WebOrigin,
     IdentitySessionCapabilities Capabilities,

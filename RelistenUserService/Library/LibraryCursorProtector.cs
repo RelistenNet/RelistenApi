@@ -1,5 +1,5 @@
-using System.Buffers.Binary;
 using System.Security.Cryptography;
+using System.Text;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.WebUtilities;
 
@@ -7,28 +7,23 @@ namespace RelistenUserService.Library;
 
 public sealed class LibraryCursorProtector
 {
-    private const byte FormatVersion = 1;
-    private const int PayloadSize = 1 + 16 + sizeof(long);
     private static readonly TimeSpan Lifetime = TimeSpan.FromDays(180);
     private readonly ITimeLimitedDataProtector _protector;
 
     public LibraryCursorProtector(IDataProtectionProvider dataProtectionProvider)
     {
         _protector = dataProtectionProvider
-            .CreateProtector("Relisten.UserService.LibraryCursor.v1")
+            .CreateProtector("Relisten.UserService.LibraryCursor.typed.v2")
             .ToTimeLimitedDataProtector();
     }
 
-    public string Protect(Guid userId, long revision)
+    public string Protect(UserId userId, long revision)
     {
-        Span<byte> payload = stackalloc byte[PayloadSize];
-        payload[0] = FormatVersion;
-        userId.TryWriteBytes(payload[1..17]);
-        BinaryPrimitives.WriteInt64BigEndian(payload[17..], revision);
-        return WebEncoders.Base64UrlEncode(_protector.Protect(payload.ToArray(), Lifetime));
+        var payload = Encoding.UTF8.GetBytes($"{userId.Value}\n{revision}");
+        return WebEncoders.Base64UrlEncode(_protector.Protect(payload, Lifetime));
     }
 
-    public bool TryUnprotect(string? cursor, Guid expectedUserId, out long revision)
+    public bool TryUnprotect(string? cursor, UserId expectedUserId, out long revision)
     {
         revision = 0;
         if (string.IsNullOrWhiteSpace(cursor))
@@ -39,14 +34,17 @@ public sealed class LibraryCursorProtector
         try
         {
             var payload = _protector.Unprotect(WebEncoders.Base64UrlDecode(cursor), out _);
-            if (payload.Length != PayloadSize || payload[0] != FormatVersion)
-            {
-                return false;
-            }
-
-            var userId = new Guid(payload.AsSpan(1, 16));
-            revision = BinaryPrimitives.ReadInt64BigEndian(payload.AsSpan(17));
-            return userId == expectedUserId && revision >= 0;
+            var fields = Encoding.UTF8.GetString(payload).Split('\n');
+            return fields.Length == 2
+                && UserId.TryParse(fields[0], out var userId)
+                && userId == expectedUserId
+                && long.TryParse(
+                    fields[1],
+                    System.Globalization.NumberStyles.None,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out revision
+                )
+                && revision >= 0;
         }
         catch (Exception exception)
             when (exception is CryptographicException or FormatException or ArgumentException)

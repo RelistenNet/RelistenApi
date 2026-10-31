@@ -18,10 +18,10 @@ namespace RelistenUserServiceTests;
 public sealed class TestBrowserFacadeBoundary
 {
     [Test]
-    public void Native_me_response_includes_the_native_session_uuid()
+    public void Native_me_response_includes_the_native_session_id()
     {
         var user = User();
-        var nativeSessionId = Guid.CreateVersion7();
+        var nativeSessionId = SessionId.New();
         var currentAccount = new CurrentAccountContext();
         currentAccount.SetNative(user, nativeSessionId);
 
@@ -29,19 +29,19 @@ public sealed class TestBrowserFacadeBoundary
 
         using var document = JsonDocument.Parse(json);
         document
-            .RootElement.GetProperty("native_session_uuid")
-            .GetGuid()
+            .RootElement.GetProperty("native_session_id")
+            .GetString()
             .Should()
-            .Be(nativeSessionId);
+            .Be(nativeSessionId.Value);
     }
 
     [Test]
-    public void Web_me_response_omits_the_native_session_uuid()
+    public void Web_me_response_omits_the_native_session_id()
     {
         var currentAccount = new CurrentAccountContext();
         currentAccount.SetWeb(
             User(),
-            Guid.CreateVersion7(),
+            SessionId.New(),
             AuthenticationConstants.LocalWebOrigin,
             IdentitySessionCapabilities.AllWeb
         );
@@ -49,7 +49,7 @@ public sealed class TestBrowserFacadeBoundary
         var json = SerializeMe(currentAccount);
 
         using var document = JsonDocument.Parse(json);
-        document.RootElement.TryGetProperty("native_session_uuid", out _).Should().BeFalse();
+        document.RootElement.TryGetProperty("native_session_id", out _).Should().BeFalse();
     }
 
     [Test]
@@ -57,11 +57,11 @@ public sealed class TestBrowserFacadeBoundary
     {
         var user = new User
         {
-            Id = Guid.CreateVersion7(),
+            Id = UserId.New(),
             Username = "browser_user",
             SecurityVersion = 7,
         };
-        var authSsoSessionId = Guid.CreateVersion7();
+        var authSsoSessionId = SessionId.New();
 
         var principal = new WebBootstrapPrincipalFactory().Create(
             user,
@@ -70,7 +70,7 @@ public sealed class TestBrowserFacadeBoundary
         );
 
         principal.GetResources().Should().BeEmpty();
-        principal.GetClaim(RelistenClaims.SessionId).Should().Be(authSsoSessionId.ToString("D"));
+        principal.GetClaim(RelistenClaims.SessionId).Should().Be(authSsoSessionId.ToString());
         principal.GetClaim(RelistenClaims.SecurityVersion).Should().BeNull();
         principal.GetClaim(Claims.ClientId).Should().BeNull();
         principal
@@ -97,7 +97,7 @@ public sealed class TestBrowserFacadeBoundary
     private static User User() =>
         new()
         {
-            Id = Guid.CreateVersion7(),
+            Id = UserId.New(),
             Username = "browser_user",
             SecurityVersion = 7,
         };

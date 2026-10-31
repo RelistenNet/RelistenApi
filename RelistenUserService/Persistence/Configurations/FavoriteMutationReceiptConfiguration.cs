@@ -16,8 +16,8 @@ public sealed class FavoriteMutationReceiptConfiguration
             table =>
             {
                 table.HasCheckConstraint(
-                    "ck_favorite_mutation_receipts_id_uuid_v7",
-                    UuidV7Constraint.Sql
+                    "ck_favorite_mutation_receipts_id_typed_id",
+                    AccountIdConstraint.Sql("mutation")
                 );
                 table.HasCheckConstraint(
                     "ck_favorite_mutation_receipts_catalog_type",
@@ -29,11 +29,13 @@ public sealed class FavoriteMutationReceiptConfiguration
                 );
                 table.HasCheckConstraint(
                     "ck_favorite_mutation_receipts_submitted_favorite_id",
-                    "submitted_favorite_id IS NULL OR uuid_extract_version(submitted_favorite_id) = 7"
+                    "submitted_favorite_id IS NULL OR "
+                        + AccountIdConstraint.Sql("favorite", "submitted_favorite_id")
                 );
                 table.HasCheckConstraint(
                     "ck_favorite_mutation_receipts_canonical_favorite_id",
-                    "canonical_favorite_id IS NULL OR uuid_extract_version(canonical_favorite_id) = 7"
+                    "canonical_favorite_id IS NULL OR "
+                        + AccountIdConstraint.Sql("favorite", "canonical_favorite_id")
                 );
                 table.HasCheckConstraint(
                     "ck_favorite_mutation_receipts_payload",

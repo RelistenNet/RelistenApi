@@ -2,7 +2,7 @@ namespace RelistenUserService.Identity.Entities;
 
 public sealed class User
 {
-    public Guid Id { get; set; }
+    public UserId Id { get; set; }
     public string Status { get; set; } = UserStatuses.Active;
     public string Username { get; set; } = "";
     public long UsernameVersion { get; set; } = 1;

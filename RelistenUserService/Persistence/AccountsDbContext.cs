@@ -24,6 +24,16 @@ public sealed class AccountsDbContext(DbContextOptions<AccountsDbContext> option
     public DbSet<LibraryState> LibraryStates => Set<LibraryState>();
     public DbSet<LibraryChange> LibraryChanges => Set<LibraryChange>();
 
+    protected override void ConfigureConventions(ModelConfigurationBuilder builder)
+    {
+        builder.Properties<UserId>().HaveConversion<AccountIdConverter<UserId>>();
+        builder.Properties<SessionId>().HaveConversion<AccountIdConverter<SessionId>>();
+        builder.Properties<FavoriteId>().HaveConversion<AccountIdConverter<FavoriteId>>();
+        builder.Properties<MutationId>().HaveConversion<AccountIdConverter<MutationId>>();
+        builder.Properties<LibraryChangeId>().HaveConversion<AccountIdConverter<LibraryChangeId>>();
+        builder.Properties<CommandId>().HaveConversion<AccountIdConverter<CommandId>>();
+    }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);

@@ -13,7 +13,10 @@ public sealed class IdentitySessionConfiguration : IEntityTypeConfiguration<Iden
             "identity",
             table =>
             {
-                table.HasCheckConstraint("ck_sessions_id_uuid_v7", UuidV7Constraint.Sql);
+                table.HasCheckConstraint(
+                    "ck_sessions_id_typed_id",
+                    AccountIdConstraint.Sql("session")
+                );
                 table.HasCheckConstraint("ck_sessions_purpose", "purpose IN ('auth_sso', 'web')");
                 table.HasCheckConstraint(
                     "ck_sessions_validator_hash",
@@ -67,7 +70,7 @@ public sealed class IdentitySessionConfiguration : IEntityTypeConfiguration<Iden
         builder.HasAlternateKey(session => new { session.Id, session.UserId });
         builder
             .Property(session => session.Id)
-            .HasValueGenerator<UuidV7ValueGenerator>()
+            .HasValueGenerator<AccountIdValueGenerator<SessionId>>()
             .ValueGeneratedOnAdd();
         builder.Property(session => session.Purpose).HasMaxLength(16);
         builder.Property(session => session.ValidatorHash).HasColumnType("bytea");

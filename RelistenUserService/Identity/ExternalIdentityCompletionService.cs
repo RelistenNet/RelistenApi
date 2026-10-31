@@ -47,7 +47,7 @@ public sealed class ExternalIdentityCompletionService(
         var now = timeProvider.GetUtcNow();
         var user = new User
         {
-            Id = Guid.CreateVersion7(),
+            Id = UserId.New(),
             Username = await usernames.AllocateAsync(profile.Email, now, cancellationToken),
             CreatedAt = now,
             UpdatedAt = now,

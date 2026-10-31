@@ -81,8 +81,8 @@ public sealed class WebSessionController(
         if (
             !result.Succeeded
             || result.Principal is not { Identity.IsAuthenticated: true } principal
-            || !Guid.TryParse(principal.GetClaim(Claims.Subject), out var userId)
-            || !Guid.TryParse(
+            || !UserId.TryParse(principal.GetClaim(Claims.Subject), out var userId)
+            || !SessionId.TryParse(
                 principal.GetClaim(RelistenClaims.SessionId),
                 out var authSsoSessionId
             )
