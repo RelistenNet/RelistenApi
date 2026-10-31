@@ -1,27 +1,6 @@
 [
   {
     "rank": 1,
-    "popularity": {
-      "momentum_score": 0.9828,
-      "trend_ratio": 91.746,
-      "windows": {
-        "48h": {
-          "plays": 8355,
-          "hours": 1093.7081,
-          "hot_score": 91.4057
-        },
-        "7d": {
-          "plays": 304,
-          "hours": 42.0158,
-          "hot_score": 17.4356
-        },
-        "30d": {
-          "plays": 2168,
-          "hours": 293.3394,
-          "hot_score": 46.5618
-        }
-      }
-    },
     "id": "show_5dpdv3406314qh1bnhv2eb0ekn",
     "artist_id": "artist_3qmp7zjbg1rpebhtyfy43096vj",
     "year_id": "year_6be0p5zv0g67nkdka2x9yxa312",
@@ -34,6 +13,27 @@
     "has_soundboard_source": true,
     "has_streamable_flac_source": true,
     "source_count": 8,
+    "popularity": {
+      "momentum_score": 0.9818,
+      "trend_ratio": 92.4453,
+      "windows": {
+        "48h": {
+          "plays": 8355,
+          "hours": 1093.7081,
+          "hot_score": 91.4057
+        },
+        "7d": {
+          "plays": 232,
+          "hours": 32.2722,
+          "hot_score": 15.2315
+        },
+        "30d": {
+          "plays": 2151,
+          "hours": 291.4433,
+          "hot_score": 46.3789
+        }
+      }
+    },
     "created_at": "2018-10-23T07:00:49.513477Z",
     "updated_at": "2020-03-17T14:52:34Z",
     "imported_venue": {

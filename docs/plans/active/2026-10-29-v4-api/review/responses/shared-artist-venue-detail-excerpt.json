@@ -13,6 +13,27 @@
       "has_soundboard_source": true,
       "has_streamable_flac_source": true,
       "source_count": 8,
+      "popularity": {
+        "momentum_score": 0.5148,
+        "trend_ratio": 0.6699,
+        "windows": {
+          "48h": {
+            "plays": 23,
+            "hours": 2.8389,
+            "hot_score": 4.7958
+          },
+          "7d": {
+            "plays": 57,
+            "hours": 7.1236,
+            "hot_score": 7.5498
+          },
+          "30d": {
+            "plays": 312,
+            "hours": 39.5239,
+            "hot_score": 17.6635
+          }
+        }
+      },
       "created_at": "2018-10-23T07:00:49.513477Z",
       "updated_at": "2022-08-29T14:17:38Z",
       "imported_venue": {

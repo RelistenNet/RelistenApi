@@ -37,10 +37,18 @@ selects one hit per category; full captured bodies are in the ignored output fol
 - [Grouped artist selection](http://127.0.0.1:43823/api/v4/shows/popular-trending?artist_ids=artist_3qmp7zjbg1rpebhtyfy43096vj&artist_ids=artist_6aaf982021nrst0m68ew1djerc&limit=5).
 - [Momentum across those artists](http://127.0.0.1:43823/api/v4/shows/momentum?artist_ids=artist_3qmp7zjbg1rpebhtyfy43096vj&artist_ids=artist_6aaf982021nrst0m68ew1djerc&limit=5).
 
-Ranking entries are the normal artist/year/show resource plus one-based `rank`
-and `popularity`. The latter contains `momentum_score`, `trend_ratio`, and the
+Show popularity now appears on every show resource, including artist, song, venue,
+date, snapshot, resolver and full-show responses. Ranking entries add one-based
+`rank`; artist/year ranking entries also include `popularity`. The latter contains `momentum_score`, `trend_ratio`, and the
 `48h`/`7d`/`30d` windows of plays, hours and hot score. No duplicate top-level
 window counts are needed. Artist metadata retains `features`.
+
+A show's published `momentum_score` is always raw and artist-local. Global and
+organic momentum scores select ordering only; they never overwrite that shared
+field. Compare a listed show with its direct show-ID response: its `popularity`
+should match exactly while the input maps remain unchanged. A missing artist-map
+entry yields `null`, independent of normalization approval. Score-only refreshes
+change response ETags, including full artist-snapshot ETags.
 
 The show `window` query offers those three values in Swagger. The existing hot
 score, play floors, and organic momentum rules are preserved. Artist/year
@@ -56,14 +64,18 @@ approved a separate aggregate snapshot from the production read-only replica.
 Production was not changed. The existing query/scoring code produced 2,817 artist,
 38,628 show and 9,341 year metrics, plus the Grateful Dead and Phish per-artist
 maps used for momentum. Only aggregate metrics were loaded into local Redis DB 0;
-no synthetic play events were added. The score maps were captured at
-2026-10-30 23:43 UTC and marked fresh locally for 24 hours. Catalog resources still come
+no synthetic play events were added. The global maps were captured at
+2026-10-30 23:43 UTC. Shared show enrichment now uses a larger artist-local
+snapshot captured at 2026-10-31 00:02 UTC (October 30, 5:02 p.m. Pacific): 62,650
+show entries across 2,814 artists, plus valid empty maps for 1,552 other local
+catalog artists. Each artist's scores were calculated separately with the existing
+score builder. These inputs are marked fresh locally for 24 hours. Catalog resources still come
 from the restored local PostgreSQL database, so missing references are omitted.
 
 Ignored `local-dev/v4-review/.output/ranking-snapshot-provenance.json` records the
 source, capture time and map sizes; `ranking-cache-before-snapshot.json` preserves
-previous local values. The five raw aggregate JSON files and temporary scoring
-runner are local review artifacts. Production uses its normal map miss/stale
+previous local values. The raw aggregate JSON files, including the all-artist show export, and temporary
+scoring runner are local review artifacts. Production uses its normal map miss/stale
 refresh behavior, not this review snapshot. The correct context and read-only
 connection command are now recorded in [AGENTS.md](../../../../../AGENTS.md).
 

@@ -215,3 +215,14 @@ Tests use Redis DB 15 and restore every fixed key they write; they do not alter
 the review snapshot in DB 0. Production keeps the existing asynchronous score
 refresh behavior. If the local snapshot becomes stale, refresh it from real aggregates
 before comparing scores; the local empty telemetry cannot reconstruct them.
+
+Show resources now include nullable artist-local `popularity` on every route.
+The same request-scoped map reader serves ranking selection and shared show
+enrichment, and one projection publishes it. Global/organic ranking scores affect
+order only. Score-only refreshes change payload ETags, including artist snapshots.
+
+The expanded real artist-local snapshot contains 62,650 show metrics across 2,814
+artists, with fresh empty maps for 1,552 other local artists that had no matching
+activity in the export. Its separate capture time and sizes are recorded under
+`artistLocalShows` in the ignored provenance file. Global score maps retain their
+earlier capture time. No production writes or synthetic play events were used.

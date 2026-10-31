@@ -33,6 +33,22 @@ LEFT JOIN features f ON f.artist_id=a.id WHERE NOT COALESCE(f.norm_catalogue,fal
 AND NOT st.is_orphaned LIMIT 1''')
 requests = ['@base = http://127.0.0.1:43823', '', '### OpenAPI', 'GET {{base}}/api-docs/v4/swagger.json', '']
 timings = {}
+show_popularity = {}
+def check_show_popularity(value):
+    # This local review uses fixed score snapshots. Every copy of a show must
+    # publish the same artist-local metrics, regardless of its endpoint/ranking.
+    if isinstance(value, dict):
+        identity = value.get('id', '')
+        if isinstance(identity, str) and identity.startswith('show_') and 'artist_id' in value:
+            assert 'popularity' in value, identity + ' is missing popularity'
+            if identity in show_popularity:
+                assert value['popularity'] == show_popularity[identity], identity + ' changed score meaning across routes'
+            show_popularity[identity] = value['popularity']
+        for child in value.values():
+            check_show_popularity(child)
+    elif isinstance(value, list):
+        for child in value:
+            check_show_popularity(child)
 def capture(name, path, label):
     elapsed = subprocess.check_output([
         'curl', '--fail', '--silent', '--show-error', '--max-time', '45',
@@ -42,7 +58,9 @@ def capture(name, path, label):
     ], text=True)
     timings[name] = float(elapsed)
     requests.extend(['### ' + label, 'GET {{base}}/api/v4' + path, ''])
-    return json.loads((out / (name + '.json')).read_text())
+    body = json.loads((out / (name + '.json')).read_text())
+    check_show_popularity(body)
+    return body
 
 def metadata(detail):
     return {key: value for key, value in detail.items() if key not in ('shows', 'tracks')}
@@ -350,6 +368,7 @@ save_example('song-track', next(track for track in song_tracks if track['id'] ==
 Path('docs/plans/active/2026-10-29-v4-api/review/requests.http').write_text('\n'.join(requests))
 (out / 'scenarios.json').write_text(json.dumps(scenarios, indent=2) + '\n')
 (out / 'request-timings.json').write_text(json.dumps(timings, indent=2) + '\n')
+(out / 'shared-popularity-review.json').write_text(json.dumps({'checked_show_ids': len(show_popularity), 'with_metrics': sum(value is not None for value in show_popularity.values())}, indent=2) + '\n')
 print('Captured real browse, venue, source, show and track responses and headers in', out)
 for row in scenarios:
     body = json.loads((out / (row['name'] + '-track.json')).read_text())
