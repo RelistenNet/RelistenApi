@@ -211,10 +211,13 @@ approved real aggregate maps from the production read-only replica, marked fresh
 `.output/ranking-snapshot-provenance.json`; original local cache values are in
 `.output/ranking-cache-before-snapshot.json`. No production or catalog data changed.
 
-Tests use Redis DB 15 and restore every fixed key they write; they do not alter
-the review snapshot in DB 0. Production keeps the existing asynchronous score
-refresh behavior. If the local snapshot becomes stale, refresh it from real aggregates
-before comparing scores; the local empty telemetry cannot reconstruct them.
+The real maps are now also published into local Postgres. V4 reads the stored
+rows and uses no Redis/calculation services in its HTTP test host. Foundation
+publication tests use Redis DB 14 and a disposable catalog. See the
+[stored-popularity checkpoint](../../docs/plans/active/2026-10-29-v4-api/review/stored-popularity.md)
+for backfill provenance and timings. Production refresh jobs publish to both
+stores. If local metrics need updating, use a new real aggregate snapshot; the
+empty local telemetry cannot reconstruct them.
 
 Every show resource includes nullable `popularity` from its endpoint's context:
 artist-local on ordinary catalog reads and artist groups, global on global

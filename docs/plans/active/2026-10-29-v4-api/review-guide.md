@@ -1,5 +1,8 @@
 # Build and review v4 in five checkpoints
 
+The [stored-popularity checkpoint](review/stored-popularity.md) covers the latest
+SQL-backed scores, matching real responses/ETags, and measured performance.
+
 Build one maintained catalog core, prove its responses first, then connect mobile.
 Keep the account/auth conversion as a separate deployment. Each checkpoint gives
 Alec something running to inspect before the next dependent work expands.

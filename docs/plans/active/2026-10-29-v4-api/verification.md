@@ -1050,3 +1050,17 @@ ranking contexts. Resolver checks target entity shows rather than input-referenc
 objects. It verified 4,508 ordinary show IDs, 3,183 with metrics. Complete bodies,
 headers and input provenance remain in ignored output; checked-in ranking excerpts
 now reflect the restored global/organic semantics.
+
+## Stored popularity checkpoint — October 30
+
+The [stored-popularity review](review/stored-popularity.md) supersedes the Redis
+read/refresh behavior described in the earlier ranking checkpoints. V4 now
+selects and enriches from stored Postgres rows, in its catalog snapshot. The
+foundation calculations continue Redis publication for legacy readers.
+
+All eight selected real responses and their ETags matched. Five popular shows
+measured 4.8 ms / 0.23 MiB allocated instead of 123 ms / 82.4 MiB; July 7 across
+artists measured 28 ms / 7.72 MiB instead of 266 ms / 122.6 MiB, with no Redis
+commands. The focused suite passes 180 v4, popularity, and saved-reference
+checks. Runtime, input provenance, query counts, independent review, and measurement limits are recorded in the
+linked checkpoint. Production full-refresh duration remains a rollout check.

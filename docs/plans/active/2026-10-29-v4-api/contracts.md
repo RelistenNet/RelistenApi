@@ -619,7 +619,7 @@ reference and target. Song merges cannot cross artist ownership. Broken chains
 never hang reads: embedded projections preserve imported fallback; the resolver
 reports `unavailable` with `normalization_unavailable` for that reference.
 
-Migration 17, [017_public_ids.sql](../../../../Relisten.Normalization/Sql/017_public_ids.sql),
+Migration 18, [017_public_ids.sql](../../../../Relisten.Normalization/Sql/017_public_ids.sql),
 creates `norm.public_ids` for canonical `song` and `venue` IDs: `id` is the primary
 key, with `kind`, `last_name`, and nullable `retired_at`. It backfills current rows
 and known historical deletions retained in `norm.changes`. The migration locks
@@ -726,9 +726,9 @@ their global input map; momentum publishes its organic score, falling back to
 raw momentum for older inputs. These are the legacy scoring meanings.
 
 `CatalogShowMetadataReader` enriches shows in batches. A ranking supplies its
-already-loaded metric map; otherwise the reader fetches an artist map once per
-artist in the batch. An explicitly supplied empty map never triggers fallback
-reads. The base show projection publishes the field once, including on ranked
+already-selected metric map; otherwise the reader fetches stored artist-local
+rows for all requested show IDs in one SQL batch, checking current artist
+ownership. An explicitly supplied empty map never triggers fallback reads. The base show projection publishes the field once, including on ranked
 shows. There is no request-scoped score cache or ranking-specific projection copy.
 A missing entry stays `null`, independently of normalization approval.
 
@@ -745,10 +745,16 @@ changes ordinary show/list/detail/snapshot validators without requiring imported
 `updated_at` changes. Global-ranking validators depend on their global scores,
 not unrelated artist-score refreshes. Both also include returned catalog metadata.
 
-Scores retain existing asynchronous cache/refresh ownership, separate from the
-catalog transaction. Failed score reads or refresh enqueues return 503/no-store
-with no partial body or ETag. A later request retries normally. Cancellation
-stops waiting while an already started input refresh may finish.
+Refresh jobs calculate scores and publish each population to Postgres and legacy
+Redis. V4 reads only Postgres, in the same primary repeatable-read snapshot as
+catalog metadata. GETs never calculate scores, read Redis, or enqueue refreshes.
+A failed refresh leaves the last successful stored population readable. Missing
+show metrics are null; a population not yet backfilled produces an empty ranking.
+Deploy the v4 reader after the initial backfill. SQL read failures return
+503/no-store without a partial body or ETag; a later request opens a fresh
+snapshot. Cancellation is passed to database commands. See the
+[popularity foundation](../../../popularity/README.md) for refresh and rollout
+ownership.
 
 ### Search and listening rankings
 
@@ -802,7 +808,7 @@ uses the existing 48-hour/30-day play floors and trend-ratio order; popular uses
 catalog; no separate embedded artist lookup arrays are returned.
 
 `GET /popular/shows` and `/trending/shows` return ordinary show summaries,
-with global `popularity` from their ranking map, plus `rank`. They accept `limit=25` (nonpositive resets to 25; larger clamps to 25)
+with global `popularity` from stored ranking rows, plus `rank`. They accept `limit=25` (nonpositive resets to 25; larger clamps to 25)
 and `window=30d`, with exactly `48h`, `7d`, `30d` supported. Invalid windows return
 422 rather than silently changing the sort. Hot score and plays in the selected
 window determine order; trending also applies existing play floors and trend-ratio
@@ -825,14 +831,15 @@ selection from older maps. Publish that selected organic/fallback score as
 `popularity` contains `momentum_score`, `trend_ratio`, and `windows`, whose keys
 are `48h`, `7d`, `30d`, each with `plays`, `hours`, `hot_score`. Scores retain
 four-decimal rounding. Do not duplicate window counts as top-level fields.
-`rank` is one-based result order. Cached inputs contain IDs and scores, never v4
-catalog bodies. Load each required map once, rank before hydration, then read only
-selected resources in one primary catalog snapshot. Pass the loaded ranking
-metrics to shared enrichment; do not load unused artist maps for global results. Removed or mismatched cached references are omitted, so a list can have fewer than its limit. SQL/Redis failure
-returns 503/no-store; it must not publish a successful empty result or validator.
-The asynchronous score inputs and catalog transaction are separate consistency
-boundaries. Normalization corrections can change the payload/ETag without a new
-score computation.
+`rank` is one-based result order. Postgres stores derived counters and scores,
+not v4 catalog bodies. SQL applies ranking order, thresholds, and limits before
+hydration. Artist groups apply their limits independently per artist. All score
+and metadata reads share one primary catalog snapshot. Pass selected global or
+organic metrics to shared enrichment; ordinary reads use one artist-local SQL
+batch. Catalog foreign keys remove deleted ranking targets. Owner-mismatched
+hydrated records are omitted. SQL failure returns 503/no-store, with no partial
+successful result or validator. Normalization corrections can change metadata
+and ETags without a new score calculation.
 
 ### Date and recent show browsing
 
