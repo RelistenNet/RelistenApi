@@ -32,43 +32,33 @@ Account application identities use the six approved account prefixes and native
 string storage described below. A review's parent source ID is obtained
 by joining to the source UUID, not by encoding its numeric foreign key.
 
-## Common application interfaces and legacy projections
+## Native application interfaces and legacy isolation
 
 The maintained application code lives in `RelistenApi/Services/Catalog/`, with
 core result models that do not inherit `RelistenApi.Models` legacy DTOs. Readers
 accept one `CatalogReadSession`; commands accept typed domain inputs. The session
 owns one connection/transaction and is disposed before serialization. Shape
-conversion stays in `Models/Api/V4` and `Services/Catalog/Compatibility` adapters.
+conversion stays in `Models/Api/V4`; existing legacy services retain their own serializers.
 Reuse the same resource/track projection across endpoints. Add query-specific
 result models only where ownership or represented data differs; avoid a chain
 of one-for-one model copies or a separate reader stack per route.
 
-Imported result identities include both the stored numeric key and typed UUID
-identity where legacy output needs them. Those internal keys are never serialized
-through v4 DTOs. Canonical entities use their short IDs. V2 adapters emit the
-existing numeric ID fields; v3 emits existing UUID fields. Do not recover numeric
-IDs through reverse HTTP lookups or prefix stripping.
+Native result models retain numeric keys only where database joins need them.
+Public v4 DTOs expose typed identities. Existing v2/v3 services keep their own
+numeric/UUID models and serializers; their routes are not migrated to the v4 core.
 
-Two internal read views are sufficient: `Imported` and `ApprovedNormalization`.
-The first skips normalization joins and exposes imported facts; the second
-applies existing artist approval and raw fallback. Read target is separately
-`Primary` or `PreferReplica`, selected by the adapter/session owner. V4 uses
-Primary plus the appropriate view; v2/v3 use Imported plus PreferReplica and
-keep their existing response cache policy. Perform the legacy full-artist cache
-lookup after minimal identity resolution and before expensive core materialization;
-a Redis cache hit must not trigger a new full catalog read. These are not public
-query flags.
+V4 readers use primary read-only snapshots and apply approved normalization with
+raw fallback where required. Legacy services retain their existing prefer-replica
+reads, Redis popularity and response caches. A legacy cache hit must not trigger
+native v4 catalog materialization. There are no compatibility modes, legacy
+ordering switches or legacy rollout flags in the v4 reader.
 
-New v4 code must not wrap legacy services/JSON. Move each migrated read algorithm
-into the common reader and remove duplicate old read SQL after auditing callers.
-During the first legacy-detail rollout, a default-off compatibility flag retains
-the old implementation for rollback. The shared recording path and Postgres
-popularity activate together; remove the old loader after the gated rollout is
-qualified. Legacy show-list enrichment remains unchanged in this slice.
-Legacy controller actions translate old routes/aliases into common typed queries
-and project old DTOs. Keep ambiguous numeric/slug compatibility parsing in those
-adapters or the explicit resolver, not in core identity types. Preserve full
-numeric-leading tour slugs and the current source/set/track hierarchy.
+V4 does not wrap legacy services or JSON, and old routes do not impose behavior
+on new readers. Share storage helpers only when their semantics are naturally
+identical and sharing simplifies maintenance. Independent query implementations
+are acceptable. Database/schema changes must remain compatible with supported
+legacy readers until those clients are retired. Saved-reference resolution and
+the mobile ID adapter remain required; they are separate from server API shims.
 
 Operator artist writes and import commands retain their existing v2 routes and
 authorization. They are listed separately in the endpoint manifest; no v4

@@ -11,13 +11,13 @@ import urllib.request
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("baseline_url", help="Original build, e.g. http://127.0.0.1:43824")
-parser.add_argument("candidate_url", help="Adapter build, e.g. http://127.0.0.1:43823")
+parser.add_argument("candidate_url", help="Candidate build, e.g. http://127.0.0.1:43823")
 parser.add_argument("--samples", type=int, default=15)
 args = parser.parse_args()
 if args.samples < 1:
     parser.error("--samples must be positive")
 
-output = Path(__file__).parent / ".output" / "legacy-recordings"
+output = Path(__file__).parent / ".output" / "catalog-read-comparison"
 output.mkdir(parents=True, exist_ok=True)
 cases = [
     ("large", "grateful-dead", "1983-10-15", "bc2acb62-6b75-7a1e-7b41-842e0aaf4140", "show_5w5b5p4tvnf8f7pgc45r5ayga0"),

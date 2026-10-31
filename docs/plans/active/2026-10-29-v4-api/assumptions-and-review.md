@@ -21,7 +21,7 @@ observations from 2026-10-29, not production deployment or capacity measurements
   the required normalized snapshot.
 - [API Startup](../../../../RelistenApi/Startup.cs) uses Newtonsoft and currently
   lacks per-version Swagger inclusion. Existing v2/v3 operation sets are mixed.
-  V4 uses dedicated DTOs/settings while legacy adapters retain their wire schemas.
+  V4 uses dedicated DTOs/settings while existing legacy services retain their wire schemas.
 - [Normalization IDs](../../../../Relisten.Normalization/NormIds.cs) are eight-
   character short IDs with System.Text.Json converters. They are not U26 UUID
   encodings. The approved `track_` is a separate UUID-backed catalog kind.
@@ -68,10 +68,11 @@ complexity, public-contract completeness and verification. They found:
    preserving current song behavior without implicit matched-show membership.
 
 The maintainability follow-up makes v4 native to the maintained application
-model and v2/v3 compatibility adapters over common readers/commands. The second
-review found shim/fallback details, now resolved:
+model. The later native-only decision supersedes the proposed v2/v3 shim
+migration: legacy services remain intact. The second review identified coexistence
+and mobile fallback requirements:
 
-- Shared-reader regressions require server/core rollback; mobile fallback only
+- Native-reader regressions require server rollback; mobile fallback only
   addresses v4 projection/transport problems. Verify the pinned server build
   against additive schema changes before release.
 - Measure legacy cold/warm bootstrap, show and discovery performance against

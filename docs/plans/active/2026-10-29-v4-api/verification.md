@@ -89,14 +89,11 @@ relative to `/Users/alecgorge/code/relisten/relisten-mobile`.
   TypeScript fixture checked for identical contents.
 - API: `RelistenApi/Models/Api/V4/`, `Controllers/V4/`, `Services/Catalog/`,
   dedicated validation/results and `Startup.cs` serializer/DI/Swagger registration.
-  Add core catalog result models and legacy adapters under `Services/Catalog/`.
-  Move read algorithms rather than maintaining a second copy. Audit existing
-  callers before removing migrated legacy SQL. Reuse SQL concepts from
-  `Services/Data/CatalogReferences/`, without opening
-  separate connections inside a v4 snapshot. All 51 v4 method/path entries in
-  `endpoints.json` must be implemented; eight operator routes remain at their v2
-  paths. Also verify the three in-place library
-  routes and typed profile GET/PATCH actions.
+  Keep v4 result models/readers native. Existing legacy services remain in place;
+  share low-level storage helpers selectively without imposing old wire behavior
+  on v4. All 51 v4 method/path entries in `endpoints.json` must be implemented;
+  eight operator routes remain at their v2 paths. Also verify the three in-place
+  library routes and typed profile GET/PATCH actions.
 - Canonical ID retention: next catalog migration and embedded normalization SQL;
   `NormStore.Venues.cs`, `NormStore.cs` restore/mint behavior only as needed by
   triggers. Existing delete/revert semantics remain; persistent reservations preserve public ID
@@ -181,22 +178,19 @@ Prove all of these through responses:
   tracks all remain playable. Exact normalized song matches return correct
   show/source/track parents; setlist-only evidence never manufactures a track.
 
-### Legacy shims and source readability
+### Native readability and legacy coexistence
 
-Before refactoring each family, freeze representative v2/v3 responses from
-local fixtures: numeric and UUID references, raw labels, nullable fields, counts,
-source/set/track order, lookup quirks, and error shapes. Compare the shimmed
-responses semantically with those fixtures. Keep existing cache headers/keys and
-prefer-replica behavior; test v4 primary selection separately. Preserve both
-legacy Swagger mixed operation sets. Operator fixtures cover legacy body-target
-update semantics versus v4 route-target semantics and shared import admission.
+Keep v2/v3 services on their current read paths. For shared schema/storage changes,
+compare representative old-client responses: numeric/UUID references, raw labels,
+nullable fields, counts, source/set/track order, lookup quirks and error shapes.
+Retain cache headers/keys, prefer-replica behavior and the mixed legacy Swagger
+operation sets. Do not create new operator aliases or legacy adapters for coverage.
 
-Fresh review must trace normalized success, raw/partial fallback and recovery
-through v4 and a corresponding legacy adapter. Confirm core catalog models/readers
-reference no legacy controllers/DTOs/Identifier and contain no API-version
-branches. Ensure common rules have one implementation, batching remains visible,
-and source readability passes separately from formatting. Do not delete a data
-service merely because its HTTP route moved; audit importer/worker callers.
+Fresh review traces native normalized success, raw/partial fallback and recovery.
+V4 readers/models must reference no legacy controllers/DTOs/Identifier, carry no
+legacy policy switch, and preserve snapshot ownership and deterministic ordering.
+Review readability separately from formatting. Existing data-service importer and
+worker callers remain supported; they are not part of a migration backlog.
 
 ### Snapshot and update behavior
 
@@ -349,7 +343,7 @@ RocketSim workflow and capture an offline cold-start/queue restoration journey.
 Build representative local snapshots/synthetic fixtures for small raw artists,
 large fully normalized artists and partial catalogs. Measure full artist catalog,
 full show, direct track, grouped venues/songs, 500-reference resolver and discovery.
-Also capture pre-refactor v2/v3 baselines and compare the shimmed API on the same
+For shared schema/storage changes, compare unchanged v2/v3 on the same
 fixtures/workload: cold and warm artist bootstrap, show detail and discovery,
 including latency and query counts. Sequential snapshot assembly must not hide
 a legacy regression behind response-fixture parity. Warm legacy cache hits must
@@ -395,7 +389,8 @@ fallback while this is resolved.
    interrupted apply and offline playback against the local API. No broad rollout
    or complete route-coverage claim is made at this checkpoint.
 4. **C4, full API acceptance and additive server release.** Complete/review route
-   families and their legacy adapters. Confirm all 51 v4 operations, eight retained
+   families and verify coexistence with existing legacy services. Confirm all
+   51 v4 operations, eight retained
    operator operations and retained
    account/auth capabilities, legacy fixtures and measured performance. Verify
    catalog backup/restore, replica/ingress configuration and current capacity.
@@ -1159,11 +1154,15 @@ is now explicit in the contract. Opaque cursor design is separate from this filt
 
 ## 2026-10-31 — Retain operator routes; gate the first legacy recording adapter
 
+Historical experiment, superseded by the native-only decision below. Its adapter,
+flag and rollout artifacts were removed; the batching optimization remains.
+
 The current manifest has 51 v4 catalog/playback operations and eight separately
 retained v2 operator operations. No artist-write/import aliases were added. Alec
 approved keeping integer event sequences and using Postgres popularity in the
-legacy adapter. The [rollout guide](review/legacy-recordings.md) records the
-default-off switch, existing backfill job, coverage query and rollback procedure.
+legacy adapter. That experiment used a default-off switch and backfill checklist.
+Those rollout instructions are withdrawn; the
+[native-only decision](review/catalog-read-isolation.md) describes the current policy.
 
 Native full-show/source reads and the enabled legacy full-show adapter now share
 the imported recording loader. It reads sources first, then batches sets, playable
@@ -1224,3 +1223,46 @@ one-hour refresh window: this verifies snapshot coverage, not freshness. No loca
 calculation/backfill replaced the saved real aggregate snapshot. Production was
 not queried or changed. The local API runs with the flag enabled for response
 review; the checked-in default remains disabled pending production warmup.
+
+## 2026-10-31 — Keep native optimization; remove legacy integration
+
+Alec chose independent v4 evolution over a blanket legacy-shim migration. The
+preceding gated-adapter experiment is historical and no longer describes the
+running implementation. V2/v3 retain their existing services, serialization,
+lookup behavior, cache headers and Redis popularity. Existing operator paths
+remain unchanged. Future shared schema/storage changes still require compatibility
+checks, but converting old routes is not a v4 completion requirement.
+
+Removed the adapter/projection, option/configuration, legacy-only DI, extra model
+fields, ordering/artist-scope switches, replica freshness option, readiness SQL
+and adapter-only HTTP cases/host setup. Those two cases protected a flag and
+integration contract that no longer exists. Legacy services, constructors, DI and
+configuration match the pre-adapter `92b4ff5e5` revision. The independent freshness
+test-isolation fix remains because it protects combined suite execution.
+
+V4 retains source-first loading and the batched set/track/link reads, plus selected
+Postgres popularity lookup. `CatalogRecordingReader` now takes the caller's
+`CatalogReadSession` directly. It has deterministic ordering, one snapshot and
+timeout/cancellation ownership, with no legacy mode or nullable connection choices.
+The native recording path still needs two round trips instead of the original
+four. Public response models and normalization policy are unchanged.
+
+**252 combined catalog/popularity/reference/ingestion checks passed**, including
+201 focused native checks. Both independent reviews found no issues. All nine
+real v2/v3/v4 captures matched the original complete JSON, array order, response
+sizes and content/cache headers after restart. The API runs without any adapter
+flag. No production, account or client changes were made.
+
+The renamed GET-only comparison tool is `compare-catalog-reads.py`; it remains
+useful for native optimization and coexistence checks. Results live in ignored
+`local-dev/v4-review/.output/catalog-read-comparison/`. The
+[native isolation review](review/catalog-read-isolation.md) describes the current
+ownership and repeatable workload. Prior adapter-enabled legacy timing gains
+must not be attributed to the current implementation.
+
+After the combined tests finished, a quiet run with four warmups and 15 samples
+measured native v4 medians of 21.34 ms (large), 10.85 ms (partial) and 4.78 ms (raw).
+Command round trips remained 18 for approved full shows and 10 for raw full shows;
+legacy full shows returned to their original five commands. These local samples
+confirm that the native optimization remains, without claiming a production
+latency guarantee or using the removed adapter's timing improvements.

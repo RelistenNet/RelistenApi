@@ -10,15 +10,15 @@ This is a review guide for Alec and Switz. C1 is now implemented for local revie
 start with the [real response examples and running API](review/README.md).
 C2 server and first client upgrades have been reviewed locally; mobile catalog
 adoption remains in its own thread. The next backend slice is the
-[default-off legacy recording adapter](review/legacy-recordings.md).
+[native catalog isolation review](review/catalog-read-isolation.md).
 
 ## The simplification to preserve
 
-Common catalog readers own imported facts, normalization policy and relationships.
-Native v4 resource models define the maintained public contract. V2/v3 adapt
-their inputs and outputs around that core. Convert legacy families individually,
-after their v4 responses are accepted and legacy fixtures protect their behavior.
-Do not rewrite ingestion or unrelated data-service callers to finish a shim.
+Native v4 readers own imported facts, normalization policy and relationships for
+v4. Existing v2/v3 services retain their current contracts and caches, with
+bug/security fixes as needed. Do not migrate legacy families to finish v4 or add
+compatibility switches to native readers. Share low-level primitives selectively;
+keep database changes compatible with both sets of readers.
 
 Mobile keeps one Realm and repository set. Its v4 adapter converts API IDs and
 applies normalized overlays to the existing catalog. Existing UUID keys still
@@ -182,8 +182,8 @@ the response-to-storage mapping; it does not qualify complete API coverage.
 ## C4 — Finish and review the complete API
 
 Expand one resource family at a time, reusing accepted track and parent-resource
-models. Convert its legacy reads into bounded compatibility adapters with
-pre-change response and performance fixtures. Avoid one large legacy rewrite.
+models. Keep old routes on their existing services. Verify representative legacy
+responses when shared schema/storage changes; no adapter migration is required.
 
 Extend the same request collection and Swagger examples. Alec reviews artist
 bootstrap, grouped venues, typed venue aliases, raw song fallback, exact normalized
@@ -193,7 +193,7 @@ recently updated. Review operator inputs/results through inert tests separately.
 
 Compare actual actions/OpenAPI against all entries in [endpoints.json](endpoints.json).
 Show response captures and coverage results together. Full capability coverage,
-legacy compatibility and shared-core readability must pass before completing
+legacy coexistence and native-reader readability must pass before completing
 the mobile browse and library UI. Route count alone is insufficient evidence.
 
 ## C5 — Complete mobile and qualify the release

@@ -23,8 +23,8 @@ authorization. Return typed catalog IDs, normalized venue overlays, and one
 `normalization` object on every returned track. Mobile keeps its listening
 navigation, imported playback titles, downloads, queue, and history. Global venue
 favorites work across artists in a separate My Library Venues section. V4 is
-the maintained catalog API. V2/v3 become compatibility adapters over the same
-catalog application logic, not a second long-lived implementation.
+the maintained catalog API. V2/v3 retain their existing services and contracts,
+with targeted bug/security fixes. They do not become adapters over the v4 readers.
 
 Alec decides product behavior. Alec and Switz implement/review the work; both
 know Relisten. This plan supplies the new contracts and cross-component rules
@@ -125,12 +125,12 @@ remain unverified. They are rollout checks, not assumptions this plan treats as 
 
 ```mermaid
 flowchart TD
-    Imported[Imported catalog and recording facts] --> Read[Common catalog readers and explicit read sessions]
+    Imported[Imported catalog and recording facts] --> Read[Native v4 readers and explicit read sessions]
     Imported --> Jobs[Existing normalization jobs]
     Jobs --> Norm[Norm songs, venues and interpretations]
     Norm --> Read
     Read --> HTTP[Native v4 DTOs and payload ETags]
-    Read --> Legacy[V2 and V3 imported compatibility projections]
+    Imported --> Legacy[Existing v2 and v3 services and caches]
     HTTP --> Adapter[Mobile ID adapter and transactional apply]
     Adapter --> Realm[Imported rows plus normalized overlays]
     Realm --> Player[Existing player and offline files]
@@ -149,11 +149,15 @@ inputs; read each required map once and do not claim transactional ranking updat
 
 ## Maintainability and readability acceptance
 
-V4 owns the future public contract. Shared catalog application code owns queries,
-identity relationships, normalization policy and command behavior. Legacy adapters
-own only old input parsing, output shape, and version-specific cache/transport
-policy. Core code must not depend on legacy controllers, DTOs or `Identifier`.
-Imported data is a domain requirement for v4 fallback, not a legacy-only feature.
+V4 owns the future public contract and its native readers, identity relationships,
+normalization policy and projections. Existing v2/v3 services retain their wire
+formats, lookup quirks, cache behavior and replica preference. No migration of
+legacy routes is required to complete v4. V4 code must not depend on legacy DTOs,
+controllers, ordering policy or API-version switches. Share low-level storage
+primitives only when their semantics are naturally identical and the benefit is
+concrete. Some duplicate query code is an accepted cost of independent evolution.
+Database changes must remain compatible with supported old clients/services.
+Imported data is still a v4 domain requirement for raw artists and fallback.
 
 Use explicit result models and a small number of cohesive readers/handlers.
 Reuse resource projections across route families; do not build a reader/DTO stack
@@ -223,12 +227,15 @@ Implement mobile's actual queries, not a generic interpreter of all server route
 - [x] Retain all eight operator write/import routes instead of adding unused v4
   copies. The separate relisten-admin app writes directly to Postgres; the old
   built-in admin continues using its existing v2 APIs.
-- [x] Share show-detail recording hierarchy reads with v4 and verify v2/v3 JSON,
-  cache policy, replica preference and performance against captured baselines.
+- [x] Evaluate the shared legacy recording adapter against real responses and
+  performance, then remove its integration and rollout flag as Alec requested.
+- [x] Keep native v4 recording batching and the selected Postgres score lookup;
+  restore existing legacy services and remove legacy-only reader policies/tests.
 - [x] Review the [play/activity responses](review/live-activity.md); keep public
   integer sequences as approved. The artist filter is implemented and reviewed.
-- [ ] Alec reviews the [gated legacy adapter](review/legacy-recordings.md).
-- [ ] C3–C5 catalog adoption, legacy adapters, and release qualification remain.
+- [ ] Review [native catalog isolation](review/catalog-read-isolation.md), then
+  continue C3–C5 mobile catalog adoption and release qualification. There is no
+  legacy-adapter migration backlog.
 
 ## Discoveries and changes from the exploration
 
@@ -245,14 +252,13 @@ apply entrypoint, not only DTO renaming. The in-place account change retains
 
 ## Implementation sequence
 
-The numbers below identify components, not a single deployment. Follow the
-[five review checkpoints](review-guide.md): packages 1/2 and the accepted catalog
-families from package 3 produce browsing and playback HTTP responses first
-(expanded C1). Venue browsing, direct sources, and song/discovery reads are
-implemented; their response review remains the next gate before auth. Package 4
-plus mobile account work proves typed auth/library against v3 (C2); the minimum of package 5 proves raw/normalized show playback
-(C3); package 3 completes route families and their legacy adapters (C4); remaining
-mobile/UI work and release checks finish the change (C5).
+The numbers below identify components, not a single deployment. C1 native browse,
+playback, discovery and snapshot/resolver responses are implemented. C2 typed
+account APIs and the first account-client upgrade have been reviewed locally;
+mobile catalog reads remain on v3. C3 proves a small v4 mobile catalog journey.
+C4 qualifies the native API and verifies coexistence with unchanged legacy reads.
+C5 finishes mobile adoption and release checks. Legacy route conversion is not a
+prerequisite for any checkpoint.
 
 Use small PRs with one reviewable outcome. Account/auth and catalog work can be
 developed independently after C1, but deploy the breaking account cutover and
@@ -302,43 +308,30 @@ ETags without writer counters. Deliver C1's running local Swagger/request setup:
 normalization-only edits must change JSON/ETag despite unchanged imported times.
 Alec reviews complete responses before their design spreads through the code.
 
-### 3. Complete API families and legacy adapters for C4
+### 3. Qualify native v4 reads and coexistence for C4
 
-The venue/source and song/discovery families are part of expanded C1 for API
-review before accounts. After C3, implement the remaining
-`endpoints.json` families and legacy adapters. Each family
-gets native v4 routes, common query/results, legacy projections, response fixtures
-and measured compatibility in one coherent change. Complete the pilot family's
-legacy conversion here too. Imported/approved read views and primary/prefer-replica
-targets remain explicit internal choices. Check legacy caches before expensive
-materialization. Remove duplicated SQL after auditing non-HTTP callers.
+Complete and review the 51 native catalog/playback operations in `endpoints.json`.
+Keep the eight operator artist-write/import operations at their existing paths,
+authorization, engine selection and job handles. The separate relisten-admin app
+continues its direct Postgres actions. No duplicate operator API is required.
 
-Keep operator artist writes and import commands at their current v2 paths, with
-their current authorization, engine selection and job handles. Do not add v4
-aliases to satisfy a route count. A future admin workflow can justify a separate
-operator API change; it is not required for v4 catalog adoption. The manifest
-lists these retained operations separately from the 51 v4 operations.
+Keep v2/v3 on their existing services, with targeted bug/security fixes as needed.
+Retain additive database compatibility and verify representative old-client reads
+when shared storage or schema changes. Do not convert legacy families merely to
+remove duplicate SQL. Keep v4 response models/readers free to change independently.
 
-Start compatibility work with the full-show routes and their nested sources,
-sets and tracks. Legacy has no standalone source/track detail routes. Share the
-recording hierarchy loader with native v4 reads; keep imported show metadata,
-feature gating, legacy popularity and transport in the existing legacy path.
-The generic show-list reader remains until that family is migrated. This avoids
-making legacy detail pay for normalization/primary reads or changing unrelated
-list behavior to finish the first adapter. Capture real responses and database
-command counts before editing, then compare the complete hierarchy afterward.
+Retain `CatalogRecordingReader` as a native v4 optimization: read sources once,
+then batch sets, playable tracks and links using source IDs within the same
+snapshot. Keep deterministic ordering and the selected Postgres score lookup.
+The legacy projection, rollout flag, extra numeric fields, reader policy switches
+and legacy-only HTTP scaffolding are removed. Existing legacy data services and
+Redis popularity paths remain intact.
 
-Gate the first legacy adapter with `Catalog:LegacyRecordingAdaptersEnabled`,
-default false. It switches the recording hierarchy and full-show popularity
-together. With the flag off, legacy detail keeps its existing loader and Redis
-scores. With it on, the adapter uses shared recording reads and selected
-artist-local Postgres score rows. Populate and verify Postgres populations before
-enabling it; missing rows are not evidence of zero activity. Retain the old path
-for this rollout, then remove it and the switch after production parity is proven.
-
-C4 requires every catalog operation in the manifest, every returned track's common normalization DTO,
-accepted browse/discovery/resolver examples, legacy compatibility and a fresh
-source-readability review. All existing capabilities remain first-release scope.
+Measure complete responses, payload sizes and query round trips on representative
+raw/partial/large catalogs. Compare against saved native v4 baselines and check
+unchanged legacy responses separately. Review missing resources, failure/recovery,
+ETags and snapshot consistency through public boundaries. The retained comparison
+script supports this work without an adapter rollout or production backfill.
 
 ### 4. Isolated account/auth migration for C2
 
@@ -403,6 +396,11 @@ by accepting this plan.
 
 ## Decision Log
 
+- 2026-10-31, Alec: prioritize independent v4 iteration. Freeze v2/v3 on existing
+  services and stop blanket legacy-adapter migration. Remove the experimental
+  recording integration and rollout flag, retaining native batching and selected
+  Postgres score lookup. This supersedes earlier shared-shim and gated-rollout
+  decisions below; database compatibility remains required.
 - 2026-10-31, Alec: retain the eight operator routes at their existing paths;
   do not add v4 duplicates for route-count completeness. Begin compatibility work
   with full-show recording hierarchies. Postgres popularity is allowed for the
@@ -428,7 +426,8 @@ by accepting this plan.
   snapshots/payload ETags rather than writer epochs; prove capacity before expansion.
 - 2026-10-29, simplification review: inspect real HTTP responses before broad work;
   prove account/auth on v3 separately; keep one mobile repository set; expand v4
-  and legacy adapters by family. Five review checkpoints govern dependent work.
+  and native API qualification. The later native-only decision supersedes the
+  legacy-adapter portion. Five review checkpoints govern dependent work.
 - 2026-10-29, HTTP correction: use weak payload ETags for conditional GET so
   compression does not require another validator-generation mechanism.
 

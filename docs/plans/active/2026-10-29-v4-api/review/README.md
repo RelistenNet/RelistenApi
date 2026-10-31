@@ -11,9 +11,9 @@ mobile-facing catalog reads and the real aggregate snapshot used locally.
 The [play reporting and public activity walkthrough](live-activity.md) covers
 typed play reports and sequence polling through the existing telemetry table.
 
-The [legacy recording adapter walkthrough](legacy-recordings.md) covers the
-default-off rollout, popularity backfill/readiness checks and before/after
-response/performance comparison. Existing operator APIs retain their v2 paths.
+The [native catalog isolation review](catalog-read-isolation.md) explains the
+retained v4 batching optimization and the decision to leave existing legacy
+services intact. Operator APIs retain their v2 paths.
 
 The [date and recent browsing walkthrough](discovery-browsing.md) connects the
 new discovery lists to full playback, with exact query and mobile apply rules.
