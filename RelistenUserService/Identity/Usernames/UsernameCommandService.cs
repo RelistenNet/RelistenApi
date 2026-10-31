@@ -18,7 +18,7 @@ public sealed class UsernameCommandService(
 )
 {
     public async Task<UsernameCommandResult> ExecuteAsync(
-        Guid userId,
+        UserId userId,
         UpdateUsernameRequest request,
         CancellationToken cancellationToken
     )
@@ -28,15 +28,12 @@ public sealed class UsernameCommandService(
         await using var transaction = await dbContext.Database.BeginTransactionAsync(
             cancellationToken
         );
-        await advisoryLocks.LockAsync(
-            $"username-command:{request.ClientCommandUuid:D}",
-            cancellationToken
-        );
+        await advisoryLocks.LockAsync($"username-command:{request.CommandId}", cancellationToken);
 
         // Check the receipt before optimistic concurrency: a retry of a completed command
         // should reproduce its result even though that command advanced username_version.
         var receipt = await dbContext.UsernameCommandReceipts.SingleOrDefaultAsync(
-            item => item.Id == request.ClientCommandUuid,
+            item => item.Id == request.CommandId,
             cancellationToken
         );
         if (receipt is not null)
@@ -136,7 +133,7 @@ public sealed class UsernameCommandService(
         dbContext.UsernameCommandReceipts.Add(
             new UsernameCommandReceipt
             {
-                Id = request.ClientCommandUuid,
+                Id = request.CommandId,
                 UserId = userId,
                 ExpectedUsernameVersion = request.ExpectedUsernameVersion,
                 PayloadHash = payloadHash,
@@ -150,11 +147,11 @@ public sealed class UsernameCommandService(
         return new UsernameCommandResult(UsernameCommandStatus.Success, lockedUser);
     }
 
-    private Task<User> RequireUserAsync(Guid userId, CancellationToken cancellationToken) =>
+    private Task<User> RequireUserAsync(UserId userId, CancellationToken cancellationToken) =>
         dbContext.Users.SingleAsync(user => user.Id == userId, cancellationToken);
 
     private async Task<User> LockAndReloadUserAsync(
-        Guid userId,
+        UserId userId,
         CancellationToken cancellationToken
     )
     {
@@ -162,7 +159,7 @@ public sealed class UsernameCommandService(
             $"""
             SELECT id
             FROM identity.users
-            WHERE id = {userId}
+            WHERE id = {userId.Value}
             FOR UPDATE
             """,
             cancellationToken
@@ -180,6 +177,7 @@ public sealed class UsernameCommandService(
     {
         var canonical = string.Join(
             '\n',
+            "relisten-username-command-typed-v2",
             request.ContractVersion.ToString(CultureInfo.InvariantCulture),
             request.ExpectedUsernameVersion.ToString(CultureInfo.InvariantCulture),
             username

@@ -14,7 +14,10 @@ public sealed class FavoriteConfiguration : IEntityTypeConfiguration<Favorite>
             "user_data",
             table =>
             {
-                table.HasCheckConstraint("ck_favorites_id_uuid_v7", UuidV7Constraint.Sql);
+                table.HasCheckConstraint(
+                    "ck_favorites_id_typed_id",
+                    AccountIdConstraint.Sql("favorite")
+                );
                 table.HasCheckConstraint("ck_favorites_catalog_type", CatalogTypeConstraint.Sql);
             }
         );
@@ -25,7 +28,7 @@ public sealed class FavoriteConfiguration : IEntityTypeConfiguration<Favorite>
             {
                 favorite.UserId,
                 favorite.CatalogType,
-                favorite.CatalogUuid,
+                favorite.CatalogId,
             })
             .IsUnique();
         builder
@@ -39,5 +42,5 @@ public sealed class FavoriteConfiguration : IEntityTypeConfiguration<Favorite>
 internal static class CatalogTypeConstraint
 {
     public const string Sql =
-        "catalog_type IN ('artist', 'show', 'source', 'source_track', 'song', 'tour', 'venue')";
+        "catalog_type IN ('artist', 'show', 'source', 'track', 'imported_song', 'imported_venue', 'song', 'tour', 'venue')";
 }

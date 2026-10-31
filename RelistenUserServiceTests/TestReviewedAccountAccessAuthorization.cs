@@ -22,7 +22,7 @@ public sealed class TestReviewedAccountAccessAuthorization
 {
     private readonly PostgresIntegrationDatabase _database = new();
     private AccountsRuntimeConfiguration _runtime = null!;
-    private Guid _userId;
+    private UserId _userId;
 
     [OneTimeSetUp]
     public async Task SetUpDatabase()
@@ -92,7 +92,7 @@ public sealed class TestReviewedAccountAccessAuthorization
         var permittedAccount = new CurrentAccountContext();
         permittedAccount.SetWeb(
             user,
-            Guid.CreateVersion7(),
+            SessionId.New(),
             AuthenticationConstants.LocalWebOrigin,
             IdentitySessionCapabilities.AccountProfileRead
         );
@@ -105,7 +105,7 @@ public sealed class TestReviewedAccountAccessAuthorization
         var missingCapabilityAccount = new CurrentAccountContext();
         missingCapabilityAccount.SetWeb(
             user,
-            Guid.CreateVersion7(),
+            SessionId.New(),
             AuthenticationConstants.LocalWebOrigin,
             IdentitySessionCapabilities.LibraryRead
         );
@@ -176,13 +176,13 @@ public sealed class TestReviewedAccountAccessAuthorization
     {
         var now = DateTimeOffset.UtcNow;
         var user = await dbContext.Users.SingleAsync(item => item.Id == _userId);
-        var authorizationId = Guid.CreateVersion7(now);
+        var authorizationId = Guid.CreateVersion7();
         dbContext
             .Set<OpenIddictEntityFrameworkCoreAuthorization<Guid>>()
             .Add(new() { Id = authorizationId });
         var session = new NativeSession
         {
-            Id = Guid.CreateVersion7(now),
+            Id = SessionId.New(),
             UserId = user.Id,
             AuthorizationId = authorizationId,
             ClientId = "test-native-client",
@@ -244,12 +244,7 @@ public sealed class TestReviewedAccountAccessAuthorization
     )
     {
         var account = new CurrentAccountContext();
-        account.SetWeb(
-            user,
-            Guid.CreateVersion7(),
-            AuthenticationConstants.LocalWebOrigin,
-            capabilities
-        );
+        account.SetWeb(user, SessionId.New(), AuthenticationConstants.LocalWebOrigin, capabilities);
         return account;
     }
 

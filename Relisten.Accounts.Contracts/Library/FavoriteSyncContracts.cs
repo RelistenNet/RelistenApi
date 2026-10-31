@@ -1,3 +1,5 @@
+using Relisten.Accounts.Contracts.Identifiers;
+
 namespace Relisten.Accounts.Contracts.Library;
 
 public sealed record FavoriteLibrarySnapshot(
@@ -8,9 +10,8 @@ public sealed record FavoriteLibrarySnapshot(
 );
 
 public sealed record FavoriteSnapshotItem(
-    Guid FavoriteUuid,
-    string CatalogType,
-    Guid CatalogUuid,
+    FavoriteId FavoriteId,
+    FavoriteTarget Target,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt
 );
@@ -24,11 +25,10 @@ public sealed record FavoriteLibraryChanges(
 );
 
 public sealed record FavoriteLibraryChange(
-    Guid ChangeUuid,
+    LibraryChangeId ChangeId,
     long Revision,
     string ChangeType,
-    Guid FavoriteUuid,
-    string CatalogType,
-    Guid CatalogUuid,
+    FavoriteId FavoriteId,
+    FavoriteTarget Target,
     DateTimeOffset ChangedAt
 );

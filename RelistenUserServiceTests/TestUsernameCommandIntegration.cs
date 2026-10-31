@@ -38,13 +38,13 @@ public sealed class TestUsernameCommandIntegration
             start.Task,
             firstContext,
             userId,
-            new UpdateUsernameRequest(1, Guid.CreateVersion7(), 1, firstUsername)
+            new UpdateUsernameRequest(1, CommandId.New(), 1, firstUsername)
         );
         var second = ExecuteAfterAsync(
             start.Task,
             secondContext,
             userId,
-            new UpdateUsernameRequest(1, Guid.CreateVersion7(), 1, secondUsername)
+            new UpdateUsernameRequest(1, CommandId.New(), 1, secondUsername)
         );
 
         start.SetResult();
@@ -80,7 +80,7 @@ public sealed class TestUsernameCommandIntegration
     private static async Task<UsernameCommandResult> ExecuteAfterAsync(
         Task start,
         AccountsDbContext dbContext,
-        Guid userId,
+        UserId userId,
         UpdateUsernameRequest request
     )
     {

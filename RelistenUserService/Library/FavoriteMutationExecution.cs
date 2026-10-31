@@ -5,14 +5,14 @@ namespace RelistenUserService.Library;
 public enum FavoriteMutationFailureKind
 {
     IdempotencyConflict,
-    FavoriteUuidConflict,
+    FavoriteIdConflict,
     QuotaExceeded,
 }
 
 public sealed record FavoriteMutationFailure(
     FavoriteMutationFailureKind Kind,
     string Detail,
-    IReadOnlyList<Guid>? ConflictingUuids = null
+    IReadOnlyList<string>? ConflictingIds = null
 );
 
 public sealed record FavoriteMutationExecution(

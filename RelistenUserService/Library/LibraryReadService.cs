@@ -22,7 +22,7 @@ public sealed class LibraryReadService(
     public const int MaximumChangesPerPage = 500;
 
     public async Task<FavoriteLibrarySnapshot> GetSnapshotAsync(
-        Guid userId,
+        UserId userId,
         CancellationToken cancellationToken
     )
     {
@@ -42,8 +42,7 @@ public sealed class LibraryReadService(
             .ThenBy(favorite => favorite.Id)
             .Select(favorite => new FavoriteSnapshotItem(
                 favorite.Id,
-                favorite.CatalogType,
-                favorite.CatalogUuid,
+                new FavoriteTarget(favorite.CatalogType, favorite.CatalogId),
                 favorite.CreatedAt,
                 favorite.UpdatedAt
             ))
@@ -59,7 +58,7 @@ public sealed class LibraryReadService(
     }
 
     public async Task<LibraryChangesExecution> GetChangesAsync(
-        Guid userId,
+        UserId userId,
         string? cursor,
         CancellationToken cancellationToken
     )
@@ -111,8 +110,7 @@ public sealed class LibraryReadService(
                     change.Revision,
                     change.ChangeType,
                     change.FavoriteId,
-                    change.CatalogType,
-                    change.CatalogUuid,
+                    new FavoriteTarget(change.CatalogType, change.CatalogId),
                     change.ChangedAt
                 ))
                 .ToArray(),

@@ -6,11 +6,11 @@ namespace RelistenUserService.Library;
 public sealed record FavoriteMutationValidationFailure(string Code, string Detail);
 
 public sealed record FavoriteMutationCommand(
-    Guid MutationUuid,
+    MutationId MutationId,
     string CatalogType,
-    Guid CatalogUuid,
+    string CatalogId,
     string DesiredState,
-    Guid? FavoriteUuid
+    FavoriteId? FavoriteId
 );
 
 public static class FavoriteMutationRequestValidator
@@ -56,7 +56,7 @@ public static class FavoriteMutationRequestValidator
         }
 
         var validated = new List<FavoriteMutationCommand>(request.Mutations.Count);
-        var mutationIds = new HashSet<Guid>();
+        var mutationIds = new HashSet<MutationId>();
         for (var index = 0; index < request.Mutations.Count; index++)
         {
             var candidate = request.Mutations[index];
@@ -66,30 +66,24 @@ public static class FavoriteMutationRequestValidator
                 return false;
             }
 
-            if (!IsUuidV7(candidate.MutationUuid))
+            if (candidate.MutationId.IsEmpty)
             {
-                failure = InvalidAt(index, "mutation_uuid must be a UUIDv7 value");
+                failure = InvalidAt(index, "mutation_id must be a mutation_ UUIDv7 ID");
                 return false;
             }
 
-            if (!mutationIds.Add(candidate.MutationUuid))
+            if (!mutationIds.Add(candidate.MutationId))
             {
-                failure = InvalidAt(index, "mutation_uuid is duplicated in this batch");
+                failure = InvalidAt(index, "mutation_id is duplicated in this batch");
                 return false;
             }
 
-            if (!FavoriteCatalogTypes.IsSupported(candidate.CatalogType))
+            if (candidate.Target is null || !candidate.Target.IsValid())
             {
                 failure = InvalidAt(
                     index,
-                    "catalog_type must be one of artist, show, source, source_track, song, tour, or venue"
+                    "target must contain a supported kind and matching typed id"
                 );
-                return false;
-            }
-
-            if (candidate.CatalogUuid == Guid.Empty)
-            {
-                failure = InvalidAt(index, "catalog_uuid must be a non-empty UUID");
                 return false;
             }
 
@@ -101,31 +95,31 @@ public static class FavoriteMutationRequestValidator
 
             if (candidate.DesiredState == FavoriteDesiredStates.Favorite)
             {
-                if (candidate.FavoriteUuid is not { } favoriteUuid || !IsUuidV7(favoriteUuid))
+                if (candidate.FavoriteId is not { } favoriteId || favoriteId.IsEmpty)
                 {
                     failure = InvalidAt(
                         index,
-                        "favorite_uuid must be a UUIDv7 value when desired_state is favorite"
+                        "favorite_id must be a favorite_ UUIDv7 ID when desired_state is favorite"
                     );
                     return false;
                 }
             }
-            else if (candidate.FavoriteUuid is not null)
+            else if (candidate.FavoriteId is not null)
             {
                 failure = InvalidAt(
                     index,
-                    "favorite_uuid must be omitted when desired_state is not_favorite"
+                    "favorite_id must be omitted when desired_state is not_favorite"
                 );
                 return false;
             }
 
             validated.Add(
                 new(
-                    candidate.MutationUuid,
-                    candidate.CatalogType!,
-                    candidate.CatalogUuid,
+                    candidate.MutationId,
+                    candidate.Target.Kind,
+                    candidate.Target.Id,
                     candidate.DesiredState!,
-                    candidate.FavoriteUuid
+                    candidate.FavoriteId
                 )
             );
         }
@@ -134,8 +128,6 @@ public static class FavoriteMutationRequestValidator
         failure = null;
         return true;
     }
-
-    private static bool IsUuidV7(Guid value) => value != Guid.Empty && value.Version == 7;
 
     private static FavoriteMutationValidationFailure Invalid(string detail) =>
         new(LibraryErrorCodes.InvalidFavoriteMutation, detail);

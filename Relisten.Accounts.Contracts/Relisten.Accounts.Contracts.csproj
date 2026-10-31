@@ -4,4 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Relisten.Identifiers/Relisten.Identifiers.csproj" />
+  </ItemGroup>
 </Project>

@@ -14,8 +14,8 @@ public sealed class UsernameCommandReceiptConfiguration
             "identity",
             table =>
                 table.HasCheckConstraint(
-                    "ck_username_command_receipts_id_uuid_v7",
-                    UuidV7Constraint.Sql
+                    "ck_username_command_receipts_id_typed_id",
+                    AccountIdConstraint.Sql("command")
                 )
         );
         builder.HasKey(receipt => receipt.Id);

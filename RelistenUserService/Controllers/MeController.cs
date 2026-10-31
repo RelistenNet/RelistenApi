@@ -41,12 +41,12 @@ public sealed class MeController(
             );
         }
 
-        if (request.ClientCommandUuid == Guid.Empty || request.ClientCommandUuid.Version != 7)
+        if (request.CommandId.IsEmpty)
         {
             return AccountProblem(
                 StatusCodes.Status422UnprocessableEntity,
-                AccountErrorCodes.InvalidCommandUuid,
-                "client_command_uuid must be a UUIDv7 value."
+                AccountErrorCodes.InvalidCommandId,
+                "command_id must be a command_ UUIDv7 ID."
             );
         }
 
@@ -67,7 +67,7 @@ public sealed class MeController(
             UsernameCommandStatus.IdempotencyConflict => AccountProblem(
                 StatusCodes.Status409Conflict,
                 AccountErrorCodes.IdempotencyConflict,
-                "client_command_uuid was already used for another username command."
+                "command_id was already used for another username command."
             ),
             UsernameCommandStatus.InvalidUsername => AccountProblem(
                 StatusCodes.Status422UnprocessableEntity,

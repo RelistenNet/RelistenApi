@@ -13,7 +13,7 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
             "identity",
             table =>
             {
-                table.HasCheckConstraint("ck_users_id_uuid_v7", UuidV7Constraint.Sql);
+                table.HasCheckConstraint("ck_users_id_typed_id", AccountIdConstraint.Sql("user"));
                 table.HasCheckConstraint(
                     "ck_users_status",
                     "status IN ('active', 'disabled', 'deleting')"
@@ -28,7 +28,7 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
         builder.HasKey(user => user.Id);
         builder
             .Property(user => user.Id)
-            .HasValueGenerator<UuidV7ValueGenerator>()
+            .HasValueGenerator<AccountIdValueGenerator<UserId>>()
             .ValueGeneratedOnAdd();
         builder.Property(user => user.Status).HasMaxLength(16);
         builder.Property(user => user.Username).HasMaxLength(30);

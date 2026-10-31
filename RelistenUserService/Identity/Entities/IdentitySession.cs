@@ -2,8 +2,8 @@ namespace RelistenUserService.Identity.Entities;
 
 public sealed class IdentitySession
 {
-    public Guid Id { get; set; }
-    public Guid UserId { get; set; }
+    public SessionId Id { get; set; }
+    public UserId UserId { get; set; }
     public string Purpose { get; set; } = "";
 
     // PostgreSQL stores only the validator hash. A database disclosure cannot use the
@@ -17,7 +17,7 @@ public sealed class IdentitySession
     public DateTimeOffset SlidingExpiresAt { get; set; }
     public DateTimeOffset AbsoluteExpiresAt { get; set; }
     public DateTimeOffset? RevokedAt { get; set; }
-    public Guid? AuthSsoSessionId { get; set; }
+    public SessionId? AuthSsoSessionId { get; set; }
     public string? WebOrigin { get; set; }
     public IdentitySessionCapabilities Capabilities { get; set; }
 

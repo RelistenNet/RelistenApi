@@ -13,7 +13,7 @@ public sealed class TestSessionCredentialCodec
     [Test]
     public void Issues_a_versioned_256_bit_credential_for_a_uuid_v7_session()
     {
-        var sessionId = Guid.CreateVersion7();
+        var sessionId = SessionId.New();
 
         var issued = _codec.Issue(sessionId);
         var parsed = _codec.TryParse(issued.CookieValue, out var credential);
@@ -31,7 +31,7 @@ public sealed class TestSessionCredentialCodec
     [Test]
     public void Reissuing_the_same_session_id_uses_a_new_validator()
     {
-        var sessionId = Guid.CreateVersion7();
+        var sessionId = SessionId.New();
 
         var first = _codec.Issue(sessionId);
         var second = _codec.Issue(sessionId);
@@ -57,10 +57,18 @@ public sealed class TestSessionCredentialCodec
     [Test]
     public void Rejects_a_uuid_that_is_not_version_seven()
     {
-        var issued = _codec.Issue(Guid.CreateVersion7());
+        var issued = _codec.Issue(SessionId.New());
         var parts = issued.CookieValue.Split('.');
         parts[1] = Guid.NewGuid().ToString("N");
 
         _codec.TryParse(string.Join('.', parts), out _).Should().BeFalse();
+    }
+
+    [Test]
+    public void Rejects_a_well_formed_old_UUID_cookie()
+    {
+        var issued = _codec.Issue(SessionId.New());
+        var oldValue = $"v1.{Guid.CreateVersion7():N}.{issued.CookieValue.Split('.')[2]}";
+        _codec.TryParse(oldValue, out _).Should().BeFalse();
     }
 }

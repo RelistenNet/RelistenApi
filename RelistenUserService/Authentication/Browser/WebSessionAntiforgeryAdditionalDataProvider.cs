@@ -8,7 +8,7 @@ public sealed class WebSessionAntiforgeryAdditionalDataProvider : IAntiforgeryAd
     public string GetAdditionalData(HttpContext context)
     {
         var currentAccount = context.RequestServices.GetRequiredService<CurrentAccountContext>();
-        return currentAccount.IsWeb ? currentAccount.WebSessionId.ToString("N") : "";
+        return currentAccount.IsWeb ? currentAccount.WebSessionId.ToString() : "";
     }
 
     public bool ValidateAdditionalData(HttpContext context, string additionalData)
@@ -17,7 +17,7 @@ public sealed class WebSessionAntiforgeryAdditionalDataProvider : IAntiforgeryAd
         return currentAccount.IsWeb
             ? string.Equals(
                 additionalData,
-                currentAccount.WebSessionId.ToString("N"),
+                currentAccount.WebSessionId.ToString(),
                 StringComparison.Ordinal
             )
             : string.IsNullOrEmpty(additionalData);

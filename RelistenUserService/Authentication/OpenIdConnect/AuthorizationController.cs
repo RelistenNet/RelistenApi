@@ -51,7 +51,7 @@ public sealed class AuthorizationController(
             : await HttpContext.AuthenticateAsync(AuthenticationConstants.AuthSsoScheme);
         if (
             !authentication.Succeeded
-            || !Guid.TryParse(authentication.Principal?.GetClaim(Claims.Subject), out var userId)
+            || !UserId.TryParse(authentication.Principal?.GetClaim(Claims.Subject), out var userId)
         )
         {
             if (runtime.Options.EnableExternalProviders)
@@ -75,7 +75,7 @@ public sealed class AuthorizationController(
         if (
             user is null
             || string.IsNullOrWhiteSpace(request.ClientId)
-            || !Guid.TryParse(
+            || !SessionId.TryParse(
                 authentication.Principal?.GetClaim(RelistenClaims.SessionId),
                 out var authSsoSessionId
             )
@@ -98,7 +98,7 @@ public sealed class AuthorizationController(
         var now = timeProvider.GetUtcNow();
         var session = new NativeSession
         {
-            Id = Guid.CreateVersion7(),
+            Id = SessionId.New(),
             UserId = user.Id,
             ClientId = request.ClientId,
             SecurityVersion = user.SecurityVersion,
@@ -123,7 +123,7 @@ public sealed class AuthorizationController(
             ?? throw new InvalidOperationException("The OpenIddict client has no ID.");
         var authorization = await authorizationManager.CreateAsync(
             principal,
-            user.Id.ToString("D"),
+            user.Id.ToString(),
             applicationId,
             AuthorizationTypes.Permanent,
             principal.GetScopes(),

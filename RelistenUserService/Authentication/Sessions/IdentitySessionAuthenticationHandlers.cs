@@ -40,9 +40,9 @@ public sealed class AuthSsoAuthenticationHandler(
             Claims.Name,
             Claims.Role
         );
-        identity.AddClaim(new Claim(Claims.Subject, session.User.Id.ToString("D")));
+        identity.AddClaim(new Claim(Claims.Subject, session.User.Id.ToString()));
         identity.AddClaim(new Claim(Claims.Name, session.User.Username));
-        identity.AddClaim(new Claim(RelistenClaims.SessionId, session.SessionId.ToString("D")));
+        identity.AddClaim(new Claim(RelistenClaims.SessionId, session.SessionId.ToString()));
         return new ClaimsPrincipal(identity);
     }
 }
@@ -94,9 +94,9 @@ public sealed class WebSessionAuthenticationHandler(
             Claims.Name,
             Claims.Role
         );
-        identity.AddClaim(new Claim(Claims.Subject, session.User.Id.ToString("D")));
+        identity.AddClaim(new Claim(Claims.Subject, session.User.Id.ToString()));
         identity.AddClaim(new Claim(Claims.Name, session.User.Username));
-        identity.AddClaim(new Claim(RelistenClaims.SessionId, session.SessionId.ToString("D")));
+        identity.AddClaim(new Claim(RelistenClaims.SessionId, session.SessionId.ToString()));
         return AuthenticateResult.Success(
             new AuthenticationTicket(new ClaimsPrincipal(identity), Scheme.Name)
         );

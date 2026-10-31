@@ -4,8 +4,6 @@ set -Eeuo pipefail
 
 readonly auth_url="${RELISTEN_USER_SERVICE_AUTH_URL:-https://auth.relisten.localhost:5443}"
 readonly accounts_url="${RELISTEN_USER_SERVICE_ACCOUNTS_URL:-https://accounts.relisten.localhost:5443}"
-readonly verifier="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~abc"
-readonly challenge="dYSqskoTcWrpu8GYY0XpWlzOc0c5rd9YO3uAgh_zmV4"
 smoke_tmp_dir="$(mktemp -d)"
 trap 'rm -r "$smoke_tmp_dir"' EXIT
 
@@ -17,55 +15,7 @@ assert_equal() {
 }
 
 sign_in() {
-  local run_name="$1"
-  local cookie_jar="$smoke_tmp_dir/$run_name.cookies"
-  local sign_in_page="$smoke_tmp_dir/$run_name.html"
-  local sign_in_url return_url authorize_return callback_url code
-
-  sign_in_url="$(curl --silent --show-error --get "$auth_url/connect/authorize" \
-    --data-urlencode 'client_id=relisten-mobile-ios-dev' \
-    --data-urlencode 'redirect_uri=net.relisten.mobile:/oauth2redirect/ios' \
-    --data-urlencode 'response_type=code' \
-    --data-urlencode 'scope=openid profile offline_access user.read library.read library.write account.manage' \
-    --data-urlencode "code_challenge=$challenge" \
-    --data-urlencode 'code_challenge_method=S256' \
-    --data-urlencode 'provider=google' \
-    --data-urlencode "state=$run_name" \
-    --write-out '%{redirect_url}' \
-    --output /dev/null)"
-
-  curl --silent --show-error \
-    --cookie-jar "$cookie_jar" \
-    "$sign_in_url" \
-    --output "$sign_in_page"
-
-  return_url="$(sed -n \
-    's/.*name="return_url" value="\([^"]*\)".*/\1/p' \
-    "$sign_in_page" | sed 's/&amp;/\&/g')"
-
-  authorize_return="$(curl --silent --show-error \
-    --cookie "$cookie_jar" \
-    --cookie-jar "$cookie_jar" \
-    --request POST "$auth_url/development/sign-in" \
-    --header "Origin: $auth_url" \
-    --data-urlencode "return_url=$return_url" \
-    --data-urlencode 'persona=google-alice' \
-    --write-out '%{redirect_url}' \
-    --output /dev/null)"
-  callback_url="$(curl --silent --show-error \
-    --cookie "$cookie_jar" \
-    "$authorize_return" \
-    --write-out '%{redirect_url}' \
-    --output /dev/null)"
-  code="$(printf '%s' "$callback_url" | sed -n 's/.*[?&]code=\([^&]*\).*/\1/p')"
-
-  curl --fail --silent --show-error \
-    --request POST "$auth_url/connect/token" \
-    --data-urlencode 'grant_type=authorization_code' \
-    --data-urlencode 'client_id=relisten-mobile-ios-dev' \
-    --data-urlencode 'redirect_uri=net.relisten.mobile:/oauth2redirect/ios' \
-    --data-urlencode "code=$code" \
-    --data-urlencode "code_verifier=$verifier"
+  "$(dirname "$0")/native-sign-in.sh" "$1"
 }
 
 logout_tokens="$(sign_in logout-smoke)"
@@ -76,17 +26,17 @@ invalid_uuid_status="$(curl --silent --show-error \
   --request PATCH "$accounts_url/v1/me" \
   --header "Authorization: Bearer $logout_access" \
   --header 'Content-Type: application/json' \
-  --data '{"contract_version":1,"client_command_uuid":"not-a-uuid","expected_username_version":1,"username":"listener"}' \
+  --data '{"contract_version":1,"command_id":"not-a-uuid","expected_username_version":1,"username":"listener"}' \
   --output "$smoke_tmp_dir/invalid-uuid.json" \
   --write-out '%{http_code}')"
 assert_equal "$invalid_uuid_status" "422"
-assert_equal "$(jq -r '.code' "$smoke_tmp_dir/invalid-uuid.json")" "invalid_command_uuid"
+assert_equal "$(jq -r '.code' "$smoke_tmp_dir/invalid-uuid.json")" "invalid_command_id"
 
 invalid_contract_status="$(curl --silent --show-error \
   --request PATCH "$accounts_url/v1/me" \
   --header "Authorization: Bearer $logout_access" \
   --header 'Content-Type: application/json' \
-  --data '{"contract_version":"one","client_command_uuid":"019f76c8-7c76-7680-ad2f-248b877f3581","expected_username_version":1,"username":"listener"}' \
+  --data '{"contract_version":"one","command_id":"command_01kxvcgz3pet0atbs4he3qydc1","expected_username_version":1,"username":"listener"}' \
   --output "$smoke_tmp_dir/invalid-contract.json" \
   --write-out '%{http_code}')"
 assert_equal "$invalid_contract_status" "422"
@@ -96,7 +46,7 @@ unmapped_status="$(curl --silent --show-error \
   --request PATCH "$accounts_url/v1/me" \
   --header "Authorization: Bearer $logout_access" \
   --header 'Content-Type: application/json' \
-  --data '{"contract_version":1,"client_command_uuid":"019f76c8-7c76-7680-ad2f-248b877f3581","expected_username_version":1,"username":"listener","extra":true}' \
+  --data '{"contract_version":1,"command_id":"command_01kxvcgz3pet0atbs4he3qydc1","expected_username_version":1,"username":"listener","extra":true}' \
   --output "$smoke_tmp_dir/unmapped.json" \
   --write-out '%{http_code}')"
 assert_equal "$unmapped_status" "400"
@@ -107,13 +57,19 @@ profile="$(curl --fail --silent --show-error \
   --header "Authorization: Bearer $logout_access")"
 username="$(printf '%s' "$profile" | jq -r '.username')"
 username_version="$(printf '%s' "$profile" | jq -r '.username_version')"
-random_uuid="$(uuidgen | tr '[:upper:]' '[:lower:]')"
-command_uuid="${random_uuid:0:14}7${random_uuid:15}"
+command_uuid="$(python3 - <<'PYID'
+import uuid
+value = uuid.uuid4().int
+value = (value & ~(15 << 76)) | (7 << 76)
+alphabet = "0123456789abcdefghjkmnpqrstvwxyz"
+print("command_" + "".join(alphabet[(value >> (5*i)) & 31] for i in reversed(range(26))))
+PYID
+)"
 username_command="$(jq --null-input --compact-output \
   --arg command_uuid "$command_uuid" \
   --arg username "$username" \
   --argjson username_version "$username_version" \
-  '{contract_version:1,client_command_uuid:$command_uuid,expected_username_version:$username_version,username:$username}')"
+  '{contract_version:1,command_id:$command_uuid,expected_username_version:$username_version,username:$username}')"
 
 username_result="$(curl --fail --silent --show-error \
   --request PATCH "$accounts_url/v1/me" \

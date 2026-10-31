@@ -359,8 +359,9 @@ namespace RelistenUserService.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid")
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text")
                         .HasColumnName("user_id");
 
                     b.HasKey("Id");
@@ -379,17 +380,17 @@ namespace RelistenUserService.Persistence.Migrations
 
             modelBuilder.Entity("RelistenUserService.Identity.Entities.IdentitySession", b =>
                 {
-                    b.Property<Guid>("Id")
+                    b.Property<string>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
+                        .HasColumnType("text")
                         .HasColumnName("id");
 
                     b.Property<DateTimeOffset>("AbsoluteExpiresAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("absolute_expires_at");
 
-                    b.Property<Guid?>("AuthSsoSessionId")
-                        .HasColumnType("uuid")
+                    b.Property<string>("AuthSsoSessionId")
+                        .HasColumnType("text")
                         .HasColumnName("auth_sso_session_id");
 
                     b.Property<DateTimeOffset>("AuthenticatedAt")
@@ -430,8 +431,9 @@ namespace RelistenUserService.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid")
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text")
                         .HasColumnName("user_id");
 
                     b.Property<byte[]>("ValidatorHash")
@@ -456,7 +458,7 @@ namespace RelistenUserService.Persistence.Migrations
                         {
                             t.HasCheckConstraint("ck_sessions_auth_sso_shape", "purpose <> 'auth_sso'\nOR (\n    auth_sso_session_id IS NULL\n    AND web_origin IS NULL\n    AND capabilities = 0\n    AND sliding_expires_at = absolute_expires_at\n)");
 
-                            t.HasCheckConstraint("ck_sessions_id_uuid_v7", "uuid_extract_version(id) IS NOT DISTINCT FROM 7");
+                            t.HasCheckConstraint("ck_sessions_id_typed_id", "id ~ '^session_[0-7][0-9a-hjkmnp-tv-z]{9}[ef][0-9a-hjkmnp-tv-z]{15}$'");
 
                             t.HasCheckConstraint("ck_sessions_purpose", "purpose IN ('auth_sso', 'web')");
 
@@ -472,9 +474,9 @@ namespace RelistenUserService.Persistence.Migrations
 
             modelBuilder.Entity("RelistenUserService.Identity.Entities.NativeSession", b =>
                 {
-                    b.Property<Guid>("Id")
+                    b.Property<string>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
+                        .HasColumnType("text")
                         .HasColumnName("id");
 
                     b.Property<DateTimeOffset>("AbsoluteExpiresAt")
@@ -525,8 +527,9 @@ namespace RelistenUserService.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid")
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text")
                         .HasColumnName("user_id");
 
                     b.HasKey("Id");
@@ -538,15 +541,15 @@ namespace RelistenUserService.Persistence.Migrations
 
                     b.ToTable("native_sessions", "identity", t =>
                         {
-                            t.HasCheckConstraint("ck_native_sessions_id_uuid_v7", "uuid_extract_version(id) IS NOT DISTINCT FROM 7");
+                            t.HasCheckConstraint("ck_native_sessions_id_typed_id", "id ~ '^session_[0-7][0-9a-hjkmnp-tv-z]{9}[ef][0-9a-hjkmnp-tv-z]{15}$'");
                         });
                 });
 
             modelBuilder.Entity("RelistenUserService.Identity.Entities.User", b =>
                 {
-                    b.Property<Guid>("Id")
+                    b.Property<string>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
+                        .HasColumnType("text")
                         .HasColumnName("id");
 
                     b.Property<DateTimeOffset>("CreatedAt")
@@ -602,7 +605,7 @@ namespace RelistenUserService.Persistence.Migrations
 
                     b.ToTable("users", "identity", t =>
                         {
-                            t.HasCheckConstraint("ck_users_id_uuid_v7", "uuid_extract_version(id) IS NOT DISTINCT FROM 7");
+                            t.HasCheckConstraint("ck_users_id_typed_id", "id ~ '^user_[0-7][0-9a-hjkmnp-tv-z]{9}[ef][0-9a-hjkmnp-tv-z]{15}$'");
 
                             t.HasCheckConstraint("ck_users_status", "status IN ('active', 'disabled', 'deleting')");
 
@@ -612,9 +615,8 @@ namespace RelistenUserService.Persistence.Migrations
 
             modelBuilder.Entity("RelistenUserService.Identity.Entities.UsernameCommandReceipt", b =>
                 {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
+                    b.Property<string>("Id")
+                        .HasColumnType("text")
                         .HasColumnName("id");
 
                     b.Property<DateTimeOffset>("CreatedAt")
@@ -635,8 +637,9 @@ namespace RelistenUserService.Persistence.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("stored_result");
 
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid")
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text")
                         .HasColumnName("user_id");
 
                     b.HasKey("Id");
@@ -645,7 +648,7 @@ namespace RelistenUserService.Persistence.Migrations
 
                     b.ToTable("username_command_receipts", "identity", t =>
                         {
-                            t.HasCheckConstraint("ck_username_command_receipts_id_uuid_v7", "uuid_extract_version(id) IS NOT DISTINCT FROM 7");
+                            t.HasCheckConstraint("ck_username_command_receipts_id_typed_id", "id ~ '^command_[0-7][0-9a-hjkmnp-tv-z]{9}[ef][0-9a-hjkmnp-tv-z]{15}$'");
                         });
                 });
 
@@ -664,8 +667,9 @@ namespace RelistenUserService.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("release_at");
 
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid")
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text")
                         .HasColumnName("user_id");
 
                     b.Property<string>("Username")
@@ -691,20 +695,20 @@ namespace RelistenUserService.Persistence.Migrations
 
             modelBuilder.Entity("RelistenUserService.Library.Entities.Favorite", b =>
                 {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
+                    b.Property<string>("Id")
+                        .HasColumnType("text")
                         .HasColumnName("id");
+
+                    b.Property<string>("CatalogId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("catalog_id");
 
                     b.Property<string>("CatalogType")
                         .IsRequired()
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
                         .HasColumnName("catalog_type");
-
-                    b.Property<Guid>("CatalogUuid")
-                        .HasColumnType("uuid")
-                        .HasColumnName("catalog_uuid");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -714,43 +718,44 @@ namespace RelistenUserService.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid")
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text")
                         .HasColumnName("user_id");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("UserId", "CatalogType", "CatalogUuid")
+                    b.HasIndex("UserId", "CatalogType", "CatalogId")
                         .IsUnique();
 
                     b.ToTable("favorites", "user_data", t =>
                         {
-                            t.HasCheckConstraint("ck_favorites_catalog_type", "catalog_type IN ('artist', 'show', 'source', 'source_track', 'song', 'tour', 'venue')");
+                            t.HasCheckConstraint("ck_favorites_catalog_type", "catalog_type IN ('artist', 'show', 'source', 'track', 'imported_song', 'imported_venue', 'song', 'tour', 'venue')");
 
-                            t.HasCheckConstraint("ck_favorites_id_uuid_v7", "uuid_extract_version(id) IS NOT DISTINCT FROM 7");
+                            t.HasCheckConstraint("ck_favorites_id_typed_id", "id ~ '^favorite_[0-7][0-9a-hjkmnp-tv-z]{9}[ef][0-9a-hjkmnp-tv-z]{15}$'");
                         });
                 });
 
             modelBuilder.Entity("RelistenUserService.Library.Entities.FavoriteMutationReceipt", b =>
                 {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
+                    b.Property<string>("Id")
+                        .HasColumnType("text")
                         .HasColumnName("id");
 
-                    b.Property<Guid?>("CanonicalFavoriteId")
-                        .HasColumnType("uuid")
+                    b.Property<string>("CanonicalFavoriteId")
+                        .HasColumnType("text")
                         .HasColumnName("canonical_favorite_id");
+
+                    b.Property<string>("CatalogId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("catalog_id");
 
                     b.Property<string>("CatalogType")
                         .IsRequired()
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
                         .HasColumnName("catalog_type");
-
-                    b.Property<Guid>("CatalogUuid")
-                        .HasColumnType("uuid")
-                        .HasColumnName("catalog_uuid");
 
                     b.Property<bool>("Changed")
                         .HasColumnType("boolean")
@@ -775,12 +780,13 @@ namespace RelistenUserService.Persistence.Migrations
                         .HasColumnType("bytea")
                         .HasColumnName("payload_hash");
 
-                    b.Property<Guid?>("SubmittedFavoriteId")
-                        .HasColumnType("uuid")
+                    b.Property<string>("SubmittedFavoriteId")
+                        .HasColumnType("text")
                         .HasColumnName("submitted_favorite_id");
 
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid")
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text")
                         .HasColumnName("user_id");
 
                     b.HasKey("Id");
@@ -791,36 +797,37 @@ namespace RelistenUserService.Persistence.Migrations
 
                     b.ToTable("favorite_mutation_receipts", "user_data", t =>
                         {
-                            t.HasCheckConstraint("ck_favorite_mutation_receipts_canonical_favorite_id", "canonical_favorite_id IS NULL OR uuid_extract_version(canonical_favorite_id) = 7");
+                            t.HasCheckConstraint("ck_favorite_mutation_receipts_canonical_favorite_id", "canonical_favorite_id IS NULL OR canonical_favorite_id ~ '^favorite_[0-7][0-9a-hjkmnp-tv-z]{9}[ef][0-9a-hjkmnp-tv-z]{15}$'");
 
-                            t.HasCheckConstraint("ck_favorite_mutation_receipts_catalog_type", "catalog_type IN ('artist', 'show', 'source', 'source_track', 'song', 'tour', 'venue')");
+                            t.HasCheckConstraint("ck_favorite_mutation_receipts_catalog_type", "catalog_type IN ('artist', 'show', 'source', 'track', 'imported_song', 'imported_venue', 'song', 'tour', 'venue')");
 
                             t.HasCheckConstraint("ck_favorite_mutation_receipts_desired_state", "desired_state IN ('favorite', 'not_favorite')");
 
-                            t.HasCheckConstraint("ck_favorite_mutation_receipts_id_uuid_v7", "uuid_extract_version(id) IS NOT DISTINCT FROM 7");
+                            t.HasCheckConstraint("ck_favorite_mutation_receipts_id_typed_id", "id ~ '^mutation_[0-7][0-9a-hjkmnp-tv-z]{9}[ef][0-9a-hjkmnp-tv-z]{15}$'");
 
                             t.HasCheckConstraint("ck_favorite_mutation_receipts_payload", "octet_length(payload_hash) = 32 AND ((desired_state = 'favorite' AND submitted_favorite_id IS NOT NULL) OR (desired_state = 'not_favorite' AND submitted_favorite_id IS NULL)) AND (desired_state <> 'favorite' OR canonical_favorite_id IS NOT NULL) AND library_revision >= 0");
 
-                            t.HasCheckConstraint("ck_favorite_mutation_receipts_submitted_favorite_id", "submitted_favorite_id IS NULL OR uuid_extract_version(submitted_favorite_id) = 7");
+                            t.HasCheckConstraint("ck_favorite_mutation_receipts_submitted_favorite_id", "submitted_favorite_id IS NULL OR submitted_favorite_id ~ '^favorite_[0-7][0-9a-hjkmnp-tv-z]{9}[ef][0-9a-hjkmnp-tv-z]{15}$'");
                         });
                 });
 
             modelBuilder.Entity("RelistenUserService.Library.Entities.LibraryChange", b =>
                 {
-                    b.Property<Guid>("Id")
+                    b.Property<string>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
+                        .HasColumnType("text")
                         .HasColumnName("id");
+
+                    b.Property<string>("CatalogId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("catalog_id");
 
                     b.Property<string>("CatalogType")
                         .IsRequired()
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
                         .HasColumnName("catalog_type");
-
-                    b.Property<Guid>("CatalogUuid")
-                        .HasColumnType("uuid")
-                        .HasColumnName("catalog_uuid");
 
                     b.Property<string>("ChangeType")
                         .IsRequired()
@@ -832,16 +839,18 @@ namespace RelistenUserService.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("changed_at");
 
-                    b.Property<Guid>("FavoriteId")
-                        .HasColumnType("uuid")
+                    b.Property<string>("FavoriteId")
+                        .IsRequired()
+                        .HasColumnType("text")
                         .HasColumnName("favorite_id");
 
                     b.Property<long>("Revision")
                         .HasColumnType("bigint")
                         .HasColumnName("revision");
 
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid")
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text")
                         .HasColumnName("user_id");
 
                     b.HasKey("Id");
@@ -855,13 +864,13 @@ namespace RelistenUserService.Persistence.Migrations
 
                     b.ToTable("library_changes", "user_data", t =>
                         {
-                            t.HasCheckConstraint("ck_library_changes_catalog_type", "catalog_type IN ('artist', 'show', 'source', 'source_track', 'song', 'tour', 'venue')");
+                            t.HasCheckConstraint("ck_library_changes_catalog_type", "catalog_type IN ('artist', 'show', 'source', 'track', 'imported_song', 'imported_venue', 'song', 'tour', 'venue')");
 
                             t.HasCheckConstraint("ck_library_changes_change_type", "change_type IN ('favorite_added', 'favorite_removed')");
 
-                            t.HasCheckConstraint("ck_library_changes_favorite_id_uuid_v7", "uuid_extract_version(favorite_id) IS NOT DISTINCT FROM 7");
+                            t.HasCheckConstraint("ck_library_changes_favorite_id_typed_id", "favorite_id ~ '^favorite_[0-7][0-9a-hjkmnp-tv-z]{9}[ef][0-9a-hjkmnp-tv-z]{15}$'");
 
-                            t.HasCheckConstraint("ck_library_changes_id_uuid_v7", "uuid_extract_version(id) IS NOT DISTINCT FROM 7");
+                            t.HasCheckConstraint("ck_library_changes_id_typed_id", "id ~ '^library_change_[0-7][0-9a-hjkmnp-tv-z]{9}[ef][0-9a-hjkmnp-tv-z]{15}$'");
 
                             t.HasCheckConstraint("ck_library_changes_revision", "revision > 0");
                         });
@@ -886,8 +895,9 @@ namespace RelistenUserService.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid")
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text")
                         .HasColumnName("user_id");
 
                     b.HasKey("Id");
