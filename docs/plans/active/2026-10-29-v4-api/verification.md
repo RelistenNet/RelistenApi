@@ -93,8 +93,9 @@ relative to `/Users/alecgorge/code/relisten/relisten-mobile`.
   Move read algorithms rather than maintaining a second copy. Audit existing
   callers before removing migrated legacy SQL. Reuse SQL concepts from
   `Services/Data/CatalogReferences/`, without opening
-  separate connections inside a v4 snapshot. All 62 catalog/operator method/path
-  entries in `endpoints.json` must be implemented, plus the three in-place library
+  separate connections inside a v4 snapshot. All 51 v4 method/path entries in
+  `endpoints.json` must be implemented; eight operator routes remain at their v2
+  paths. Also verify the three in-place library
   routes and typed profile GET/PATCH actions.
 - Canonical ID retention: next catalog migration and embedded normalization SQL;
   `NormStore.Venues.cs`, `NormStore.cs` restore/mint behavior only as needed by
@@ -286,7 +287,8 @@ the old generation cannot overwrite the new apply. Review one shared Realm/model
 repository set: screens/player/favorite rules contain no version branches, and
 v4 updates bypass legacy timestamp guards through one apply coordinator.
 Assert each mobile-used endpoint follows its manifest replacement policy. The
-server coverage test, not a mobile generic interpreter, covers all 62 routes. Artist
+server coverage test, not a mobile generic interpreter, covers the 51 v4 routes
+and separately checks the eight retained operator routes. Artist
 collections replace only that artist/list; filtered/search/recent results replace
 only their exact cached query result; resolver entity arrays only upsert. No
 ordinary response contains `meta`, `data` or `included` wrapper fields, and no
@@ -393,7 +395,8 @@ fallback while this is resolved.
    interrupted apply and offline playback against the local API. No broad rollout
    or complete route-coverage claim is made at this checkpoint.
 4. **C4, full API acceptance and additive server release.** Complete/review route
-   families and their legacy adapters. Confirm all 62 operations plus retained
+   families and their legacy adapters. Confirm all 51 v4 operations, eight retained
+   operator operations and retained
    account/auth capabilities, legacy fixtures and measured performance. Verify
    catalog backup/restore, replica/ingress configuration and current capacity.
    Install reservation triggers/backfill atomically while canonical writes are
@@ -1153,3 +1156,71 @@ empty and wrong-kind filters returned 422. OpenAPI exposes `artist_ids` as a que
 array. The four local review plays remain until the one-hour window expires.
 The public integer sequence remains the legacy event ID; its counter disclosure
 is now explicit in the contract. Opaque cursor design is separate from this filter.
+
+## 2026-10-31 — Retain operator routes; gate the first legacy recording adapter
+
+The current manifest has 51 v4 catalog/playback operations and eight separately
+retained v2 operator operations. No artist-write/import aliases were added. Alec
+approved keeping integer event sequences and using Postgres popularity in the
+legacy adapter. The [rollout guide](review/legacy-recordings.md) records the
+default-off switch, existing backfill job, coverage query and rollback procedure.
+
+Native full-show/source reads and the enabled legacy full-show adapter now share
+the imported recording loader. It reads sources first, then batches sets, playable
+tracks and links by those source IDs. This avoids repeated source descriptions
+and repeated parent-query planning. The first joined and single-batch prototypes
+preserved payloads but regressed native performance; neither remains in the code.
+Legacy show metadata, feature gates, date aliases, serializers and HTTP caching
+remain in place. Other legacy families retain their current readers.
+
+The adapter flag defaults off in appsettings and options. Off retains the old
+recording loader and Redis popularity. On reads selected artist-local Postgres
+scores using the same lookup as v4 and requests stale refreshes after reads.
+Legacy database reads, including freshness, prefer replicas. The old loader is
+temporarily retained for rollout rollback and has an explicit removal criterion.
+
+**254 focused catalog, popularity, reference and ingestion tests passed.** The
+two new HTTP cases reuse the existing host/fixture. They compare the complete
+legacy resource across numeric-artist date routes, year/date aliases and UUID
+routes for raw and normalization-approved artists. Distinct Redis/Postgres values
+prove that the flag selects the intended store. They verify warm-Redis rollback
+with the Postgres score table unavailable and missing-show/cache-error behavior.
+That rollback test does not promise a cold dual-write calculation can work without
+the schema. The broader run also exposed a preexisting test assumption that the
+global popularity population was empty; its setup now creates that missing state
+explicitly, without weakening its queue assertions.
+
+One error behavior deliberately improves: an enabled adapter returns `sets: []`
+for a source with no playable tracks, where the old dictionary lookup throws.
+The regression case restores orphan flags afterward. Native reads retain empty
+sets. Both independent correctness/readability passes found no actionable issues.
+
+For real-data comparison, an untouched `92b4ff5e5` build ran on port 43824 beside
+the candidate on 43823, against the same restored database and Redis. Workers and
+imports stayed off. For each of nine v2/v3/v4 routes, four warmups preceded 15
+interleaved samples with alternating build order. Complete JSON, array order,
+popularity, content/cache headers and response byte sizes matched in every case.
+The scratch baseline server/worktree was removed afterward. Captures and samples
+are in ignored `local-dev/v4-review/.output/legacy-recordings/`; the checked-in
+comparison script makes the workload repeatable.
+
+Representative median response times in that controlled run:
+
+- 38-source legacy v3 show: **68.74 → 28.05 ms**; native v4 **23.57 → 20.97 ms**.
+- Partial-show legacy v3: **12.19 → 9.14 ms**; native v4 **12.31 → 11.69 ms**.
+- One-source raw legacy v3: **3.32 → 4.71 ms**; native v4 **5.26 → 4.94 ms**.
+
+The small raw legacy response adds 1.39 ms in this sample. Enabled legacy detail
+uses seven command round trips versus five: selected Postgres scores and
+freshness add two bounded reads while removing the Redis map read/deserialization.
+Native detail drops from 20 to 18 round trips for approved artists and 12 to 10
+for raw artists. Its child batch contains three SELECTs; these command counts are
+network round trips, not claims of fewer SQL statements. No production latency or
+allocation estimate is inferred from this local workload.
+
+The local readiness query found **215,939/215,939 show rows populated, zero
+missing**, including 153,297 unscored rows. All publications were older than the
+one-hour refresh window: this verifies snapshot coverage, not freshness. No local
+calculation/backfill replaced the saved real aggregate snapshot. Production was
+not queried or changed. The local API runs with the flag enabled for response
+review; the checked-in default remains disabled pending production warmup.

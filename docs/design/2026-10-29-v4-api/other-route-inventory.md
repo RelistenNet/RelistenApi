@@ -73,33 +73,29 @@ V4 must document its meaning and optionality separately from catalog prefixes.
 The existing play record's generated integer ID may remain a cursor field;
 it needs a public resource prefix only if the contract exposes it as an entity.
 
-## Import control — six routes
+## Import control — six retained routes
 
-These actions are operator APIs even though their current paths contain `v2`.
-Propose complete v4 equivalents below, preserving admission and authentication
-rules. They remain operational commands rather than mobile catalog reads.
-Source: [ImportController.cs](../../../RelistenApi/Controllers/Import/ImportController.cs).
+Keep these operations at their current v2 paths and authorization. The separate
+relisten-admin application talks directly to Postgres; it does not consume these
+routes. Existing built-in admin/integration callers remain supported. No v4
+aliases are required. Source: [ImportController.cs](../../../RelistenApi/Controllers/Import/ImportController.cs).
 
-| Current method and route | Proposed route | Contract to preserve or change |
+| Current method and route | Retained route | Contract to preserve or change |
 | --- | --- | --- |
-| POST `/api/v2/import/{idOrSlug}` | POST `/api/v4/import/artists/{artistId}` | Authenticated artist refresh; `deleteOldContent=false` default; queue workflow/job and report its handle. Destructive reimport conflicts while Temporal owns ingestion. Line 42. |
-| POST `/api/v2/import/{idOrSlug}/debug` | POST `/api/v4/import/artists/{artistId}/debug` | Authenticated synchronous debug refresh; preserve delete flag and refusal while Temporal is enabled. Line 75. |
-| POST `/api/v2/import/phishin` | POST `/api/v4/import/phishin` | Preserve `X-Relisten-Api-Key` admission and Phish-only provider refresh; return Temporal/Hangfire handle. Line 102. |
-| POST `/api/v2/import/all-years-and-shows` | POST `/api/v4/import/all-years-and-shows` | Authenticated whole-catalog derived rebuild; return workflow/job handle. Line 137. |
-| POST `/api/v2/import/{idOrSlug}/{showIdentifier}` | POST `/api/v4/import/artists/{artistId}/items/{upstreamIdentifier}` | Authenticated single-item import, optional delete flag; under Temporal the second value is an Archive item identifier, not a Relisten show ID. Preserve external identifier and engine admission semantics. Line 149. |
-| POST `/api/v2/import/{idOrSlug}/{showIdentifier}/debug` | POST `/api/v4/import/artists/{artistId}/items/{upstreamIdentifier}/debug` | Authenticated synchronous item debug import; same external identifier meaning; reject while Temporal enabled. Line 193. |
+| POST `/api/v2/import/{idOrSlug}` | POST `/api/v2/import/{idOrSlug}` | Authenticated artist refresh; `deleteOldContent=false` default; queue workflow/job and report its handle. Destructive reimport conflicts while Temporal owns ingestion. Line 42. |
+| POST `/api/v2/import/{idOrSlug}/debug` | POST `/api/v2/import/{idOrSlug}/debug` | Authenticated synchronous debug refresh; preserve delete flag and refusal while Temporal is enabled. Line 75. |
+| POST `/api/v2/import/phishin` | POST `/api/v2/import/phishin` | Preserve `X-Relisten-Api-Key` admission and Phish-only provider refresh; return Temporal/Hangfire handle. Line 102. |
+| POST `/api/v2/import/all-years-and-shows` | POST `/api/v2/import/all-years-and-shows` | Authenticated whole-catalog derived rebuild; return workflow/job handle. Line 137. |
+| POST `/api/v2/import/{idOrSlug}/{showIdentifier}` | POST `/api/v2/import/{idOrSlug}/{showIdentifier}` | Authenticated single-item import, optional delete flag; under Temporal the second value is an Archive item identifier, not a Relisten show ID. Preserve external identifier and engine admission semantics. Line 149. |
+| POST `/api/v2/import/{idOrSlug}/{showIdentifier}/debug` | POST `/api/v2/import/{idOrSlug}/{showIdentifier}/debug` | Authenticated synchronous item debug import; same external identifier meaning; reject while Temporal enabled. Line 193. |
 
 Workflow IDs, Hangfire job IDs, and Archive identifiers retain their native
-formats. Renaming a route does not authorize an import or change the ingestion
-engine. These six commands need separate OpenAPI/auth coverage from anonymous
-v4 reads; documentation must not hide them merely because current ApiExplorer
-does. Current v2 commands can remain for operator compatibility during rollout.
+formats. This catalog work does not change ingestion engines or admission rules.
 
 ## Existing admin HTML/control routes — seventeen explicit dispositions
 
 All remain at their existing paths: this is a separately authenticated operator
-UI, not a versioned catalog DTO API. The v4 import and catalog-write routes
-provide typed API entrypoints; changing these HTML paths adds no mobile coverage.
+UI, not a versioned catalog DTO API. Artist writes and imports also retain their v2 paths; changing these HTML paths adds no mobile coverage.
 Source: [AdminController.cs](../../../RelistenApi/Controllers/Admin/AdminController.cs).
 
 | Method and retained route | Purpose and inputs | Source line |

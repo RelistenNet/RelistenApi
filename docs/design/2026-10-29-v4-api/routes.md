@@ -5,8 +5,8 @@ Status: route coverage mapped, not implemented. Alias consolidation and the
 embedded with no prefix.
 
 The v4 catalog must cover every existing catalog, discovery, and playback
-capability. Authenticated catalog writes and import commands also have explicit
-v4 coverage. Existing HTML operations, health, and authentication protocols keep
+capability. Authenticated artist writes and import commands retain their existing
+v2 routes; no v4 duplicates are planned. Existing HTML operations, health, and authentication protocols keep
 their own paths and authorization; they are accounted for rather than silently
 omitted or renamed into catalog routes.
 
