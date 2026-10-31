@@ -98,13 +98,13 @@ public sealed class PopularityStore(DbService db)
                     FROM requested r
                 )
                 SELECT ordinal FROM freshness r
-                WHERE generated_at<=@cutoff OR (generated_at IS NULL AND CASE r.kind
+                WHERE (generated_at<=@cutoff OR generated_at IS NULL) AND CASE r.kind
                     WHEN 'artist' THEN EXISTS(SELECT 1 FROM artists)
                     WHEN 'show' THEN CASE WHEN r.artist_uuid IS NULL THEN EXISTS(SELECT 1 FROM shows)
                         ELSE EXISTS(SELECT 1 FROM shows s JOIN artists a ON a.id=s.artist_id WHERE a.uuid=r.artist_uuid) END
                     WHEN 'year' THEN CASE WHEN r.artist_uuid IS NULL THEN EXISTS(SELECT 1 FROM years)
                         ELSE EXISTS(SELECT 1 FROM years y JOIN artists a ON a.id=y.artist_id WHERE a.uuid=r.artist_uuid) END
-                    ELSE false END)
+                    ELSE false END
                 """,
                 new
                 {
