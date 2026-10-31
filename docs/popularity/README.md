@@ -1,95 +1,106 @@
 # Stored popularity for catalog reads
 
-Popularity calculations publish the same results to Postgres and Redis. Legacy
-APIs keep their cache keys and response contracts. The v4 branch reads stored
-Postgres rows, selecting ranked IDs in SQL and enriching only returned shows.
+Popularity metric-map calculations publish to Postgres and Redis. Legacy APIs
+keep their cache keys and contracts. V4 reads stored SQL rows, selecting limited
+ranking results and enriching only returned shows. Requests serve stored values
+and queue one batch for any required stale or missing populations.
 
-## Ownership and publication
+## Schema
 
-`PopularityService` owns the existing calculations. Each metric-map calculation publishes
-its full population through `PopularityStore` before the caller writes its
-Redis cache. This covers explicit map refreshes and map cache misses. Legacy response caches
-keep their existing contracts. In particular, legacy artist lists calculate
-percentiles over 30-day-active artists, while the artist metric map spans 90
-days. Their separate calculations preserve that distinction.
+- `artist_popularity`: global artist metrics, keyed by `uuid`.
+- `show_popularity`: global and artist-local metrics, keyed by `(uuid, is_global)`;
+  `artist_uuid` supports artist-scoped selection and replacement.
+- `year_popularity`: global and artist-local year metrics, with the same keys.
+- `popularity_refreshes`: `kind`, `scope_uuid`, and `generated_at`, keyed by the
+  first two columns. Zero UUID identifies a global population; another UUID
+  identifies an artist population. This is a refresh key, not a catalog ID.
 
-- `artist_popularity`: global artist metrics.
-- `show_popularity`: separate global and artist-local rows for each show.
-- `year_popularity`: separate global and artist-local rows for each year.
-- `popularity_refreshes`: last accepted calculation start time per population.
+Each metrics table has plays, hours, and hot score for 48 hours, seven days, and
+30 days, plus trend ratio and raw momentum. Only show rows have nullable organic
+momentum. Six-hour and 90-day play counts are calculation inputs, not read-model
+fields. Global ranking indexes contain only global rows. Catalog foreign keys
+cascade deletion; there are no per-row timestamps or revision counters.
 
-The public counters, hours, hot scores, trend ratio, and raw momentum are stored
-as scalar columns. Artist-local show rows also store the organic momentum used
-by momentum discovery. Global and artist-local percentile scores have different
-comparison populations; neither can replace the other. Window values and public metric-map scores retain the four-decimal precision
-of the existing warm Redis maps. Artist-local raw/organic momentum and trend
-ratios retain their cache DTO precision. This preserves ranking tie behavior;
-public JSON still applies its normal rounding.
+Global and artist-local percentiles have different comparison populations and
+can refresh independently. Storing separate rows preserves those results without
+coordinating their calculations. Window values and public metric-map scores
+retain warm Redis precision; artist-local show raw/organic scores and trend
+ratios retain their cache DTO precision.
 
-Each publication uses one short transaction: claim/update its refresh row,
-upsert the calculated rows, delete rows absent from that population, and commit.
-The refresh row prevents an older calculation that finishes late from replacing
-a newer publication. It also serializes simultaneous publication of the same
-population. Different artists use different rows; readers use MVCC. There are
-no triggers, advisory locks, table locks, or per-record round trips. Catalog
-foreign keys cascade deletion. Unknown or foreign artist targets are omitted.
+Freshness belongs to the complete population. A successful empty calculation
+still needs a timestamp, otherwise every request would treat it as missing.
+The refresh row also orders competing publications. A `generated_at` column on
+metric rows alone would duplicate timestamps and lose both guarantees on empty
+results.
 
-Postgres and Redis are not one transaction. If Postgres publication fails, the
-calculation fails and existing data in both stores remains available. If Redis
-fails afterward, Postgres retains its new population and the job fails for
-retry. Brief differences between stores are acceptable; no distributed commit
-protocol is introduced. A legacy warm-cache hit does not backfill Postgres.
+## Read and refresh ownership
 
-## Refresh and operations
+`PopularityRefreshRequest` is scoped to one HTTP request. Readers register their
+required populations while assembling the response. After catalog snapshots
+are disposed, the controller checks all required timestamps in one SQL query
+and queues at most one `PopularityJobs.RefreshPopulations` job. The same one-hour
+staleness threshold is used by legacy maps. Unknown artists are excluded from
+refresh requests; successful empty populations are fresh normally.
 
-`PopularityJobs.RefreshReadModel(CancellationToken)` refreshes all global maps,
-then show/year maps for artists with activity or previously stored local rows.
-The latter ensures scores disappear when old plays leave the rolling windows.
-Calculations and publications use the existing methods; each population commits
-independently. Cancellation is checked between artists. A retry recomputes
-populations; it does not clear successfully published data first.
+The response keeps its stored scores. A missing show metric is null; a missing
+ranking population is empty while its first calculation is queued. SQL or queue
+submission failures use v4's existing 503/no-store boundary. A later request can
+retry. Enqueueing finishes before publication of the response or its ETag.
 
-A single hourly Hangfire recurring job owns time-based refresh, independently
-of the ingestion engine. Registration requires the existing production
-`ENABLE_HANGFIRE_SERVER` setting; development starts no job. Rolling windows
-change as time passes, so refresh cannot depend only on new plays or legacy
-requests. The admin “refresh all” action also queues this job, alongside the
-legacy response-cache refreshes. Read `popularity_refreshes.generated_at` to
-check job progress and retained freshness. An empty successful population still
-updates its refresh record.
+Concurrent stale requests may enqueue duplicate batches, as in the existing
+legacy path. There is no distributed lease or pending-refresh state. Each job
+uses the existing scoped calculations. Retries recalculate even if Postgres has
+become fresh: a previous attempt may have committed there and then failed to
+publish Redis. This keeps partial-failure recovery straightforward.
+
+`PopularityJobs.RefreshReadModel` remains an explicit full backfill/repair action,
+also available through admin refresh-all. There is no automatic schedule.
+Previously stored artist populations are included in a full repair so that rows
+whose plays have aged out can be removed. Normal reads request only populations
+they actually use; unused artists require no automatic work.
+
+## Publication and failure
+
+`PopularityService` owns calculations. Metric-map calculations publish their full
+population through `PopularityStore` before the caller writes Redis. This covers
+explicit map refreshes and map cache misses. Legacy artist lists retain their
+separate 30-day-active comparison population; their metric map spans 90 days.
+
+Publication uses one short transaction: update the population's refresh row,
+upsert calculated rows, remove departed rows, and commit. An older calculation
+that finishes late is ignored. The refresh row serializes publication only for
+that population. Other artists use different rows; readers use MVCC. The writer
+takes no explicit catalog/table locks. It joins current catalog owners to omit
+unknown or foreign targets before publishing.
+
+Postgres and Redis are not one transaction. A Postgres publication failure leaves
+both previous populations available. If Redis fails afterward, Postgres retains
+its new population and the job fails for retry. A warm legacy cache hit does not
+backfill Postgres. No v4 body cache or invalidation system is involved.
 
 ## Rollout and recovery
 
-1. Apply migration 17 and deploy this foundation. Existing legacy traffic can
-   continue using Redis while calculations begin dual publication.
-2. Run `PopularityJobs.RefreshReadModel` through the normal job runner. Confirm
-   global and active artist populations exist before deploying the v4 reader.
-   This is derived data; the migration does not recalculate play history.
-3. Enable the normal hourly job and monitor its duration and failures. The first
-   full refresh has more work than a cache hit: it invokes the existing scoped
-   calculations for each active artist sequentially, without concurrent scans.
-   Measure that full job on real telemetry before accepting its hourly budget.
-   Read-only samples measured the show calculation at 885 ms for Grateful Dead
-   and 1.3 ms for one artist with a single active show; these do not establish
-   the complete job duration.
-4. Deploy v4 after backfill. Missing show metrics are `null`; an unpopulated
-   ranking is empty. GETs do not calculate or repair derived state.
+1. Apply migration 17 and deploy this foundation. Legacy calculations can begin
+   dual publication while existing clients continue reading Redis.
+2. Run `PopularityJobs.RefreshReadModel` through the normal job runner before
+   deploying v4, so its first requests have stored scores. Measure a full repair
+   on real telemetry; it invokes existing scoped calculations sequentially.
+3. Deploy v4. Stale or missing required populations refresh on demand. Monitor
+   queue failures and `popularity_refreshes.generated_at` when diagnosing age.
 
-An application rollback keeps the additive tables and Redis data. Reverting the
-v4 reader restores its Redis path. Pause the recurring job if investigating a
-bad calculation, then correct and rerun it. Do not truncate the stored tables
-before a repair: readers can continue using the last successful populations.
+An application rollback keeps the additive tables and Redis data. Repair by
+correcting and rerunning a calculation, without truncating last successful data.
+The schema is still unshipped in this PR; local preview schema changes are applied
+explicitly. No production schema or schedules changed during development.
 
-For local review, publish the existing real Redis aggregate snapshot through
-`PopularityStore`. Preserve its generation timestamps and compare both resource
-JSON and ranking order. This avoids replacing real review metrics with the
-empty local play history. Never run a full recalculation against that empty
-history as a substitute for a real backfill.
+For local review, publish the existing real Redis snapshot through the writer,
+retaining its timestamps. Local workers stay disabled, so queued refreshes cannot
+replace that snapshot with results calculated from the empty local play history.
 
 ## Verification
 
-`./test-local.sh --filter FullyQualifiedName~Popularity` checks publication,
-scoped replacement, late-calculation rejection, raw/organic separation, and the
-real calculation-to-Postgres-and-Redis boundary in a disposable catalog. The
-v4 branch adds HTTP tests for ranking order, ordinary enrichment, and ETags
-without registering Redis/popularity calculation services in its test host.
+`./test-local.sh --filter FullyQualifiedName~Popularity` exercises real publication,
+scoped replacement, late-calculation rejection, empty-population freshness, one
+batch for stale/missing scopes, and dual-publication failure/retry in a disposable
+catalog. V4 HTTP tests cover ordering, enrichment, ETags, and queue-failure recovery
+without registering Redis map readers or calculation services.

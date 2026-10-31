@@ -20,7 +20,7 @@ namespace Relisten.Services.Popularity
 
     public partial class PopularityService
     {
-        private const int DefaultStaleAfterSeconds = 60 * 60;
+        internal const int DefaultStaleAfterSeconds = 60 * 60;
         private const int ArtistTrendingPlays48hFloor = 130;
         private const int ArtistTrendingPlays30dFloor = 1808;
         private const int ShowTrendingPlays48hFloor = 9;

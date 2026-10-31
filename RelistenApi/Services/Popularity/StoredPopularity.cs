@@ -20,8 +20,6 @@ public sealed class StoredPopularity
     public long plays_48h { get; set; }
     public double hours_48h { get; set; }
     public double hot_score_48h { get; set; }
-    public long plays_6h { get; set; }
-    public long plays_90d { get; set; }
     public double trend_ratio { get; set; }
     public double momentum_score { get; set; }
     public double? organic_momentum_score { get; set; }
@@ -50,8 +48,6 @@ public sealed class StoredPopularity
                     hot_score = hot_score_48h,
                 },
             },
-            plays_6h = plays_6h,
-            plays_90d = plays_90d,
             trend_ratio = trend_ratio,
             momentum_score = organic ? organic_momentum_score ?? momentum_score : momentum_score,
         };
@@ -76,8 +72,6 @@ public sealed class StoredPopularity
             plays_48h = value.windows.hours_48h.plays,
             hours_48h = Math.Round(value.windows.hours_48h.hours, 4),
             hot_score_48h = Math.Round(value.windows.hours_48h.hot_score, 4),
-            plays_6h = value.plays_6h,
-            plays_90d = value.plays_90d,
             trend_ratio = roundScores ? Math.Round(value.trend_ratio, 4) : value.trend_ratio,
             momentum_score = roundScores
                 ? Math.Round(value.momentum_score, 4)
