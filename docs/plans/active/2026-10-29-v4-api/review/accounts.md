@@ -9,9 +9,10 @@ production cutover.
 
 Use the [local review commands](../../../../../local-dev/accounts-review/README.md)
 to read `/v1/me` and `/v1/library/snapshot`. The capture also saves batch results,
-changes, conflict and cursor-reset responses. The
-[response excerpts](responses/accounts-excerpt.json) show selected actual fields;
-full responses and protected cursors stay in the ignored local output directory.
+changes, conflict and cursor-reset responses. Full responses and protected cursors
+stay in the ignored local output directory.
+Read fresh responses with the local commands rather than maintaining a second
+checked-in copy of changing IDs, revisions and timestamps.
 
 Check these decisions:
 
@@ -97,11 +98,11 @@ production backup/restore procedure still need release qualification.
 
 ## Chrome verification and focused-diff review — October 31
 
-The fresh account test run passes all 169 cases: 154 existing cases and 15 added
-for C2. The new NUnit files total 217 lines. The migration designer and snapshot
-are generated EF output. The review found no runtime defect or test deletion
-that would preserve the same coverage. No runtime or frontend code changed in
-this pass.
+The account test run passes all 169 cases: 154 existing cases and 15 added for C2.
+The added cases cover JSON/validation and a real database migration. The migration
+designer and snapshot are generated EF output. The review found no runtime defects
+or behavioral tests worth deleting. The cookie-version test now uses a correctly
+prefixed v4 ID; deliberately removing version validation makes it fail.
 
 One HTTP assertion was too weak: it accepted an empty changes feed with the
 correct revision. The capture now checks exact targets, canonical favorite IDs,

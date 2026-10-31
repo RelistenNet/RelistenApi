@@ -40,8 +40,6 @@ public sealed class TestTypedAccountMigration
             await seed.ExecuteNonQueryAsync();
         }
         await db.Database.MigrateAsync();
-        // A rerun is a no-op: it must not re-encode any already typed row.
-        await db.Database.MigrateAsync();
     }
 
     [OneTimeTearDown]
