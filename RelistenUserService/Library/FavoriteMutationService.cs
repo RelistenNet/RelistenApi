@@ -229,7 +229,7 @@ public sealed class FavoriteMutationService(
             )
             .Select(identity => identity.FavoriteId)
             .Distinct()
-            .Order()
+            .OrderBy(id => id.Value, StringComparer.Ordinal)
             .ToArray();
         return conflicts.Length == 0 ? null : FavoriteIdConflict(conflicts);
     }

@@ -127,7 +127,6 @@ request('/v1/logout', token=other['access_token'], method='POST', expected=204)
 credential_path = OUT / 'access-token'
 credential_path.write_text(access)
 credential_path.chmod(0o600)
-(OUT / 'claims.json').write_text(json.dumps({'id_token_sub': claims['sub'], 'authenticated_session_id': profile['native_session_id']}, indent=2)+'\n')
 (OUT / 'request.json').unlink(missing_ok=True)
 print(f'C2 real HTTP checks passed. Responses: {OUT}')
 print(f"Migrated account: {profile['user_id']}; {len(snapshot['favorites'])} saved targets.")

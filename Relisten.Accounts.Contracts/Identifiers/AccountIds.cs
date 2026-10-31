@@ -49,12 +49,11 @@ public sealed class AccountIdJsonConverter<T> : JsonConverter<T>
 }
 
 [JsonConverter(typeof(AccountIdJsonConverter<UserId>))]
-public readonly record struct UserId : IAccountId<UserId>, IComparable<UserId>
+public readonly record struct UserId : IAccountId<UserId>
 {
     private readonly string? _value;
     public string Value =>
         _value ?? throw new InvalidOperationException("An uninitialized user_ ID has no value.");
-    public bool IsEmpty => _value is null;
     public static string Prefix => "user";
 
     private UserId(string value) => _value = value;
@@ -75,13 +74,11 @@ public readonly record struct UserId : IAccountId<UserId>, IComparable<UserId>
 
     public static UserId New() => FromUuid(Guid.CreateVersion7());
 
-    public int CompareTo(UserId other) => StringComparer.Ordinal.Compare(_value, other._value);
-
     public override string ToString() => Value;
 }
 
 [JsonConverter(typeof(AccountIdJsonConverter<SessionId>))]
-public readonly record struct SessionId : IAccountId<SessionId>, IComparable<SessionId>
+public readonly record struct SessionId : IAccountId<SessionId>
 {
     private readonly string? _value;
     public string Value =>
@@ -107,13 +104,11 @@ public readonly record struct SessionId : IAccountId<SessionId>, IComparable<Ses
 
     public static SessionId New() => FromUuid(Guid.CreateVersion7());
 
-    public int CompareTo(SessionId other) => StringComparer.Ordinal.Compare(_value, other._value);
-
     public override string ToString() => Value;
 }
 
 [JsonConverter(typeof(AccountIdJsonConverter<FavoriteId>))]
-public readonly record struct FavoriteId : IAccountId<FavoriteId>, IComparable<FavoriteId>
+public readonly record struct FavoriteId : IAccountId<FavoriteId>
 {
     private readonly string? _value;
     public string Value =>
@@ -140,13 +135,11 @@ public readonly record struct FavoriteId : IAccountId<FavoriteId>, IComparable<F
 
     public static FavoriteId New() => FromUuid(Guid.CreateVersion7());
 
-    public int CompareTo(FavoriteId other) => StringComparer.Ordinal.Compare(_value, other._value);
-
     public override string ToString() => Value;
 }
 
 [JsonConverter(typeof(AccountIdJsonConverter<MutationId>))]
-public readonly record struct MutationId : IAccountId<MutationId>, IComparable<MutationId>
+public readonly record struct MutationId : IAccountId<MutationId>
 {
     private readonly string? _value;
     public string Value =>
@@ -173,21 +166,16 @@ public readonly record struct MutationId : IAccountId<MutationId>, IComparable<M
 
     public static MutationId New() => FromUuid(Guid.CreateVersion7());
 
-    public int CompareTo(MutationId other) => StringComparer.Ordinal.Compare(_value, other._value);
-
     public override string ToString() => Value;
 }
 
 [JsonConverter(typeof(AccountIdJsonConverter<LibraryChangeId>))]
-public readonly record struct LibraryChangeId
-    : IAccountId<LibraryChangeId>,
-        IComparable<LibraryChangeId>
+public readonly record struct LibraryChangeId : IAccountId<LibraryChangeId>
 {
     private readonly string? _value;
     public string Value =>
         _value
         ?? throw new InvalidOperationException("An uninitialized library_change_ ID has no value.");
-    public bool IsEmpty => _value is null;
     public static string Prefix => "library_change";
 
     private LibraryChangeId(string value) => _value = value;
@@ -208,14 +196,11 @@ public readonly record struct LibraryChangeId
 
     public static LibraryChangeId New() => FromUuid(Guid.CreateVersion7());
 
-    public int CompareTo(LibraryChangeId other) =>
-        StringComparer.Ordinal.Compare(_value, other._value);
-
     public override string ToString() => Value;
 }
 
 [JsonConverter(typeof(AccountIdJsonConverter<CommandId>))]
-public readonly record struct CommandId : IAccountId<CommandId>, IComparable<CommandId>
+public readonly record struct CommandId : IAccountId<CommandId>
 {
     private readonly string? _value;
     public string Value =>
@@ -240,8 +225,6 @@ public readonly record struct CommandId : IAccountId<CommandId>, IComparable<Com
     public static CommandId FromUuid(Guid value) => Parse(UuidTypeId.Format(Prefix, value));
 
     public static CommandId New() => FromUuid(Guid.CreateVersion7());
-
-    public int CompareTo(CommandId other) => StringComparer.Ordinal.Compare(_value, other._value);
 
     public override string ToString() => Value;
 }

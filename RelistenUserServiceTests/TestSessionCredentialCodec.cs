@@ -59,7 +59,7 @@ public sealed class TestSessionCredentialCodec
     {
         var issued = _codec.Issue(SessionId.New());
         var parts = issued.CookieValue.Split('.');
-        parts[1] = Guid.NewGuid().ToString("N");
+        parts[1] = Relisten.Identifiers.UuidTypeId.Format("session", Guid.NewGuid());
 
         _codec.TryParse(string.Join('.', parts), out _).Should().BeFalse();
     }
