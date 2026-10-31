@@ -22,6 +22,7 @@ public sealed class TestPopularityStore
     private string previousReplica = null!;
     private readonly Guid artist = Guid.NewGuid();
     private readonly Guid show = Guid.NewGuid();
+    private readonly Guid emptyArtist = Guid.NewGuid();
     private readonly Guid year = Guid.NewGuid();
     private readonly Guid track = Guid.NewGuid();
 
@@ -42,7 +43,7 @@ public sealed class TestPopularityStore
         store = new PopularityStore(db);
         await connection.ExecuteAsync(
             """
-            INSERT INTO artists(uuid,name,slug,updated_at) VALUES (@artist,'Popularity fixture',@artist::text,now());
+            INSERT INTO artists(uuid,name,slug,updated_at) VALUES (@artist,'Popularity fixture',@artist::text,now()),(@emptyArtist,'Empty popularity fixture',@emptyArtist::text,now());
             INSERT INTO years(uuid,artist_id,year,updated_at)
                 SELECT @year,id,'1985',now() FROM artists WHERE uuid=@artist;
             INSERT INTO shows(uuid,artist_id,year_id,date,display_date,updated_at)
@@ -61,6 +62,7 @@ public sealed class TestPopularityStore
                 show,
                 year,
                 track,
+                emptyArtist,
             }
         );
     }
@@ -72,7 +74,10 @@ public sealed class TestPopularityStore
         {
             return;
         }
-        await connection.ExecuteAsync("DELETE FROM artists WHERE uuid=@artist", new { artist });
+        await connection.ExecuteAsync(
+            "DELETE FROM artists WHERE uuid=ANY(@artists)",
+            new { artists = new[] { artist, emptyArtist } }
+        );
         await connection.DisposeAsync();
         DbService.ConnStr = previousPrimary;
         DbService.ReadOnlyConnStr = previousReplica;
@@ -123,12 +128,18 @@ public sealed class TestPopularityStore
         );
         (
             await connection.QueryAsync<bool>(
-                "SELECT is_global FROM show_popularity WHERE uuid=@show",
+                "SELECT is_global FROM show_popularity WHERE uuid=@show AND momentum_score IS NOT NULL",
                 new { show }
             )
         )
             .Should()
             .Equal(true);
+        var inactive = await connection.QuerySingleAsync<StoredPopularity>(
+            "SELECT * FROM show_popularity WHERE uuid=@show AND NOT is_global",
+            new { show }
+        );
+        inactive.plays_30d.Should().Be(0);
+        inactive.ToMetrics().Should().BeNull();
         await connection.ExecuteAsync("DELETE FROM show_popularity WHERE uuid=@show", new { show });
     }
 
@@ -136,7 +147,7 @@ public sealed class TestPopularityStore
     public async Task Stale_and_missing_populations_queue_once_while_fresh_empty_results_do_not()
     {
         await connection.ExecuteAsync(
-            "DELETE FROM popularity_refreshes WHERE scope_uuid=@artist",
+            "DELETE FROM show_popularity WHERE artist_uuid=@artist AND NOT is_global; DELETE FROM year_popularity WHERE artist_uuid=@artist AND NOT is_global",
             new { artist }
         );
         await store.ReplaceArtistShows(
@@ -145,11 +156,23 @@ public sealed class TestPopularityStore
             DateTime.UtcNow.AddHours(-2)
         );
         var jobs = new RecordingPopularityJobs();
+        await connection.ExecuteAsync(
+            "DELETE FROM show_popularity WHERE uuid=@show AND is_global",
+            new { show }
+        );
+        await store.ReplaceGlobalShows(
+            new Dictionary<Guid, PopularityMetrics>(),
+            DateTime.UtcNow.AddHours(-2)
+        );
         var request = new PopularityRefreshRequest(db, jobs);
         request.Require(PopularityPopulationKind.Show, artist);
         request.Require(PopularityPopulationKind.Show, artist);
         request.Require(PopularityPopulationKind.Year, artist);
         request.Require(PopularityPopulationKind.Show, Guid.NewGuid());
+        request.Require(PopularityPopulationKind.Show, Guid.Empty);
+        request.Require(PopularityPopulationKind.Show, emptyArtist);
+        request.Require(PopularityPopulationKind.Year, emptyArtist);
+        request.Require(PopularityPopulationKind.Show);
         await request.EnqueueStale(CancellationToken.None);
         jobs.Batches.Should()
             .ContainSingle()
@@ -159,6 +182,7 @@ public sealed class TestPopularityStore
                 {
                     new PopularityPopulation(PopularityPopulationKind.Show, artist),
                     new PopularityPopulation(PopularityPopulationKind.Year, artist),
+                    new PopularityPopulation(PopularityPopulationKind.Show),
                 }
             );
 
@@ -172,6 +196,7 @@ public sealed class TestPopularityStore
             new Dictionary<Guid, PopularityMetrics>(),
             DateTime.UtcNow
         );
+        await store.ReplaceGlobalShows(new Dictionary<Guid, PopularityMetrics>(), DateTime.UtcNow);
         await request.EnqueueStale(CancellationToken.None);
         jobs.Batches.Should().ContainSingle();
     }

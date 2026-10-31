@@ -11,15 +11,15 @@ and queue one batch for any required stale or missing populations.
 - `show_popularity`: global and artist-local metrics, keyed by `(uuid, is_global)`;
   `artist_uuid` supports artist-scoped selection and replacement.
 - `year_popularity`: global and artist-local year metrics, with the same keys.
-- `popularity_refreshes`: `kind`, `scope_uuid`, and `generated_at`, keyed by the
-  first two columns. Zero UUID identifies a global population; another UUID
-  identifies an artist population. This is a refresh key, not a catalog ID.
 
 Each metrics table has plays, hours, and hot score for 48 hours, seven days, and
 30 days, plus trend ratio and raw momentum. Only show rows have nullable organic
-momentum. Six-hour and 90-day play counts are calculation inputs, not read-model
-fields. Global ranking indexes contain only global rows. Catalog foreign keys
-cascade deletion; there are no per-row timestamps or revision counters.
+momentum. Each row also has `generated_at`. Counters are zero and momentum is
+null for targets without scored activity. Public `popularity` remains null for
+those rows; rankings exclude them. Six-hour and 90-day play counts remain only
+calculation inputs. Ranking indexes contain only scored rows, and global
+show/year indexes contain only global scored rows. Catalog foreign keys cascade
+deletion.
 
 Global and artist-local percentiles have different comparison populations and
 can refresh independently. Storing separate rows preserves those results without
@@ -27,11 +27,17 @@ coordinating their calculations. Window values and public metric-map scores
 retain warm Redis precision; artist-local show raw/organic scores and trend
 ratios retain their cache DTO precision.
 
-Freshness belongs to the complete population. A successful empty calculation
-still needs a timestamp, otherwise every request would treat it as missing.
-The refresh row also orders competing publications. A `generated_at` column on
-metric rows alone would duplicate timestamps and lose both guarantees on empty
-results.
+A publication covers every current catalog target in its scope, including
+inactive entities. The same `generated_at` is written to those rows in one
+transaction, so a representative row supplies population age. A population with
+no catalog targets has nothing to score and needs no refresh. A missing row for
+an entirely uninitialized population triggers the first background calculation.
+New catalog targets join the next population calculation, as with the legacy
+whole-map cache.
+
+This replaces the separate freshness table and its scope key. Per-row timestamp
+comparisons reject old publications; inactive rows replace the former deletion
+step. There is no placeholder catalog ID or special global UUID.
 
 ## Read and refresh ownership
 
@@ -39,8 +45,8 @@ results.
 required populations while assembling the response. After catalog snapshots
 are disposed, the controller checks all required timestamps in one SQL query
 and queues at most one `PopularityJobs.RefreshPopulations` job. The same one-hour
-staleness threshold is used by legacy maps. Unknown artists are excluded from
-refresh requests; successful empty populations are fresh normally.
+staleness threshold is used by legacy maps. Unknown artists and scopes without catalog targets are excluded from refresh
+requests. Successfully calculated inactive rows are fresh normally.
 
 The response keeps its stored scores. A missing show metric is null; a missing
 ranking population is empty while its first calculation is queued. SQL or queue
@@ -55,9 +61,9 @@ publish Redis. This keeps partial-failure recovery straightforward.
 
 `PopularityJobs.RefreshReadModel` remains an explicit full backfill/repair action,
 also available through admin refresh-all. There is no automatic schedule.
-Previously stored artist populations are included in a full repair so that rows
-whose plays have aged out can be removed. Normal reads request only populations
-they actually use; unused artists require no automatic work.
+A full repair visits every catalog artist. Results whose plays aged out become
+zero/null rows. Normal reads request only populations they use; unused artists
+require no automatic work.
 
 ## Publication and failure
 
@@ -66,12 +72,13 @@ population through `PopularityStore` before the caller writes Redis. This covers
 explicit map refreshes and map cache misses. Legacy artist lists retain their
 separate 30-day-active comparison population; their metric map spans 90 days.
 
-Publication uses one short transaction: update the population's refresh row,
-upsert calculated rows, remove departed rows, and commit. An older calculation
-that finishes late is ignored. The refresh row serializes publication only for
-that population. Other artists use different rows; readers use MVCC. The writer
-takes no explicit catalog/table locks. It joins current catalog owners to omit
-unknown or foreign targets before publishing.
+Publication uses one sorted bulk upsert in a transaction. It joins calculated
+results onto all current catalog targets, filling missing calculations with
+zero counters and null momentum. A row updates only when the incoming
+`generated_at` is at least its stored timestamp. Older calculations finishing
+late cannot overwrite newer rows. Sorted row order keeps overlapping writes in
+the same lock order; no explicit catalog/table lock is taken. Catalog ownership
+comes from the joined target, not the calculation payload.
 
 Postgres and Redis are not one transaction. A Postgres publication failure leaves
 both previous populations available. If Redis fails afterward, Postgres retains
@@ -86,7 +93,7 @@ backfill Postgres. No v4 body cache or invalidation system is involved.
    deploying v4, so its first requests have stored scores. Measure a full repair
    on real telemetry; it invokes existing scoped calculations sequentially.
 3. Deploy v4. Stale or missing required populations refresh on demand. Monitor
-   queue failures and `popularity_refreshes.generated_at` when diagnosing age.
+   queue failures and the affected rows' `generated_at` when diagnosing age.
 
 An application rollback keeps the additive tables and Redis data. Repair by
 correcting and rerunning a calculation, without truncating last successful data.
@@ -104,3 +111,10 @@ scoped replacement, late-calculation rejection, empty-population freshness, one
 batch for stale/missing scopes, and dual-publication failure/retry in a disposable
 catalog. V4 HTTP tests cover ordering, enrichment, ETags, and queue-failure recovery
 without registering Redis map readers or calculation services.
+
+A temporary-table comparison using the real catalog measured global show layout
+at 215,939 rows versus 38,628 scored rows. Storage was 51 MB versus 14.6 MB;
+stamping all rows took 1.35 seconds versus 0.38 seconds. Indexed top-five reads
+remained 0.12 ms. These are local layout measurements without foreign-key or
+calculation cost, not a production budget. The additional background writes
+are accepted to keep publication and freshness in the three resource tables.

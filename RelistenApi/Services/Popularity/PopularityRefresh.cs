@@ -1,5 +1,7 @@
+using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Dapper;
 
 namespace Relisten.Services.Popularity;
 
@@ -53,7 +55,15 @@ public partial class PopularityService
         await RefreshGlobalShowPopularityMap();
         await RefreshGlobalYearPopularityMap();
 
-        foreach (var artist in await store.ReadArtistsToRefresh(cancellationToken))
+        var artists = await db.WithConnection(connection =>
+            connection.QueryAsync<Guid>(
+                new CommandDefinition(
+                    "SELECT uuid FROM artists ORDER BY uuid",
+                    cancellationToken: cancellationToken
+                )
+            )
+        );
+        foreach (var artist in artists)
         {
             cancellationToken.ThrowIfCancellationRequested();
             await RefreshShowPopularityMapForArtist(artist);

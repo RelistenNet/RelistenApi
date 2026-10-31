@@ -14,5 +14,4 @@ public enum PopularityPopulationKind
 public sealed record PopularityPopulation(PopularityPopulationKind Kind, Guid? Artist = null)
 {
     internal string StorageKind => Kind.ToString().ToLowerInvariant();
-    internal Guid Scope => Artist ?? Guid.Empty;
 }
