@@ -116,18 +116,12 @@ public sealed class CatalogShowMetadataReader(
             {
                 refresh.Require(PopularityPopulationKind.Show, artist);
             }
-            var rows = await session.Connection.QueryAsync<StoredPopularity>(
-                session.Command(
-                    """
-                    SELECT p.* FROM show_popularity p
-                    JOIN shows s ON s.uuid=p.uuid JOIN artists a ON a.id=s.artist_id
-                    WHERE NOT p.is_global AND p.uuid=ANY(@ids) AND p.artist_uuid=a.uuid AND p.momentum_score IS NOT NULL
-                    """,
-                    new { ids = shows.Select(show => show.uuid).ToArray() },
-                    cancellationToken
-                )
+            map = await PopularityStore.ReadArtistLocalShowMetrics(
+                session.Connection,
+                shows.Select(show => show.uuid).ToArray(),
+                session.Transaction,
+                cancellationToken
             );
-            map = rows.ToDictionary(row => row.uuid, row => row.ToMetrics()!);
         }
         foreach (var show in shows)
         {

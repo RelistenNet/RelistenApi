@@ -1,5 +1,7 @@
 using System;
 using Microsoft.Extensions.DependencyInjection;
+using Relisten.Catalog;
+using Relisten.Catalog.Compatibility;
 using Relisten.Data;
 using Relisten.Import;
 using Relisten.Normalization;
@@ -28,6 +30,12 @@ public static class IngestionServiceRegistration
         services.AddScoped<SetlistFmImporter, SetlistFmImporter>();
         services.AddScoped<PhishinImporter, PhishinImporter>();
         services.AddScoped<ShowService, ShowService>();
+        services.AddScoped<CatalogRecordingReader>();
+        services.AddOptions<LegacyCatalogOptions>().BindConfiguration("Catalog");
+        services.AddScoped<PopularityRefreshRequest>();
+        services.AddScoped(sp => new Lazy<PopularityRefreshRequest>(
+            sp.GetRequiredService<PopularityRefreshRequest>
+        ));
         services.AddScoped<ArchiveOrgImporter, ArchiveOrgImporter>();
         services.AddScoped<SourceService, SourceService>();
         services.AddScoped<SourceReviewService, SourceReviewService>();

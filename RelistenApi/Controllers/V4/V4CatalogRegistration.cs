@@ -26,6 +26,7 @@ public static class V4CatalogRegistration
     {
         services.AddScoped<PopularityRefreshRequest>();
         services.AddTransient<CatalogReader>();
+        services.TryAddScoped<CatalogRecordingReader>();
         services.AddTransient<CatalogLiveReader>();
         services.TryAddScoped<Relisten.Data.SourceTrackPlaysService>();
         services.AddTransient<CatalogSourceReviewReader>();
