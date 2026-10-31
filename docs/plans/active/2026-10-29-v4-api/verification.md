@@ -1064,3 +1064,17 @@ artists measured 28 ms / 7.72 MiB instead of 266 ms / 122.6 MiB, with no Redis
 commands. The focused suite passes 180 v4, popularity, and saved-reference
 checks. Runtime, input provenance, query counts, independent review, and measurement limits are recorded in the
 linked checkpoint. Production full-refresh duration remains a rollout check.
+
+
+## Demand refresh and three-table schema — October 30
+
+The final [popularity checkpoint](review/stored-popularity.md) replaces the
+scheduled refresh with stale-read/background refresh. One freshness query and
+at most one queued batch cover a response after catalog snapshots close. Scores
+are still selected from Postgres and published to both stores by existing jobs.
+
+The separate freshness table is removed. Every target has a generated row;
+inactive targets have zero counters and null momentum. Conditional sorted
+upserts protect newer rows, without a publication gate or deletion phase.
+The focused suite passes 183 checks, including inactive freshness, zero IDs,
+composed-request batching, queue failure/304 recovery, and cross-store retry.

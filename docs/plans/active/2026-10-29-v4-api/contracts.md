@@ -745,16 +745,25 @@ changes ordinary show/list/detail/snapshot validators without requiring imported
 `updated_at` changes. Global-ranking validators depend on their global scores,
 not unrelated artist-score refreshes. Both also include returned catalog metadata.
 
-Refresh jobs calculate scores and publish each population to Postgres and legacy
-Redis. V4 reads only Postgres, in the same primary repeatable-read snapshot as
-catalog metadata. GETs never calculate scores, read Redis, or enqueue refreshes.
-A failed refresh leaves the last successful stored population readable. Missing
-show metrics are null; a population not yet backfilled produces an empty ranking.
-Deploy the v4 reader after the initial backfill. SQL read failures return
-503/no-store without a partial body or ETag; a later request opens a fresh
-snapshot. Cancellation is passed to database commands. See the
-[popularity foundation](../../../popularity/README.md) for refresh and rollout
-ownership.
+Refresh jobs calculate scores and publish to Postgres and legacy Redis. V4 reads
+scores with catalog metadata in the same primary repeatable-read snapshot. After
+readers dispose that snapshot, one request-scoped collector checks the required
+populations' ages in one SQL query and queues at most one refresh batch. Reads
+serve stored scores; they never calculate them. Missing metrics remain null and
+missing rankings remain empty while the first calculation is queued.
+
+Every current catalog target receives a stored row. Inactive targets have zero
+counters, null momentum, and a `generated_at` timestamp. They remain null in
+public show resources and are excluded from ranking selection. A population with
+no catalog targets does not need a refresh. There is no separate freshness table
+or scheduled refresh. The same one-hour age policy is used by legacy maps.
+
+A failed refresh leaves prior values readable. SQL or queue-submission failure
+returns 503/no-store without a partial body or ETag; a later request retries.
+Concurrent stale requests can enqueue duplicate batches, matching the existing
+legacy behavior. Batch retries recalculate even after Postgres became fresh,
+because an earlier attempt may have failed during Redis publication. See the
+[popularity foundation](../../../popularity/README.md) for ownership and repair.
 
 ### Search and listening rankings
 
