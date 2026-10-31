@@ -262,7 +262,8 @@ resolver; map its echoed references back before membership checks. Canonical
 short targets without v4 metadata remain saved/unavailable, never sent to the
 UUID-only resolver or erased. Re-sign-in must recover server memberships.
 
-Then upgrade a schema-15 Realm fixture containing imported rows, an offline file,
+Then upgrade the current schema-17 account build and an older schema-15 Realm
+fixture containing imported rows, an offline file,
 queue/shuffle entries, history and private-alpha favorites. Verify identical
 imported primary keys, file paths and parent links. New fields/models are additive;
 the existing favorite migration still runs in the intended order. Test both a
@@ -399,7 +400,7 @@ fallback while this is resolved.
    mobile activation off. Pin known-good server/core rollback builds against the
    additive schema. Bounded production read-only smoke checks start no imports.
 5. **C5, complete mobile and controlled activation.** Finish normalized storage,
-   browse screens and global venue favorites. Qualify both direct schema-15
+   browse screens and global venue favorites. Qualify current schema-17, direct schema-15
    upgrades and staged C2→C5 upgrades. Deploy the schema-compatible mobile build
    with catalog v4 disabled; confirm v3 playback first, then enable v4 for developer
    testing. Review raw/approved/partial and global favorite journeys, and record
@@ -1266,3 +1267,38 @@ Command round trips remained 18 for approved full shows and 10 for raw full show
 legacy full shows returned to their original five commands. These local samples
 confirm that the native optimization remains, without claiming a production
 latency guarantee or using the removed adapter's timing improvements.
+
+## Final local contract, allocation and origin review — 2026-10-31
+
+The [qualification report](review/api-qualification.md) records the current
+51-operation inventory, recursive real-payload schema audit, conditional reads,
+query plans, allocation comparison and complete-response concurrent workload.
+All 49 GETs succeeded with zero schema mismatches after correcting popularity
+and grouped-ranking naming. All 48 deterministic bodies/ETags were unchanged.
+The two no-store GETs are random show and public history; 47 ordinary GETs
+revalidated with bodyless 304. A real six-reference resolver POST returned ordered
+availability results with no-store/no ETag. Existing operator registrations remain
+unchanged and hidden from OpenAPI; no operator/import request was executed.
+
+The fixes avoid a full UTF-16 JSON copy, bound selected artist counts using the
+existing resolver query, and remove duplicated source selection SQL. Final
+focused validation passed 202 checks; one test was added and existing ranking
+and Unicode/correction assertions were extended. Both new schema regressions
+failed against the original implementation. Existing fixture, migration and
+failure/recovery coverage is reused. Independent reviews found no actionable
+code issue; the simplicity pass added no pooling, cache, policy mode or new
+runtime switch.
+
+The final Release workload measured 162 requests with no failures. Artist
+catalog medians were 123.5/134.1 ms, the large show 20.8 ms, Scarlet detail 52.4 ms,
+Red Rocks 18.7 ms and Drums file matches 372.2 ms. Measured allocation fell about
+28–30% in matched before/prototype large-response samples. Allocations include
+in-process HTTP client/diagnostic overhead, not just the server or peak heap.
+A 304 still reads and serializes current data. Cloudflare owns downstream caching;
+no additional application response cache or zero-allocation requirement is planned.
+
+The [mobile handoff](review/mobile-handoff.md) identifies current schema-17 account
+code, exact review URLs, additive storage/identity rules, authoritative apply,
+failure/retry and offline acceptance. C3 mobile execution, phone memory/apply time,
+production capacity budgets and deployment qualification remain open. No mobile
+files or production data were changed by this review.

@@ -33,7 +33,7 @@ titles are imported values; normalized parts describe the file without replacing
 The [date and recent browsing review](../../docs/plans/active/2026-10-29-v4-api/review/discovery-browsing.md)
 provides anniversary, exact-date, recent, top-rated, and random-show links.
 
-The expanded C1 browse checkpoint exposes 49 routes (48 GETs and one POST). Follow the
+The local API exposes 51 operations (49 GETs and two POSTs). Follow the
 [venue-to-playback walkthrough](../../docs/plans/active/2026-10-29-v4-api/review/venue-source-journey.md)
 and [song-to-playback walkthrough](../../docs/plans/active/2026-10-29-v4-api/review/song-source-journey.md)
 to inspect the resource links. Implemented families are:
@@ -93,8 +93,11 @@ Resources return directly. Every track has `normalization` with `state`,
 Ordinary responses carry a weak HTTP ETag and require cache revalidation.
 Send the returned ETag in `If-None-Match` to get 304 when unchanged. Errors use
 ProblemDetails with `code`: 422 `invalid_id`, 404 `not_found`, or 503
-`catalog_unavailable`; errors are no-store. The complete v4 manifest remains
-future work after this review.
+`catalog_unavailable`; errors are no-store. The complete
+[manifest](../../docs/plans/active/2026-10-29-v4-api/endpoints.json),
+[final contract/performance audit](../../docs/plans/active/2026-10-29-v4-api/review/api-qualification.md)
+and [mobile handoff](../../docs/plans/active/2026-10-29-v4-api/review/mobile-handoff.md)
+describe current coverage and the next pilot.
 
 ## Local approval flags and source provenance
 

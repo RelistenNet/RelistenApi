@@ -2,7 +2,9 @@
 
 Status: C1 includes playback navigation, artist snapshots, and saved-reference
 resolution, date browsing, search, listening rankings, and anonymous live activity,
-2026-10-31. C2 server and initial client upgrades have been reviewed locally;
+2026-10-31. The final local contract/performance audit is complete; start the
+[mobile handoff](review/mobile-handoff.md) for C3.
+C2 server and initial client upgrades have been reviewed locally;
 mobile catalog reads remain on v3. The catalog API reads the restored production
 catalog. Account migrations ran only on disposable local rehearsal databases; no
 production deployment or migration occurred. This is a living ExecPlan: update Progress,
@@ -233,9 +235,12 @@ Implement mobile's actual queries, not a generic interpreter of all server route
   restore existing legacy services and remove legacy-only reader policies/tests.
 - [x] Review the [play/activity responses](review/live-activity.md); keep public
   integer sequences as approved. The artist filter is implemented and reviewed.
-- [ ] Review [native catalog isolation](review/catalog-read-isolation.md), then
-  continue C3–C5 mobile catalog adoption and release qualification. There is no
-  legacy-adapter migration backlog.
+- [x] Verify [native catalog isolation](review/catalog-read-isolation.md), complete
+  the [contract and origin performance audit](review/api-qualification.md), and
+  publish the [mobile handoff](review/mobile-handoff.md). Keep Cloudflare caching
+  downstream; add no application response cache or zero-allocation requirement.
+- [ ] Complete the C3 mobile pilot, then C4/C5 production and mobile release
+  qualification. There is no legacy-adapter migration backlog.
 
 ## Discoveries and changes from the exploration
 
@@ -366,7 +371,8 @@ Apply resources, owned associations, query results and ETag in one Realm transac
 using each endpoint's replacement rule. Bypass legacy timestamp guards for v4;
 preserve richer detail when shallow related objects arrive. Discard superseded
 query/account/transport generations. Failed apply commits no validator or cursor.
-Test direct schema-15 upgrades and staged account-only then catalog upgrades.
+Test upgrades from the current schema-17 account build as well as direct older
+schema upgrades and staged account-only then catalog upgrades.
 
 ### 6. Complete browsing and global favorites for C5
 

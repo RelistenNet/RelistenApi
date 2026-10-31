@@ -133,8 +133,10 @@ catalog generation.
 Ordinary public GET: `Cache-Control: public, no-cache` and weak ETag; revalidate
 before reuse. A matching `If-None-Match` yields 304 after reading current data.
 Random, errors, commands, resolver POST and account responses use no-store.
-No v4 Redis body cache or immutable max-age policy in this release. Ranking
-maps retain their existing asynchronous Redis ownership; load once per request.
+Cloudflare owns downstream response caching. There is no v4 application response
+cache or immutable max-age policy in this release. Scores are read from Postgres
+in the catalog snapshot; calculations still publish to both Postgres and Redis
+for the existing legacy readers.
 
 Hash the uncompressed deterministic JSON; a weak validator avoids tying this
 mechanism to host/ingress compression. Conditional GET uses weak comparison,
@@ -147,11 +149,12 @@ This guarantees one database snapshot and detects changed represented data.
 It does not establish a total order across independent queries or make a whole
 normalization workflow atomic. Mobile ignores superseded requests for the same
 scope and revalidates stale views. Initial primary routing for v4 avoids replica lag;
-adding replicas or shared response caching requires an explicit consistency
+adding replicas or an origin response cache requires an explicit consistency
 design and measurements, not a future switch of connection strings alone.
 
-Use ProblemDetails with a stable `code` for failures. Preserve 400 for malformed
-JSON, 422 for semantically invalid request/prefix/kind/filter, 404 for a valid
+Use ProblemDetails with a stable `code` for failures. Resolver POST uses 400 for
+malformed JSON; play reporting uses 422 for invalid JSON or fields, as specified
+below. Other semantic request/prefix/kind/filter errors use 422; use 404 for a valid
 unknown resource, 410 for a known retired canonical ID, 413 for body bounds,
 and 503 for disabled service/read timeout/dependency failure. Authorization
 keeps its current 401/403 semantics. Resolver item unavailability is data in a

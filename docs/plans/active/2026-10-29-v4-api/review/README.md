@@ -1,5 +1,9 @@
 # C1: inspect the real responses
 
+The [mobile handoff](mobile-handoff.md) is the current starting point after the
+[final local contract and origin performance audit](api-qualification.md).
+The walkthroughs below retain concrete examples for each resource family.
+
 Start the API with `./local-dev/v4-review/run.sh`, then open
 [Swagger](http://127.0.0.1:43823/api-docs-v4) or run [requests.http](requests.http).
 The [local setup](../../../../../local-dev/v4-review/README.md) explains startup,

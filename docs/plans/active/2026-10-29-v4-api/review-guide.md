@@ -9,8 +9,9 @@ Alec something running to inspect before the next dependent work expands.
 This is a review guide for Alec and Switz. C1 is now implemented for local review;
 start with the [real response examples and running API](review/README.md).
 C2 server and first client upgrades have been reviewed locally; mobile catalog
-adoption remains in its own thread. The next backend slice is the
-[native catalog isolation review](review/catalog-read-isolation.md).
+adoption remains in its own thread. The [final local API audit](review/api-qualification.md)
+is complete; the [mobile handoff](review/mobile-handoff.md) starts C3. Production
+capacity and deployment qualification remain later release work.
 
 ## The simplification to preserve
 
