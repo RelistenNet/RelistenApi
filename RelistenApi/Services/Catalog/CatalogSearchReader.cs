@@ -94,7 +94,7 @@ public sealed class CatalogSearchReader(
             ? (
                 await Query<CatalogSource>(
                     session,
-                    CatalogReader.SourceSelect
+                    CatalogRecordingReader.SourceSelect
                         + " WHERE (src.upstream_identifier ILIKE @pattern OR src.description ILIKE @pattern OR src.taper_notes ILIKE @pattern OR src.source ILIKE @pattern OR src.taper ILIKE @pattern OR src.transferrer ILIKE @pattern OR src.lineage ILIKE @pattern)"
                         + scope
                         + " ORDER BY src.avg_rating_weighted DESC NULLS LAST,src.duration DESC NULLS LAST,src.display_date DESC,src.uuid LIMIT 20",

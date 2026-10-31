@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -161,11 +160,4 @@ public sealed class CatalogReader(
                 cancellationToken
             )
         );
-
-    internal const string SourceSelect = """
-        SELECT src.*,a.uuid artist_uuid,sh.uuid show_uuid,
-               COALESCE(rc.source_review_count,0) review_count
-        FROM sources src JOIN artists a ON a.id=src.artist_id JOIN shows sh ON sh.id=src.show_id
-        LEFT JOIN source_review_counts rc ON rc.source_id=src.id
-        """;
 }

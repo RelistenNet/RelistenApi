@@ -274,7 +274,8 @@ public sealed class CatalogResolverHydrator(
         (
             await session.Connection.QueryAsync<CatalogSource>(
                 session.Command(
-                    CatalogReader.SourceSelect + " WHERE src.uuid=ANY(@uuids) ORDER BY src.uuid",
+                    CatalogRecordingReader.SourceSelect
+                        + " WHERE src.uuid=ANY(@uuids) ORDER BY src.uuid",
                     new { uuids },
                     cancellationToken
                 )

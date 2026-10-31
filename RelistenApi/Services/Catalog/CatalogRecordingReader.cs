@@ -38,14 +38,8 @@ public sealed class CatalogRecordingReader
         var sources = (
             await session.Connection.QueryAsync<CatalogSource>(
                 session.Command(
-                    $"""
-                    SELECT src.*,a.uuid artist_uuid,sh.uuid show_uuid,
-                           COALESCE(rc.source_review_count,0) review_count
-                    FROM sources src JOIN artists a ON a.id=src.artist_id
-                    JOIN shows sh ON sh.id=src.show_id
-                    LEFT JOIN source_review_counts rc ON rc.source_id=src.id
-                    WHERE {predicate} ORDER BY src.avg_rating_weighted DESC,src.uuid
-                    """,
+                    SourceSelect
+                        + $" WHERE {predicate} ORDER BY src.avg_rating_weighted DESC,src.uuid",
                     parameters,
                     cancellationToken
                 )
@@ -95,4 +89,11 @@ public sealed class CatalogRecordingReader
         }
         return sources;
     }
+
+    internal const string SourceSelect = """
+        SELECT src.*,a.uuid artist_uuid,sh.uuid show_uuid,
+               COALESCE(rc.source_review_count,0) review_count
+        FROM sources src JOIN artists a ON a.id=src.artist_id JOIN shows sh ON sh.id=src.show_id
+        LEFT JOIN source_review_counts rc ON rc.source_id=src.id
+        """;
 }
