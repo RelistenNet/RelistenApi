@@ -92,6 +92,7 @@ public static class V4CatalogRegistration
         options.ParameterFilter<CatalogQueryParameterSchema>();
         options.SchemaFilter<CatalogResolveRequestSchema>();
         options.OperationFilter<CatalogResolveRequestSchema>();
+        options.OperationFilter<CatalogHttpResponseSchema>();
     }
 
     private static void MapId<T>(SwaggerGenOptions options)

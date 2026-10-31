@@ -731,6 +731,47 @@ public sealed partial class TestV4CatalogHttp
         UuidTypeId.Format(prefix, Guid.Parse($"00000000-0000-0000-0000-{suffix:000000000000}"));
 
     [Test]
+    public async Task Openapi_describes_conditional_reads_and_actual_error_media_types()
+    {
+        var paths = (await GetJson("/api-docs/v4/swagger.json"))["paths"]!;
+        var show = paths["/api/v4/shows/{showId}"]!["get"]!;
+        using var initial = await http.GetAsync(ShowPath(4));
+        using var unchanged = await Conditional(ShowPath(4), initial.Headers.ETag!.ToString());
+        var status = ((int)unchanged.StatusCode).ToString();
+        show["responses"]![status].Should().NotBeNull();
+        show["responses"]![status]!["content"].Should().BeNull();
+        foreach (var code in new[] { "200", status })
+        {
+            show["responses"]![code]!["headers"]!["ETag"].Should().NotBeNull();
+        }
+        show["parameters"]!
+            .AsArray()
+            .Should()
+            .Contain(parameter =>
+                parameter!["name"]!.GetValue<string>() == "If-None-Match"
+                && parameter["in"]!.GetValue<string>() == "header"
+            );
+        using var invalid = await http.GetAsync("/api/v4/shows/invalid");
+        show["responses"]![((int)invalid.StatusCode).ToString()]!["content"]!
+            .AsObject()
+            .Select(item => item.Key)
+            .Should()
+            .Equal(invalid.Content.Headers.ContentType!.MediaType);
+        foreach (
+            var (path, method) in new[]
+            {
+                ("/api/v4/artists/{artistId}/shows/random", "get"),
+                ("/api/v4/live/history", "get"),
+                ("/api/v4/live/play", "post"),
+                ("/api/v4/catalog/resolve", "post"),
+            }
+        )
+        {
+            paths[path]![method]!["responses"]!["304"].Should().BeNull();
+        }
+    }
+
+    [Test]
     public async Task Openapi_property_names_and_id_types_match_the_actual_json()
     {
         var document = await GetJson("/api-docs/v4/swagger.json");

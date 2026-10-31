@@ -299,6 +299,19 @@ public sealed partial class TestV4CatalogHttp
                 .StartWith("year_");
             var expectedPopularity = (await GetJson(ShowPath(4)))["popularity"]!;
             expectedPopularity["momentum_score"]!.GetValue<double>().Should().Be(0.9);
+            var document = await GetJson("/api-docs/v4/swagger.json");
+            AssertSchemaFields(document, "ArtistRankingResource", groups[0]!);
+            AssertSchemaFields(document, "PopularityResource", expectedPopularity);
+            AssertSchemaFields(
+                document,
+                "PopularityWindowsResource",
+                expectedPopularity["windows"]!
+            );
+            AssertSchemaFields(
+                document,
+                "PopularityWindowResource",
+                expectedPopularity["windows"]!["48h"]!
+            );
             await AssertArtistLocalPopularityAcrossRoutes(expectedPopularity);
             JsonNode.DeepEquals(grouped["popularity"], expectedPopularity).Should().BeTrue();
             var resolved = await Resolve(Reference("show", "v4", ShowId(4)));
