@@ -18,9 +18,9 @@ namespace Relisten.Services.Popularity
         Days30,
     }
 
-    public class PopularityService
+    public partial class PopularityService
     {
-        private const int DefaultStaleAfterSeconds = 60 * 60;
+        internal const int DefaultStaleAfterSeconds = 60 * 60;
         private const int ArtistTrendingPlays48hFloor = 130;
         private const int ArtistTrendingPlays30dFloor = 1808;
         private const int ShowTrendingPlays48hFloor = 9;
@@ -29,6 +29,7 @@ namespace Relisten.Services.Popularity
         private const int YearTrendingPlays30dFloor = 67;
 
         private readonly DbService db;
+        private readonly PopularityStore store;
         private readonly PopularityCacheService cache;
         private readonly IBackgroundJobClient backgroundJobs;
         private readonly ILogger<PopularityService> logger;
@@ -41,6 +42,7 @@ namespace Relisten.Services.Popularity
         )
         {
             this.db = db;
+            store = new PopularityStore(db);
             this.cache = cache;
             this.backgroundJobs = backgroundJobs;
             this.logger = logger;
@@ -567,6 +569,7 @@ namespace Relisten.Services.Popularity
 
         private async Task<Dictionary<Guid, PopularityMetrics>> ComputeArtistPopularityMap()
         {
+            var generatedAt = DateTime.UtcNow;
             var rows = await db.WithConnection(con =>
                 con.QueryAsync<PopularityRow>(
                     @"
@@ -622,13 +625,16 @@ namespace Relisten.Services.Popularity
                 )
             );
 
-            return BuildMetricsMap(rows);
+            var map = BuildMetricsMap(rows);
+            await store.ReplaceArtists(map, generatedAt);
+            return map;
         }
 
         private async Task<
             Dictionary<Guid, CachedShowPopularity>
         > ComputeShowPopularityMapForArtist(Guid artistUuid)
         {
+            var generatedAt = DateTime.UtcNow;
             var rows = await db.WithConnection(con =>
                 con.QueryAsync<PopularityShowCacheRow>(
                     @"
@@ -762,13 +768,16 @@ namespace Relisten.Services.Popularity
                 )
             );
 
-            return BuildShowPopularityCacheMap(rows);
+            var map = BuildShowPopularityCacheMap(rows);
+            await store.ReplaceArtistShows(artistUuid, map, generatedAt);
+            return map;
         }
 
         private async Task<Dictionary<Guid, PopularityMetrics>> ComputeYearPopularityMapForArtist(
             Guid artistUuid
         )
         {
+            var generatedAt = DateTime.UtcNow;
             var rows = await db.WithConnection(con =>
                 con.QueryAsync<PopularityRow>(
                     @"
@@ -827,9 +836,13 @@ namespace Relisten.Services.Popularity
                 )
             );
 
-            return BuildMetricsMap(rows);
+            var map = BuildMetricsMap(rows);
+            await store.ReplaceYears(artistUuid, map, generatedAt);
+            return map;
         }
 
+        // Legacy artist lists normalize only 30-day-active artists. The metric
+        // map spans 90 days; keep this calculation to preserve legacy scores.
         private async Task<IReadOnlyList<PopularArtistListItem>> ComputePopularArtists(int limit)
         {
             var rows = await db.WithConnection(con =>
@@ -944,101 +957,13 @@ namespace Relisten.Services.Popularity
             PopularitySortWindow sortWindow
         )
         {
-            var rows = await db.WithConnection(con =>
-                con.QueryAsync<PopularityShowRow>(
-                    @"
-                WITH plays_90d AS (
-                    SELECT show_uuid, SUM(plays) AS plays_90d
-                    FROM source_track_plays_daily
-                    WHERE play_day >= now() - interval '90 days'
-                    GROUP BY 1
-                ),
-                plays_30d AS (
-                    SELECT show_uuid, SUM(plays) AS plays_30d,
-                        SUM(total_track_seconds)::bigint AS seconds_30d
-                    FROM source_track_plays_daily
-                    WHERE play_day >= now() - interval '30 days'
-                    GROUP BY 1
-                ),
-                plays_7d AS (
-                    SELECT show_uuid, SUM(plays) AS plays_7d,
-                        SUM(total_track_seconds)::bigint AS seconds_7d
-                    FROM source_track_plays_daily
-                    WHERE play_day >= now() - interval '7 days'
-                    GROUP BY 1
-                ),
-                plays_6h AS (
-                    SELECT show_uuid, SUM(plays) AS plays_6h
-                    FROM source_track_plays_hourly
-                    WHERE play_hour >= now() - interval '6 hours'
-                    GROUP BY 1
-                ),
-                plays_48h AS (
-                    SELECT show_uuid, SUM(plays) AS plays_48h,
-                        SUM(total_track_seconds)::bigint AS seconds_48h
-                    FROM source_track_plays_hourly
-                    WHERE play_hour >= now() - interval '48 hours'
-                    GROUP BY 1
-                )
-                SELECT
-                    s.uuid AS show_uuid,
-                    COALESCE(p30.plays_30d, 0) AS plays_30d,
-                    COALESCE(p7.plays_7d, 0) AS plays_7d,
-                    COALESCE(p48.plays_48h, 0) AS plays_48h
-                    , COALESCE(p90.plays_90d, 0) AS plays_90d
-                    , COALESCE(p6.plays_6h, 0) AS plays_6h
-                    , COALESCE(p30.seconds_30d, 0) AS seconds_30d
-                    , COALESCE(p7.seconds_7d, 0) AS seconds_7d
-                    , COALESCE(p48.seconds_48h, 0) AS seconds_48h
-                FROM shows s
-                LEFT JOIN plays_30d p30 ON p30.show_uuid = s.uuid
-                LEFT JOIN plays_7d p7 ON p7.show_uuid = s.uuid
-                LEFT JOIN plays_48h p48 ON p48.show_uuid = s.uuid
-                LEFT JOIN plays_90d p90 ON p90.show_uuid = s.uuid
-                LEFT JOIN plays_6h p6 ON p6.show_uuid = s.uuid
-                WHERE p30.plays_30d IS NOT NULL
-            "
-                )
-            );
-
-            var showDetails = await LoadShowDetailsByUuid(rows.Select(row => row.show_uuid), null);
-            var items = new List<Show>();
-
-            foreach (var row in rows)
+            var map = await ComputeGlobalShowPopularityMap();
+            var details = await LoadShowDetailsByUuid(map.Keys, null);
+            foreach (var show in details.Values)
             {
-                if (!showDetails.TryGetValue(row.show_uuid, out var show))
-                {
-                    continue;
-                }
-
-                show.popularity = CreateMetrics(
-                    row.plays_30d,
-                    row.plays_7d,
-                    row.plays_6h,
-                    row.plays_48h,
-                    row.plays_90d,
-                    row.seconds_30d,
-                    row.seconds_7d,
-                    row.seconds_48h
-                );
-                items.Add(show);
+                show.popularity = map[show.uuid];
             }
-
-            ApplyMomentumScores(
-                items
-                    .Select(item => item.popularity)
-                    .Where(metrics => metrics != null)
-                    .Select(metrics => metrics!)
-                    .ToList()
-            );
-
-            var ordered = items
-                .OrderByDescending(item => GetSortWindowHotScore(item, sortWindow))
-                .ThenByDescending(item => GetSortWindowPlays(item, sortWindow))
-                .Take(limit)
-                .ToList();
-
-            return ordered;
+            return RankPopularArtistShows(details.Values.ToArray(), limit, sortWindow);
         }
 
         private async Task<IReadOnlyList<Show>> ComputeTrendingShows(
@@ -1302,102 +1227,28 @@ namespace Relisten.Services.Popularity
 
         private async Task<IReadOnlyList<PopularYearListItem>> ComputePopularYears(int limit)
         {
+            var map = await ComputeGlobalYearPopularityMap();
             var rows = await db.WithConnection(con =>
                 con.QueryAsync<PopularityYearRow>(
-                    @"
-                WITH plays_90d AS (
-                    SELECT s.year_id, SUM(p.plays) AS plays_90d
-                    FROM source_track_plays_daily p
-                    JOIN shows s ON s.uuid = p.show_uuid
-                    WHERE play_day >= now() - interval '90 days'
-                    GROUP BY 1
-                ),
-                plays_30d AS (
-                    SELECT s.year_id, SUM(p.plays) AS plays_30d,
-                        SUM(p.total_track_seconds)::bigint AS seconds_30d
-                    FROM source_track_plays_daily p
-                    JOIN shows s ON s.uuid = p.show_uuid
-                    WHERE p.play_day >= now() - interval '30 days'
-                    GROUP BY 1
-                ),
-                plays_7d AS (
-                    SELECT s.year_id, SUM(p.plays) AS plays_7d,
-                        SUM(p.total_track_seconds)::bigint AS seconds_7d
-                    FROM source_track_plays_daily p
-                    JOIN shows s ON s.uuid = p.show_uuid
-                    WHERE p.play_day >= now() - interval '7 days'
-                    GROUP BY 1
-                ),
-                plays_6h AS (
-                    SELECT s.year_id, SUM(p.plays) AS plays_6h
-                    FROM source_track_plays_hourly p
-                    JOIN shows s ON s.uuid = p.show_uuid
-                    WHERE p.play_hour >= now() - interval '6 hours'
-                    GROUP BY 1
-                ),
-                plays_48h AS (
-                    SELECT s.year_id, SUM(p.plays) AS plays_48h,
-                        SUM(p.total_track_seconds)::bigint AS seconds_48h
-                    FROM source_track_plays_hourly p
-                    JOIN shows s ON s.uuid = p.show_uuid
-                    WHERE p.play_hour >= now() - interval '48 hours'
-                    GROUP BY 1
-                )
-                SELECT
-                    y.uuid AS year_uuid,
-                    y.year,
-                    a.uuid AS artist_uuid,
-                    a.name AS artist_name,
-                    COALESCE(p30.plays_30d, 0) AS plays_30d,
-                    COALESCE(p7.plays_7d, 0) AS plays_7d,
-                    COALESCE(p48.plays_48h, 0) AS plays_48h
-                    , COALESCE(p90.plays_90d, 0) AS plays_90d
-                    , COALESCE(p6.plays_6h, 0) AS plays_6h
-                    , COALESCE(p30.seconds_30d, 0) AS seconds_30d
-                    , COALESCE(p7.seconds_7d, 0) AS seconds_7d
-                    , COALESCE(p48.seconds_48h, 0) AS seconds_48h
-                FROM years y
-                JOIN artists a ON a.id = y.artist_id
-                LEFT JOIN plays_30d p30 ON p30.year_id = y.id
-                LEFT JOIN plays_7d p7 ON p7.year_id = y.id
-                LEFT JOIN plays_48h p48 ON p48.year_id = y.id
-                LEFT JOIN plays_90d p90 ON p90.year_id = y.id
-                LEFT JOIN plays_6h p6 ON p6.year_id = y.id
-                WHERE p30.plays_30d IS NOT NULL
-            "
+                    "SELECT y.uuid year_uuid,y.year,a.uuid artist_uuid,a.name artist_name FROM years y JOIN artists a ON a.id=y.artist_id WHERE y.uuid=ANY(@ids)",
+                    new { ids = map.Keys.ToArray() }
                 )
             );
-
-            var items = rows.Select(row => new PopularYearListItem
+            var ordered = rows.Select(row => new PopularYearListItem
                 {
                     year_uuid = row.year_uuid,
                     year = row.year,
                     artist_uuid = row.artist_uuid,
                     artist_name = row.artist_name,
-                    plays_30d = row.plays_30d,
-                    plays_48h = row.plays_48h,
-                    trend_ratio = ComputeTrendRatio(row.plays_48h, row.plays_90d),
-                    popularity = CreateMetrics(
-                        row.plays_30d,
-                        row.plays_7d,
-                        row.plays_6h,
-                        row.plays_48h,
-                        row.plays_90d,
-                        row.seconds_30d,
-                        row.seconds_7d,
-                        row.seconds_48h
-                    ),
+                    plays_30d = map[row.year_uuid].windows.days_30d.plays,
+                    plays_48h = map[row.year_uuid].windows.hours_48h.plays,
+                    trend_ratio = map[row.year_uuid].trend_ratio,
+                    popularity = map[row.year_uuid],
                 })
-                .ToList();
-
-            ApplyMomentumScores(items.Select(item => item.popularity).ToList());
-
-            var ordered = items
                 .OrderByDescending(item => item.popularity.windows.days_30d.hot_score)
                 .ThenByDescending(item => item.plays_30d)
                 .Take(limit)
                 .ToList();
-
             AssignRanks(ordered);
             return ordered;
         }
@@ -1668,19 +1519,6 @@ namespace Relisten.Services.Popularity
             public long seconds_48h { get; set; }
         }
 
-        private class PopularityShowRow
-        {
-            public Guid show_uuid { get; set; }
-            public long plays_30d { get; set; }
-            public long plays_7d { get; set; }
-            public long plays_48h { get; set; }
-            public long plays_6h { get; set; }
-            public long plays_90d { get; set; }
-            public long seconds_30d { get; set; }
-            public long seconds_7d { get; set; }
-            public long seconds_48h { get; set; }
-        }
-
         private class PopularityShowCacheRow
         {
             public Guid uuid { get; set; }
@@ -1701,14 +1539,6 @@ namespace Relisten.Services.Popularity
             public string year { get; set; } = string.Empty;
             public Guid artist_uuid { get; set; }
             public string artist_name { get; set; } = string.Empty;
-            public long plays_30d { get; set; }
-            public long plays_7d { get; set; }
-            public long plays_48h { get; set; }
-            public long plays_6h { get; set; }
-            public long plays_90d { get; set; }
-            public long seconds_30d { get; set; }
-            public long seconds_7d { get; set; }
-            public long seconds_48h { get; set; }
         }
     }
 }
