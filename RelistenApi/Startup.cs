@@ -345,6 +345,20 @@ namespace Relisten
                 app.UseDeveloperExceptionPage();
             }
 
+            if (
+                !env.IsDevelopment()
+                && !string.IsNullOrEmpty(Configuration["ENABLE_HANGFIRE_SERVER"])
+                && Configuration["ENABLE_HANGFIRE_SERVER"] != "false"
+            )
+            {
+                app.ApplicationServices.GetRequiredService<IRecurringJobManager>()
+                    .AddOrUpdate<Relisten.Services.Popularity.PopularityJobs>(
+                        "popularity-read-model",
+                        job => job.RefreshReadModel(System.Threading.CancellationToken.None),
+                        Cron.Hourly()
+                    );
+            }
+
             app.UseResponseCompression();
 
             app.UseSerilogRequestLogging(options =>

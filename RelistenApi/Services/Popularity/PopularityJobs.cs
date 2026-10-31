@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using Hangfire;
 
@@ -13,6 +14,19 @@ namespace Relisten.Services.Popularity
         {
             this.popularityService = popularityService;
         }
+
+        /// <summary>Refreshes rolling windows without depending on legacy API traffic.</summary>
+        [Queue("default")]
+        public Task RefreshReadModel(CancellationToken cancellationToken) =>
+            popularityService.RefreshReadModel(cancellationToken);
+
+        [Queue("default")]
+        public Task RefreshGlobalShowPopularityMap() =>
+            popularityService.RefreshGlobalShowPopularityMap();
+
+        [Queue("default")]
+        public Task RefreshGlobalYearPopularityMap() =>
+            popularityService.RefreshGlobalYearPopularityMap();
 
         [Queue("default")]
         public Task RefreshArtistPopularityMap()
