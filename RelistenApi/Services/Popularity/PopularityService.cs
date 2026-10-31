@@ -1517,19 +1517,6 @@ namespace Relisten.Services.Popularity
             public long seconds_48h { get; set; }
         }
 
-        private class PopularityShowRow
-        {
-            public Guid show_uuid { get; set; }
-            public long plays_30d { get; set; }
-            public long plays_7d { get; set; }
-            public long plays_48h { get; set; }
-            public long plays_6h { get; set; }
-            public long plays_90d { get; set; }
-            public long seconds_30d { get; set; }
-            public long seconds_7d { get; set; }
-            public long seconds_48h { get; set; }
-        }
-
         private class PopularityShowCacheRow
         {
             public Guid uuid { get; set; }
@@ -1550,14 +1537,6 @@ namespace Relisten.Services.Popularity
             public string year { get; set; } = string.Empty;
             public Guid artist_uuid { get; set; }
             public string artist_name { get; set; } = string.Empty;
-            public long plays_30d { get; set; }
-            public long plays_7d { get; set; }
-            public long plays_48h { get; set; }
-            public long plays_6h { get; set; }
-            public long plays_90d { get; set; }
-            public long seconds_30d { get; set; }
-            public long seconds_7d { get; set; }
-            public long seconds_48h { get; set; }
         }
     }
 }
