@@ -6,6 +6,7 @@ namespace Relisten.Services.Popularity;
 /// <summary>
 /// Flat storage for one calculated score. Population selection belongs to the
 /// query; global and artist-local momentum must never overwrite each other.
+/// NULL momentum represents a calculated row without scored activity.
 /// </summary>
 public sealed class StoredPopularity
 {
@@ -21,11 +22,16 @@ public sealed class StoredPopularity
     public double hours_48h { get; set; }
     public double hot_score_48h { get; set; }
     public double trend_ratio { get; set; }
-    public double momentum_score { get; set; }
+    public double? momentum_score { get; set; }
     public double? organic_momentum_score { get; set; }
 
-    public PopularityMetrics ToMetrics(bool organic = false) =>
-        new()
+    public PopularityMetrics? ToMetrics(bool organic = false)
+    {
+        if (momentum_score is not { } raw)
+        {
+            return null;
+        }
+        return new()
         {
             windows = new()
             {
@@ -49,8 +55,9 @@ public sealed class StoredPopularity
                 },
             },
             trend_ratio = trend_ratio,
-            momentum_score = organic ? organic_momentum_score ?? momentum_score : momentum_score,
+            momentum_score = organic ? organic_momentum_score ?? raw : raw,
         };
+    }
 
     // Window DTOs round in both caches. Metric maps also round their scalar scores;
     // the artist-local show cache retains full-precision raw/organic scores.
