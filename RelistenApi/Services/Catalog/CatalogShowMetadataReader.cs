@@ -17,13 +17,12 @@ public sealed class CatalogShowMetadataReader(
     CatalogImportedVenueMetadataReader importedVenueMetadata,
     CatalogVenueMetadataReader venueMetadata,
     CatalogArtistVenueMetadataReader artistVenueMetadata,
-    CatalogTourMetadataReader tourMetadata,
-    PopularityService popularity
+    CatalogTourMetadataReader tourMetadata
 )
 {
     /// <summary>
     /// Hydrates one show batch. Supplied scores retain the caller's ranking
-    /// context; otherwise artist-local maps are read once per artist.
+    /// context; otherwise stored artist-local scores are read in one batch.
     /// </summary>
     public async Task Apply(
         CatalogReadSession session,
@@ -97,29 +96,37 @@ public sealed class CatalogShowMetadataReader(
         }
 
         await ApplyVenues(session, shows, cancellationToken);
-        await ApplyPopularity(shows, popularityMap, cancellationToken);
+        await ApplyPopularity(session, shows, popularityMap, cancellationToken);
     }
 
-    // A supplied map keeps ranking context and avoids fetching artist maps that
-    // the caller does not need. An empty supplied map also suppresses fallback.
-    private async Task ApplyPopularity(
+    // Supplied scores retain a global or organic ranking context. Ordinary show
+    // reads load only the requested rows, across artists, in the catalog snapshot.
+    private static async Task ApplyPopularity(
+        CatalogReadSession session,
         IReadOnlyList<CatalogShow> shows,
         IReadOnlyDictionary<Guid, PopularityMetrics>? suppliedMap,
         CancellationToken cancellationToken
     )
     {
-        foreach (var group in shows.GroupBy(show => show.artist_uuid))
+        var map = suppliedMap;
+        if (map is null)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var map =
-                suppliedMap
-                ?? await popularity
-                    .GetShowPopularityMapForArtist(group.Key)
-                    .WaitAsync(cancellationToken);
-            foreach (var show in group)
-            {
-                show.Popularity = map.GetValueOrDefault(show.uuid);
-            }
+            var rows = await session.Connection.QueryAsync<StoredPopularity>(
+                session.Command(
+                    """
+                    SELECT p.* FROM show_popularity p
+                    JOIN shows s ON s.uuid=p.uuid JOIN artists a ON a.id=s.artist_id
+                    WHERE NOT p.is_global AND p.uuid=ANY(@ids) AND p.artist_uuid=a.uuid
+                    """,
+                    new { ids = shows.Select(show => show.uuid).ToArray() },
+                    cancellationToken
+                )
+            );
+            map = rows.ToDictionary(row => row.uuid, row => row.ToMetrics());
+        }
+        foreach (var show in shows)
+        {
+            show.Popularity = map.GetValueOrDefault(show.uuid);
         }
     }
 

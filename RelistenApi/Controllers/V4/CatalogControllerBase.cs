@@ -1,12 +1,10 @@
 using System;
 using System.Threading.Tasks;
-using Hangfire;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using Relisten.Catalog;
 using Relisten.Identifiers;
-using StackExchange.Redis;
 
 namespace Relisten.Controllers.V4;
 
@@ -56,13 +54,7 @@ public abstract class CatalogControllerBase(ILogger logger) : ControllerBase
                 "The normalized catalog is temporarily unavailable."
             );
         }
-        catch (Exception exception)
-            when (exception
-                    is NpgsqlException
-                        or TimeoutException
-                        or RedisException
-                        or BackgroundJobClientException
-            )
+        catch (Exception exception) when (exception is NpgsqlException or TimeoutException)
         {
             logger.LogError(exception, "Catalog read failed for {RequestPath}", Request.Path);
             return Failure(503, "catalog_unavailable", "The catalog is temporarily unavailable.");

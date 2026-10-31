@@ -1,12 +1,11 @@
 using System.Net;
-using System.Reflection;
 using System.Text.Json.Nodes;
 using Dapper;
 using FluentAssertions;
-using Hangfire;
+using Microsoft.Extensions.DependencyInjection;
+using Relisten;
 using Relisten.Api.Models;
 using Relisten.Services.Popularity;
-using StackExchange.Redis;
 
 namespace RelistenApiTests.V4;
 
@@ -113,19 +112,9 @@ public sealed partial class TestV4CatalogHttp
     [Test]
     public async Task Ranking_windows_thresholds_groups_and_organic_momentum_preserve_current_catalog_metadata()
     {
-        var keys = new[]
-        {
-            "popularity:artists:map:30d-48h",
-            "popularity:shows:map:30d-48h",
-            "popularity:years:map:30d-48h",
-            $"popularity:artist:{Guid.Parse("00000000-0000-0000-0000-000000000014")}:shows:map:30d-48h",
-            $"popularity:artist:{Guid.Parse("00000000-0000-0000-0000-000000000011")}:shows:map:30d-48h",
-        };
-        var previous = new Dictionary<string, RedisValue>();
-        foreach (var key in keys)
-        {
-            previous[key] = await rankingRedis.db.StringGetAsync(key);
-        }
+        var store = new PopularityStore(app.Services.GetRequiredService<DbService>());
+        var owner = Guid.Parse("00000000-0000-0000-0000-000000000014");
+        var rawOwner = Guid.Parse("00000000-0000-0000-0000-000000000011");
         try
         {
             CachedShowPopularity Metrics(int month, int week, int hours, double momentum = 0.1) =>
@@ -158,51 +147,53 @@ public sealed partial class TestV4CatalogHttp
                     plays_90d = 100,
                     momentum = new() { raw = momentum, organic = 1 - momentum },
                 };
-            async Task Put(string key, object data, bool stale = false) =>
-                await rankingRedis.db.StringSetAsync(
-                    key,
-                    Newtonsoft.Json.JsonConvert.SerializeObject(
-                        new
-                        {
-                            generated_at = stale ? DateTime.UtcNow.AddHours(-2) : DateTime.UtcNow,
-                            stale_after_seconds = 3600,
-                            data,
-                        }
-                    )
+            static Dictionary<Guid, PopularityMetrics> PublicMetrics(
+                Dictionary<Guid, CachedShowPopularity> values
+            ) =>
+                values.ToDictionary(
+                    item => item.Key,
+                    item => CachedShowPopularityMapper.ToPopularityMetrics(item.Value)
                 );
-            var showMap = new Dictionary<Guid, object>
+            var showMap = new Dictionary<Guid, CachedShowPopularity>
             {
                 [Guid.Parse("00000000-0000-0000-0000-000000000004")] = Metrics(100, 10, 20, 0.9),
                 [Guid.Parse("00000000-0000-0000-0000-000000000010")] = Metrics(50, 40, 5, 0.2),
             };
-            await Put(
-                keys[0],
-                new Dictionary<Guid, object>
-                {
-                    [Guid.Parse("00000000-0000-0000-0000-000000000014")] = Metrics(2000, 100, 200),
-                }
+            await store.ReplaceArtists(
+                PublicMetrics(
+                    new Dictionary<Guid, CachedShowPopularity> { [owner] = Metrics(2000, 100, 200) }
+                ),
+                DateTime.UtcNow
             );
             // Each ranking publishes the scores used by that endpoint.
-            var globalMap = new Dictionary<Guid, object>
+            var globalMap = new Dictionary<Guid, CachedShowPopularity>
             {
                 [Guid.Parse("00000000-0000-0000-0000-000000000004")] = Metrics(100, 10, 20, 0.4),
                 [Guid.Parse("00000000-0000-0000-0000-000000000010")] = Metrics(50, 40, 5, 0.5),
             };
-            await Put(keys[1], globalMap);
-            await Put(keys[3], showMap);
-            await Put(
-                keys[4],
-                new Dictionary<Guid, object>
+            await store.ReplaceGlobalShows(PublicMetrics(globalMap), DateTime.UtcNow);
+            await store.ReplaceArtistShows(owner, showMap, DateTime.UtcNow);
+            await store.ReplaceArtistShows(
+                rawOwner,
+                new Dictionary<Guid, CachedShowPopularity>
                 {
                     [Guid.Parse("00000000-0000-0000-0000-000000000001")] = Metrics(25, 10, 5, 0.3),
-                }
+                },
+                DateTime.UtcNow
             );
-            await Put(
-                keys[2],
-                new Dictionary<Guid, object>
-                {
-                    [Guid.Parse("00000000-0000-0000-0000-000000000064")] = Metrics(2000, 100, 200),
-                }
+            await store.ReplaceYears(
+                null,
+                PublicMetrics(
+                    new Dictionary<Guid, CachedShowPopularity>
+                    {
+                        [Guid.Parse("00000000-0000-0000-0000-000000000064")] = Metrics(
+                            2000,
+                            100,
+                            200
+                        ),
+                    }
+                ),
+                DateTime.UtcNow
             );
             async Task<string[]> Ids(string path) =>
                 (await GetJson(path))
@@ -266,7 +257,7 @@ public sealed partial class TestV4CatalogHttp
             unchanged.StatusCode.Should().Be(HttpStatusCode.NotModified);
             using var artistSnapshot = await http.GetAsync(BrowseArtistPath + "/catalog");
             showMap[Guid.Parse("00000000-0000-0000-0000-000000000004")] = Metrics(100, 10, 20, 0.7);
-            await Put(keys[3], showMap);
+            await store.ReplaceArtistShows(owner, showMap, DateTime.UtcNow);
             using var changed = await Conditional(
                 "/api/v4/popular/shows",
                 ranked.Headers.ETag!.ToString()
@@ -285,41 +276,48 @@ public sealed partial class TestV4CatalogHttp
                 20,
                 0.6
             );
-            await Put(keys[1], globalMap);
+            await store.ReplaceGlobalShows(PublicMetrics(globalMap), DateTime.UtcNow);
             using var globalChanged = await Conditional(
                 "/api/v4/popular/shows",
                 ranked.Headers.ETag!.ToString()
             );
             globalChanged.StatusCode.Should().Be(HttpStatusCode.OK);
-            await Put(keys[3], showMap, stale: true);
-            using var unavailable = await Conditional(BrowseArtistPath + "/shows", "*");
-            unavailable.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
-            unavailable.Headers.CacheControl!.NoStore.Should().BeTrue();
-            unavailable.Headers.ETag.Should().BeNull();
-            // Global rankings need only their global map, even when artist refresh fails.
+            // Catalog reads remain available without a Redis connection or refresh services.
             (await GetJson("/api/v4/popular/shows"))[0]!["popularity"]!["momentum_score"]!
                 .GetValue<double>()
                 .Should()
                 .Be(0.6);
-            await Put(keys[3], showMap);
+            await store.ReplaceArtistShows(owner, showMap, DateTime.UtcNow);
             (await GetJson(ShowPath(4)))["popularity"]!["momentum_score"]!
                 .GetValue<double>()
                 .Should()
                 .Be(0.7);
+
+            // Warm Redis maps round ratios before selection. Equal published ratios
+            // must use hot-score ordering, rather than hidden extra precision.
+            var hotter = Metrics(3000, 100, 200);
+            hotter.trend_ratio = 1.234441;
+            var cooler = Metrics(2000, 100, 200);
+            cooler.trend_ratio = 1.234449;
+            await store.ReplaceArtists(
+                PublicMetrics(new() { [owner] = hotter, [rawOwner] = cooler }),
+                DateTime.UtcNow
+            );
+            (await Ids("/api/v4/trending/artists"))
+                .Should()
+                .Equal(CatalogId("artist", 14), CatalogId("artist", 11));
         }
         finally
         {
-            foreach (var (key, value) in previous)
-            {
-                if (value.IsNull)
-                {
-                    await rankingRedis.db.KeyDeleteAsync(key);
-                }
-                else
-                {
-                    await rankingRedis.db.StringSetAsync(key, value);
-                }
-            }
+            await using var connection = await MigratedTestDatabase.OpenAsync();
+            await connection.ExecuteAsync(
+                """
+                DELETE FROM show_popularity WHERE artist_uuid=ANY(@owners);
+                DELETE FROM year_popularity WHERE artist_uuid=ANY(@owners);
+                DELETE FROM artist_popularity WHERE uuid=ANY(@owners);
+                """,
+                new { owners = new[] { owner, rawOwner } }
+            );
         }
     }
 
@@ -360,14 +358,5 @@ public sealed partial class TestV4CatalogHttp
         invalid.Headers.CacheControl!.NoStore.Should().BeTrue();
         using var invalidId = await http.GetAsync("/api/v4/search?q=Scarlet&artist_id=wrong");
         invalidId.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
-    }
-
-    public class UnexpectedRankingRefresh : DispatchProxy
-    {
-        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) =>
-            throw new BackgroundJobClientException(
-                "Ranking refresh job storage is unavailable in this fixture",
-                new InvalidOperationException("Fixture job storage failure")
-            );
     }
 }
