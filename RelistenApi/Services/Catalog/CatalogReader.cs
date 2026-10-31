@@ -78,14 +78,7 @@ public sealed class CatalogReader(
             return null;
         }
 
-        show.Sources = (
-            await recordings.ReadForShow(
-                session.Connection,
-                show.id,
-                transaction: session.Transaction,
-                cancellationToken: cancellationToken
-            )
-        ).ToList();
+        show.Sources = (await recordings.ReadForShow(session, show.id, cancellationToken)).ToList();
         await metadata.Apply(session, [show], cancellationToken);
         await trackNormalization.Apply(
             session,
@@ -103,12 +96,7 @@ public sealed class CatalogReader(
     )
     {
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
-        var source = await recordings.ReadSource(
-            session.Connection,
-            uuid,
-            session.Transaction,
-            cancellationToken
-        );
+        var source = await recordings.ReadSource(session, uuid, cancellationToken);
         if (source is null)
         {
             return null;

@@ -98,14 +98,10 @@ public sealed class PopularityStore(DbService db)
 
     internal async Task<PopularityPopulation[]> ReadStale(
         IReadOnlyList<PopularityPopulation> populations,
-        CancellationToken cancellationToken,
-        bool preferReplica = false
+        CancellationToken cancellationToken
     )
     {
-        await using var connection = db.CreateConnection(
-            longTimeout: false,
-            readOnly: preferReplica
-        );
+        await using var connection = db.CreateConnection(longTimeout: false, readOnly: false);
         await connection.OpenAsync(cancellationToken);
         // A publication stamps every current target in its population atomically,
         // including inactive rows. One representative row therefore supplies age.

@@ -18,18 +18,14 @@ public sealed class PopularityRefreshRequest(DbService db, IBackgroundJobClient 
     public void Require(PopularityPopulationKind kind, System.Guid? artist = null) =>
         required.Add(new(kind, artist));
 
-    public async Task EnqueueStale(CancellationToken cancellationToken, bool preferReplica = false)
+    public async Task EnqueueStale(CancellationToken cancellationToken)
     {
         if (required.Count == 0)
         {
             return;
         }
 
-        var stale = await new PopularityStore(db).ReadStale(
-            required.ToArray(),
-            cancellationToken,
-            preferReplica
-        );
+        var stale = await new PopularityStore(db).ReadStale(required.ToArray(), cancellationToken);
         if (stale.Length > 0)
         {
             jobs.Enqueue<PopularityJobs>(job =>

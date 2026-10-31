@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace Relisten.Catalog;
 
-// Materialized catalog facts retain numeric keys for joins and future legacy projections.
+// Materialized catalog facts retain numeric keys for database joins.
 // These types have no serializer or API-version behavior. Public projections select fields explicitly.
 public abstract class CatalogTimestamps
 {
@@ -39,9 +39,6 @@ public sealed class CatalogShow : CatalogTimestamps
 
 public sealed class CatalogSource : CatalogTimestamps
 {
-    public long artist_id { get; set; }
-    public long? show_id { get; set; }
-    public Guid? venue_uuid { get; set; }
     public long id { get; set; }
     public Guid uuid { get; set; }
     public Guid artist_uuid { get; set; }
@@ -72,7 +69,6 @@ public sealed class CatalogSource : CatalogTimestamps
 
 public sealed class CatalogSet : CatalogTimestamps
 {
-    public long artist_id { get; set; }
     public long id { get; set; }
     public Guid uuid { get; set; }
     public long source_id { get; set; }
@@ -86,8 +82,6 @@ public sealed class CatalogSet : CatalogTimestamps
 
 public sealed class CatalogTrack : CatalogTimestamps
 {
-    public long source_id { get; set; }
-    public long artist_id { get; set; }
     public long id { get; set; }
     public Guid uuid { get; set; }
     public long source_set_id { get; set; }
@@ -124,8 +118,6 @@ public sealed class CatalogImportedVenue : CatalogTimestamps
 
 public sealed class CatalogLink : CatalogTimestamps
 {
-    public long id { get; set; }
-    public long upstream_source_id { get; set; }
     public long source_id { get; set; }
     public Guid source_uuid { get; set; }
     public string provider { get; set; } = null!;

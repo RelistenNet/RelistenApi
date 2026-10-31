@@ -3,9 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Dapper;
-using Microsoft.Extensions.Options;
 using Relisten.Api.Models;
-using Relisten.Catalog.Compatibility;
 using Relisten.Services.Popularity;
 
 namespace Relisten.Data
@@ -15,24 +13,18 @@ namespace Relisten.Data
         public ShowService(
             DbService db,
             SourceService sourceService,
-            Lazy<PopularityService> popularityService,
-            IOptions<LegacyCatalogOptions> compatibility,
-            Lazy<PopularityRefreshRequest> popularityRefresh
+            Lazy<PopularityService> popularityService
         )
             : base(db)
         {
             _sourceService = sourceService;
             this.popularityService = popularityService;
-            this.compatibility = compatibility;
-            this.popularityRefresh = popularityRefresh;
         }
 
         private SourceService _sourceService { get; }
 
         // Ingestion uses catalog writes without constructing API-only background job dependencies.
         private readonly Lazy<PopularityService> popularityService;
-        private readonly IOptions<LegacyCatalogOptions> compatibility;
-        private readonly Lazy<PopularityRefreshRequest> popularityRefresh;
 
         public async Task<IEnumerable<T>> ShowsForCriteriaGeneric<T>(
             Artist? artist,
@@ -40,8 +32,7 @@ namespace Relisten.Data
             object? parms,
             int? limit = null,
             string? orderBy = null,
-            bool includeNestedObject = true,
-            bool includePopularity = true
+            bool includeNestedObject = true
         )
             where T : Show
         {
@@ -125,10 +116,7 @@ namespace Relisten.Data
                 )
             ).ToList();
 
-            if (includePopularity)
-            {
-                await ApplyShowPopularity(shows, artist);
-            }
+            await ApplyShowPopularity(shows, artist);
             return shows;
         }
 
@@ -411,13 +399,7 @@ namespace Relisten.Data
             object param
         )
         {
-            var useAdapter = compatibility.Value.LegacyRecordingAdaptersEnabled;
-            var shows = await ShowsForCriteriaGeneric<ShowWithSources>(
-                artist,
-                where,
-                param,
-                includePopularity: !useAdapter
-            );
+            var shows = await ShowsForCriteriaGeneric<ShowWithSources>(artist, where, param);
             var show = shows.FirstOrDefault();
 
             if (show == null)
@@ -426,16 +408,6 @@ namespace Relisten.Data
             }
 
             show.sources = await _sourceService.FullSourcesForShow(artist, show);
-
-            if (useAdapter)
-            {
-                var scores = await db.WithConnection(connection =>
-                    PopularityStore.ReadArtistLocalShowMetrics(connection, [show.uuid])
-                );
-                show.popularity = scores.GetValueOrDefault(show.uuid);
-                popularityRefresh.Value.Require(PopularityPopulationKind.Show, artist.uuid);
-                await popularityRefresh.Value.EnqueueStale(default, preferReplica: true);
-            }
 
             return show;
         }

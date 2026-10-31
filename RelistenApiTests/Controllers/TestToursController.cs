@@ -87,18 +87,7 @@ public class TestToursController
             INSERT INTO features VALUES (1, 1, true), (2, 2, true);
             """
         );
-        var tours = new TourService(
-            db,
-            new ShowService(
-                db,
-                null!,
-                null!,
-                Microsoft.Extensions.Options.Options.Create(
-                    new Relisten.Catalog.Compatibility.LegacyCatalogOptions()
-                ),
-                null!
-            )
-        );
+        var tours = new TourService(db, new ShowService(db, null!, null!));
         controller = new ToursController(null!, db, new ArtistService(db, null!), tours)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },

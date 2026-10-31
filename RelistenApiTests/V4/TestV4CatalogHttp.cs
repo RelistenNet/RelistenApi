@@ -16,11 +16,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi;
 using Relisten;
-using Relisten.Catalog.Compatibility;
 using Relisten.Controllers.V4;
-using Relisten.Data;
 using Relisten.Identifiers;
-using Relisten.Services.Popularity;
 using RelistenApiTests.Popularity;
 
 namespace RelistenApiTests.V4;
@@ -37,8 +34,6 @@ public sealed partial class TestV4CatalogHttp
     private HttpClient http = null!;
     private string previousPrimary = null!;
     private string previousReplica = null!;
-    private RedisService legacyRedis = null!;
-    private readonly LegacyCatalogOptions legacyOptions = new();
 
     [OneTimeSetUp]
     public async Task Start()
@@ -58,28 +53,6 @@ public sealed partial class TestV4CatalogHttp
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.ConfigureKestrel(server => server.Listen(IPAddress.Loopback, 0));
         builder.Services.AddSingleton(db);
-        SqlMapper.AddTypeHandler(new Relisten.Api.Models.DateTimeHandler());
-        var redisOptions = RedisService.BuildConfiguration("redis://127.0.0.1:16379");
-        redisOptions.DefaultDatabase = 14;
-        legacyRedis = new RedisService(redisOptions);
-        builder.Services.AddSingleton(legacyRedis);
-        builder.Services.AddSingleton<IOptions<LegacyCatalogOptions>>(
-            Options.Create(legacyOptions)
-        );
-        // Legacy parity cases use fixture artists without provider assignments.
-        builder.Services.AddSingleton(new ArtistService(db, null!));
-        builder.Services.AddScoped<SourceSetService>();
-        builder.Services.AddScoped<SourceService>();
-        builder.Services.AddScoped<ShowService>();
-        builder.Services.AddScoped<YearService>();
-        builder.Services.AddScoped<PopularityCacheService>();
-        builder.Services.AddScoped<PopularityService>();
-        builder.Services.AddScoped(sp => new Lazy<PopularityService>(
-            sp.GetRequiredService<PopularityService>
-        ));
-        builder.Services.AddScoped(sp => new Lazy<PopularityRefreshRequest>(
-            sp.GetRequiredService<PopularityRefreshRequest>
-        ));
         builder.Services.AddTransient<
             IConfigureOptions<MvcNewtonsoftJsonOptions>,
             RelistenApiJsonOptionsWrapper
@@ -125,7 +98,6 @@ public sealed partial class TestV4CatalogHttp
         }
         DbService.ConnStr = previousPrimary;
         DbService.ReadOnlyConnStr = previousReplica;
-        legacyRedis?.connection.Dispose();
     }
 
     [TestCase(1, "unavailable", "disabled")]

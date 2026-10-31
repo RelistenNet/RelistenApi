@@ -3,10 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Dapper;
-using Microsoft.Extensions.Options;
 using Relisten.Api.Models;
-using Relisten.Catalog;
-using Relisten.Catalog.Compatibility;
 
 namespace Relisten.Data
 {
@@ -39,22 +36,13 @@ namespace Relisten.Data
 
     public class SourceService : RelistenDataServiceBase
     {
-        public SourceService(
-            DbService db,
-            SourceSetService sourceSetService,
-            CatalogRecordingReader recordings,
-            IOptions<LegacyCatalogOptions> compatibility
-        )
+        public SourceService(DbService db, SourceSetService sourceSetService)
             : base(db)
         {
             _sourceSetService = sourceSetService;
-            this.recordings = recordings;
-            this.compatibility = compatibility;
         }
 
         private SourceSetService _sourceSetService { get; }
-        private readonly CatalogRecordingReader recordings;
-        private readonly IOptions<LegacyCatalogOptions> compatibility;
 
         /// <summary>Reads the current recording inside an import transaction, avoiding replica lag.</summary>
         public Task<Source?> ForUpstreamIdentifierFromPrimary(Artist artist, string identifier) =>
@@ -106,22 +94,6 @@ namespace Relisten.Data
 
         public Task<IEnumerable<SourceFull>> FullSourcesForShow(Artist artist, Show show)
         {
-            if (compatibility.Value.LegacyRecordingAdaptersEnabled)
-            {
-                return db.WithConnection<IEnumerable<SourceFull>>(async connection =>
-                    (
-                        await recordings.ReadForShow(
-                            connection,
-                            show.id,
-                            artist.id,
-                            stableOrder: false
-                        )
-                    )
-                        .Select(LegacyRecordingProjection.Source)
-                        .ToArray()
-                );
-            }
-
             return FullSourcesGeneric(
                 "s.artist_id = @artistId AND s.show_id = @showId",
                 new { showId = show.id, artistId = artist.id }
