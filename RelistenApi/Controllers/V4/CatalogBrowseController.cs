@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Relisten.Api.Models.Api.V4;
 using Relisten.Catalog;
 using Relisten.Identifiers;
+using Relisten.Services.Popularity;
 
 namespace Relisten.Controllers.V4;
 
@@ -20,8 +21,9 @@ namespace Relisten.Controllers.V4;
 public sealed class CatalogBrowseController(
     CatalogBrowseReader reader,
     CatalogArtistSnapshotReader snapshots,
+    PopularityRefreshRequest refresh,
     ILogger<CatalogBrowseController> logger
-) : CatalogControllerBase(logger)
+) : CatalogControllerBase(logger, refresh)
 {
     [HttpGet]
     [ProducesResponseType(typeof(ArtistResource[]), 200)]

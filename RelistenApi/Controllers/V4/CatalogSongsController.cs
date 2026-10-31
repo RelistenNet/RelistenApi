@@ -8,6 +8,7 @@ using Relisten.Api.Models.Api.V4;
 using Relisten.Catalog;
 using Relisten.Identifiers;
 using Relisten.Normalization;
+using Relisten.Services.Popularity;
 
 namespace Relisten.Controllers.V4;
 
@@ -21,8 +22,9 @@ namespace Relisten.Controllers.V4;
 [ProducesResponseType(typeof(ProblemDetails), 503)]
 public sealed class CatalogSongsController(
     CatalogSongReader reader,
+    PopularityRefreshRequest refresh,
     ILogger<CatalogSongsController> logger
-) : CatalogControllerBase(logger)
+) : CatalogControllerBase(logger, refresh)
 {
     [HttpGet("artists/{artistId}/songs")]
     [ProducesResponseType(typeof(ArtistSongEntryResource[]), 200)]

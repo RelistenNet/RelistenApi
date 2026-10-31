@@ -1,15 +1,18 @@
 using System;
 using System.Threading.Tasks;
+using Hangfire;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using Relisten.Catalog;
 using Relisten.Identifiers;
+using Relisten.Services.Popularity;
 
 namespace Relisten.Controllers.V4;
 
 /// <summary>Owns v4 read validation, dependency failures and response publication.</summary>
-public abstract class CatalogControllerBase(ILogger logger) : ControllerBase
+public abstract class CatalogControllerBase(ILogger logger, PopularityRefreshRequest refresh)
+    : ControllerBase
 {
     protected Task<IActionResult> Read<T>(
         string id,
@@ -33,9 +36,14 @@ public abstract class CatalogControllerBase(ILogger logger) : ControllerBase
         try
         {
             var resource = await read();
-            return resource is null
-                ? Failure(404, "not_found", "The requested resource does not exist.")
-                : new CatalogJsonResult(resource, cacheable);
+            if (resource is null)
+            {
+                return Failure(404, "not_found", "The requested resource does not exist.");
+            }
+            // Readers have disposed their snapshots. Freshness never changes the
+            // represented data; queue one batch before publishing its validator.
+            await refresh.EnqueueStale(HttpContext.RequestAborted);
+            return new CatalogJsonResult(resource, cacheable);
         }
         catch (CatalogRetiredResourceException)
         {
@@ -54,7 +62,8 @@ public abstract class CatalogControllerBase(ILogger logger) : ControllerBase
                 "The normalized catalog is temporarily unavailable."
             );
         }
-        catch (Exception exception) when (exception is NpgsqlException or TimeoutException)
+        catch (Exception exception)
+            when (exception is NpgsqlException or TimeoutException or BackgroundJobClientException)
         {
             logger.LogError(exception, "Catalog read failed for {RequestPath}", Request.Path);
             return Failure(503, "catalog_unavailable", "The catalog is temporarily unavailable.");

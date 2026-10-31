@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.OpenApi;
 using Relisten.Catalog;
 using Relisten.Identifiers;
+using Relisten.Services.Popularity;
 using Swashbuckle.AspNetCore.SwaggerGen;
 
 namespace Relisten.Controllers.V4;
@@ -22,6 +23,7 @@ public static class V4CatalogRegistration
 
     public static IServiceCollection AddV4Catalog(this IServiceCollection services)
     {
+        services.AddScoped<PopularityRefreshRequest>();
         services.AddTransient<CatalogReader>();
         services.AddTransient<CatalogSourceReviewReader>();
         services.AddTransient<CatalogReferenceLookup>();

@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Text.Json.Nodes;
 using Dapper;
 using FluentAssertions;
+using Hangfire;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
@@ -17,6 +18,7 @@ using Microsoft.OpenApi;
 using Relisten;
 using Relisten.Controllers.V4;
 using Relisten.Identifiers;
+using RelistenApiTests.Popularity;
 
 namespace RelistenApiTests.V4;
 
@@ -28,6 +30,7 @@ namespace RelistenApiTests.V4;
 public sealed partial class TestV4CatalogHttp
 {
     private WebApplication app = null!;
+    private readonly RecordingPopularityJobs refreshJobs = new();
     private HttpClient http = null!;
     private string previousPrimary = null!;
     private string previousReplica = null!;
@@ -58,7 +61,8 @@ public sealed partial class TestV4CatalogHttp
             .Services.AddControllers(options => options.EnableEndpointRouting = false)
             .AddApplicationPart(typeof(CatalogReadController).Assembly)
             .AddNewtonsoftJson();
-        // No Redis or calculation services: catalog HTTP reads must use stored scores.
+        // Reads use stored scores; only queue submission is replaced in this host.
+        builder.Services.AddSingleton<IBackgroundJobClient>(refreshJobs);
         builder.Services.AddV4Catalog();
         builder.Services.AddResponseCompression(options => options.EnableForHttps = true);
         builder.Services.AddSwaggerGen(options =>

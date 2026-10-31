@@ -22,7 +22,11 @@ public sealed record CatalogArtistRankings(
 /// and metadata share the read snapshot; GETs never calculate or refresh scores.
 /// Rankings remain transient online results for mobile.
 /// </summary>
-public sealed class CatalogRankingReader(DbService db, CatalogShowMetadataReader metadata)
+public sealed class CatalogRankingReader(
+    DbService db,
+    CatalogShowMetadataReader metadata,
+    PopularityRefreshRequest refresh
+)
 {
     public async Task<IReadOnlyList<CatalogRanked<CatalogArtist>>> ReadArtists(
         bool trending,
@@ -48,7 +52,7 @@ public sealed class CatalogRankingReader(DbService db, CatalogShowMetadataReader
         ).ToDictionary(artist => artist.uuid);
         return scores
             .Where(row => artists.ContainsKey(row.uuid))
-            .Select(row => new CatalogRanked<CatalogArtist>(artists[row.uuid], row.ToMetrics()))
+            .Select(row => new CatalogRanked<CatalogArtist>(artists[row.uuid], row.ToMetrics()!))
             .ToArray();
     }
 
@@ -78,7 +82,7 @@ public sealed class CatalogRankingReader(DbService db, CatalogShowMetadataReader
         ).ToDictionary(year => year.uuid);
         return scores
             .Where(row => years.ContainsKey(row.uuid))
-            .Select(row => new CatalogRanked<CatalogYear>(years[row.uuid], row.ToMetrics()))
+            .Select(row => new CatalogRanked<CatalogYear>(years[row.uuid], row.ToMetrics()!))
             .ToArray();
     }
 
@@ -103,7 +107,7 @@ public sealed class CatalogRankingReader(DbService db, CatalogShowMetadataReader
             scores.Select(row => row.uuid).ToArray(),
             cancellationToken
         );
-        var map = scores.ToDictionary(row => row.uuid, row => row.ToMetrics());
+        var map = scores.ToDictionary(row => row.uuid, row => row.ToMetrics()!);
         await metadata.Apply(session, shows, cancellationToken, map);
         var byId = shows.ToDictionary(show => show.uuid);
         return scores
@@ -134,6 +138,10 @@ public sealed class CatalogRankingReader(DbService db, CatalogShowMetadataReader
                 )
             )
         ).ToArray();
+        foreach (var artist in owners)
+        {
+            refresh.Require(PopularityPopulationKind.Show, artist);
+        }
         var popularOrder = ShowOrder(false, window);
         var trendingOrder = ShowOrder(true, window);
         // Apply each artist's limit before loading show metadata. The ordinal
@@ -145,11 +153,11 @@ public sealed class CatalogRankingReader(DbService db, CatalogShowMetadataReader
                     SELECT ranked.* FROM unnest(@artists::uuid[]) owner(uuid)
                     CROSS JOIN LATERAL (
                         (SELECT uuid,artist_uuid,false trending,row_number() OVER (ORDER BY {popularOrder}) ordinal
-                         FROM show_popularity WHERE NOT is_global AND artist_uuid=owner.uuid
+                         FROM show_popularity WHERE NOT is_global AND artist_uuid=owner.uuid AND momentum_score IS NOT NULL
                          ORDER BY {popularOrder} LIMIT @limit)
                         UNION ALL
                         (SELECT uuid,artist_uuid,true trending,row_number() OVER (ORDER BY {trendingOrder}) ordinal
-                         FROM show_popularity WHERE NOT is_global AND artist_uuid=owner.uuid
+                         FROM show_popularity WHERE NOT is_global AND artist_uuid=owner.uuid AND momentum_score IS NOT NULL
                            AND plays_48h>=@recentFloor AND plays_30d>=@monthlyFloor
                          ORDER BY {trendingOrder} LIMIT @limit)
                     ) ranked ORDER BY artist_uuid,trending,ordinal
@@ -202,11 +210,15 @@ public sealed class CatalogRankingReader(DbService db, CatalogShowMetadataReader
             return [];
         }
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
+        foreach (var artist in artists.Distinct())
+        {
+            refresh.Require(PopularityPopulationKind.Show, artist);
+        }
         var selected = (
             await session.Connection.QueryAsync<StoredPopularity>(
                 session.Command(
                     """
-                    SELECT * FROM show_popularity WHERE NOT is_global AND artist_uuid=ANY(@artists)
+                    SELECT * FROM show_popularity WHERE NOT is_global AND artist_uuid=ANY(@artists) AND momentum_score IS NOT NULL
                     ORDER BY COALESCE(organic_momentum_score,momentum_score) DESC,momentum_score DESC,
                              hot_score_30d DESC,plays_30d DESC,uuid
                     LIMIT @limit
@@ -229,12 +241,12 @@ public sealed class CatalogRankingReader(DbService db, CatalogShowMetadataReader
             session,
             ordered,
             cancellationToken,
-            owned.ToDictionary(row => row.uuid, row => row.ToMetrics(organic: true))
+            owned.ToDictionary(row => row.uuid, row => row.ToMetrics(organic: true)!)
         );
         return ordered;
     }
 
-    private static async Task<StoredPopularity[]> ReadGlobalScores(
+    private async Task<StoredPopularity[]> ReadGlobalScores(
         CatalogReadSession session,
         string kind,
         bool trending,
@@ -243,22 +255,26 @@ public sealed class CatalogRankingReader(DbService db, CatalogShowMetadataReader
         CancellationToken cancellationToken
     )
     {
-        var (recentFloor, monthlyFloor) = kind switch
+        var (recentFloor, monthlyFloor, populationKind) = kind switch
         {
             "artist" => (
                 PopularityService.ArtistTrendingPlays48hFloor,
-                PopularityService.ArtistTrendingPlays30dFloor
+                PopularityService.ArtistTrendingPlays30dFloor,
+                PopularityPopulationKind.Artist
             ),
             "year" => (
                 PopularityService.YearTrendingPlays48hFloor,
-                PopularityService.YearTrendingPlays30dFloor
+                PopularityService.YearTrendingPlays30dFloor,
+                PopularityPopulationKind.Year
             ),
             "show" => (
                 PopularityService.ShowTrendingPlays48hFloor,
-                PopularityService.ShowTrendingPlays30dFloor
+                PopularityService.ShowTrendingPlays30dFloor,
+                PopularityPopulationKind.Show
             ),
             _ => throw new ArgumentOutOfRangeException(nameof(kind)),
         };
+        refresh.Require(populationKind);
         var population = kind == "artist" ? "plays_30d>0" : "is_global";
         var threshold = trending ? " AND plays_48h>=@recentFloor AND plays_30d>=@monthlyFloor" : "";
         var order =
@@ -268,7 +284,7 @@ public sealed class CatalogRankingReader(DbService db, CatalogShowMetadataReader
         return (
             await session.Connection.QueryAsync<StoredPopularity>(
                 session.Command(
-                    $"SELECT * FROM {kind}_popularity WHERE {population}{threshold} ORDER BY {order} LIMIT @limit",
+                    $"SELECT * FROM {kind}_popularity WHERE {population} AND momentum_score IS NOT NULL{threshold} ORDER BY {order} LIMIT @limit",
                     new
                     {
                         recentFloor,
