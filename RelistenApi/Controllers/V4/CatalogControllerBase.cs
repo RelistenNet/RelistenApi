@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using Hangfire;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Npgsql;
@@ -56,7 +57,12 @@ public abstract class CatalogControllerBase(ILogger logger) : ControllerBase
             );
         }
         catch (Exception exception)
-            when (exception is NpgsqlException or TimeoutException or RedisException)
+            when (exception
+                    is NpgsqlException
+                        or TimeoutException
+                        or RedisException
+                        or BackgroundJobClientException
+            )
         {
             logger.LogError(exception, "Catalog read failed for {RequestPath}", Request.Path);
             return Failure(503, "catalog_unavailable", "The catalog is temporarily unavailable.");

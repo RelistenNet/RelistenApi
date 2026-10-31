@@ -23,6 +23,9 @@ public record ShowSummaryResource
     public bool HasSoundboardSource { get; init; }
     public bool HasStreamableFlacSource { get; init; }
     public int SourceCount { get; init; }
+
+    /// <summary>Artist-local listening metrics; null when the score map has no entry.</summary>
+    public PopularityResource? Popularity { get; init; }
     public DateTime CreatedAt { get; init; }
     public DateTime UpdatedAt { get; init; }
     public ImportedVenueResource? ImportedVenue { get; init; }

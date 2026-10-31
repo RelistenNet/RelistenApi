@@ -34,6 +34,7 @@ public static partial class V4CatalogProjection
             HasSoundboardSource = value.has_soundboard_source,
             HasStreamableFlacSource = value.has_streamable_flac_source,
             SourceCount = value.source_count,
+            Popularity = value.Popularity is { } popularity ? ProjectPopularity(popularity) : null,
             CreatedAt = value.created_at,
             UpdatedAt = value.updated_at,
             ImportedVenue = value.ImportedVenue is { } imported ? ImportedVenue(imported) : null,
