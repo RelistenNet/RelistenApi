@@ -52,7 +52,7 @@ public sealed class CatalogBrowseReader(DbService db, CatalogShowMetadataReader 
     {
         var artist = await session.Connection.QuerySingleOrDefaultAsync<CatalogArtist>(
             session.Command(
-                ArtistSelect + " WHERE a.uuid=@artistUuid",
+                SelectedArtistSelect + " WHERE a.uuid=@artistUuid",
                 new { artistUuid },
                 cancellationToken
             )
@@ -74,12 +74,7 @@ public sealed class CatalogBrowseReader(DbService db, CatalogShowMetadataReader 
         var artists = (
             await session.Connection.QueryAsync<CatalogArtist>(
                 session.Command(
-                    """
-                    SELECT a.*,
-                           (SELECT count(*)::int FROM shows s WHERE s.artist_id=a.id) show_count,
-                           (SELECT count(*)::int FROM sources src WHERE src.artist_id=a.id) source_count
-                    FROM artists a WHERE a.uuid=ANY(@artistUuids) ORDER BY a.uuid
-                    """,
+                    SelectedArtistSelect + " WHERE a.uuid=ANY(@artistUuids) ORDER BY a.uuid",
                     new { artistUuids = artistUuids.ToArray() },
                     cancellationToken
                 )
@@ -296,6 +291,15 @@ public sealed class CatalogBrowseReader(DbService db, CatalogShowMetadataReader 
             artist.UpstreamSources = providers[artist.id].ToList();
         }
     }
+
+    // Selected artists use bounded index counts; the all-artist list aggregates
+    // once across the catalog instead of repeating those scans for every artist.
+    private const string SelectedArtistSelect = """
+        SELECT a.*,
+               (SELECT count(*)::int FROM shows s WHERE s.artist_id=a.id) show_count,
+               (SELECT count(*)::int FROM sources src WHERE src.artist_id=a.id) source_count
+        FROM artists a
+        """;
 
     private const string ArtistSelect = """
         SELECT a.*,COALESCE(sh.show_count,0)::int show_count,COALESCE(src.source_count,0)::int source_count

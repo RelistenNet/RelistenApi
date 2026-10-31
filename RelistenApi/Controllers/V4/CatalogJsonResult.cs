@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
@@ -27,13 +28,21 @@ internal sealed class CatalogJsonResult(object resource, bool cacheable = true) 
 
     public async Task ExecuteResultAsync(ActionContext context)
     {
-        var bytes = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(resource, Settings));
+        // Buffer UTF-8 once: the validator and body must cover the same bytes.
+        // Avoid retaining a second, UTF-16 copy of large artist/track collections.
+        using var buffer = new MemoryStream();
+        using (var text = new StreamWriter(buffer, new UTF8Encoding(false), leaveOpen: true))
+        using (var json = new JsonTextWriter(text))
+        {
+            JsonSerializer.Create(Settings).Serialize(json, resource);
+        }
+        var bytes = buffer.GetBuffer().AsMemory(0, checked((int)buffer.Length));
         var response = context.HttpContext.Response;
         response.Headers.CacheControl = cacheable ? "public, no-cache" : "no-store";
         if (cacheable)
         {
             var etag = new EntityTagHeaderValue(
-                "\"" + Convert.ToHexStringLower(SHA256.HashData(bytes)) + "\"",
+                "\"" + Convert.ToHexStringLower(SHA256.HashData(bytes.Span)) + "\"",
                 isWeak: true
             );
             response.Headers.ETag = etag.ToString();

@@ -161,7 +161,7 @@ public sealed partial class TestV4CatalogHttp
         {
             await ChangeNormalization(
                 connection,
-                "UPDATE norm.track_songs SET notes=ARRAY['Reviewed normalization correction'] WHERE track_uuid='00000000-0000-0000-0000-000000000044' AND part=1"
+                "UPDATE norm.track_songs SET notes=ARRAY['Reviewed correction: café 🎵'] WHERE track_uuid='00000000-0000-0000-0000-000000000044' AND part=1"
             );
             using var changed = await Conditional(ShowPath(4), etag.ToString());
             changed.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -173,7 +173,7 @@ public sealed partial class TestV4CatalogHttp
             ]![0]!
                 .GetValue<string>()
                 .Should()
-                .Be("Reviewed normalization correction");
+                .Be("Reviewed correction: café 🎵");
             using var compressed = new HttpRequestMessage(HttpMethod.Get, ShowPath(4));
             compressed.Headers.AcceptEncoding.Add(new StringWithQualityHeaderValue("gzip"));
             compressed.Headers.Add("Origin", "https://review.example");
