@@ -1,6 +1,7 @@
 using System;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.OpenApi;
 using Relisten.Catalog;
 using Relisten.Identifiers;
@@ -25,6 +26,8 @@ public static class V4CatalogRegistration
     {
         services.AddScoped<PopularityRefreshRequest>();
         services.AddTransient<CatalogReader>();
+        services.AddTransient<CatalogLiveReader>();
+        services.TryAddScoped<Relisten.Data.SourceTrackPlaysService>();
         services.AddTransient<CatalogSourceReviewReader>();
         services.AddTransient<CatalogReferenceLookup>();
         services.AddTransient<CatalogResolverHydrator>();

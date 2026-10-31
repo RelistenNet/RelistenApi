@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Reflection;
 using Microsoft.OpenApi;
@@ -27,12 +28,20 @@ internal sealed class NullableCatalogSchemaFilter : ISchemaFilter
         var nullability = new NullabilityInfoContext();
         foreach (var property in contract.Properties)
         {
+            var member = property.DeclaringType?.GetProperty(property.UnderlyingName!);
             if (Nullable.GetUnderlyingType(property.PropertyType!) is { IsEnum: true } enumType)
             {
                 var generated = context.SchemaGenerator.GenerateSchema(
                     enumType,
                     context.SchemaRepository
                 );
+                // Nullable request properties let MVC detect missing values, but
+                // Required rejects null at the HTTP boundary.
+                if (member?.IsDefined(typeof(RequiredAttribute)) == true)
+                {
+                    schema.Properties[property.PropertyName!] = generated;
+                    continue;
+                }
                 var values = generated is OpenApiSchemaReference enumReference
                     ? context.SchemaRepository.Schemas[enumReference.Reference.Id!].Enum
                     : generated.Enum;
@@ -45,7 +54,7 @@ internal sealed class NullableCatalogSchemaFilter : ISchemaFilter
             }
 
             if (
-                property.DeclaringType?.GetProperty(property.UnderlyingName!) is not { } member
+                member is null
                 || nullability.Create(member).ReadState != NullabilityState.Nullable
                 || schema.Properties[property.PropertyName!] is not OpenApiSchemaReference reference
             )

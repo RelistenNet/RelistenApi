@@ -1000,6 +1000,8 @@ public sealed partial class TestV4CatalogHttp
             .Should()
             .BeEquivalentTo(
                 "/api/v4/artists",
+                "/api/v4/live/play",
+                "/api/v4/live/history",
                 "/api/v4/search",
                 "/api/v4/popular/artists",
                 "/api/v4/popular/shows",
