@@ -109,9 +109,12 @@ from the endpoint and normalized filters. No returned scope identifier is needed
   for the fully returned owners. Keep entity records needed for offline playback,
   saved references and other query results. Missing shallow parent fields do not
   clear previously stored detail.
-- Search, popular/recent/top, anniversary and other filtered/limited endpoints
+- Search, recent/top, anniversary and other filtered/limited catalog endpoints
   replace only their exact cached query result. An absent result never implies
   that the resource is gone from another list or the catalog.
+- Popular/trending/momentum responses are transient online ranking views. Do not
+  apply their context-dependent scores or membership to the persisted catalog.
+  Open ordinary resource details when catalog apply is needed.
 - Ordinary singleton reads upsert the returned resource/fields. History applies
   its documented event-sequence window/append behavior. Commands change only what
   their explicit result says changed.
@@ -716,40 +719,43 @@ recording changes.
 ### Popularity on every show resource
 
 Every `ShowSummaryResource` and full `ShowResource` includes nullable `popularity`.
-This applies to artist/year lists, date/recent reads, song/venue/tour details,
-search results, full shows, artist snapshots, resolver parents, and rankings.
-The value has the same meaning everywhere: play windows, trend ratio, and raw
-momentum from that show's artist-local map. A missing entry is `null`, not an
-invented zero-valued score. Normalization approval does not control popularity.
+Ordinary artist/year, date/recent, song/venue/tour, search, full-show, snapshot and
+resolver reads use raw artist-local metrics. Artist-specific popular/trending
+groups also use artist-local metrics. Global popular/trending show lists use
+their global input map; momentum publishes its organic score, falling back to
+raw momentum for older inputs. These are the legacy scoring meanings.
 
-`CatalogShowMetadataReader` invokes one shared batched popularity reader. Its
-request-scoped artist maps are shared with ranking selection, so each artist's
-input is fetched once even if several reader phases need it. The base show
-projection owns the `popularity` field. Ranked shows inherit it and add `rank`;
-they do not redeclare or overwrite it. Scores are rounded through one projection.
+`CatalogShowMetadataReader` enriches shows in batches. A ranking supplies its
+already-loaded metric map; otherwise the reader fetches an artist map once per
+artist in the batch. An explicitly supplied empty map never triggers fallback
+reads. The base show projection publishes the field once, including on ranked
+shows. There is no request-scoped score cache or ranking-specific projection copy.
+A missing entry stays `null`, independently of normalization approval.
 
-Global ranking inputs and organic momentum may choose list order, but they never
-replace the returned show's artist-local metrics. Consequently, a global or
-momentum list can be ordered by a score different from its published raw local
-`momentum_score`. Mobile can upsert the same show from any route without changing
-what that property means. `rank` records order within a ranking response.
+Ranking results are transient online views on mobile. They do not update persisted
+show popularity or offline catalog membership. Opening a ranked result loads its
+ordinary detail route for catalog apply. The same show may therefore display a
+global, artist-local or organic momentum score in different views; the endpoint
+defines that context. All nine ranking operations use `transient_ranking` in
+[endpoints.json](endpoints.json). Search and other catalog query policies remain
+unchanged.
 
-Popularity is part of the represented JSON and therefore its ETag. Score-only
-refreshes can change show, list, detail and artist-snapshot validators even if
-imported `updated_at` and normalization are unchanged. Artist snapshots still
-replace complete artist-owned membership; popularity adds no new sync protocol.
+Popularity participates in the represented JSON and ETag. An artist-score refresh
+changes ordinary show/list/detail/snapshot validators without requiring imported
+`updated_at` changes. Global-ranking validators depend on their global scores,
+not unrelated artist-score refreshes. Both also include returned catalog metadata.
 
-Score maps retain their existing asynchronous cache/refresh ownership. They are
-separate inputs to the catalog transaction, not a second catalog snapshot. Valid
-empty maps yield `null` metrics. A failed score read or refresh enqueue returns
-503/no-store, with no partial body or ETag; retrying starts a new request scope.
-Cancellation stops waiting for inputs while the existing cache refresh may finish.
+Scores retain existing asynchronous cache/refresh ownership, separate from the
+catalog transaction. Failed score reads or refresh enqueues return 503/no-store
+with no partial body or ETag. A later request retries normally. Cancellation
+stops waiting while an already started input refresh may finish.
 
 ### Search and listening rankings
 
 These ten operations are implemented. Search keeps six named categories; rankings
 return direct resource arrays or the documented artist groups. They have ETags
-and `public, no-cache`, with query-result replacement only.
+and `public, no-cache`. Search uses query-result replacement; rankings are
+transient online views with no offline catalog apply.
 
 `GET /search` accepts `q`, optional typed `artist_id`, and boolean `artists`,
 `shows`, `songs`, `sources`, `tours`, `venues` (all default true). Trim `q`;
@@ -796,7 +802,7 @@ uses the existing 48-hour/30-day play floors and trend-ratio order; popular uses
 catalog; no separate embedded artist lookup arrays are returned.
 
 `GET /popular/shows` and `/trending/shows` return ordinary show summaries,
-including artist-local `popularity`, plus `rank`. They accept `limit=25` (nonpositive resets to 25; larger clamps to 25)
+with global `popularity` from their ranking map, plus `rank`. They accept `limit=25` (nonpositive resets to 25; larger clamps to 25)
 and `window=30d`, with exactly `48h`, `7d`, `30d` supported. Invalid windows return
 422 rather than silently changing the sort. Hot score and plays in the selected
 window determine order; trending also applies existing play floors and trend-ratio
@@ -813,16 +819,16 @@ are omitted. This array replaces the legacy outer `artists` wrapper.
 `GET /shows/momentum` accepts repeated `artist_ids` and the show limit/reset rules.
 Empty input stays empty. Order by organic momentum, raw momentum, 30-day hot
 score, 30-day plays, then show ID. Retain the existing raw-score fallback for
-selection from older maps. Returned `popularity.momentum_score` remains raw and
-artist-local, matching every other show route.
+selection from older maps. Publish that selected organic/fallback score as
+`popularity.momentum_score`, matching the momentum ordering semantics.
 
 `popularity` contains `momentum_score`, `trend_ratio`, and `windows`, whose keys
 are `48h`, `7d`, `30d`, each with `plays`, `hours`, `hot_score`. Scores retain
 four-decimal rounding. Do not duplicate window counts as top-level fields.
 `rank` is one-based result order. Cached inputs contain IDs and scores, never v4
 catalog bodies. Load each required map once, rank before hydration, then read only
-selected resources in one primary catalog snapshot. Reuse loaded artist inputs
-for shared enrichment. Removed or mismatched cached references are omitted, so a list can have fewer than its limit. SQL/Redis failure
+selected resources in one primary catalog snapshot. Pass the loaded ranking
+metrics to shared enrichment; do not load unused artist maps for global results. Removed or mismatched cached references are omitted, so a list can have fewer than its limit. SQL/Redis failure
 returns 503/no-store; it must not publish a successful empty result or validator.
 The asynchronous score inputs and catalog transaction are separate consistency
 boundaries. Normalization corrections can change the payload/ETag without a new

@@ -210,8 +210,9 @@ Implement mobile's actual queries, not a generic interpreter of all server route
   random show browsing with focused HTTP tests and real-data review links.
 - [x] Complete the ten search/popularity/trending/momentum reads and verify
   current metadata against real ranking aggregates from the read-only replica.
-- [x] Publish artist-local popularity through the shared show enrichment and
-  projection, preserving separate ranking selection and score-only ETags.
+- [x] Publish popularity through shared show enrichment and projection. Ordinary
+  catalog reads are artist-local; transient rankings retain global/organic scores
+  and reuse their loaded maps. Remove request-scoped consistency caching.
 - [ ] C2–C5 remain unstarted pending the C1 response review.
 
 ## Discoveries and changes from the exploration
@@ -449,9 +450,14 @@ by accepting this plan.
   Use a real aggregate snapshot for local review; update `AGENTS.md` when
   production access instructions do not match the available context.
 
-- 2026-10-30, Alec: every returned show includes artist-local popularity. Global
+- 2026-10-30, Alec (superseded below): every returned show includes artist-local popularity. Global
   and organic ranking inputs control order without overwriting shared metrics;
   enrich/project once across all route families.
+
+- 2026-10-30, Alec: mobile ranking responses are transient online views, so keep
+  legacy context-dependent scores: artist-local catalog/artist groups, global
+  popular/trending, organic momentum. Reuse loaded maps through shared enrichment
+  and remove the request-scoped score cache. This supersedes uniform score semantics.
 
 ## Outcomes and retrospective
 

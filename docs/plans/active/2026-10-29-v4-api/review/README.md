@@ -23,10 +23,11 @@ shared venue across approved-read artists. The old flat `show.venue` is removed.
 The same relationship metadata appears in show summaries, full shows, canonical
 artist-list children, and direct artist venue detail. Only detail adds complete `shows`.
 
-Every returned show now includes `popularity`, using the same raw artist-local
-metrics in browse, detail, snapshot, resolver and ranking responses. Ranked shows
-add only `rank`. Global and organic scores control order without replacing the
-shared show's metrics. Missing activity is `null`; score refreshes change ETags.
+Every returned show includes `popularity`. Ordinary catalog reads use artist-local
+scores; global rankings use global scores and momentum uses organic/fallback
+momentum. Ranking views stay transient on mobile and do not update the offline
+catalog. All paths share enrichment and projection, with supplied maps reused.
+Missing activity is `null`; score refreshes change the relevant ETags.
 
 The local host now serves 49 review routes (48 GETs and one POST). Venue and song detail destinations
 return metadata and complete `shows` together. Direct
