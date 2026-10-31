@@ -3,6 +3,21 @@
 ### OpenAPI
 GET {{base}}/api-docs/v4/swagger.json
 
+### Public activity (one-hour window, initially empty in the restored backup)
+GET {{base}}/api/v4/live/history?limit=20
+
+### Poll activity after the last returned event sequence
+GET {{base}}/api/v4/live/history?after_sequence=0&limit=20
+
+### Record a local play (writes telemetry; does not write account history)
+POST {{base}}/api/v4/live/play
+Content-Type: application/json
+
+{
+  "track_id": "track_7b6v6pgvzqfvhd0s7avr18bdw5",
+  "app_type": "web"
+}
+
 ### Browse: artists
 GET {{base}}/api/v4/artists
 

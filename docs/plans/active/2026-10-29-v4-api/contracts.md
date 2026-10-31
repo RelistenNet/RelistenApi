@@ -899,12 +899,54 @@ list never removes shows from the artist snapshot, detail memberships, or person
 library. Full exact-date and random responses apply the existing `full_show`
 replacement policy to the selected show; random carries no saved validator.
 
-`POST /api/v4/live/play` uses JSON `{ track_id, app_type, client_uuid? }`.
-`client_uuid` retains optional caller-supplied telemetry identity and is not
-authenticated account identity. History uses `after_sequence` and current limit
-bounds; event sequence is not a prefixed catalog ID. Ranking/recent bounds and
-supported sort/window choices are listed in the coverage tables; invalid enum
-values are 422 rather than silently selecting a different sort.
+### Anonymous play reporting and public activity
+
+`POST /api/v4/live/play` accepts JSON
+`{ "track_id": "track_…", "app_type": "ios" }` with an optional `client_uuid` UUID.
+`app_type` is the string enum `ios|web|sonos|android`; numeric enum values are
+rejected. Omit `client_uuid` when unavailable. It is a caller-supplied telemetry
+UUID, unrelated to authenticated `user_` identities. It remains in telemetry
+storage and is never returned by v4. No account login is required.
+
+A successful report returns 200 with
+`{ sequence, played_at, track_id, app_type }` after insertion into the existing
+`source_track_plays` table. The integer sequence and database timestamp identify
+the event; the sequence has no catalog prefix. Invalid JSON, missing/invalid
+fields, and wrong ID kinds return 422 ProblemDetails. Unknown, orphaned, or
+missing-parent tracks return 404 and write nothing. Database failures return
+503. Each accepted POST records a play: retry after a lost response can duplicate
+telemetry. There is no new idempotency store or account-history write. Popularity
+continues to refresh on ranking/catalog demand; reporting does not enqueue work.
+
+`GET /api/v4/live/history?after_sequence=123&limit=20` returns a direct array of
+`{ sequence, played_at, app_type, track, show }`. `track` is the ordinary v4
+`TrackResource`, including one `normalization` object. `show` is the ordinary
+`ShowSummaryResource`, including imported venue, artist–venue, and artist-local
+popularity. Track parent IDs provide exact source/set/show/artist references;
+artist metadata comes from the separately held artist catalog. No full source
+hierarchy or artist array is repeated. Missing/orphaned recordings and unsupported
+legacy app types are omitted.
+
+The window covers events created in the last hour. Without `after_sequence`, take
+the latest `limit` events; with it, take the next events whose sequence is greater
+than the cursor. Both return sequence ascending, independently of tied or
+non-monotonic event timestamps. Default limit is 20, positive limits cap at 2000,
+and `after_sequence` must be a nonnegative 32-bit integer. Invalid query values
+return 422. Empty results are `[]`. Both endpoints use `Cache-Control: no-store`
+and emit no ETag.
+
+This preserves best-effort public activity, not a durable change feed: replica
+delay, overlapping insert commits, the one-hour window, and removed recordings can
+cause omissions. Clients append/deduplicate by sequence when polling; periodically
+reload the recent window without a cursor. A full reload replaces only that
+window. It never deletes catalog records or personal listening history. Account
+history remains separate. V2 routes retain their request/response formats and
+share telemetry storage; their recent-event selection now also follows sequence
+order so cursor paging does not skip a lower sequence with a later timestamp.
+
+Ranking/recent bounds and supported sort/window choices are listed in the
+coverage tables; invalid enum values are 422 rather than silently selecting a
+different sort.
 
 Artist create/update accepts v4 artist fields, embedded features and provider-
 qualified upstream assignments. Numeric database IDs are not writable identities.

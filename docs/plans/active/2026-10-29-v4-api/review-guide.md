@@ -51,7 +51,8 @@ Implement packages 1 and 2 for artist/year/show-list navigation, show detail,
 direct source and track reads. Alec expanded C1 to review these with the venue
 family before auth: artist venue groups, canonical metadata and show collections,
 and imported venue fallback detail. Song discovery extends the review to a
-complete resource-with-shows journey. The current local contract has 49 routes (48 GETs and one POST).
+complete resource-with-shows journey. The current local contract has 51 operations
+(49 GETs and two POSTs), including anonymous play reporting and public activity.
 Cover raw, normalization-disabled, partial and fully interpreted
 fixtures. Alec reviews each family before its contract spreads to the next family
 or mobile work.

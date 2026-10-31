@@ -1,9 +1,9 @@
 # Deliver the complete v4 catalog and mobile adapter
 
 Status: C1 includes playback navigation, artist snapshots, and saved-reference
-resolution, date browsing, search, and listening rankings, 2026-10-30.
-C2 migration/API rehearsal is implemented for local review; mobile work waits for
-Alec’s account response review. The catalog API reads the restored production
+resolution, date browsing, search, listening rankings, and anonymous live activity,
+2026-10-31. C2 server and initial client upgrades have been reviewed locally;
+mobile catalog reads remain on v3. The catalog API reads the restored production
 catalog. Account migrations ran only on disposable local rehearsal databases; no
 production deployment or migration occurred. This is a living ExecPlan: update Progress,
 Discoveries, Decision Log, and Outcomes as work proceeds.
@@ -214,8 +214,13 @@ Implement mobile's actual queries, not a generic interpreter of all server route
   and reuse their loaded maps. Remove request-scoped consistency caching.
 - [x] Begin C2 migration/API work after Alec’s catalog response review.
 - [x] Implement and rehearse native stored account/auth IDs and in-place library APIs; verify real native/browser responses and old-credential retirement.
-- [ ] Alec reviews the [C2 account/library responses](review/accounts.md) before mobile work.
-- [ ] C2 mobile work and C3–C5 remain unstarted.
+- [x] Review the [C2 account/library responses](review/accounts.md) and the first
+  mobile/web account upgrade. The web populated-library smoke-test cleanup is
+  tracked separately; mobile catalog reads stay on v3.
+- [x] Implement anonymous v4 play reporting and public recent activity using
+  shared telemetry storage, batched catalog hydration, and sequence polling.
+- [ ] Alec reviews the [play/activity responses](review/live-activity.md).
+- [ ] C3–C5 catalog adoption, legacy adapters, and release qualification remain.
 
 ## Discoveries and changes from the exploration
 

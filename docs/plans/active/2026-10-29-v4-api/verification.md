@@ -1087,3 +1087,47 @@ flows, backup restore/remigration, and rejection of actual old-binary credential
 and cursors. The API is available against the separate local `relisten_c2_review`
 database; the catalog preview is unchanged. C2 mobile work waits for response
 review. No production migration, deployment or mobile change occurred.
+## 2026-10-31 — Anonymous play reporting and public activity
+
+Implemented `POST /api/v4/live/play` and `GET /api/v4/live/history`. The running
+local OpenAPI document has 51 operations: 49 GETs and two POSTs. Eight planned
+operator actions remain; this change adds no import or account behavior.
+
+The focused v4/popularity/reference suite passes **197 tests**, including 14 new
+HTTP cases in the existing disposable-database fixture. Coverage includes all
+four app types and their persisted enum values, typed track decoding, raw/partial/
+interpreted track responses, telemetry identity omission, missing/orphaned track
+rejection, malformed JSON/fields, sequence paging with backward timestamps, the
+one-hour window, and dependency 503/recovery. OpenAPI rejects null/numeric app
+values consistently with the HTTP boundary. No new test host or mocking layer
+was added.
+
+The independent two-pass review found one polling defect: eligibility filtering
+after LIMIT could block a valid event behind an orphaned event. The mixed
+orphan/null/unsupported-app → valid-event test failed before the fix and passed
+after filtering in SQL before LIMIT. The final review confirmed the correction.
+
+A real-data `EXPLAIN (ANALYZE, BUFFERS)` rejected an uncorrelated membership
+subquery that scanned 4.9 million tracks in 7.9 seconds. The final validation
+query puts the UUID predicate inside EXISTS and uses `source_tracks_uuid_key`:
+19 shared buffer hits and 0.64 ms execution in that local sample. Planning time
+was 16.8 ms. The code comment preserves the reason for that predicate placement.
+
+The production API composition was restarted against local `relisten_db` and
+tested through actual HTTP using real track
+`track_7b6v6pgvzqfvhd0s7avr18bdw5`. Reporting without `client_uuid` returned 200
+and sequence 255697580. Both initial and cursor history returned its imported
+title, partial normalization, and the matching 1970-05-15 show. Polling after the
+event returned `[]`. All responses used `no-store` without ETags. The exact local
+event was deleted afterward; no fixture events remain in the restored catalog.
+No worker ran or replaced the saved real popularity aggregate snapshot.
+
+Single-request local timings were 388 ms for the first POST, 321 ms for the first
+history read, 16.6 ms for the subsequent history poll with one event, and 2.7 ms
+for the empty poll. These are review samples, not production latency estimates.
+The request/response walkthrough is [live-activity.md](review/live-activity.md).
+
+No migration, scheduler, queue protocol, or lock was introduced. V2 request and
+response shapes remain; shared recent-event selection now follows its integer
+cursor order. Tests and the rehearsal wrote only to local databases. Production
+data and clients are unchanged.
