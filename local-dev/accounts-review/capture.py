@@ -90,7 +90,17 @@ added = request('/v1/library/favorite-mutations:batch', token=access, payload=ba
 assert request('/v1/library/favorite-mutations:batch', token=access, payload=batch) == added
 snapshot = request('/v1/library/snapshot', token=access, capture='snapshot')
 changes = request('/v1/library/changes?after='+before['next_cursor'], token=access, capture='changes')
+assert snapshot['library_revision'] == before['library_revision'] + len(batch['mutations'])
 assert changes['library_revision'] == snapshot['library_revision']
+assert [
+    (change['revision'], change['change_type'], change['favorite_id'], change['target'])
+    for change in changes['changes']
+] == [
+    (before['library_revision'] + index + 1, 'favorite_added',
+     result['canonical_favorite_id'], result['target'])
+    for index, result in enumerate(added['results'])
+]
+assert all(result['changed'] for result in added['results'])
 assert all(any(f['target'] == m['target'] for f in snapshot['favorites']) for m in batch['mutations'])
 changed = json.loads(json.dumps(batch))
 changed['mutations'][0]['target']['id'] = 'venue_00000000'
@@ -106,7 +116,7 @@ request('/v1/library/changes?after=old-format-cursor', token=access, expected=41
 request('/v1/library-evil', token=access, expected=404)
 request('/v1/library/snapshot', expected=401)
 
-# A different provider subject must neither attach by email nor see the migrated membership.
+# A different provider subject must have its own account and library.
 other = sign_in('google-shared')
 other_profile = request('/v1/me', token=other['access_token'])
 assert other_profile['user_id'] != profile['user_id']
