@@ -64,19 +64,21 @@ namespace Relisten.Data
         /// <summary>
         /// Selects the latest window or the next sequence page, then returns it ascending.
         /// V4 filters public eligibility before LIMIT so removed tracks cannot block polling;
-        /// legacy callers keep their existing eligibility and response filtering.
+        /// artistUuids optionally restricts that public window to any selected artist.
+        /// Legacy callers keep their existing eligibility and response filtering.
         /// </summary>
         public async Task<IEnumerable<SourceTrackPlay>> PlayedTracksSince(
             int? lastSeenId = null,
             int limit = 2000,
             bool publicActivityOnly = false,
+            Guid[]? artistUuids = null,
             CancellationToken cancellationToken = default
         )
         {
             await using var con = db.CreateConnection(longTimeout: false, readOnly: true);
             await con.OpenAsync(cancellationToken);
             var eligibility = publicActivityOnly
-                ? $"AND EXISTS ({PlayableTracks} AND t.uuid=p.source_track_uuid) AND p.app_type IN (1,2,3,4)"
+                ? $"AND EXISTS ({PlayableTracks} AND t.uuid=p.source_track_uuid AND (@artistUuids::uuid[] IS NULL OR a.uuid=ANY(@artistUuids))) AND p.app_type IN (1,2,3,4)"
                 : "";
             var tracks = await con.QueryAsync<SourceTrackPlay>(
                 new CommandDefinition(
@@ -88,7 +90,12 @@ namespace Relisten.Data
                     ORDER BY p.id {(lastSeenId != null ? "" : "DESC")}
                     LIMIT @limit
                     """,
-                    new { lastSeenId, limit },
+                    new
+                    {
+                        lastSeenId,
+                        limit,
+                        artistUuids,
+                    },
                     commandTimeout: 30,
                     cancellationToken: cancellationToken
                 )

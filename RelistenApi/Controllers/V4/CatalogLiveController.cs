@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Threading;
@@ -84,19 +85,41 @@ public sealed class CatalogLiveController(
         }
     }
 
-    /// <summary>One-hour activity window, ascending by sequence. Limits above 2000 are capped.</summary>
+    /// <summary>
+    /// One-hour activity window, ascending by sequence. Repeat artist_ids to select
+    /// any of those artists before the limit; omit it for all artists. Limits cap at 2000.
+    /// </summary>
     [HttpGet("history")]
     [ProducesResponseType(typeof(LiveHistoryResource[]), 200)]
     [ProducesResponseType(typeof(ProblemDetails), 422)]
     [ProducesResponseType(typeof(ProblemDetails), 503)]
     public Task<IActionResult> History(
+        [FromQuery(Name = "artist_ids")] string[]? artistIds = null,
         [FromQuery, Range(0, int.MaxValue)] int? after_sequence = null,
         [FromQuery, Range(1, int.MaxValue)] int limit = 20,
         CancellationToken cancellationToken = default
-    ) =>
-        Execute(
+    )
+    {
+        var artists = new List<Guid>();
+        foreach (var id in artistIds ?? [])
+        {
+            if (!ArtistId.TryParse(id, out var artist))
+            {
+                return Task.FromResult<IActionResult>(InvalidId(ArtistId.Prefix));
+            }
+            artists.Add(artist.Value);
+        }
+
+        return Execute(
             async () =>
-                (await reader.ReadHistory(after_sequence, Math.Min(limit, 2000), cancellationToken))
+                (
+                    await reader.ReadHistory(
+                        after_sequence,
+                        Math.Min(limit, 2000),
+                        artists.Distinct().ToArray(),
+                        cancellationToken
+                    )
+                )
                     .Select(item => new LiveHistoryResource(
                         item.Play.id,
                         item.Play.created_at,
@@ -107,4 +130,5 @@ public sealed class CatalogLiveController(
                     .ToArray(),
             cacheable: false
         );
+    }
 }

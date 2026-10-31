@@ -65,7 +65,7 @@ Source: [LiveController.cs](../../../RelistenApi/Controllers/LiveController.cs).
 | Current method and route | Proposed route | Contract to preserve or change |
 | --- | --- | --- |
 | POST `/api/v2/live/play` | POST `/api/v4/live/play` | Implemented JSON `{ track_id, app_type, client_uuid? }`; canonical `track_` identity, supported app enum, optional telemetry UUID. Returns `{ sequence, played_at, track_id, app_type }`; invalid input 422, unavailable track 404. Same telemetry table, no account-history write. Legacy source: line 41. |
-| GET `/api/v2/live/history` | GET `/api/v4/live/history` | Implemented one-hour recent window, `after_sequence` cursor, `limit` (20, capped at 2000), ascending sequence order. Each event includes a v4 track with normalization and show summary; track IDs identify source/set/artist without repeating their resources. Caller telemetry UUIDs are omitted. Legacy source: line 99. |
+| GET `/api/v2/live/history` | GET `/api/v4/live/history` | Implemented one-hour recent window, `after_sequence` cursor, `limit` (20, capped at 2000), ascending sequence order. Optional repeated `artist_ids` selects any requested artist before the limit; omitted means global. Each event includes a v4 track with normalization and show summary; track IDs identify source/set/artist without repeating their resources. Caller telemetry UUIDs are omitted. Legacy source: line 99. |
 
 `user_uuid` on the current report is a caller-supplied telemetry field. Do not
 silently reinterpret it as authenticated account identity or favorite membership.

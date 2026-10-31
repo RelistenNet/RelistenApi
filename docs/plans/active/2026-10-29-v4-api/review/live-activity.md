@@ -32,6 +32,13 @@ Open [Swagger](http://127.0.0.1:43823/api-docs-v4/index.html) and expand
 5. Try a wrong ID prefix or unsupported app value: 422 ProblemDetails. Try a
    well-formed nonexistent track: 404. These requests record no play.
 
+To review artist filtering, open [Grateful Dead activity](http://127.0.0.1:43823/api/v4/live/history?artist_ids=artist_3qmp7zjbg1rpebhtyfy43096vj&limit=20),
+or combine it with [Phish activity](http://127.0.0.1:43823/api/v4/live/history?artist_ids=artist_3qmp7zjbg1rpebhtyfy43096vj&artist_ids=artist_6aaf982021nrst0m68ew1djerc&limit=20).
+Repeat `artist_ids` for any selected artists. Omit it for the global feed. The
+filter applies before the limit and cursor paging, including for imported-only
+artists. Duplicates are harmless; valid IDs without recent plays yield no events;
+empty or invalid values return 422. Local review plays expire after one hour.
+
 Public activity covers the last hour. An initial request selects the latest
 20 events; polling selects subsequent events. Both return ascending sequence.
 Positive limits cap at 2000. Filtering unavailable recordings happens before the
@@ -41,6 +48,8 @@ for an artist or hydrates each event separately.
 Mobile can append and deduplicate these events by sequence, and periodically
 replace the recent window with a request without a cursor. This best-effort activity
 window is separate from personal playback history and full artist snapshots.
+Keep a separate window/cursor for each artist selection. When the selection
+changes, load a fresh window without `after_sequence`.
 Replica delay and overlapping commits can omit events from a cursor poll; this
 endpoint makes no durable-delivery guarantee. Retrying a POST after a lost response
 can record a duplicate play, matching existing telemetry behavior.
