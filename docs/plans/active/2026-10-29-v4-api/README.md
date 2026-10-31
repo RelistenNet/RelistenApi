@@ -2,9 +2,10 @@
 
 Status: C1 includes playback navigation, artist snapshots, and saved-reference
 resolution, date browsing, search, and listening rankings, 2026-10-30.
-Implementation and real-response verification are in progress.
-The local API reads the restored production catalog; no production deployment or
-account migration occurred. This is a living ExecPlan: update Progress,
+C2 migration/API rehearsal is implemented for local review; mobile work waits for
+Alec’s account response review. The catalog API reads the restored production
+catalog. Account migrations ran only on disposable local rehearsal databases; no
+production deployment or migration occurred. This is a living ExecPlan: update Progress,
 Discoveries, Decision Log, and Outcomes as work proceeds.
 
 Build and review this in stages. First deliver a running browse and playback API that
@@ -190,15 +191,13 @@ Implement mobile's actual queries, not a generic interpreter of all server route
 - [x] Wire stored artist–venue resources and global counts into every C1 show/venue read.
 - [x] Verify count identity, approval scope, ETags, and the real end-to-end responses.
 - [x] Refresh the saved request/capture evidence for the new graph.
-- [ ] Alec reviews the [expanded C1 browsing and playback responses](review/README.md)
-  before account/auth work.
+- [x] Review the [expanded C1 browsing and playback responses](review/README.md) and proceed to C2 as authorized by Alec.
 - [x] Add song browsing/discovery reads for the
   [song-to-playback review](review/song-source-journey.md).
 - [x] Stack [stored song counts #111](https://github.com/RelistenNet/RelistenApi/pull/111)
   below v4, update admin refreshes, backfill locally, and verify the 19 ms warm
   artist-browse median with unchanged payloads.
-- [ ] Alec reviews song counts, exact recording matches, and imported setlist
-  fallback before account/auth work.
+- [x] Review song counts, exact recording matches, and imported setlist fallback before starting C2.
 - [x] Unify venue/song detail snapshots, add direct imported and artist-venue
   lookups, and verify focused HTTP tests and real local responses. Keep compact
   browse resources and separate file-match detail; omit `detail_url`.
@@ -213,7 +212,10 @@ Implement mobile's actual queries, not a generic interpreter of all server route
 - [x] Publish popularity through shared show enrichment and projection. Ordinary
   catalog reads are artist-local; transient rankings retain global/organic scores
   and reuse their loaded maps. Remove request-scoped consistency caching.
-- [ ] C2–C5 remain unstarted pending the C1 response review.
+- [x] Begin C2 migration/API work after Alec’s catalog response review.
+- [x] Implement and rehearse native stored account/auth IDs and in-place library APIs; verify real native/browser responses and old-credential retirement.
+- [ ] Alec reviews the [C2 account/library responses](review/accounts.md) before mobile work.
+- [ ] C2 mobile work and C3–C5 remain unstarted.
 
 ## Discoveries and changes from the exploration
 

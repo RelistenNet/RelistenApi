@@ -2,7 +2,7 @@
 
 C1 has local runtime evidence in the [response review](review/README.md).
 The remaining sections are the full-plan execution checklist, not claims that
-C2–C5 or production rollout have passed. No account migration or deployment occurred.
+full C2–C5 or production rollout have passed. The [C2 account checkpoint](review/accounts.md) records local migration/API rehearsal; no production deployment occurred.
 
 Follow [C1–C5 in the review guide](review-guide.md) for Alec's checkpoints.
 Automated checks support those reviews; a green test run does not approve the
@@ -1078,3 +1078,12 @@ inactive targets have zero counters and null momentum. Conditional sorted
 upserts protect newer rows, without a publication gate or deletion phase.
 The focused suite passes 183 checks, including inactive freshness, zero IDs,
 composed-request batching, queue failure/304 recovery, and cross-store retry.
+
+## C2 migration and account API rehearsal — October 30
+
+The [account checkpoint](review/accounts.md) records the native-text identity migration,
+169 passing account tests, 183 passing catalog checks, real native/browser HTTP
+flows, backup restore/remigration, and rejection of actual old-binary credentials
+and cursors. The API is available against the separate local `relisten_c2_review`
+database; the catalog preview is unchanged. C2 mobile work waits for response
+review. No production migration, deployment or mobile change occurred.
