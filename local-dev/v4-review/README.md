@@ -212,7 +212,8 @@ approved real aggregate maps from the production read-only replica, marked fresh
 `.output/ranking-cache-before-snapshot.json`. No production or catalog data changed.
 
 The real maps are now also published into local Postgres. V4 reads the stored
-rows and uses no Redis/calculation services in its HTTP test host. Foundation
+rows. Its HTTP test host replaces only queue submission; it registers no Redis
+map reader or calculation services. Foundation
 publication tests use Redis DB 14 and a disposable catalog. See the
 [stored-popularity checkpoint](../../docs/plans/active/2026-10-29-v4-api/review/stored-popularity.md)
 for backfill provenance and timings. Production refresh jobs publish to both
@@ -230,3 +231,17 @@ artists, with fresh empty maps for 1,552 other local artists that had no matchin
 activity in the export. Its separate capture time and sizes are recorded under
 `artistLocalShows` in the ignored provenance file. Global score maps retain their
 earlier capture time. No production writes or synthetic play events were used.
+
+## Demand refresh and per-row freshness
+
+The unshipped popularity schema now has three resource tables and per-row
+`generated_at`. Inactive targets have zero counters and null momentum; they keep
+public `popularity: null` and do not enter rankings. `popularity_refreshes` is
+removed. The preview schema was adjusted directly and the same real Redis
+snapshot republished through the writer, preserving generation times.
+
+Reads queue at most one batch for stale/missing required populations, using one
+freshness query after catalog snapshots close. Full refresh remains a manual
+repair action; no recurring job is registered. Local Hangfire workers remain
+disabled, so queued jobs cannot replace real review metrics with calculations
+from the empty local play history.

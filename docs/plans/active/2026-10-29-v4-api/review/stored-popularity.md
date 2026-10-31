@@ -19,24 +19,26 @@ Rankings select ordered, limited score rows before catalog hydration. Artist
 ranking groups apply limits independently per artist. Ordinary show lists load
 only their requested artist-local score rows in one SQL query across artists.
 Both scores and catalog metadata use the same primary repeatable-read snapshot.
-There are no Redis reads, refresh enqueues, or play aggregations in v4 GETs.
+There are no Redis map reads or play aggregations in v4 GETs. After catalog reads
+finish, one freshness query checks the required populations and queues at most
+one batch for stale or missing data. There is no automatic refresh schedule.
 
 Global rankings retain global momentum. Ordinary shows and artist groups retain
 artist-local raw momentum; momentum discovery publishes organic/fallback
 momentum. Missing ordinary metrics remain null. An unpopulated ranking is empty.
-A failed background refresh leaves its last successful population available;
-SQL read failures use the existing 503/no-store response.
+A failed background refresh leaves its last successful rows available. SQL or
+queue-submission failures use the existing 503/no-store response.
 
 ## Real-data comparison
 
-The local backfill published the existing real aggregate snapshot through
-`PopularityStore`, preserving its generation timestamps. It did not recalculate
-from empty local telemetry or change Redis. Postgres contains 2,817 artist rows,
-38,628 global show rows, 62,642 current artist-local show rows, and 9,341 global
-year rows. The artist-local input contained 62,650 entries; publication joins to
-the current restored catalog and accepts only current owned targets. Empty
-cached populations are also recorded. Backfill took 18.3 seconds; that measures
-publication of existing scores, not a full calculation job.
+The local backfill publishes the existing real aggregate snapshot through
+`PopularityStore`, preserving its generation times. It does not calculate from
+empty local telemetry or change Redis. The final schema covers every current
+catalog target with zero/null rows when inactive: 4,387 artist rows, 431,878 show
+rows across both contexts, and 33,231 year rows across the contexts present in
+the snapshot. There are 101,270 scored show rows, unchanged from the sparse
+model. Repopulating the final schema took 20.5 seconds; that is publication of
+existing scores, not a complete calculation job.
 
 Eight complete response/ETag comparisons matched the prior Redis-backed API:
 popular shows, seven-day trending shows, popular artists, trending years,
@@ -66,37 +68,54 @@ shows use 12. The top-five score selection itself used
 `show_popularity_hot_30d_idx` and measured 0.234 ms in a local EXPLAIN.
 The existing metadata hydration accounts for the remaining queries.
 
+## Demand refresh and schema review
+
+The final schema is [migration SQL](../../../../../RelistenApi/Migrations/Sql/017_popularity.sql):
+three resource tables, each with `generated_at`. Counters are zero and momentum
+is null on inactive rows. Rankings and ordinary score hydration exclude those
+rows, preserving the public null/empty behavior. The separate freshness table,
+sentinel scope key, scope publication gate, and departure deletion are removed.
+One sorted UPSERT stamps the whole population and uses per-row timestamps to
+reject older results. It needs no explicit multi-statement transaction.
+
+The same one-hour age policy is checked once per request, after catalog snapshots
+close. Required scopes are deduplicated and queued as one batch. Unknown artists
+and populations without catalog targets do not queue work. A fresh inactive
+population does not repeatedly enqueue. Job retries always calculate again so
+Postgres-success/Redis-failure can recover; no pending-job lease is introduced.
+
+A temporary-table comparison using real catalog membership measured the global
+show layout at 215,939 rows versus 38,628 scored rows. Storage was 51 MB versus
+14.6 MB. Updating all timestamps took 1.35 seconds versus 0.38 seconds, while
+indexed active top-five reads remained 0.12 ms. These local measurements omit
+foreign-key and calculation cost. The extra background writes buy simpler row
+semantics and publication.
+
 ## Verification and remaining work
 
-The focused suite passes 180 v4, popularity, and saved-reference checks. The v4
-HTTP host registers no Redis or calculation services. It exercises global/local/organic ordering,
-window thresholds, empty groups, current ownership, cross-route enrichment,
-score-sensitive ETags, and near-equal trending ratios after cache precision is
-applied. Foundation tests exercise scoped replacement, older-publication
-rejection, real dual publication, Redis failure after a changed play input, and
-successful retry. Two independent source reviews found no runtime defect.
+The focused suite passes 183 v4, popularity, and saved-reference checks. It
+covers one batch from a composed snapshot, fresh inactive populations, zero UUIDs,
+queue failure and retry, raw/organic ordering, ETags, and dual-publication repair.
+The v4 host registers queue submission only, not Redis maps or calculators.
+The normal Development API was restarted against the real snapshot for the
+live response/ETag comparison. No workers or production writes were started.
 
-The schema foundation is migration 17. V4's unshipped public-ID migration moves
-to 18; its normalization SQL resource remains named `017_public_ids.sql`. The
-private preview already had that public-ID migration applied, so its version
-ledger was adjusted while applying the new popularity schema. Its records are
-ordered 17 then 18: SimpleMigrations reads the last inserted record, rather than
-the maximum version. All eight live response/ETag comparisons passed after the
-normal Development API restarted. New deployments apply 17 then 18 normally.
+The schema foundation remains migration 17. V4's unshipped public-ID migration
+is 18. Local preview changes were applied directly; new deployments apply the
+final 17 then 18 normally. A production backfill is still needed before v4
+rollout. Full refresh is an explicit repair action; unused artists have no
+scheduled work.
 
-Before production v4 rollout, backfill with the real calculation job and measure
-its complete duration. The hourly job runs scoped calculations sequentially;
-read-only production samples took 885 ms for Grateful Dead's show calculation
-and 1.3 ms for an artist with one active show. These samples do not establish
-the full hourly budget. No production schema, metrics, or schedules changed in
-this checkpoint.
+JSON copies, repeated snapshot metadata queries, and source substring search
+remain separate work from this popularity change.
 
-The earlier performance review also identified JSON UTF-16 copies, repeated
-snapshot metadata queries, and expensive source substring search. Those remain
-separate work; this change addresses popularity storage and retrieval.
-
-Ignored evidence is in `local-dev/v4-review/.output/performance-review/`:
-`postgres-measurements.json`, `postgres-response-parity.json`,
-`postgres-backfill.json`, `postgres-popular-plan.json`, and the two read-only
-production refresh query plans. Earlier baseline and component measurements
-remain alongside them.
+Ignored evidence is in `local-dev/v4-review/.output/performance-review/`, including
+`zero-row-layout-experiment.txt`, `swr-live-response-parity.json`, prior baseline
+and SQL-read timings, and preserved input provenance. Earlier timing tables
+above measured SQL retrieval before demand-refresh wiring. Final local Release
+samples measured five popular shows at 13 ms / 0.25 MiB allocated with 13 data
+SQL commands, including freshness. The 424-artist anniversary freshness lookup
+took 9 ms in the traced sample. Queue submission was stubbed in this allocation
+harness; the real Development API also passed all eight response/ETag checks.
+The final harness registered the production date handler; elapsed times are
+illustrative local samples rather than a production latency estimate.

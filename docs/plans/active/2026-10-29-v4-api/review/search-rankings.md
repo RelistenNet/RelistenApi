@@ -81,7 +81,8 @@ previous local values. The raw aggregate JSON files, including the all-artist sh
 scoring runner are local review artifacts. The same real maps have now been
 published into local Postgres through the production population writer. V4 reads
 those stored rows. Production refresh jobs publish to both Postgres and Redis;
-v4 requests never calculate or enqueue refreshes. The correct context and read-only
+v4 requests read stored scores and queue one batch for stale or missing required
+populations; they do not calculate scores. There is no automatic schedule. The correct context and read-only
 connection command are now recorded in [AGENTS.md](../../../../../AGENTS.md).
 
 Search and ordinary catalog queries can replace their exact cached query results
