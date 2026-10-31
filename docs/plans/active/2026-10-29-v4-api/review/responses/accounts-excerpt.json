@@ -1,0 +1,118 @@
+{
+  "note": "Selected actual response fields; protected cursors and authentication tokens omitted.",
+  "profile": {
+    "contract_version": 1,
+    "user_id": "user_01k8000000e008000000000001",
+    "username": "c2_listener",
+    "username_version": 3,
+    "username_review_needed": false,
+    "username_reviewed_at": "2026-10-01T00:00:00+00:00",
+    "username_change_available_at": null,
+    "native_session_id": "session_01m6821er5f7htw8d2334x2t9s"
+  },
+  "browser_profile": {
+    "contract_version": 1,
+    "user_id": "user_01k8000000e008000000000001",
+    "username": "c2_listener",
+    "username_version": 3,
+    "username_review_needed": false,
+    "username_reviewed_at": "2026-10-01T00:00:00+00:00",
+    "username_change_available_at": null
+  },
+  "snapshot": {
+    "contract_version": 1,
+    "library_revision": 10,
+    "favorites": [
+      {
+        "favorite_id": "favorite_01m6821faae5c9gy50x50vtcse",
+        "target": {
+          "kind": "venue",
+          "id": "venue_fp4h900f"
+        },
+        "created_at": "2026-10-31T04:03:47.201509+00:00",
+        "updated_at": "2026-10-31T04:03:47.201509+00:00"
+      },
+      {
+        "favorite_id": "favorite_01m6821faafz9tv40rs8qe9ndx",
+        "target": {
+          "kind": "song",
+          "id": "song_62mhvjyd"
+        },
+        "created_at": "2026-10-31T04:03:47.201509+00:00",
+        "updated_at": "2026-10-31T04:03:47.201509+00:00"
+      }
+    ]
+  },
+  "favorite_results": {
+    "contract_version": 1,
+    "library_revision": 10,
+    "results": [
+      {
+        "mutation_id": "mutation_01m6821faaemevk35n3hhfbh0c",
+        "target": {
+          "kind": "venue",
+          "id": "venue_fp4h900f"
+        },
+        "desired_state": "favorite",
+        "changed": true,
+        "submitted_favorite_id": "favorite_01m6821faae5c9gy50x50vtcse",
+        "canonical_favorite_id": "favorite_01m6821faae5c9gy50x50vtcse",
+        "library_revision": 9
+      },
+      {
+        "mutation_id": "mutation_01m6821faafdxac02deep4nhd2",
+        "target": {
+          "kind": "song",
+          "id": "song_62mhvjyd"
+        },
+        "desired_state": "favorite",
+        "changed": true,
+        "submitted_favorite_id": "favorite_01m6821faafz9tv40rs8qe9ndx",
+        "canonical_favorite_id": "favorite_01m6821faafz9tv40rs8qe9ndx",
+        "library_revision": 10
+      }
+    ]
+  },
+  "changes": {
+    "contract_version": 1,
+    "library_revision": 10,
+    "changes": [
+      {
+        "change_id": "library_change_01m6821fc4esg8tsh6fh0a9ah5",
+        "revision": 9,
+        "change_type": "favorite_added",
+        "favorite_id": "favorite_01m6821faae5c9gy50x50vtcse",
+        "target": {
+          "kind": "venue",
+          "id": "venue_fp4h900f"
+        },
+        "changed_at": "2026-10-31T04:03:47.201509+00:00"
+      },
+      {
+        "change_id": "library_change_01m6821fc4f1389dxmd01aehq1",
+        "revision": 10,
+        "change_type": "favorite_added",
+        "favorite_id": "favorite_01m6821faafz9tv40rs8qe9ndx",
+        "target": {
+          "kind": "song",
+          "id": "song_62mhvjyd"
+        },
+        "changed_at": "2026-10-31T04:03:47.201509+00:00"
+      }
+    ],
+    "has_more": false
+  },
+  "conflict": {
+    "status": 409,
+    "detail": "A mutation_id was already used by another account or semantic mutation.",
+    "conflicting_mutation_ids": [
+      "mutation_01m6821faaemevk35n3hhfbh0c"
+    ],
+    "code": "idempotency_conflict"
+  },
+  "cursor_reset": {
+    "status": 410,
+    "snapshot_url": "/v1/library/snapshot",
+    "code": "sync_cursor_expired"
+  }
+}
