@@ -8,7 +8,9 @@ Keep the account/auth conversion as a separate deployment. Each checkpoint gives
 Alec something running to inspect before the next dependent work expands.
 This is a review guide for Alec and Switz. C1 is now implemented for local review;
 start with the [real response examples and running API](review/README.md).
-C2 migration/API rehearsal is implemented for local review; its mobile work and C3–C5 remain unimplemented.
+C2 server and first client upgrades have been reviewed locally; mobile catalog
+adoption remains in its own thread. The next backend slice is the
+[default-off legacy recording adapter](review/legacy-recordings.md).
 
 ## The simplification to preserve
 
@@ -139,7 +141,9 @@ fallback remains visible when normalization or its stored relationship is absent
 
 ## C2 — Rehearse the account/auth change independently
 
-The [account API checkpoint](review/accounts.md) now provides the migration rehearsal, running responses, and evidence. Mobile work waits for Alec’s response review.
+The [account API checkpoint](review/accounts.md) records the migration rehearsal
+and response evidence. The server and initial account-client upgrades have been
+reviewed locally; catalog adoption remains separate in the mobile thread.
 
 Convert owned account/auth IDs and `/v1/library` in place. Prove the typed mobile
 account client against today's v3 imported catalog. Normalized Realm models and

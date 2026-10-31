@@ -61,17 +61,20 @@ query flags.
 
 New v4 code must not wrap legacy services/JSON. Move each migrated read algorithm
 into the common reader and remove duplicate old read SQL after auditing callers.
+During the first legacy-detail rollout, a default-off compatibility flag retains
+the old implementation for rollback. The shared recording path and Postgres
+popularity activate together; remove the old loader after the gated rollout is
+qualified. Legacy show-list enrichment remains unchanged in this slice.
 Legacy controller actions translate old routes/aliases into common typed queries
 and project old DTOs. Keep ambiguous numeric/slug compatibility parsing in those
 adapters or the explicit resolver, not in core identity types. Preserve full
 numeric-leading tour slugs and the current source/set/track hierarchy.
 
-Operator commands likewise have one handler over existing ingestion services.
-V4 PUT selects the target from its typed route and rejects conflicting body ID;
-the legacy PUT adapter preserves its existing body-target interpretation before
-calling that same typed update handler. Error/status adaptation remains at the
-wire boundary. This preserves old behavior without making core code inspect an
-API version.
+Operator artist writes and import commands retain their existing v2 routes and
+authorization. They are listed separately in the endpoint manifest; no v4
+copies or new command framework are required. The separate relisten-admin app
+uses direct Postgres actions, while the older built-in admin uses these v2 APIs.
+Their request targeting, job handles, and ingestion engine rules remain unchanged.
 
 ## Response, validation and read freshness
 
@@ -966,15 +969,12 @@ Ranking/recent bounds and supported sort/window choices are listed in the
 coverage tables; invalid enum values are 422 rather than silently selecting a
 different sort.
 
-Artist create/update accepts v4 artist fields, embedded features and provider-
-qualified upstream assignments. Numeric database IDs are not writable identities.
-PUT route identity is authoritative; reject a conflicting body ID. Save the
-artist/features/upstream assignments in one `CatalogImportTransaction`. Keep
-existing API operator-cookie authorization on these writes and import commands;
-do not accept ordinary account-service login as operator admission. Preserve
-the provider API-key endpoint, Temporal/Hangfire engine checks, delete restrictions,
-debug restrictions, and workflow/job handle response fields. Operations and random
-reads are no-store. No endpoint in this plan starts an import as a test.
+Artist create/update and import operations remain on their current v2 routes.
+Preserve existing operator authorization and the provider API-key endpoint;
+ordinary account-service login does not grant operator access. Preserve current
+request bodies, targeting, Temporal/Hangfire engine checks, delete/debug
+restrictions, and workflow/job handle responses. No provider import is started
+to verify this work. Random catalog reads remain no-store.
 
 ## Canonical account/auth IDs and the in-place library
 

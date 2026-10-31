@@ -17,8 +17,9 @@ The [review guide](review-guide.md) defines five checkpoints and what Alec sees.
 
 ## Outcome and readers
 
-Deliver v4 coverage for every existing catalog, discovery, playback, and operator
-API capability. Return typed catalog IDs, normalized venue overlays, and one
+Deliver v4 coverage for every existing catalog, discovery, and playback API
+capability. Retain operator writes/import commands at their existing paths and
+authorization. Return typed catalog IDs, normalized venue overlays, and one
 `normalization` object on every returned track. Mobile keeps its listening
 navigation, imported playback titles, downloads, queue, and history. Global venue
 favorites work across artists in a separate My Library Venues section. V4 is
@@ -219,7 +220,14 @@ Implement mobile's actual queries, not a generic interpreter of all server route
   tracked separately; mobile catalog reads stay on v3.
 - [x] Implement anonymous v4 play reporting and public recent activity using
   shared telemetry storage, batched catalog hydration, and sequence polling.
-- [ ] Alec reviews the [play/activity responses](review/live-activity.md).
+- [x] Retain all eight operator write/import routes instead of adding unused v4
+  copies. The separate relisten-admin app writes directly to Postgres; the old
+  built-in admin continues using its existing v2 APIs.
+- [x] Share show-detail recording hierarchy reads with v4 and verify v2/v3 JSON,
+  cache policy, replica preference and performance against captured baselines.
+- [x] Review the [play/activity responses](review/live-activity.md); keep public
+  integer sequences as approved. The artist filter is implemented and reviewed.
+- [ ] Alec reviews the [gated legacy adapter](review/legacy-recordings.md).
 - [ ] C3–C5 catalog adoption, legacy adapters, and release qualification remain.
 
 ## Discoveries and changes from the exploration
@@ -305,10 +313,28 @@ legacy conversion here too. Imported/approved read views and primary/prefer-repl
 targets remain explicit internal choices. Check legacy caches before expensive
 materialization. Remove duplicated SQL after auditing non-HTTP callers.
 
-Share operator handlers over existing ingestion clients/stores. Preserve current
-admission, engine selection and job handles; v4 artist PUT uses route identity
-and atomically updates artist/features/upstream assignments. Commands do not
-become anonymous. Isolate v4 Swagger while preserving mixed legacy operation sets.
+Keep operator artist writes and import commands at their current v2 paths, with
+their current authorization, engine selection and job handles. Do not add v4
+aliases to satisfy a route count. A future admin workflow can justify a separate
+operator API change; it is not required for v4 catalog adoption. The manifest
+lists these retained operations separately from the 51 v4 operations.
+
+Start compatibility work with the full-show routes and their nested sources,
+sets and tracks. Legacy has no standalone source/track detail routes. Share the
+recording hierarchy loader with native v4 reads; keep imported show metadata,
+feature gating, legacy popularity and transport in the existing legacy path.
+The generic show-list reader remains until that family is migrated. This avoids
+making legacy detail pay for normalization/primary reads or changing unrelated
+list behavior to finish the first adapter. Capture real responses and database
+command counts before editing, then compare the complete hierarchy afterward.
+
+Gate the first legacy adapter with `Catalog:LegacyRecordingAdaptersEnabled`,
+default false. It switches the recording hierarchy and full-show popularity
+together. With the flag off, legacy detail keeps its existing loader and Redis
+scores. With it on, the adapter uses shared recording reads and selected
+artist-local Postgres score rows. Populate and verify Postgres populations before
+enabling it; missing rows are not evidence of zero activity. Retain the old path
+for this rollout, then remove it and the switch after production parity is proven.
 
 C4 requires every catalog operation in the manifest, every returned track's common normalization DTO,
 accepted browse/discovery/resolver examples, legacy compatibility and a fresh
@@ -377,6 +403,11 @@ by accepting this plan.
 
 ## Decision Log
 
+- 2026-10-31, Alec: retain the eight operator routes at their existing paths;
+  do not add v4 duplicates for route-count completeness. Begin compatibility work
+  with full-show recording hierarchies. Postgres popularity is allowed for the
+  adapter; gate it off until populations are prefilled and checked. Keep public
+  integer play sequences for now.
 - 2026-10-29, Alec: approved 13 prefixes with `track_`, embedded eras, and
   functional coverage with duplicate-alias consolidation.
 - 2026-10-29, Alec: normalized information belongs on every track, entirely
@@ -470,7 +501,8 @@ by accepting this plan.
 
 Planning is complete. Independent feasibility and mobile/account reviewers
 confirmed the corrected plan has no remaining blockers in their reviewed areas.
-The handoff includes 59 catalog/operator endpoints, three in-place library
+The handoff includes 51 v4 catalog/playback endpoints and eight retained operator
+endpoints, three in-place library
 endpoints, two profile actions, contracts, five personal review checkpoints,
 migration/rollback steps and verification. The full thread was reread during the
 simplification pass; later decisions supersede the exploration's old epoch,
