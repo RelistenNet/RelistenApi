@@ -18,8 +18,10 @@ Redis cache. This covers explicit refreshes and legacy cache misses.
 The public counters, hours, hot scores, trend ratio, and raw momentum are stored
 as scalar columns. Artist-local show rows also store the organic momentum used
 by momentum discovery. Global and artist-local percentile scores have different
-comparison populations; neither can replace the other. Existing public JSON
-rounding remains the serializer's responsibility.
+comparison populations; neither can replace the other. Window values and public metric-map scores retain the four-decimal precision
+of the existing warm Redis maps. Artist-local raw/organic momentum and trend
+ratios retain their cache DTO precision. This preserves ranking tie behavior;
+public JSON still applies its normal rounding.
 
 Each publication uses one short transaction: claim/update its refresh row,
 upsert the calculated rows, delete rows absent from that population, and commit.

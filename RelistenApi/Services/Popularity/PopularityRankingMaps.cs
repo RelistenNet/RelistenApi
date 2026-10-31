@@ -11,26 +11,6 @@ namespace Relisten.Services.Popularity;
 // lists and v4 hydrate their own resources from these inputs; v4 never caches bodies.
 public partial class PopularityService
 {
-    public Task<Dictionary<Guid, PopularityMetrics>> GetGlobalShowPopularityMap() =>
-        GetOrRefresh(
-            "popularity:shows:map:30d-48h",
-            DefaultStaleAfterSeconds,
-            ComputeGlobalShowPopularityMap,
-            () =>
-                backgroundJobs.Enqueue<PopularityJobs>(job => job.RefreshGlobalShowPopularityMap()),
-            true
-        );
-
-    public Task<Dictionary<Guid, PopularityMetrics>> GetGlobalYearPopularityMap() =>
-        GetOrRefresh(
-            "popularity:years:map:30d-48h",
-            DefaultStaleAfterSeconds,
-            ComputeGlobalYearPopularityMap,
-            () =>
-                backgroundJobs.Enqueue<PopularityJobs>(job => job.RefreshGlobalYearPopularityMap()),
-            true
-        );
-
     public async Task RefreshGlobalShowPopularityMap() =>
         await cache.SetAsync(
             "popularity:shows:map:30d-48h",

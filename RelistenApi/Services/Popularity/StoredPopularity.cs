@@ -59,24 +59,27 @@ public sealed class StoredPopularity
     internal static StoredPopularity From(
         Guid id,
         PopularityMetrics value,
-        double? organic = null
+        double? organic = null,
+        bool roundScores = true
     ) =>
         new()
         {
             uuid = id,
             plays_30d = value.windows.days_30d.plays,
-            hours_30d = value.windows.days_30d.hours,
-            hot_score_30d = value.windows.days_30d.hot_score,
+            hours_30d = Math.Round(value.windows.days_30d.hours, 4),
+            hot_score_30d = Math.Round(value.windows.days_30d.hot_score, 4),
             plays_7d = value.windows.days_7d.plays,
-            hours_7d = value.windows.days_7d.hours,
-            hot_score_7d = value.windows.days_7d.hot_score,
+            hours_7d = Math.Round(value.windows.days_7d.hours, 4),
+            hot_score_7d = Math.Round(value.windows.days_7d.hot_score, 4),
             plays_48h = value.windows.hours_48h.plays,
-            hours_48h = value.windows.hours_48h.hours,
-            hot_score_48h = value.windows.hours_48h.hot_score,
+            hours_48h = Math.Round(value.windows.hours_48h.hours, 4),
+            hot_score_48h = Math.Round(value.windows.hours_48h.hot_score, 4),
             plays_6h = value.plays_6h,
             plays_90d = value.plays_90d,
-            trend_ratio = value.trend_ratio,
-            momentum_score = value.momentum_score,
+            trend_ratio = roundScores ? Math.Round(value.trend_ratio, 4) : value.trend_ratio,
+            momentum_score = roundScores
+                ? Math.Round(value.momentum_score, 4)
+                : value.momentum_score,
             organic_momentum_score = organic,
         };
 }

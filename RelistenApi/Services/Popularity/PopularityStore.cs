@@ -12,7 +12,7 @@ namespace Relisten.Services.Popularity;
 /// <summary>
 /// Publishes a complete calculated population in a short transaction. Calculation
 /// happens beforehand. The refresh row orders competing publications of that
-/// population; it does not lock catalog rows or serialize different artists.
+/// population; it takes no explicit catalog/table locks and does not serialize different artists.
 /// </summary>
 public sealed class PopularityStore(DbService db)
 {
@@ -50,7 +50,8 @@ public sealed class PopularityStore(DbService db)
                 StoredPopularity.From(
                     item.Key,
                     CachedShowPopularityMapper.ToPopularityMetrics(item.Value),
-                    CachedShowPopularityMapper.GetRankingMomentumScore(item.Value)
+                    CachedShowPopularityMapper.GetRankingMomentumScore(item.Value),
+                    roundScores: false
                 )
             ),
             generatedAt

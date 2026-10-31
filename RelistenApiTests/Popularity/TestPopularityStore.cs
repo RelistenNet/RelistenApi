@@ -104,7 +104,10 @@ public sealed class TestPopularityStore
             )
         ).ToArray();
         rows.Should().HaveCount(2);
-        rows[0].ToMetrics().Should().BeEquivalentTo(global);
+        Newtonsoft
+            .Json.JsonConvert.SerializeObject(rows[0].ToMetrics())
+            .Should()
+            .Be(Newtonsoft.Json.JsonConvert.SerializeObject(global));
         rows[1].ToMetrics().momentum_score.Should().Be(0.9);
         rows[1].ToMetrics(organic: true).momentum_score.Should().Be(0.6);
 
