@@ -90,7 +90,7 @@ public sealed class CatalogShowDiscoveryReader(DbService db, CatalogShowMetadata
         );
     }
 
-    /// <summary>Rating-weighted source rank, independent of Redis popularity/trending.</summary>
+    /// <summary>Rating-weighted source rank, independent of listening popularity/trending.</summary>
     public Task<IReadOnlyList<CatalogShow>?> ReadTop(
         Guid artistUuid,
         int limit,

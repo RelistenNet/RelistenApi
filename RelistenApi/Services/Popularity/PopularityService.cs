@@ -437,7 +437,7 @@ namespace Relisten.Services.Popularity
             }
         }
 
-        internal async Task<
+        private async Task<
             Dictionary<Guid, CachedShowPopularity>
         > GetShowPopularityCacheMapForArtist(Guid artistUuid, bool allowStale = true)
         {

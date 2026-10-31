@@ -3,7 +3,6 @@ using System.Net.Http.Headers;
 using System.Text.Json.Nodes;
 using Dapper;
 using FluentAssertions;
-using Hangfire;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
@@ -18,7 +17,6 @@ using Microsoft.OpenApi;
 using Relisten;
 using Relisten.Controllers.V4;
 using Relisten.Identifiers;
-using Relisten.Services.Popularity;
 
 namespace RelistenApiTests.V4;
 
@@ -31,7 +29,6 @@ public sealed partial class TestV4CatalogHttp
 {
     private WebApplication app = null!;
     private HttpClient http = null!;
-    private RedisService rankingRedis = null!;
     private string previousPrimary = null!;
     private string previousReplica = null!;
 
@@ -61,16 +58,7 @@ public sealed partial class TestV4CatalogHttp
             .Services.AddControllers(options => options.EnableEndpointRouting = false)
             .AddApplicationPart(typeof(CatalogReadController).Assembly)
             .AddNewtonsoftJson();
-        // Isolate fixed popularity keys from the developer's review snapshot in Redis DB 0.
-        var redisOptions = RedisService.BuildConfiguration("redis://127.0.0.1:16379");
-        redisOptions.DefaultDatabase = 15;
-        rankingRedis = new RedisService(redisOptions);
-        builder.Services.AddSingleton(rankingRedis);
-        builder.Services.AddTransient<PopularityCacheService>();
-        builder.Services.AddTransient<PopularityService>();
-        builder.Services.AddSingleton(
-            System.Reflection.DispatchProxy.Create<IBackgroundJobClient, UnexpectedRankingRefresh>()
-        );
+        // No Redis or calculation services: catalog HTTP reads must use stored scores.
         builder.Services.AddV4Catalog();
         builder.Services.AddResponseCompression(options => options.EnableForHttps = true);
         builder.Services.AddSwaggerGen(options =>
@@ -104,7 +92,6 @@ public sealed partial class TestV4CatalogHttp
         {
             await app.DisposeAsync();
         }
-        rankingRedis?.connection.Dispose();
         DbService.ConnStr = previousPrimary;
         DbService.ReadOnlyConnStr = previousReplica;
     }

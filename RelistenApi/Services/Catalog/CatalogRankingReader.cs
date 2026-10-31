@@ -18,14 +18,11 @@ public sealed record CatalogArtistRankings(
 );
 
 /// <summary>
-/// Ranking maps supply both selection and response scores. Catalog metadata
-/// uses one read snapshot; ranking responses are transient online results.
+/// Selects stored ranking rows before hydrating current catalog resources. Scores
+/// and metadata share the read snapshot; GETs never calculate or refresh scores.
+/// Rankings remain transient online results for mobile.
 /// </summary>
-public sealed class CatalogRankingReader(
-    DbService db,
-    PopularityService popularity,
-    CatalogShowMetadataReader metadata
-)
+public sealed class CatalogRankingReader(DbService db, CatalogShowMetadataReader metadata)
 {
     public async Task<IReadOnlyList<CatalogRanked<CatalogArtist>>> ReadArtists(
         bool trending,
@@ -33,29 +30,25 @@ public sealed class CatalogRankingReader(
         CancellationToken cancellationToken
     )
     {
-        var map = await popularity.GetArtistPopularityMap();
-        var selected = Rank(
-                map.Where(entry => entry.Value.windows.days_30d.plays > 0)
-                    .Select(entry => new CatalogRanked<Guid>(entry.Key, entry.Value)),
-                trending,
-                PopularityService.ArtistTrendingPlays48hFloor,
-                PopularityService.ArtistTrendingPlays30dFloor,
-                PopularitySortWindow.Days30,
-                id => id
-            )
-            .Take(limit)
-            .ToArray();
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
+        var scores = await ReadGlobalScores(
+            session,
+            "artist",
+            trending,
+            limit,
+            PopularitySortWindow.Days30,
+            cancellationToken
+        );
         var artists = (
             await CatalogBrowseReader.ReadArtists(
                 session,
-                selected.Select(item => item.Resource).ToArray(),
+                scores.Select(row => row.uuid).ToArray(),
                 cancellationToken
             )
         ).ToDictionary(artist => artist.uuid);
-        return selected
-            .Where(item => artists.ContainsKey(item.Resource))
-            .Select(item => new CatalogRanked<CatalogArtist>(artists[item.Resource], item.Metrics))
+        return scores
+            .Where(row => artists.ContainsKey(row.uuid))
+            .Select(row => new CatalogRanked<CatalogArtist>(artists[row.uuid], row.ToMetrics()))
             .ToArray();
     }
 
@@ -65,30 +58,27 @@ public sealed class CatalogRankingReader(
         CancellationToken cancellationToken
     )
     {
-        var map = await popularity.GetGlobalYearPopularityMap();
-        var selected = Rank(
-                map.Select(entry => new CatalogRanked<Guid>(entry.Key, entry.Value)),
-                trending,
-                PopularityService.YearTrendingPlays48hFloor,
-                PopularityService.YearTrendingPlays30dFloor,
-                PopularitySortWindow.Days30,
-                id => id
-            )
-            .Take(limit)
-            .ToArray();
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
+        var scores = await ReadGlobalScores(
+            session,
+            "year",
+            trending,
+            limit,
+            PopularitySortWindow.Days30,
+            cancellationToken
+        );
         var years = (
             await session.Connection.QueryAsync<CatalogYear>(
                 session.Command(
                     "SELECT y.*,a.uuid artist_uuid FROM years y JOIN artists a ON a.id=y.artist_id WHERE y.uuid=ANY(@ids)",
-                    new { ids = selected.Select(item => item.Resource).ToArray() },
+                    new { ids = scores.Select(row => row.uuid).ToArray() },
                     cancellationToken
                 )
             )
         ).ToDictionary(year => year.uuid);
-        return selected
-            .Where(item => years.ContainsKey(item.Resource))
-            .Select(item => new CatalogRanked<CatalogYear>(years[item.Resource], item.Metrics))
+        return scores
+            .Where(row => years.ContainsKey(row.uuid))
+            .Select(row => new CatalogRanked<CatalogYear>(years[row.uuid], row.ToMetrics()))
             .ToArray();
     }
 
@@ -99,34 +89,30 @@ public sealed class CatalogRankingReader(
         CancellationToken cancellationToken
     )
     {
-        var map = await popularity.GetGlobalShowPopularityMap();
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
-        var selected = Rank(
-                map.Select(entry => new CatalogRanked<Guid>(entry.Key, entry.Value)),
-                trending,
-                PopularityService.ShowTrendingPlays48hFloor,
-                PopularityService.ShowTrendingPlays30dFloor,
-                window,
-                id => id,
-                trendByRatio: false
-            )
-            .Take(limit)
-            .ToArray();
-        var shows = (
-            await ReadShows(
-                session,
-                selected.Select(item => item.Resource).ToArray(),
-                cancellationToken
-            )
-        ).ToDictionary(show => show.uuid);
-        await metadata.Apply(session, shows.Values.ToArray(), cancellationToken, map);
-        return selected
-            .Where(item => shows.ContainsKey(item.Resource))
-            .Select(item => shows[item.Resource])
+        var scores = await ReadGlobalScores(
+            session,
+            "show",
+            trending,
+            limit,
+            window,
+            cancellationToken
+        );
+        var shows = await ReadShows(
+            session,
+            scores.Select(row => row.uuid).ToArray(),
+            cancellationToken
+        );
+        var map = scores.ToDictionary(row => row.uuid, row => row.ToMetrics());
+        await metadata.Apply(session, shows, cancellationToken, map);
+        var byId = shows.ToDictionary(show => show.uuid);
+        return scores
+            .Where(row => byId.ContainsKey(row.uuid))
+            .Select(row => byId[row.uuid])
             .ToArray();
     }
 
-    /// <summary>Empty selection stays empty. Unknown filter artists are omitted; a single unknown path is 404.</summary>
+    /// <summary>Unknown filter artists are omitted; existing artists retain empty groups.</summary>
     public async Task<IReadOnlyList<CatalogArtistRankings>> ReadArtistGroups(
         Guid[] artists,
         int limit,
@@ -134,12 +120,9 @@ public sealed class CatalogRankingReader(
         CancellationToken cancellationToken
     )
     {
-        var maps = new Dictionary<Guid, Dictionary<Guid, PopularityMetrics>>();
-        foreach (var artist in artists.Distinct().Order())
+        if (artists.Length == 0)
         {
-            maps[artist] = await popularity
-                .GetShowPopularityMapForArtist(artist)
-                .WaitAsync(cancellationToken);
+            return [];
         }
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
         var owners = (
@@ -151,55 +134,60 @@ public sealed class CatalogRankingReader(
                 )
             )
         ).ToArray();
-        var selectedIds = maps
-            .Values.SelectMany(map =>
-                Rank(
-                        map.Select(entry => new CatalogRanked<Guid>(entry.Key, entry.Value)),
-                        false,
-                        PopularityService.ShowTrendingPlays48hFloor,
-                        PopularityService.ShowTrendingPlays30dFloor,
-                        window,
-                        id => id,
-                        trendByRatio: false
-                    )
-                    .Take(limit)
-                    .Concat(
-                        Rank(
-                                map.Select(entry => new CatalogRanked<Guid>(
-                                    entry.Key,
-                                    entry.Value
-                                )),
-                                true,
-                                PopularityService.ShowTrendingPlays48hFloor,
-                                PopularityService.ShowTrendingPlays30dFloor,
-                                window,
-                                id => id,
-                                trendByRatio: false
-                            )
-                            .Take(limit)
-                    )
-                    .Select(item => item.Resource)
+        var popularOrder = ShowOrder(false, window);
+        var trendingOrder = ShowOrder(true, window);
+        // Apply each artist's limit before loading show metadata. The ordinal
+        // preserves SQL ordering across the two selections and the outer join.
+        var selected = (
+            await session.Connection.QueryAsync<ArtistSelection>(
+                session.Command(
+                    $"""
+                    SELECT ranked.* FROM unnest(@artists::uuid[]) owner(uuid)
+                    CROSS JOIN LATERAL (
+                        (SELECT uuid,artist_uuid,false trending,row_number() OVER (ORDER BY {popularOrder}) ordinal
+                         FROM show_popularity WHERE NOT is_global AND artist_uuid=owner.uuid
+                         ORDER BY {popularOrder} LIMIT @limit)
+                        UNION ALL
+                        (SELECT uuid,artist_uuid,true trending,row_number() OVER (ORDER BY {trendingOrder}) ordinal
+                         FROM show_popularity WHERE NOT is_global AND artist_uuid=owner.uuid
+                           AND plays_48h>=@recentFloor AND plays_30d>=@monthlyFloor
+                         ORDER BY {trendingOrder} LIMIT @limit)
+                    ) ranked ORDER BY artist_uuid,trending,ordinal
+                    """,
+                    new
+                    {
+                        artists = owners,
+                        limit,
+                        recentFloor = PopularityService.ShowTrendingPlays48hFloor,
+                        monthlyFloor = PopularityService.ShowTrendingPlays30dFloor,
+                    },
+                    cancellationToken
+                )
             )
-            .Distinct()
-            .ToArray();
-        var shows = await ReadShows(session, selectedIds, cancellationToken);
-        var metrics = shows
-            .Where(show =>
-                maps.TryGetValue(show.artist_uuid, out var artistMap)
-                && artistMap.ContainsKey(show.uuid)
-            )
-            .ToDictionary(show => show.uuid, show => maps[show.artist_uuid][show.uuid]);
-        await metadata.Apply(session, shows, cancellationToken, metrics);
+        ).ToArray();
+        var shows = await ReadShows(
+            session,
+            selected.Select(row => row.uuid).Distinct().ToArray(),
+            cancellationToken
+        );
+        await metadata.Apply(session, shows, cancellationToken);
+        var byId = shows.ToDictionary(show => show.uuid);
+        IReadOnlyList<CatalogShow> Group(Guid artist, bool trending) =>
+            selected
+                .Where(row =>
+                    row.artist_uuid == artist
+                    && row.trending == trending
+                    && byId.TryGetValue(row.uuid, out var show)
+                    && show.artist_uuid == artist
+                )
+                .Select(row => byId[row.uuid])
+                .ToArray();
         return owners
-            .Select(artist =>
-            {
-                var owned = shows.Where(show => show.artist_uuid == artist).ToArray();
-                return new CatalogArtistRankings(
-                    artist,
-                    RankShows(owned, maps[artist], false, window).Take(limit).ToArray(),
-                    RankShows(owned, maps[artist], true, window).Take(limit).ToArray()
-                );
-            })
+            .Select(artist => new CatalogArtistRankings(
+                artist,
+                Group(artist, false),
+                Group(artist, true)
+            ))
             .ToArray();
     }
 
@@ -209,55 +197,104 @@ public sealed class CatalogRankingReader(
         CancellationToken cancellationToken
     )
     {
-        var candidates = new Dictionary<Guid, (Guid Artist, CachedShowPopularity Cached)>();
-        foreach (var artist in artists.Distinct().Order())
+        if (artists.Length == 0)
         {
-            var map = await popularity
-                .GetShowPopularityCacheMapForArtist(artist)
-                .WaitAsync(cancellationToken);
-            foreach (var (id, cached) in map)
-            {
-                candidates.TryAdd(id, (artist, cached));
-            }
+            return [];
         }
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
-        var selectedIds = candidates
-            .OrderByDescending(entry =>
-                CachedShowPopularityMapper.GetRankingMomentumScore(entry.Value.Cached)
+        var selected = (
+            await session.Connection.QueryAsync<StoredPopularity>(
+                session.Command(
+                    """
+                    SELECT * FROM show_popularity WHERE NOT is_global AND artist_uuid=ANY(@artists)
+                    ORDER BY COALESCE(organic_momentum_score,momentum_score) DESC,momentum_score DESC,
+                             hot_score_30d DESC,plays_30d DESC,uuid
+                    LIMIT @limit
+                    """,
+                    new { artists, limit },
+                    cancellationToken
+                )
             )
-            .ThenByDescending(entry =>
-                CachedShowPopularityMapper.GetRawMomentumScore(entry.Value.Cached)
+        ).ToArray();
+        var shows = (
+            await ReadShows(session, selected.Select(row => row.uuid).ToArray(), cancellationToken)
+        ).ToDictionary(show => show.uuid);
+        var owned = selected
+            .Where(row =>
+                shows.TryGetValue(row.uuid, out var show) && show.artist_uuid == row.artist_uuid
             )
-            .ThenByDescending(entry => entry.Value.Cached.windows.days_30d.hot_score)
-            .ThenByDescending(entry => entry.Value.Cached.windows.days_30d.plays)
-            .ThenBy(entry => entry.Key)
-            .Take(limit)
-            .Select(entry => entry.Key)
             .ToArray();
-        var shows = (await ReadShows(session, selectedIds, cancellationToken)).ToDictionary(show =>
-            show.uuid
+        var ordered = owned.Select(row => shows[row.uuid]).ToArray();
+        await metadata.Apply(
+            session,
+            ordered,
+            cancellationToken,
+            owned.ToDictionary(row => row.uuid, row => row.ToMetrics(organic: true))
         );
-        var ordered = selectedIds
-            .Where(id =>
-                shows.TryGetValue(id, out var show) && show.artist_uuid == candidates[id].Artist
-            )
-            .Select(id => shows[id])
-            .ToArray();
-        var metrics = ordered.ToDictionary(
-            show => show.uuid,
-            show =>
-            {
-                var cached = candidates[show.uuid].Cached;
-                var value = CachedShowPopularityMapper.ToPopularityMetrics(cached);
-                value.momentum_score = CachedShowPopularityMapper.GetRankingMomentumScore(cached);
-                return value;
-            }
-        );
-        await metadata.Apply(session, ordered, cancellationToken, metrics);
         return ordered;
     }
 
-    private async Task<CatalogShow[]> ReadShows(
+    private static async Task<StoredPopularity[]> ReadGlobalScores(
+        CatalogReadSession session,
+        string kind,
+        bool trending,
+        int limit,
+        PopularitySortWindow window,
+        CancellationToken cancellationToken
+    )
+    {
+        var (recentFloor, monthlyFloor) = kind switch
+        {
+            "artist" => (
+                PopularityService.ArtistTrendingPlays48hFloor,
+                PopularityService.ArtistTrendingPlays30dFloor
+            ),
+            "year" => (
+                PopularityService.YearTrendingPlays48hFloor,
+                PopularityService.YearTrendingPlays30dFloor
+            ),
+            "show" => (
+                PopularityService.ShowTrendingPlays48hFloor,
+                PopularityService.ShowTrendingPlays30dFloor
+            ),
+            _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+        };
+        var population = kind == "artist" ? "plays_30d>0" : "is_global";
+        var threshold = trending ? " AND plays_48h>=@recentFloor AND plays_30d>=@monthlyFloor" : "";
+        var order =
+            kind == "show" ? ShowOrder(trending, window)
+            : trending ? "trend_ratio DESC,hot_score_30d DESC,uuid"
+            : "hot_score_30d DESC,plays_30d DESC,uuid";
+        return (
+            await session.Connection.QueryAsync<StoredPopularity>(
+                session.Command(
+                    $"SELECT * FROM {kind}_popularity WHERE {population}{threshold} ORDER BY {order} LIMIT @limit",
+                    new
+                    {
+                        recentFloor,
+                        monthlyFloor,
+                        limit,
+                    },
+                    cancellationToken
+                )
+            )
+        ).ToArray();
+    }
+
+    private static string ShowOrder(bool trending, PopularitySortWindow window)
+    {
+        var suffix = window switch
+        {
+            PopularitySortWindow.Hours48 => "48h",
+            PopularitySortWindow.Days7 => "7d",
+            _ => "30d",
+        };
+        return $"hot_score_{suffix} DESC,plays_{suffix} DESC,"
+            + (trending ? "trend_ratio DESC," : "")
+            + "uuid";
+    }
+
+    private static async Task<CatalogShow[]> ReadShows(
         CatalogReadSession session,
         Guid[] ids,
         CancellationToken cancellationToken
@@ -267,7 +304,7 @@ public sealed class CatalogRankingReader(
         {
             return [];
         }
-        var shows = (
+        return (
             await session.Connection.QueryAsync<CatalogShow>(
                 session.Command(
                     CatalogShowMetadataReader.ShowSelect + " WHERE s.uuid=ANY(@ids)",
@@ -276,64 +313,13 @@ public sealed class CatalogRankingReader(
                 )
             )
         ).ToArray();
-        return shows;
     }
 
-    private static IEnumerable<CatalogShow> RankShows(
-        IEnumerable<CatalogShow> shows,
-        IReadOnlyDictionary<Guid, PopularityMetrics> map,
-        bool trending,
-        PopularitySortWindow window
-    ) =>
-        Rank(
-                shows
-                    .Where(show => map.ContainsKey(show.uuid))
-                    .Select(show => new CatalogRanked<CatalogShow>(show, map[show.uuid])),
-                trending,
-                PopularityService.ShowTrendingPlays48hFloor,
-                PopularityService.ShowTrendingPlays30dFloor,
-                window,
-                show => show.uuid,
-                trendByRatio: false
-            )
-            .Select(item => item.Resource);
-
-    private static IOrderedEnumerable<CatalogRanked<T>> Rank<T>(
-        IEnumerable<CatalogRanked<T>> items,
-        bool trending,
-        int recentFloor,
-        int monthlyFloor,
-        PopularitySortWindow window,
-        Func<T, Guid> id,
-        bool trendByRatio = true
-    )
+    private sealed class ArtistSelection
     {
-        if (trending)
-        {
-            items = items.Where(item =>
-                item.Metrics.windows.hours_48h.plays >= recentFloor
-                && item.Metrics.windows.days_30d.plays >= monthlyFloor
-            );
-        }
-        PopularityWindowMetrics Window(PopularityMetrics metrics) =>
-            window switch
-            {
-                PopularitySortWindow.Hours48 => metrics.windows.hours_48h,
-                PopularitySortWindow.Days7 => metrics.windows.days_7d,
-                _ => metrics.windows.days_30d,
-            };
-        var ranked =
-            trending && trendByRatio
-                ? items
-                    .OrderByDescending(item => item.Metrics.trend_ratio)
-                    .ThenByDescending(item => Window(item.Metrics).hot_score)
-                : items
-                    .OrderByDescending(item => Window(item.Metrics).hot_score)
-                    .ThenByDescending(item => Window(item.Metrics).plays);
-        if (trending && !trendByRatio)
-        {
-            ranked = ranked.ThenByDescending(item => item.Metrics.trend_ratio);
-        }
-        return ranked.ThenBy(item => id(item.Resource));
+        public Guid uuid { get; set; }
+        public Guid artist_uuid { get; set; }
+        public bool trending { get; set; }
+        public long ordinal { get; set; }
     }
 }
