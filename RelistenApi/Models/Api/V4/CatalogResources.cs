@@ -24,7 +24,7 @@ public record ShowSummaryResource
     public bool HasStreamableFlacSource { get; init; }
     public int SourceCount { get; init; }
 
-    /// <summary>Artist-local listening metrics; null when the score map has no entry.</summary>
+    /// <summary>Listening metrics in the endpoint's scoring context; null when its map has no entry.</summary>
     public PopularityResource? Popularity { get; init; }
     public DateTime CreatedAt { get; init; }
     public DateTime UpdatedAt { get; init; }

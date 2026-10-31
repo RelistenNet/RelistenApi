@@ -4,6 +4,8 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
+using Relisten.Api.Models;
+using Relisten.Services.Popularity;
 
 namespace Relisten.Catalog;
 
@@ -16,13 +18,18 @@ public sealed class CatalogShowMetadataReader(
     CatalogVenueMetadataReader venueMetadata,
     CatalogArtistVenueMetadataReader artistVenueMetadata,
     CatalogTourMetadataReader tourMetadata,
-    CatalogShowPopularityReader popularity
+    PopularityService popularity
 )
 {
+    /// <summary>
+    /// Hydrates one show batch. Supplied scores retain the caller's ranking
+    /// context; otherwise artist-local maps are read once per artist.
+    /// </summary>
     public async Task Apply(
         CatalogReadSession session,
         IReadOnlyList<CatalogShow> shows,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        IReadOnlyDictionary<Guid, PopularityMetrics>? popularityMap = null
     )
     {
         if (shows.Count == 0)
@@ -90,7 +97,30 @@ public sealed class CatalogShowMetadataReader(
         }
 
         await ApplyVenues(session, shows, cancellationToken);
-        await popularity.Apply(shows, cancellationToken);
+        await ApplyPopularity(shows, popularityMap, cancellationToken);
+    }
+
+    // A supplied map keeps ranking context and avoids fetching artist maps that
+    // the caller does not need. An empty supplied map also suppresses fallback.
+    private async Task ApplyPopularity(
+        IReadOnlyList<CatalogShow> shows,
+        IReadOnlyDictionary<Guid, PopularityMetrics>? suppliedMap,
+        CancellationToken cancellationToken
+    )
+    {
+        foreach (var group in shows.GroupBy(show => show.artist_uuid))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var map =
+                suppliedMap
+                ?? await popularity
+                    .GetShowPopularityMapForArtist(group.Key)
+                    .WaitAsync(cancellationToken);
+            foreach (var show in group)
+            {
+                show.Popularity = map.GetValueOrDefault(show.uuid);
+            }
+        }
     }
 
     private async Task ApplyVenues(

@@ -18,14 +18,13 @@ public sealed record CatalogArtistRankings(
 );
 
 /// <summary>
-/// Ranking maps are asynchronous inputs, shared once per request. Catalog
-/// metadata uses one read snapshot, so cached ranks never freeze show resources.
+/// Ranking maps supply both selection and response scores. Catalog metadata
+/// uses one read snapshot; ranking responses are transient online results.
 /// </summary>
 public sealed class CatalogRankingReader(
     DbService db,
     PopularityService popularity,
-    CatalogShowMetadataReader metadata,
-    CatalogShowPopularityReader showPopularity
+    CatalogShowMetadataReader metadata
 )
 {
     public async Task<IReadOnlyList<CatalogRanked<CatalogArtist>>> ReadArtists(
@@ -120,7 +119,7 @@ public sealed class CatalogRankingReader(
                 cancellationToken
             )
         ).ToDictionary(show => show.uuid);
-        await metadata.Apply(session, shows.Values.ToArray(), cancellationToken);
+        await metadata.Apply(session, shows.Values.ToArray(), cancellationToken, map);
         return selected
             .Where(item => shows.ContainsKey(item.Resource))
             .Select(item => shows[item.Resource])
@@ -138,12 +137,9 @@ public sealed class CatalogRankingReader(
         var maps = new Dictionary<Guid, Dictionary<Guid, PopularityMetrics>>();
         foreach (var artist in artists.Distinct().Order())
         {
-            maps[artist] = (
-                await showPopularity.ReadMap(artist).WaitAsync(cancellationToken)
-            ).ToDictionary(
-                entry => entry.Key,
-                entry => CachedShowPopularityMapper.ToPopularityMetrics(entry.Value)
-            );
+            maps[artist] = await popularity
+                .GetShowPopularityMapForArtist(artist)
+                .WaitAsync(cancellationToken);
         }
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
         var owners = (
@@ -187,7 +183,13 @@ public sealed class CatalogRankingReader(
             .Distinct()
             .ToArray();
         var shows = await ReadShows(session, selectedIds, cancellationToken);
-        await metadata.Apply(session, shows, cancellationToken);
+        var metrics = shows
+            .Where(show =>
+                maps.TryGetValue(show.artist_uuid, out var artistMap)
+                && artistMap.ContainsKey(show.uuid)
+            )
+            .ToDictionary(show => show.uuid, show => maps[show.artist_uuid][show.uuid]);
+        await metadata.Apply(session, shows, cancellationToken, metrics);
         return owners
             .Select(artist =>
             {
@@ -210,7 +212,9 @@ public sealed class CatalogRankingReader(
         var candidates = new Dictionary<Guid, (Guid Artist, CachedShowPopularity Cached)>();
         foreach (var artist in artists.Distinct().Order())
         {
-            var map = await showPopularity.ReadMap(artist).WaitAsync(cancellationToken);
+            var map = await popularity
+                .GetShowPopularityCacheMapForArtist(artist)
+                .WaitAsync(cancellationToken);
             foreach (var (id, cached) in map)
             {
                 candidates.TryAdd(id, (artist, cached));
@@ -233,13 +237,24 @@ public sealed class CatalogRankingReader(
         var shows = (await ReadShows(session, selectedIds, cancellationToken)).ToDictionary(show =>
             show.uuid
         );
-        await metadata.Apply(session, shows.Values.ToArray(), cancellationToken);
-        return selectedIds
+        var ordered = selectedIds
             .Where(id =>
                 shows.TryGetValue(id, out var show) && show.artist_uuid == candidates[id].Artist
             )
             .Select(id => shows[id])
             .ToArray();
+        var metrics = ordered.ToDictionary(
+            show => show.uuid,
+            show =>
+            {
+                var cached = candidates[show.uuid].Cached;
+                var value = CachedShowPopularityMapper.ToPopularityMetrics(cached);
+                value.momentum_score = CachedShowPopularityMapper.GetRankingMomentumScore(cached);
+                return value;
+            }
+        );
+        await metadata.Apply(session, ordered, cancellationToken, metrics);
+        return ordered;
     }
 
     private async Task<CatalogShow[]> ReadShows(

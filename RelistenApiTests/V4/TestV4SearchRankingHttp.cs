@@ -182,21 +182,13 @@ public sealed partial class TestV4CatalogHttp
                     [Guid.Parse("00000000-0000-0000-0000-000000000014")] = Metrics(2000, 100, 200),
                 }
             );
-            // Global momentum is a different comparison population. It must not leak
-            // into the same show's artist-local resource fields.
-            await Put(
-                keys[1],
-                new Dictionary<Guid, object>
-                {
-                    [Guid.Parse("00000000-0000-0000-0000-000000000004")] = Metrics(
-                        100,
-                        10,
-                        20,
-                        0.4
-                    ),
-                    [Guid.Parse("00000000-0000-0000-0000-000000000010")] = Metrics(50, 40, 5, 0.5),
-                }
-            );
+            // Each ranking publishes the scores used by that endpoint.
+            var globalMap = new Dictionary<Guid, object>
+            {
+                [Guid.Parse("00000000-0000-0000-0000-000000000004")] = Metrics(100, 10, 20, 0.4),
+                [Guid.Parse("00000000-0000-0000-0000-000000000010")] = Metrics(50, 40, 5, 0.5),
+            };
+            await Put(keys[1], globalMap);
             await Put(keys[3], showMap);
             await Put(
                 keys[4],
@@ -228,9 +220,15 @@ public sealed partial class TestV4CatalogHttp
             var grouped = groups[0]!["popular_shows"]![0]!;
             grouped["artist_venue"].Should().NotBeNull();
             grouped["id"]!.GetValue<string>().Should().Be(ShowId(4));
-            (await Ids($"/api/v4/shows/momentum?artist_ids={BrowseArtistId}"))
+            var momentum = (
+                await GetJson($"/api/v4/shows/momentum?artist_ids={BrowseArtistId}")
+            ).AsArray();
+            momentum
+                .Select(show => show!["id"]!.GetValue<string>())
                 .Should()
                 .Equal(ShowId(10), ShowId(4));
+            momentum[0]!["popularity"]!["momentum_score"]!.GetValue<double>().Should().Be(0.8);
+            momentum[1]!["popularity"]!["momentum_score"]!.GetValue<double>().Should().Be(0.1);
             (await GetJson("/api/v4/popular/artists"))[0]!["features"]!.Should().NotBeNull();
             (await GetJson("/api/v4/trending/years"))[0]!["id"]!
                 .GetValue<string>()
@@ -254,6 +252,13 @@ public sealed partial class TestV4CatalogHttp
             noActivity.AsObject().ContainsKey("popularity").Should().BeTrue();
             noActivity["popularity"].Should().BeNull();
             using var ranked = await http.GetAsync("/api/v4/popular/shows");
+            var globalShows = JsonNode.Parse(await ranked.Content.ReadAsStringAsync())!.AsArray();
+            globalShows.Single(show => show!["id"]!.GetValue<string>() == ShowId(4))![
+                "popularity"
+            ]!["momentum_score"]!
+                .GetValue<double>()
+                .Should()
+                .Be(0.4);
             using var unchanged = await Conditional(
                 "/api/v4/popular/shows",
                 ranked.Headers.ETag!.ToString()
@@ -266,7 +271,7 @@ public sealed partial class TestV4CatalogHttp
                 "/api/v4/popular/shows",
                 ranked.Headers.ETag!.ToString()
             );
-            changed.StatusCode.Should().Be(HttpStatusCode.OK);
+            changed.StatusCode.Should().Be(HttpStatusCode.NotModified);
             using var changedSnapshot = await Conditional(
                 BrowseArtistPath + "/catalog",
                 artistSnapshot.Headers.ETag!.ToString()
@@ -274,11 +279,28 @@ public sealed partial class TestV4CatalogHttp
             changedSnapshot.StatusCode.Should().Be(HttpStatusCode.OK);
             var updated = (await GetJson(ShowPath(4)))["popularity"]!;
             updated["momentum_score"]!.GetValue<double>().Should().Be(0.7);
+            globalMap[Guid.Parse("00000000-0000-0000-0000-000000000004")] = Metrics(
+                100,
+                10,
+                20,
+                0.6
+            );
+            await Put(keys[1], globalMap);
+            using var globalChanged = await Conditional(
+                "/api/v4/popular/shows",
+                ranked.Headers.ETag!.ToString()
+            );
+            globalChanged.StatusCode.Should().Be(HttpStatusCode.OK);
             await Put(keys[3], showMap, stale: true);
             using var unavailable = await Conditional(BrowseArtistPath + "/shows", "*");
             unavailable.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
             unavailable.Headers.CacheControl!.NoStore.Should().BeTrue();
             unavailable.Headers.ETag.Should().BeNull();
+            // Global rankings need only their global map, even when artist refresh fails.
+            (await GetJson("/api/v4/popular/shows"))[0]!["popularity"]!["momentum_score"]!
+                .GetValue<double>()
+                .Should()
+                .Be(0.6);
             await Put(keys[3], showMap);
             (await GetJson(ShowPath(4)))["popularity"]!["momentum_score"]!
                 .GetValue<double>()
@@ -317,9 +339,6 @@ public sealed partial class TestV4CatalogHttp
                 ($"/api/v4/search?q=1995-12-31&artist_id={BrowseArtistId}", "shows"),
                 (BrowseArtistPath + "/shows/on-date?month=12&day=31", null),
                 (BrowseArtistPath + "/shows/recently-performed", null),
-                ("/api/v4/popular/shows", null),
-                ("/api/v4/trending/shows", null),
-                ($"/api/v4/shows/momentum?artist_ids={BrowseArtistId}", null),
                 (BrowseArtistPath + "/shows/popular-trending", "popular_shows"),
             }
         )

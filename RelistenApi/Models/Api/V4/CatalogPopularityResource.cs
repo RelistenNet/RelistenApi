@@ -3,8 +3,8 @@ using Newtonsoft.Json;
 namespace Relisten.Api.Models.Api.V4;
 
 /// <summary>
-/// Listening windows and scores. A show's momentum is raw and relative to its
-/// artist's shows; ranking order may use global or organic selection scores.
+/// Listening windows and scores in the endpoint's context: artist-local for
+/// ordinary show reads, global for global rankings, organic for momentum.
 /// </summary>
 public sealed record PopularityResource(
     double MomentumScore,
