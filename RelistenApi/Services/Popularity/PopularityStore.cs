@@ -69,6 +69,42 @@ public sealed class PopularityStore(DbService db)
             generatedAt
         );
 
+    internal async Task<PopularityPopulation[]> ReadStale(
+        IReadOnlyList<PopularityPopulation> populations,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var connection = db.CreateConnection(longTimeout: false, readOnly: false);
+        await connection.OpenAsync(cancellationToken);
+        var stale = await connection.QueryAsync<(string Kind, Guid Scope)>(
+            new CommandDefinition(
+                """
+                SELECT requested.kind,requested.scope_uuid
+                FROM unnest(@kinds::text[],@scopes::uuid[]) requested(kind,scope_uuid)
+                LEFT JOIN popularity_refreshes refreshed USING(kind,scope_uuid)
+                LEFT JOIN artists a ON a.uuid=requested.scope_uuid
+                WHERE (requested.scope_uuid=@global OR a.uuid IS NOT NULL)
+                  AND (refreshed.generated_at IS NULL OR refreshed.generated_at<=@cutoff)
+                """,
+                new
+                {
+                    kinds = populations.Select(population => population.StorageKind).ToArray(),
+                    scopes = populations.Select(population => population.Scope).ToArray(),
+                    global = Guid.Empty,
+                    cutoff = DateTime.UtcNow.AddSeconds(
+                        -PopularityService.DefaultStaleAfterSeconds
+                    ),
+                },
+                commandTimeout: 30,
+                cancellationToken: cancellationToken
+            )
+        );
+        var keys = stale.ToHashSet();
+        return populations
+            .Where(population => keys.Contains((population.StorageKind, population.Scope)))
+            .ToArray();
+    }
+
     private async Task Replace(
         string kind,
         Guid? artist,
@@ -78,7 +114,7 @@ public sealed class PopularityStore(DbService db)
     {
         // Names are chosen only by the typed entrypoints above. JSON is a batch
         // parameter, not SQL, and avoids a round trip for every calculated row.
-        var rows = JsonConvert.SerializeObject(values.OrderBy(row => row.uuid));
+        var rows = JsonConvert.SerializeObject(values);
         await using var connection = db.CreateConnection(longTimeout: false, readOnly: false);
         await connection.OpenAsync();
         await using var transaction = await connection.BeginTransactionAsync();
@@ -112,9 +148,10 @@ public sealed class PopularityStore(DbService db)
                 ? "true"
                 : "is_global=@isGlobal AND (@artist::uuid IS NULL OR artist_uuid=@artist)";
         var conflict = kind == "artist" ? "uuid" : "uuid,is_global";
+        var columns = kind == "show" ? Columns + ",organic_momentum_score" : Columns;
         var assignments = string.Join(
             ',',
-            Columns.Split(',').Select(column => $"{column}=EXCLUDED.{column}")
+            columns.Split(',').Select(column => $"{column}=EXCLUDED.{column}")
         );
         if (kind != "artist")
         {
@@ -127,13 +164,13 @@ public sealed class PopularityStore(DbService db)
                     uuid uuid,plays_30d bigint,hours_30d double precision,hot_score_30d double precision,
                     plays_7d bigint,hours_7d double precision,hot_score_7d double precision,
                     plays_48h bigint,hours_48h double precision,hot_score_48h double precision,
-                    plays_6h bigint,plays_90d bigint,trend_ratio double precision,
-                    momentum_score double precision,organic_momentum_score double precision)
+                    trend_ratio double precision,momentum_score double precision,
+                    organic_momentum_score double precision)
             )
-            INSERT INTO {kind}_popularity(uuid,{Columns}{ownerColumns})
+            INSERT INTO {kind}_popularity(uuid,{columns}{ownerColumns})
             SELECT x.uuid,{string.Join(
                 ',',
-                Columns.Split(',').Select(column => "x." + column)
+                columns.Split(',').Select(column => "x." + column)
             )}{ownerValues}
             FROM input x JOIN {kind}s entity ON entity.uuid=x.uuid{ownerJoin}
             WHERE {ownerFilter} ORDER BY x.uuid
@@ -175,5 +212,5 @@ public sealed class PopularityStore(DbService db)
         ).ToArray();
 
     private const string Columns =
-        "plays_30d,hours_30d,hot_score_30d,plays_7d,hours_7d,hot_score_7d,plays_48h,hours_48h,hot_score_48h,plays_6h,plays_90d,trend_ratio,momentum_score,organic_momentum_score";
+        "plays_30d,hours_30d,hot_score_30d,plays_7d,hours_7d,hot_score_7d,plays_48h,hours_48h,hot_score_48h,trend_ratio,momentum_score";
 }

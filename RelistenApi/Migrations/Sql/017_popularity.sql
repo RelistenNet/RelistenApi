@@ -20,11 +20,8 @@ CREATE TABLE artist_popularity (
     plays_48h bigint NOT NULL,
     hours_48h double precision NOT NULL,
     hot_score_48h double precision NOT NULL,
-    plays_6h bigint NOT NULL,
-    plays_90d bigint NOT NULL,
     trend_ratio double precision NOT NULL,
     momentum_score double precision NOT NULL,
-    organic_momentum_score double precision NULL,
     PRIMARY KEY (uuid)
 );
 CREATE INDEX artist_popularity_hot_30d_idx ON artist_popularity (hot_score_30d DESC, plays_30d DESC, uuid);
@@ -43,17 +40,15 @@ CREATE TABLE show_popularity (
     plays_48h bigint NOT NULL,
     hours_48h double precision NOT NULL,
     hot_score_48h double precision NOT NULL,
-    plays_6h bigint NOT NULL,
-    plays_90d bigint NOT NULL,
     trend_ratio double precision NOT NULL,
     momentum_score double precision NOT NULL,
     organic_momentum_score double precision NULL,
     PRIMARY KEY (uuid, is_global)
 );
 CREATE INDEX show_popularity_artist_idx ON show_popularity (artist_uuid, is_global);
-CREATE INDEX show_popularity_hot_30d_idx ON show_popularity (is_global, hot_score_30d DESC, plays_30d DESC, uuid);
-CREATE INDEX show_popularity_hot_7d_idx ON show_popularity (is_global, hot_score_7d DESC, plays_7d DESC, uuid);
-CREATE INDEX show_popularity_hot_48h_idx ON show_popularity (is_global, hot_score_48h DESC, plays_48h DESC, uuid);
+CREATE INDEX show_popularity_hot_30d_idx ON show_popularity (hot_score_30d DESC, plays_30d DESC, uuid) WHERE is_global;
+CREATE INDEX show_popularity_hot_7d_idx ON show_popularity (hot_score_7d DESC, plays_7d DESC, uuid) WHERE is_global;
+CREATE INDEX show_popularity_hot_48h_idx ON show_popularity (hot_score_48h DESC, plays_48h DESC, uuid) WHERE is_global;
 
 CREATE TABLE year_popularity (
     uuid uuid NOT NULL REFERENCES years(uuid) ON DELETE CASCADE,
@@ -68,14 +63,11 @@ CREATE TABLE year_popularity (
     plays_48h bigint NOT NULL,
     hours_48h double precision NOT NULL,
     hot_score_48h double precision NOT NULL,
-    plays_6h bigint NOT NULL,
-    plays_90d bigint NOT NULL,
     trend_ratio double precision NOT NULL,
     momentum_score double precision NOT NULL,
-    organic_momentum_score double precision NULL,
     PRIMARY KEY (uuid, is_global)
 );
 CREATE INDEX year_popularity_artist_idx ON year_popularity (artist_uuid, is_global);
-CREATE INDEX year_popularity_hot_30d_idx ON year_popularity (is_global, hot_score_30d DESC, plays_30d DESC, uuid);
-CREATE INDEX year_popularity_trending_idx ON year_popularity (is_global, trend_ratio DESC, hot_score_30d DESC, uuid);
+CREATE INDEX year_popularity_hot_30d_idx ON year_popularity (hot_score_30d DESC, plays_30d DESC, uuid) WHERE is_global;
+CREATE INDEX year_popularity_trending_idx ON year_popularity (trend_ratio DESC, hot_score_30d DESC, uuid) WHERE is_global;
 

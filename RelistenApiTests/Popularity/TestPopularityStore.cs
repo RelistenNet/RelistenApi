@@ -133,6 +133,50 @@ public sealed class TestPopularityStore
     }
 
     [Test]
+    public async Task Stale_and_missing_populations_queue_once_while_fresh_empty_results_do_not()
+    {
+        await connection.ExecuteAsync(
+            "DELETE FROM popularity_refreshes WHERE scope_uuid=@artist",
+            new { artist }
+        );
+        await store.ReplaceArtistShows(
+            artist,
+            new Dictionary<Guid, CachedShowPopularity>(),
+            DateTime.UtcNow.AddHours(-2)
+        );
+        var jobs = new RecordingPopularityJobs();
+        var request = new PopularityRefreshRequest(db, jobs);
+        request.Require(PopularityPopulationKind.Show, artist);
+        request.Require(PopularityPopulationKind.Show, artist);
+        request.Require(PopularityPopulationKind.Year, artist);
+        request.Require(PopularityPopulationKind.Show, Guid.NewGuid());
+        await request.EnqueueStale(CancellationToken.None);
+        jobs.Batches.Should()
+            .ContainSingle()
+            .Which.Should()
+            .BeEquivalentTo(
+                new[]
+                {
+                    new PopularityPopulation(PopularityPopulationKind.Show, artist),
+                    new PopularityPopulation(PopularityPopulationKind.Year, artist),
+                }
+            );
+
+        await store.ReplaceArtistShows(
+            artist,
+            new Dictionary<Guid, CachedShowPopularity>(),
+            DateTime.UtcNow
+        );
+        await store.ReplaceYears(
+            artist,
+            new Dictionary<Guid, PopularityMetrics>(),
+            DateTime.UtcNow
+        );
+        await request.EnqueueStale(CancellationToken.None);
+        jobs.Batches.Should().ContainSingle();
+    }
+
+    [Test]
     public async Task Refresh_publishes_the_same_calculation_to_Postgres_and_legacy_Redis()
     {
         var options = RedisService.BuildConfiguration("redis://127.0.0.1:16379");
@@ -230,7 +274,7 @@ public sealed class TestPopularityStore
                 jobs,
                 NullLogger<PopularityService>.Instance
             );
-            await service.RefreshShowPopularityMapForArtist(artist);
+            await service.RefreshPopulations([new(PopularityPopulationKind.Show, artist)]);
             (await cache.GetAsync<Dictionary<Guid, CachedShowPopularity>>(key))
                 .Entry!.data[show]
                 .windows.days_30d.plays.Should()

@@ -15,10 +15,17 @@ namespace Relisten.Services.Popularity
             this.popularityService = popularityService;
         }
 
-        /// <summary>Refreshes rolling windows without depending on legacy API traffic.</summary>
+        /// <summary>Explicit full backfill/repair; this is not a recurring job.</summary>
         [Queue("default")]
         public Task RefreshReadModel(CancellationToken cancellationToken) =>
             popularityService.RefreshReadModel(cancellationToken);
+
+        /// <summary>Recalculates the stale populations selected by one catalog request.</summary>
+        [Queue("default")]
+        public Task RefreshPopulations(
+            PopularityPopulation[] populations,
+            CancellationToken cancellationToken
+        ) => popularityService.RefreshPopulations(populations, cancellationToken);
 
         [Queue("default")]
         public Task RefreshGlobalShowPopularityMap() =>
