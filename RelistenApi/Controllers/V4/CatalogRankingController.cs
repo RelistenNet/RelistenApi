@@ -19,8 +19,9 @@ namespace Relisten.Controllers.V4;
 [ProducesResponseType(typeof(ProblemDetails), 503, "application/problem+json")]
 public sealed class CatalogRankingController(
     CatalogRankingReader reader,
+    PopularityRefreshRequest refresh,
     ILogger<CatalogRankingController> logger
-) : CatalogControllerBase(logger)
+) : CatalogControllerBase(logger, refresh)
 {
     [HttpGet("popular/artists")]
     [ProducesResponseType(typeof(RankedArtistResource[]), 200, "application/json")]

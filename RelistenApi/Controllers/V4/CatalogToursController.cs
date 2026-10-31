@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Relisten.Api.Models.Api.V4;
 using Relisten.Catalog;
 using Relisten.Identifiers;
+using Relisten.Services.Popularity;
 
 namespace Relisten.Controllers.V4;
 
@@ -18,8 +19,9 @@ namespace Relisten.Controllers.V4;
 [ProducesResponseType(typeof(ProblemDetails), 503)]
 public sealed class CatalogToursController(
     CatalogTourReader reader,
+    PopularityRefreshRequest refresh,
     ILogger<CatalogToursController> logger
-) : CatalogControllerBase(logger)
+) : CatalogControllerBase(logger, refresh)
 {
     [HttpGet("artists/{artistId}/tours")]
     [ProducesResponseType(typeof(TourResource[]), 200)]

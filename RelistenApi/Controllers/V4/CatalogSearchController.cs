@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Relisten.Api.Models.Api.V4;
 using Relisten.Catalog;
 using Relisten.Identifiers;
+using Relisten.Services.Popularity;
 
 namespace Relisten.Controllers.V4;
 
@@ -15,8 +16,9 @@ namespace Relisten.Controllers.V4;
 [ProducesResponseType(typeof(ProblemDetails), 503, "application/problem+json")]
 public sealed class CatalogSearchController(
     CatalogSearchReader reader,
+    PopularityRefreshRequest refresh,
     ILogger<CatalogSearchController> logger
-) : CatalogControllerBase(logger)
+) : CatalogControllerBase(logger, refresh)
 {
     [HttpGet]
     [ProducesResponseType(typeof(CatalogSearchResource), 200, "application/json")]

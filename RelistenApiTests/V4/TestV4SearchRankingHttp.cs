@@ -6,11 +6,83 @@ using Microsoft.Extensions.DependencyInjection;
 using Relisten;
 using Relisten.Api.Models;
 using Relisten.Services.Popularity;
+using RelistenApiTests.Popularity;
 
 namespace RelistenApiTests.V4;
 
 public sealed partial class TestV4CatalogHttp
 {
+    [Test]
+    public async Task Stale_snapshot_queues_one_batch_and_queue_failure_is_uncacheable_then_recovers()
+    {
+        var owner = Guid.Parse("00000000-0000-0000-0000-000000000014");
+        var store = new PopularityStore(app.Services.GetRequiredService<DbService>());
+        var metrics = PopularityService.CreateMetrics(100, 20, 1, 10, 200, 12000, 2400, 1200);
+        await store.ReplaceArtistShows(
+            owner,
+            new Dictionary<Guid, CachedShowPopularity>
+            {
+                [Guid.Parse("00000000-0000-0000-0000-000000000004")] =
+                    CachedShowPopularityMapper.FromPopularityMetrics(metrics),
+            },
+            DateTime.UtcNow
+        );
+        await using var connection = await MigratedTestDatabase.OpenAsync();
+        await connection.ExecuteAsync(
+            "UPDATE show_popularity SET generated_at=now()-interval '2 hours' WHERE NOT is_global AND artist_uuid=@owner",
+            new { owner }
+        );
+        var count = refreshJobs.Batches.Count;
+        using var initial = await http.GetAsync(BrowseArtistPath + "/catalog");
+        initial.StatusCode.Should().Be(HttpStatusCode.OK);
+        refreshJobs.Batches.Should().HaveCount(count + 1);
+        refreshJobs
+            .Batches.Last()
+            .Should()
+            .Equal(new PopularityPopulation(PopularityPopulationKind.Show, owner));
+        var etag = initial.Headers.ETag!.ToString();
+
+        refreshJobs.FailNext = true;
+        using var failed = await Conditional(BrowseArtistPath + "/catalog", etag);
+        failed.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+        failed.Headers.CacheControl!.NoStore.Should().BeTrue();
+        failed.Headers.ETag.Should().BeNull();
+        using var recovered = await Conditional(BrowseArtistPath + "/catalog", etag);
+        recovered.StatusCode.Should().Be(HttpStatusCode.NotModified);
+        refreshJobs.Batches.Should().HaveCount(count + 2);
+    }
+
+    [Test]
+    public async Task Inactive_rows_remain_null_and_empty_without_repeat_refreshes_or_zero_artist_aliases()
+    {
+        var owner = Guid.Parse("00000000-0000-0000-0000-000000000014");
+        var store = new PopularityStore(app.Services.GetRequiredService<DbService>());
+        await store.ReplaceArtistShows(
+            owner,
+            new Dictionary<Guid, CachedShowPopularity>(),
+            DateTime.UtcNow
+        );
+        await store.ReplaceGlobalShows(new Dictionary<Guid, PopularityMetrics>(), DateTime.UtcNow);
+        var count = refreshJobs.Batches.Count;
+        (await GetJson(ShowPath(4)))["popularity"].Should().BeNull();
+        (await GetJson("/api/v4/popular/shows")).AsArray().Should().BeEmpty();
+        (await GetJson($"/api/v4/shows/momentum?artist_ids={BrowseArtistId}"))
+            .AsArray()
+            .Should()
+            .BeEmpty();
+        refreshJobs.Batches.Should().HaveCount(count);
+
+        await using var connection = await MigratedTestDatabase.OpenAsync();
+        await connection.ExecuteAsync(
+            "UPDATE show_popularity SET generated_at=now()-interval '2 hours' WHERE is_global"
+        );
+        (await GetJson($"/api/v4/shows/momentum?artist_ids={CatalogId("artist", 0)}"))
+            .AsArray()
+            .Should()
+            .BeEmpty();
+        refreshJobs.Batches.Should().HaveCount(count);
+    }
+
     [Test]
     public async Task Search_returns_existing_resource_shapes_and_approved_aliases_with_imported_fallback()
     {
