@@ -1054,7 +1054,6 @@ public sealed partial class TestV4CatalogHttp
                 "/api/v4/shows/popular-trending",
                 "/api/v4/shows/momentum",
                 "/api/v4/artists/{artistId}",
-                "/api/v4/artists/{artistId}/catalog",
                 "/api/v4/catalog/resolve",
                 "/api/v4/artists/{artistId}/years",
                 "/api/v4/artists/{artistId}/years/{yearId}",

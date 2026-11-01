@@ -1,113 +1,91 @@
-# Mobile handoff: prove one v4 catalog journey
+# Mobile handoff: load v4 through the existing browsing journey
 
-The server is ready for the local C3 mobile pilot. The [contract audit and origin
-measurements](api-qualification.md) cover all 51 operations, real response/schema
-agreement, conditional reads, and representative concurrent requests. Production
-capacity and mobile memory/apply time still need release qualification.
+Use the smaller v4 endpoints for artist → years → year → show → source → playable
+track navigation. The combined `/artists/{id}/catalog` endpoint has been removed.
+The earlier handoff directed the pilot to fetch all artist collections; that
+instruction is superseded. Do not replace it with an eager fan-out to every list.
+Alec and Switz review the real journey, including an offline restart, before
+broader mobile adoption. Account/auth work stays separate; catalog reads need no
+login.
 
-Alec and Switz should now prove one artist sync → show → source → playable track
-journey, with an offline restart. Keep one Realm/repository set and the existing
-player. Account/auth adoption remains separate; this pilot needs no login.
+## Current integration
 
-## Start from the current mobile code
+The mobile pilot is in the sibling `relisten-mobile` checkout on
+`codex/v4-mobile-pilot`, with additive Realm schema 18 storage. Recheck its current
+branch and working tree before editing. Its public entrypoints are
+`relisten/api/client.ts`, `relisten/api/v4/catalog_client.ts` and the existing
+Realm repositories. Keep one repository set and the existing player.
 
-The sibling checkout inspected on October 31 was `codex/c2-account-client` at
-`0e033d5`, with Realm schema 17. It already has typed account targets and a UUID
-codec in `relisten/util/typed_uuid_id.ts`; catalog reads still use v3.
-Recheck the branch before implementation. Earlier mobile investigation notes
-describe an older account baseline and say v4 live routes are missing; those
-status claims are superseded by this handoff.
+For simulator review, set
+`EXPO_PUBLIC_RELISTEN_CATALOG_ORIGIN=http://127.0.0.1:43823` (without `/api`) and
+opt into `EXPO_PUBLIC_RELISTEN_CATALOG_TRANSPORT=v4`. V3 remains the default.
+Start the API with `./local-dev/v4-review/run.sh` and inspect
+[Swagger](http://127.0.0.1:43823/api-docs-v4/index.html). Physical devices need a
+reachable HTTPS origin.
 
-The main integration points are `relisten/api/client.ts`,
-`relisten/api/catalog_config.ts`, `relisten/realm/schema.ts`, the existing
-repositories, and the account target adapter. Leave the v3 resolver DTOs intact.
-Add v4 wire types and a small transport/apply adapter; do not change every URL
-version in the existing client.
+## Fetch what the screen needs
 
-For local iOS Simulator review, set
-`EXPO_PUBLIC_RELISTEN_CATALOG_ORIGIN=http://127.0.0.1:43823` before starting Metro.
-The value is an origin, without `/api`. Start the API with
-`./local-dev/v4-review/run.sh`; [Swagger](http://127.0.0.1:43823/api-docs-v4/index.html)
-documents the current schemas, ETags and 304 responses. Loopback URLs target the
-Mac/simulator; a physical device needs a reachable HTTPS origin.
+| Use | Endpoint | Local replacement |
+| --- | --- | --- |
+| Artist metadata | `GET /artists` or `/artists/{artistId}` | Upsert returned artist fields. |
+| Artist's years | `GET /artists/{artistId}/years` | Replace only that artist's year membership. |
+| Selected year | `GET /artists/{artistId}/years/{yearId}` or `/years/by-number/{year}` | Upsert year metadata; replace only that year's show membership. |
+| Show / source | `GET /shows/{showId}` or `/sources/{sourceId}` | Replace children only for the fully returned owner. |
+| Track | `GET /source-tracks/{trackId}` | Upsert track fields and supplied shallow parents. |
+| Venue / song / tour / era browsing | Respective artist list and resource-detail endpoints | Load on demand; replace only the requested list/detail membership. |
 
-## Implement only the pilot
+All paths above are under `/api/v4`. A complete empty list clears its own cached
+membership. Omission never globally deletes a shared entity or another query's
+membership. Search and filtered results own only their exact query results;
+rankings stay transient online views. Resolver responses are shallow entity
+patches. Read [endpoints.json](../endpoints.json) and
+[contracts](../contracts.md#load-collections-as-needed) for the full map.
 
-1. **Transport and identity.** Decode UUID-backed catalog IDs at the adapter and
-   retain existing Realm UUIDs, downloaded filenames, queue and history keys.
-   `track_` names the existing playable file. Short `venue_`, `song_` and
-   `artist_venue_` IDs remain strings in additive normalized models. Feature code
-   should not decode IDs. Keep typed account IDs/targets unchanged in either
-   catalog transport.
-2. **Authoritative apply.** Apply the response, its owned memberships and its ETag
-   in one Realm transaction. Reuse coherent mapping/write primitives, but bypass
-   v3's timestamp-derived hash and request cooldown. Use the agreed 15-minute
-   refresh default with manual refresh and reconnect retry. Discard superseded
-   same-query responses and results from an old transport/account generation.
-3. **Playback and recovery.** Load the artist catalog, then load show/source/track
-   detail on demand. Preserve imported venue labels and track titles. Store the
-   server's optional canonical links and ordered track interpretation. Verify
-   source switching, playback, offline restart, correction refresh and retry
-   before adding all venue/song screens.
+Keep response apply and its validator in one Realm transaction. Use ordinary
+ETags/304s, the existing refresh interval, manual refresh and reconnect retry.
+Fetch/apply failure must leave prior local data and validator intact. Do not add
+an artist-wide validator or invalidate every query after a write. Smaller
+responses can still overlap shared entities; removing the full download alone
+is not proof that every overlapping-response race is resolved.
 
-## Apply ownership, not absence everywhere
+## Preserve the existing player and imported display
 
-- `/artists/{id}/catalog` replaces its artist-owned collection memberships,
-  including empty lists. Its `artist_venues`, `venues` and `songs` arrays patch
-  entities. They never delete globally shared records or recording detail.
-- Full show detail replaces that show's active sources and each fully returned
-  source/set's child membership. Full source detail owns only its sets/tracks.
-  Retain entities required by downloads, queues, history and favorites.
-- Compact parents and track-part songs update supplied fields only. They cannot
-  clear richer metadata, counts, aliases, reviews or child memberships.
-- Venue/song/year/tour detail owns its complete `shows` membership. Song `/tracks`
-  owns only its file matches. Artist mixed venue/song entries use their returned
-  `kind`; mobile does not choose a route using the normalization feature flag.
-- Rankings remain transient online views. Search/filtered lists replace only
-  their exact query results. Resolver arrays are shallow patches.
-- Save a validator only after successful apply. A 304 is usable only with the
-  matching applied local response; otherwise refetch without a validator.
-  Fetch/apply failure keeps the last complete state and validator.
+Decode UUID-backed catalog IDs at the adapter. Keep existing Realm UUID keys,
+download filenames, queues and history. Short `venue_`, `song_` and
+`artist_venue_` IDs remain opaque strings. Keep typed account targets unchanged.
 
-These are endpoint contracts, not instructions to build a generic sync engine.
-Use [endpoints.json](../endpoints.json) for the full replacement map and
-[contracts](../contracts.md#mobile-persistence-transport-and-ui) for exact rules.
+Display imported venue labels and track titles. Store optional canonical links
+and track `normalization` internally. A medley stays one playable file, with no
+invented per-part seek offsets. Compact parent projections update supplied fields
+without clearing richer metadata, aliases, counts, reviews or children. Retain
+records needed by downloads, queues, history and favorites.
 
-## Concrete review cases
+## Review against real data
 
-- [Artist bootstrap](http://127.0.0.1:43823/api/v4/artists), then
-  [Grateful Dead's catalog](http://127.0.0.1:43823/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/catalog).
-  This catalog has 2,081 show summaries; recording hierarchies stay lazy.
-- [Matched show](http://127.0.0.1:43823/api/v4/shows/show_2jn80dqf5ntfxmmkwx11j27gdk),
-  [matched medley file](http://127.0.0.1:43823/api/v4/source-tracks/track_3s1y1rg4yaxa7nqw31wk617b0d),
-  and [partial file](http://127.0.0.1:43823/api/v4/source-tracks/track_7b6v6pgvzqfvhd0s7avr18bdw5).
-  Follow the returned `source_id`; the direct and nested track must agree.
-  A medley remains one playable file, with no per-part seek offsets.
-- [Imported-only show](http://127.0.0.1:43823/api/v4/shows/show_3pdmj761gph53bb7ad3db8v4x4)
-  and [Spafford's raw catalog](http://127.0.0.1:43823/api/v4/artists/artist_0h4h1nj2n61q70bb880qksd6yy/catalog).
-  Missing normalization must preserve browsing and playback.
-- [Red Rocks relationship](http://127.0.0.1:43823/api/v4/artist-venues/artist_venue_344wrm28)
-  and [global venue](http://127.0.0.1:43823/api/v4/venues/venue_fp4h900f).
-  Keep `artist_show_count`, `venue.global_show_count` and imported `show_count`
-  in their distinct scopes. Do not sum overlapping mixed browse entries.
+1. Open [artists](http://127.0.0.1:43823/api/v4/artists), then
+   [Grateful Dead's years](http://127.0.0.1:43823/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/years)
+   and [1985's shows](http://127.0.0.1:43823/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/years/by-number/1985).
+   Confirm mobile requests these endpoints rather than all artist collections.
+2. Open a returned show, select a source and play a track. Exercise source
+   switching and a medley/partial file while retaining imported display text.
+   The [matched show](http://127.0.0.1:43823/api/v4/shows/show_2jn80dqf5ntfxmmkwx11j27gdk)
+   and [partial file](http://127.0.0.1:43823/api/v4/source-tracks/track_7b6v6pgvzqfvhd0s7avr18bdw5)
+   remain useful direct cases.
+3. Repeat with [Spafford's years](http://127.0.0.1:43823/api/v4/artists/artist_0h4h1nj2n61q70bb880qksd6yy/years)
+   and an [imported-only show](http://127.0.0.1:43823/api/v4/shows/show_3pdmj761gph53bb7ad3db8v4x4).
+   Missing normalization must preserve browsing and playback.
+4. With disposable data, change normalization without advancing imported
+   timestamps, refresh its owning endpoint, and verify the correction. Exercise
+   failed apply followed by retry and a downloaded track after an offline cold
+   start. Preserve upgrade coverage for imported identities and files.
 
-For the correction test, use a disposable fixture: change normalization without
-advancing imported timestamps. Revalidate the owning show/track, verify the
-overlay changes, and keep the imported display text. A track-only correction
-need not change the artist-catalog ETag when no represented catalog field changes.
+Keep tests at these public behavior boundaries. Remove full-snapshot-only wire
+models, apply code, query state and tests after replacing their callers. Remove
+the extra UTF-8 diagnostic copy used only to count response bytes. Keep useful
+shared mapping code; add no generic sync engine.
 
-The pilot passes when an upgrade from the current schema-17 account build
-preserves imported keys/files/queue/history, failed apply commits no validator,
-retry succeeds, and an offline cold start plays the retained download. Retain
-direct older-schema upgrade coverage for release. Alec reviews these observable
-journeys before broader UI adoption. V3 catalog fallback must preserve typed
-accounts and additive normalized rows; no legacy server adapter is needed.
-
-## Keep the remaining work small
-
-The large Drums file-match response is about 15.5 MB uncompressed. Do not eagerly
-sync every song's `/tracks` while applying an artist catalog. Measure actual
-mobile parse/apply memory during the pilot. Cloudflare owns downstream response
-caching; the API needs no additional response-cache framework or zero-allocation
-requirement. Production capacity/latency budgets, deployment and full C5 browsing
-remain separate decisions, not missing product rules for this pilot.
+The [origin audit](api-qualification.md) retains historical measurements; its
+full-artist snapshot results describe the removed endpoint. The large Drums file
+list remains separate and uses gzip as agreed. Do not eagerly download song file
+matches. Cloudflare owns downstream caching. Production capacity, deployment and
+full venue/song UI adoption remain later checkpoints.

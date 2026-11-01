@@ -28,9 +28,11 @@ lookup/filter capability. A route name alone does not establish coverage: the
 linked tables specify the response hierarchy, filters, counts, and identity
 meaning that need to survive.
 
-The current artist `/normalized` route is a flat bootstrap over imported
-catalog tables. V4 calls that capability `/artists/{artistId}/catalog`, with
-normalized overlays. Its name must not be confused with the `norm` schema.
+The legacy artist `/normalized` route is a flat bootstrap over imported catalog
+tables. V4 exposes that data through separate collection/detail endpoints. The
+combined v4 artist download was removed after mobile review on November 1; use
+years, selected-year shows and on-demand details instead. The legacy route stays
+unchanged.
 
 ## Contract rules across routes
 

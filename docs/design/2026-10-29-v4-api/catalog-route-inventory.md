@@ -48,7 +48,7 @@ defined by the approved prefix table; playable tracks use `track_`.
 | `GET /api/v3/artists` | `GET /api/v4/artists` | Same filter, counts, and artist popularity. | [Artists:56](../../../RelistenApi/Controllers/ArtistsController.cs#L56) |
 | `GET /api/v2/artists/{artistIdOrSlug}` | `GET /api/v4/artists/{artistId}` plus legacy lookup | Preserve artist numeric/slug lookup via explicit resolver; return typed ID and counts. | [Artists:77](../../../RelistenApi/Controllers/ArtistsController.cs#L77) |
 | `GET /api/v3/artists/{artistIdOrSlug}` | `GET /api/v4/artists/{artistId}` plus legacy lookup | Preserve UUID/numeric/slug lookup and popularity through the typed resource and lookup adapter. | [Artists:78](../../../RelistenApi/Controllers/ArtistsController.cs#L78) |
-| `GET /api/v3/artists/{artistUuid}/normalized` | `GET /api/v4/artists/{artistId}/catalog` | Complete bootstrap of artist, years, venues, songs, tours, and shows, with v4 typed references and normalized overlays. Retain imported venue/song entities needed by stored references; grouped normalized browse entries are additional projections. | [Artists:110](../../../RelistenApi/Controllers/ArtistsController.cs#L110) |
+| `GET /api/v3/artists/{artistUuid}/normalized` | Individual artist, year, venue, song, tour and show endpoints | Fetch each complete collection only when needed. No combined v4 bootstrap endpoint. Retain imported identities and normalized overlays through the individual resources. | [Artists:110](../../../RelistenApi/Controllers/ArtistsController.cs#L110) |
 | `POST /api/v2/artists` | Retain `/api/v2/artists` — operator write | Keep the existing body, operator authorization and upstream-assignment behavior; no v4 duplicate. | [Artists:177](../../../RelistenApi/Controllers/ArtistsController.cs#L177) |
 | `PUT /api/v2/artists/{artistIdOrSlug}` | Retain `/api/v2/artists/{artistIdOrSlug}` — operator write | Keep existing targeting/body semantics and authorization; a future operator redesign is separate. | [Artists:193](../../../RelistenApi/Controllers/ArtistsController.cs#L193) |
 
@@ -185,9 +185,9 @@ discover them while writing controllers:
    aliases may consolidate, but their functionality must remain accessible.
 3. Define imported versus normalized song-list fallback and count semantics;
    setlist plays, distinct shows, and matched recording tracks are different.
-4. Define full artist snapshot collection keys and completeness; preserve imported
-   rows and normalized browse projections without making mobile guess which list
-   is safe to replace.
+4. Define completeness per collection/detail endpoint; preserve imported rows
+   and normalized browse projections without a combined artist download. Each
+   endpoint replaces only its own membership.
 5. Define update-list treatment of normalization-only edits, default anniversary
    time zone, and operator create/update authorization/failure behavior.
 

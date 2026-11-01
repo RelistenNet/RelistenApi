@@ -40,7 +40,7 @@ momentum. Ranking views stay transient on mobile and do not update the offline
 catalog. All paths share enrichment and projection, with supplied maps reused.
 Missing activity is `null`; score refreshes change the relevant ETags.
 
-The local host now serves 51 review operations (49 GETs and two POSTs). Venue and song detail destinations
+The local host now serves 50 review operations (48 GETs and two POSTs). Venue and song detail destinations
 return metadata and complete `shows` together. Direct
 lookups use the resource's ID kind; there is no returned detail URL. Compact
 browse children stay compact. The [contracts](../contracts.md) define replacement
@@ -124,22 +124,16 @@ lists. Imported `setlist_show_count` describes a separate collection; it can
 legitimately differ. Full live captures and test results are recorded separately
 from this guide.
 
-## Review offline catalog sync
+## Review collection sync
 
-Open [Grateful Dead’s complete catalog](http://127.0.0.1:43823/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/catalog)
-and [Ryan Adams’ raw catalog](http://127.0.0.1:43823/api/v4/artists/artist_1e72h78badf1zvzkvkzcp7kk2a/catalog).
-Both use the same 12 top-level fields. Compare their artist, show, imported venue,
-imported song, and browse collections with the individual list routes. The
-approved catalog retains imported fallback alongside canonical browse; the raw
-catalog keeps imported browsing usable without invented normalized entities.
-
-A complete snapshot replaces only the artist-owned memberships. Its
-`artist_venues` refreshes available approved relationships, including retained
-zero counts; `venues` and `songs` are shared entity patches. It contains no
-recording hierarchies. Inspect tracks through their own detail routes, whose
-validators own track-normalization changes outside the snapshot fields. A matching
-artist snapshot ETag returns 304. Empty collections still establish complete
-membership; failed fetch/apply preserves the last complete state.
+Open [Grateful Dead's years](http://127.0.0.1:43823/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/years),
+then [1985's shows](http://127.0.0.1:43823/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/years/by-number/1985).
+Compare normalized and imported-only shows through their direct detail routes.
+The combined artist catalog has been removed. Each endpoint replaces only its
+own complete list, including empty lists; returned shared metadata is upserted,
+and recording detail remains lazy. Matching endpoint ETags return 304. Failed
+fetch/apply retains the previous local state. See the
+[mobile handoff](mobile-handoff.md) for the exact client loading journey.
 
 Then run the mixed `POST /catalog/resolve` request in [requests.http](requests.http).
 It includes typed and explicit legacy references, repeated requests, missing IDs,
@@ -149,11 +143,9 @@ Results keep input order and duplicate references; entities deduplicate and incl
 parents. Imported targets keep imported identity. Resolve-only patches never clear
 unreturned children or personal membership. The POST is no-store with no ETag.
 
-The [contracts](../contracts.md#complete-artist-snapshots) define ownership and
+The [contracts](../contracts.md#load-collections-as-needed) define ownership and
 validation; the [verification log](../verification.md) records completed checks.
-The saved [approved catalog excerpt](responses/artist-catalog-excerpt.json),
-[raw catalog excerpt](responses/raw-artist-catalog-excerpt.json), and
-[resolver excerpt](responses/resolver-excerpt.json) select one entity per domain
+The saved [resolver excerpt](responses/resolver-excerpt.json) selects one entity per domain
 group. Full arrays live in the real responses and ignored captures. Artist metadata
 is cached separately; the resolver returns artists only when explicitly requested.
 Mobile apply remains future work, and no account/auth changes occur in this review.

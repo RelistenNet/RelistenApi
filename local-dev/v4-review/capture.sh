@@ -247,26 +247,6 @@ source_reviews = capture('source-reviews', '/sources/' + review_source_id + '/re
 assert source_reviews and all(review['source_id'] == review_source_id and review['id'].startswith('source_review_') for review in source_reviews)
 assert len({review['id'] for review in source_reviews}) == len(source_reviews)
 
-# Artist snapshots replace complete owned collections; playback stays lazy.
-artist_catalog = capture('artist-catalog', '/artists/' + artist_id + '/catalog', 'Approved artist: complete catalog snapshot with imported fallback')
-raw_catalog = capture('raw-artist-catalog', '/artists/' + raw_artist + '/catalog', 'Raw artist: the same complete snapshot contract')
-expected_catalog_fields = {'artist', 'years', 'shows', 'tours', 'eras', 'imported_venues',
-                           'imported_songs', 'venue_entries', 'song_entries', 'artist_venues', 'venues', 'songs'}
-assert set(artist_catalog) == set(raw_catalog) == expected_catalog_fields
-for field, name in [('artist', 'artist'), ('years', 'years'), ('shows', 'artist-shows'),
-                    ('venue_entries', 'artist-venues'), ('song_entries', 'artist-songs'),
-                    ('imported_venues', 'imported-venues'), ('imported_songs', 'imported-songs')]:
-    assert artist_catalog[field] == json.loads((out / (name + '.json')).read_text())
-assert raw_catalog['song_entries'] == raw_songs and raw_catalog['imported_songs'] == raw_song_inventory
-assert raw_catalog['artist_venues'] == raw_catalog['venues'] == raw_catalog['songs'] == []
-assert all('sources' not in show for body in (artist_catalog, raw_catalog) for show in body['shows'])
-for name, body in [('artist-catalog', artist_catalog), ('raw-artist-catalog', raw_catalog)]:
-    validator = next(line.split(': ', 1)[1] for line in (out / (name + '.headers')).read_text().splitlines() if line.lower().startswith('etag:'))
-    response_code = subprocess.check_output(['curl', '--silent', '--show-error', '-o', '/dev/null',
-                    '-w', '%{http_code}', '-H', 'If-None-Match: ' + validator,
-                    'http://127.0.0.1:43823/api/v4/artists/' + body['artist']['id'] + '/catalog'], text=True)
-    assert response_code == '304'
-
 # Saved references preserve input order while returned entities are deduplicated patches.
 references = [
     {'kind': 'artist', 'scheme': 'legacy_slug', 'id': 'grateful-dead'},
@@ -347,9 +327,6 @@ for name in ('shared-artist-venue', 'shared-venue',
         continue
     body = json.loads((out / (name + '.json')).read_text())
     save_example(name + '-detail-excerpt', detail_excerpt(body))
-for name, body in [('artist-catalog', artist_catalog), ('raw-artist-catalog', raw_catalog)]:
-    excerpt = {key: value[:1] if isinstance(value, list) else value for key, value in body.items()}
-    save_example(name + '-excerpt', excerpt)
 resolver_excerpt = {'references': resolver['references'],
                     'entities': {kind: entities[:1] for kind, entities in resolver['entities'].items()}}
 save_example('resolver-excerpt', resolver_excerpt)

@@ -13,7 +13,7 @@ scoring meaning.
 - [Red Rocks with shows](http://127.0.0.1:43823/api/v4/venues/venue_fp4h900f).
 - [Grateful Dead popular/trending](http://127.0.0.1:43823/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/shows/popular-trending?limit=5).
 - [Grateful Dead momentum](http://127.0.0.1:43823/api/v4/shows/momentum?artist_ids=artist_3qmp7zjbg1rpebhtyfy43096vj&limit=5).
-- [Grateful Dead catalog](http://127.0.0.1:43823/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/catalog).
+- [Grateful Dead shows](http://127.0.0.1:43823/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/shows).
 
 Rankings select ordered, limited score rows before catalog hydration. Artist
 ranking groups apply limits independently per artist. Ordinary show lists load
@@ -59,7 +59,7 @@ these are local comparisons, not production latency or capacity estimates.
 | Red Rocks detail | 96 | 17 | 36.6 | 3.50 | 12 → 0 |
 | Full 1978-07-07 show | 50 | 12 | 8.2 | 1.87 | 1 → 0 |
 | Artist momentum, five shows | 15 | 6.7 | 6.6 | 0.25 | 1 → 0 |
-| Complete artist catalog | 208 | 152 | 64.4 | 60.3 | 1 → 0 |
+| Complete artist catalog (historical; endpoint removed) | 208 | 152 | 64.4 | 60.3 | 1 → 0 |
 
 Four simultaneous popular-five requests allocated 1.19 MiB total, compared with
 330.7 MiB before. Ordinary show lists add one batched SQL query in place of

@@ -26,15 +26,6 @@ public sealed class CatalogVenueReader(
     )
     {
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
-        return await ReadArtistVenues(session, artistUuid, cancellationToken);
-    }
-
-    internal async Task<IReadOnlyList<CatalogArtistVenueEntry>?> ReadArtistVenues(
-        CatalogReadSession session,
-        Guid artistUuid,
-        CancellationToken cancellationToken
-    )
-    {
         if (await ReadArtistId(session, artistUuid, cancellationToken) is null)
         {
             return null;
@@ -164,15 +155,6 @@ public sealed class CatalogVenueReader(
     )
     {
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
-        return await ReadArtistVenue(session, artistVenueId, cancellationToken);
-    }
-
-    internal async Task<CatalogArtistVenueDetail?> ReadArtistVenue(
-        CatalogReadSession session,
-        string artistVenueId,
-        CancellationToken cancellationToken
-    )
-    {
         var stored = await session.Connection.QuerySingleOrDefaultAsync<CatalogArtistVenue>(
             session.Command(
                 """
@@ -206,7 +188,7 @@ public sealed class CatalogVenueReader(
         return await ReadArtistVenue(session, artistUuid, venueId, cancellationToken);
     }
 
-    internal async Task<CatalogArtistVenueDetail?> ReadArtistVenue(
+    private async Task<CatalogArtistVenueDetail?> ReadArtistVenue(
         CatalogReadSession session,
         Guid artistUuid,
         string venueId,
@@ -245,15 +227,6 @@ public sealed class CatalogVenueReader(
     )
     {
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
-        return await ReadVenueDetail(session, venueId, cancellationToken);
-    }
-
-    internal async Task<CatalogVenueDetail?> ReadVenueDetail(
-        CatalogReadSession session,
-        string venueId,
-        CancellationToken cancellationToken
-    )
-    {
         var venue = await ReadVenue(session, venueId, cancellationToken);
         if (venue is null)
         {
@@ -271,15 +244,6 @@ public sealed class CatalogVenueReader(
     )
     {
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
-        return await ReadImportedVenues(session, artistUuid, cancellationToken);
-    }
-
-    internal async Task<IReadOnlyList<CatalogImportedVenue>?> ReadImportedVenues(
-        CatalogReadSession session,
-        Guid artistUuid,
-        CancellationToken cancellationToken
-    )
-    {
         var artistId = await ReadArtistId(session, artistUuid, cancellationToken);
         if (artistId is null)
         {
@@ -306,15 +270,6 @@ public sealed class CatalogVenueReader(
     )
     {
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
-        return await ReadImportedVenue(session, venueUuid, cancellationToken);
-    }
-
-    internal async Task<CatalogImportedVenueDetail?> ReadImportedVenue(
-        CatalogReadSession session,
-        Guid venueUuid,
-        CancellationToken cancellationToken
-    )
-    {
         var venue = await session.Connection.QuerySingleOrDefaultAsync<CatalogImportedVenue>(
             session.Command(
                 CatalogImportedVenueMetadataReader.Select + " WHERE v.uuid=@venueUuid",

@@ -43,7 +43,6 @@ public static class V4CatalogRegistration
         services.AddTransient<CatalogSearchReader>();
         services.AddTransient<CatalogRankingReader>();
         services.AddTransient<CatalogShowDiscoveryReader>();
-        services.AddTransient<CatalogArtistSnapshotReader>();
         services.AddTransient<CatalogImportedVenueMetadataReader>();
         services.AddTransient<CatalogShowMetadataReader>();
         services.AddTransient<CatalogVenueMetadataReader>();

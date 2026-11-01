@@ -1,5 +1,10 @@
 # Verification, migration, rollout and recovery
 
+> November 1 update: the combined artist-catalog endpoint is removed. Earlier
+> full-artist snapshot sizes, timings and test counts below are historical
+> evidence, not the current route inventory. Use [the mobile handoff](review/mobile-handoff.md)
+> and [endpoint manifest](endpoints.json) for current behavior.
+
 C1 has local runtime evidence in the [response review](review/README.md).
 The remaining sections are the full-plan execution checklist, not claims that
 full C2–C5 or production rollout have passed. The [C2 account checkpoint](review/accounts.md) records local migration/API rehearsal; no production deployment occurred.
@@ -1302,3 +1307,37 @@ code, exact review URLs, additive storage/identity rules, authoritative apply,
 failure/retry and offline acceptance. C3 mobile execution, phone memory/apply time,
 production capacity budgets and deployment qualification remain open. No mobile
 files or production data were changed by this review.
+
+## Remove combined artist downloads, 2026-11-01
+
+Removed `GET /artists/{artistId}/catalog`, its dedicated reader/model/projection,
+unused reader forwarding overloads, snapshot-only tests and sample responses.
+The individual routes retain their existing SQL and public resource shapes.
+The useful imported-membership deletion regression now exercises
+`/artists/{artistId}/imported-songs`; popularity queue failure/recovery and
+revalidation tests now use the ordinary artist show list.
+
+Verification against the restarted API and restored local `relisten_db`:
+
+- The focused v4/popularity suite passed 168 checks, with no failures or skips.
+- Runtime OpenAPI has 50 operations: 48 GETs and two POSTs. The removed GET
+  returns 404 and its route/schema are absent from OpenAPI.
+- Twelve representative retained routes returned byte-identical bodies and
+  ETags compared with pre-change captures; all twelve conditional reads returned
+  304. These cover artist metadata, years, selected-year shows, artist shows,
+  venue/song/imported lists, tours, eras, full show and track detail.
+- Grateful Dead's years response is 8,760 bytes; 1985's year-with-shows response
+  is 181,598 bytes, uncompressed. These replace ordinary navigation's earlier
+  6,984,020-byte combined response; no new compact format or pagination was added.
+- The updated real-data capture script completed from scratch output space,
+  covering raw, interpreted, partial and disabled-normalization tracks plus
+  browse/detail/resolver responses. It no longer requests the removed route.
+- Formatter and diff whitespace checks passed. Two independent review passes
+  found no correctness issues; a stale capture comment was removed.
+
+No database migration or backfill is needed. Existing v2/v3 routes stay unchanged.
+The mobile pilot chat received the instruction to replace its two full-catalog
+callers with years and selected-year endpoints, remove unused snapshot-only
+client code and the diagnostic byte-count copy, and verify the existing playback
+journey. The corrected [handoff](review/mobile-handoff.md) defines those contracts;
+mobile implementation and its device verification remain in that chat.

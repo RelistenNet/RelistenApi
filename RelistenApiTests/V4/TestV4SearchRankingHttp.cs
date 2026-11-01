@@ -13,7 +13,7 @@ namespace RelistenApiTests.V4;
 public sealed partial class TestV4CatalogHttp
 {
     [Test]
-    public async Task Stale_snapshot_queues_one_batch_and_queue_failure_is_uncacheable_then_recovers()
+    public async Task Stale_show_list_queues_one_batch_and_queue_failure_is_uncacheable_then_recovers()
     {
         var owner = Guid.Parse("00000000-0000-0000-0000-000000000014");
         var store = new PopularityStore(app.Services.GetRequiredService<DbService>());
@@ -33,7 +33,7 @@ public sealed partial class TestV4CatalogHttp
             new { owner }
         );
         var count = refreshJobs.Batches.Count;
-        using var initial = await http.GetAsync(BrowseArtistPath + "/catalog");
+        using var initial = await http.GetAsync(BrowseArtistPath + "/shows");
         initial.StatusCode.Should().Be(HttpStatusCode.OK);
         refreshJobs.Batches.Should().HaveCount(count + 1);
         refreshJobs
@@ -43,11 +43,11 @@ public sealed partial class TestV4CatalogHttp
         var etag = initial.Headers.ETag!.ToString();
 
         refreshJobs.FailNext = true;
-        using var failed = await Conditional(BrowseArtistPath + "/catalog", etag);
+        using var failed = await Conditional(BrowseArtistPath + "/shows", etag);
         failed.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
         failed.Headers.CacheControl!.NoStore.Should().BeTrue();
         failed.Headers.ETag.Should().BeNull();
-        using var recovered = await Conditional(BrowseArtistPath + "/catalog", etag);
+        using var recovered = await Conditional(BrowseArtistPath + "/shows", etag);
         recovered.StatusCode.Should().Be(HttpStatusCode.NotModified);
         refreshJobs.Batches.Should().HaveCount(count + 2);
     }
@@ -340,7 +340,7 @@ public sealed partial class TestV4CatalogHttp
                 ranked.Headers.ETag!.ToString()
             );
             unchanged.StatusCode.Should().Be(HttpStatusCode.NotModified);
-            using var artistSnapshot = await http.GetAsync(BrowseArtistPath + "/catalog");
+            using var artistShows = await http.GetAsync(BrowseArtistPath + "/shows");
             showMap[Guid.Parse("00000000-0000-0000-0000-000000000004")] = Metrics(100, 10, 20, 0.7);
             await store.ReplaceArtistShows(owner, showMap, DateTime.UtcNow);
             using var changed = await Conditional(
@@ -348,11 +348,11 @@ public sealed partial class TestV4CatalogHttp
                 ranked.Headers.ETag!.ToString()
             );
             changed.StatusCode.Should().Be(HttpStatusCode.NotModified);
-            using var changedSnapshot = await Conditional(
-                BrowseArtistPath + "/catalog",
-                artistSnapshot.Headers.ETag!.ToString()
+            using var changedShows = await Conditional(
+                BrowseArtistPath + "/shows",
+                artistShows.Headers.ETag!.ToString()
             );
-            changedSnapshot.StatusCode.Should().Be(HttpStatusCode.OK);
+            changedShows.StatusCode.Should().Be(HttpStatusCode.OK);
             var updated = (await GetJson(ShowPath(4)))["popularity"]!;
             updated["momentum_score"]!.GetValue<double>().Should().Be(0.7);
             globalMap[Guid.Parse("00000000-0000-0000-0000-000000000004")] = Metrics(
@@ -413,7 +413,6 @@ public sealed partial class TestV4CatalogHttp
             {
                 (BrowseArtistPath + "/shows", (string?)null),
                 (BrowseArtistPath + "/years/by-number/1995", "shows"),
-                (BrowseArtistPath + "/catalog", "shows"),
                 ("/api/v4/songs/song_00000003", "shows"),
                 ("/api/v4/venues/venue_00000001", "shows"),
                 (BrowseArtistPath + "/venues/venue_00000001", "shows"),

@@ -1,5 +1,5 @@
 {
-  "status": "51 v4 catalog/playback operations; eight operator operations remain at their existing v2 paths. Verify runtime contracts and legacy compatibility separately.",
+  "status": "50 v4 catalog/playback operations; eight operator operations remain at their existing v2 paths. Verify runtime contracts and legacy compatibility separately.",
   "catalog_endpoints": [
     {
       "method": "GET",
@@ -21,13 +21,6 @@
       "coverage_source": "catalog-route-inventory.md",
       "response_shape": "resource",
       "sync_policy": "resource"
-    },
-    {
-      "method": "GET",
-      "path": "/api/v4/artists/{artistId}/catalog",
-      "coverage_source": "catalog-route-inventory.md",
-      "response_shape": "artist_catalog",
-      "sync_policy": "artist_catalog"
     },
     {
       "method": "GET",
@@ -427,7 +420,6 @@
     "command": "Apply the explicit command result only; no collection replacement inferred.",
     "resource": "Upsert the returned resource and supplied related fields; omission never removes unrelated entities or associations.",
     "artist_collection": "Replace this artist endpoint\u2019s association list for the exact request/filter; retain entity records, other query associations, favorites and offline data.",
-    "artist_catalog": "Atomically upsert the artist and replace its years/shows/tours/eras/imported_venues/imported_songs/venue_entries/song_entries memberships, including empty lists. artist_venues includes approved retained zero-count relationships and upserts entities; venues and songs are shared entity patches, never global replacement sets. Save the snapshot ETag in the same transaction. Preserve shared entities, recording detail, downloads, and personal membership.",
     "full_show": "Upsert the show and nested sources/sets/tracks; replace active source associations for this show and set/track associations for each fully returned source/set. Retain entity records needed for offline playback and favorites.",
     "full_source": "Upsert source and nested sets/tracks; replace active sets for this source and tracks for each fully returned set. Related artist/show summaries are patches.",
     "detail_shows": "Upsert the resource and returned show summaries; replace only this resource\u2019s complete show association list, including an empty list. Save the payload ETag in the same local transaction. Retain shared show entities, downloads, favorites, and other query memberships. Artist-venue ID and artist-plus-venue alias identify the same membership owner.",

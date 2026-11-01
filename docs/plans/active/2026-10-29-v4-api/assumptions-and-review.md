@@ -261,17 +261,16 @@ This update changes the API contract and plan; it does not yet migrate mobile.
 
 ## Offline catalog checkpoint, 2026-10-30
 
-The new artist snapshot composes the existing collection readers inside one read
-session. It includes imported fallback for raw/partly normalized artists and
-approved retained zero-count artist-venue rows. Shared venue/song arrays are entity
-patches; visible browse entries own artist memberships. The snapshot deliberately
-omits recording hierarchies, so a normalization-only track edit outside represented
-catalog fields belongs to recording validators rather than the artist ETag.
+The original full-artist snapshot was removed on November 1 after mobile review.
+Complete-list replacement is still useful, but belongs to each existing endpoint.
+Year navigation loads years, then only the selected year's shows. Other collection
+and recording reads remain on demand. See the corrected
+[mobile handoff](review/mobile-handoff.md).
 
 Saved-reference resolution covers typed identities and fixed legacy schemes in a
 bounded batch. It returns ordered per-input results plus deduplicated shallow
 entity patches, without changing collection or personal membership. Imported IDs
-keep their kind; optional normalized mapping is omitted because browse/snapshot
+keep their kind; optional normalized mapping is omitted because browse/detail
 resources already expose approved overlays. Source sets resolve by reference but
 remain embedded for full playback detail. The resolver POST is no-store.
 

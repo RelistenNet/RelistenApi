@@ -28,7 +28,7 @@ typed strings, including storage, while framework and provider IDs retain their
 existing meanings. These boundaries keep conversion out of feature code.
 
 Rankings remain transient online views on mobile. Their global or organic scores
-never update the persisted show catalog; ordinary detail and artist snapshots
+never update the persisted show catalog; ordinary detail and collection reads
 supply artist-local data for offline apply.
 
 Ordinary responses are direct resources or lists. Every track has one
@@ -54,8 +54,8 @@ Implement packages 1 and 2 for artist/year/show-list navigation, show detail,
 direct source and track reads. Alec expanded C1 to review these with the venue
 family before auth: artist venue groups, canonical metadata and show collections,
 and imported venue fallback detail. Song discovery extends the review to a
-complete resource-with-shows journey. The current local contract has 51 operations
-(49 GETs and two POSTs), including anonymous play reporting and public activity.
+complete resource-with-shows journey. The current local contract has 50 operations
+(48 GETs and two POSTs), including anonymous play reporting and public activity.
 Cover raw, normalization-disabled, partial and fully interpreted
 fixtures. Alec reviews each family before its contract spreads to the next family
 or mobile work.
@@ -63,15 +63,15 @@ or mobile work.
 Use the [venue-to-playback walkthrough](review/venue-source-journey.md) for the
 venue review: artist → venue group → venue's shows → show → source → track.
 Then use the [song-to-playback walkthrough](review/song-source-journey.md):
-artist → song → matched files/shows → source → playable track. Artist snapshots and saved-reference resolution now connect the offline catalog.
+artist → song → matched files/shows → source → playable track. Endpoint-specific collection reads and saved-reference resolution support offline data.
 Date and recent browsing now form the [discovery review](review/discovery-browsing.md).
 Search, popularity/trending rankings, and momentum now form the
 [search and ranking review](review/search-rankings.md).
 Tours, eras, and source reviews complete the next catalog review: open a compact
 Phish tour entry, its direct resource-with-shows detail, ordered era metadata,
 and one source’s complete review list. Source sets stay embedded in sources.
-Review complete raw/partly normalized artist snapshots against their individual
-collections. Then resolve a mixed batch of saved typed and legacy references.
+Review raw/partly normalized artists through years and selected-year shows.
+Load venue/song inventories only when needed. Then resolve a mixed batch of saved typed and legacy references.
 Check complete membership replacement versus upsert-only shallow entity patches;
 recording hierarchies remain lazy. Keep account/auth as a separate checkpoint
 after the catalog responses settle.

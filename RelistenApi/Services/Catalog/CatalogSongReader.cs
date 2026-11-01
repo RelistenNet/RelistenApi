@@ -25,15 +25,6 @@ public sealed class CatalogSongReader(
     )
     {
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
-        return await ReadArtistSongs(session, artistUuid, cancellationToken);
-    }
-
-    internal async Task<IReadOnlyList<CatalogArtistSongEntry>?> ReadArtistSongs(
-        CatalogReadSession session,
-        Guid artistUuid,
-        CancellationToken cancellationToken
-    )
-    {
         var artist = await ReadArtist(session, artistUuid, cancellationToken);
         if (artist is null)
         {
@@ -75,15 +66,6 @@ public sealed class CatalogSongReader(
     )
     {
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
-        return await ReadSong(session, songId, cancellationToken);
-    }
-
-    internal async Task<CatalogSongWithShows?> ReadSong(
-        CatalogReadSession session,
-        string songId,
-        CancellationToken cancellationToken
-    )
-    {
         var song = await ReadApprovedSongDetail(session, songId, cancellationToken);
         if (song is null)
         {
@@ -112,15 +94,6 @@ public sealed class CatalogSongReader(
     )
     {
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
-        return await ReadTracks(session, songId, cancellationToken);
-    }
-
-    internal async Task<CatalogSongWithTracks?> ReadTracks(
-        CatalogReadSession session,
-        string songId,
-        CancellationToken cancellationToken
-    )
-    {
         var song = await ReadApprovedSongDetail(session, songId, cancellationToken);
         if (song is null)
         {
@@ -154,15 +127,6 @@ public sealed class CatalogSongReader(
     )
     {
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
-        return await ReadImportedSongs(session, artistUuid, cancellationToken);
-    }
-
-    internal async Task<IReadOnlyList<CatalogImportedSong>?> ReadImportedSongs(
-        CatalogReadSession session,
-        Guid artistUuid,
-        CancellationToken cancellationToken
-    )
-    {
         var artist = await ReadArtist(session, artistUuid, cancellationToken);
         return artist is null
             ? null
@@ -175,15 +139,6 @@ public sealed class CatalogSongReader(
     )
     {
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
-        return await ReadImportedSong(session, songUuid, cancellationToken);
-    }
-
-    internal async Task<CatalogImportedSongDetail?> ReadImportedSong(
-        CatalogReadSession session,
-        Guid songUuid,
-        CancellationToken cancellationToken
-    )
-    {
         var song = await session.Connection.QuerySingleOrDefaultAsync<CatalogImportedSong>(
             session.Command(
                 ImportedSongSelect + " WHERE s.uuid=@songUuid",

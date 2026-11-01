@@ -1,5 +1,10 @@
 # Native v4 contract and origin performance review
 
+> November 1 update: the combined artist-catalog endpoint is removed. Earlier
+> full-artist snapshot sizes, timings and test counts below are historical
+> evidence, not the current route inventory. Use [the mobile handoff](mobile-handoff.md)
+> and [endpoint manifest](../endpoints.json) for current behavior.
+
 October 31, 2026. Native v4 is ready for the local [mobile pilot](mobile-handoff.md).
 All 51 manifest operations are present in runtime OpenAPI. All 49 GET samples
 returned 200; 47 cacheable GETs returned bodyless 304 on revalidation. Random show
@@ -102,15 +107,13 @@ four requests; this does not establish their peak live heap.
 
 ## Limits that matter to mobile and release
 
-A 304 saves response bytes, but still runs the same read/materialize/serialize
-work. Snapshot composition reuses normal collection readers and has 44–47 command
-completions in these cases. Avoid overlapping full-artist refreshes on one client;
-keep playback/detail reads lazy. Zero allocation is not an origin requirement.
-Cloudflare handles downstream caching; no application response cache was added.
+A 304 saves response bytes but still runs read/materialize/serialize work.
+Use years and selected-year details for navigation; the full-artist endpoint is
+removed. Keep recording detail and unrelated collections lazy. Cloudflare handles
+downstream caching; no application response cache was added.
 
-The unpaginated artist snapshots and the largest song-track response completed
-under the local workload. This does not establish production primary capacity,
-ingress behavior, phone parse/apply memory or an acceptable fleet refresh rate.
+The largest song-track response completed under the local workload. This does not
+establish production capacity, ingress behavior or phone parse/apply memory.
 Measure those before broad activation and agree capacity/latency budgets with
 Alec. If mobile measurements require pagination, define that endpoint's cursor
 and replacement behavior explicitly; do not silently truncate collections.

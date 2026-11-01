@@ -33,16 +33,13 @@ titles are imported values; normalized parts describe the file without replacing
 The [date and recent browsing review](../../docs/plans/active/2026-10-29-v4-api/review/discovery-browsing.md)
 provides anniversary, exact-date, recent, top-rated, and random-show links.
 
-The local API exposes 51 operations (49 GETs and two POSTs). Follow the
+The local API exposes 50 operations (48 GETs and two POSTs). Follow the
 [venue-to-playback walkthrough](../../docs/plans/active/2026-10-29-v4-api/review/venue-source-journey.md)
 and [song-to-playback walkthrough](../../docs/plans/active/2026-10-29-v4-api/review/song-source-journey.md)
 to inspect the resource links. Implemented families are:
 
 - `GET /api/v4/artists` and `/api/v4/artists/{artistId}`: artist list/detail,
   counts, features and provider metadata.
-- `GET /api/v4/artists/{artistId}/catalog`: complete artist-owned collections and
-  shared venue/song entity patches, with one snapshot ETag. Recording hierarchies
-  remain lazy. The capture compares approved/partial and raw artist inventories.
 - `POST /api/v4/catalog/resolve`: bounded saved-reference lookup across typed and
   explicit legacy schemes; per-input results and shallow entity patches. No-store,
   with no ETag or collection replacement. The generated request includes its JSON.

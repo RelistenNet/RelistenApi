@@ -1,12 +1,12 @@
 # Deliver the complete v4 catalog and mobile adapter
 
-Status: C1 includes playback navigation, artist snapshots, and saved-reference
+Status: C1 includes playback navigation, collection reads, and saved-reference
 resolution, date browsing, search, listening rankings, and anonymous live activity,
 2026-10-31. The final local contract/performance audit is complete; start the
 [mobile handoff](review/mobile-handoff.md) for C3.
 C2 server and initial client upgrades have been reviewed locally;
-mobile catalog reads remain on v3. The catalog API reads the restored production
-catalog. Account migrations ran only on disposable local rehearsal databases; no
+mobile v4 browsing is opt-in; v3 remains the default. The catalog API reads the
+restored production catalog. Account migrations ran only on disposable local rehearsal databases; no
 production deployment or migration occurred. This is a living ExecPlan: update Progress,
 Discoveries, Decision Log, and Outcomes as work proceeds.
 
@@ -210,8 +210,9 @@ Implement mobile's actual queries, not a generic interpreter of all server route
   browse resources and separate file-match detail; omit `detail_url`.
 - [x] Add artist tours/eras, direct tour-with-shows, and source reviews for the
   next C1 review; retain source sets only inside source/show responses.
-- [x] Add complete artist snapshots and bounded saved-reference resolution for
-  offline sync review, plus canonical public-ID retirement safety.
+- [x] Add bounded saved-reference resolution and canonical public-ID retirement
+  safety. Remove the combined artist snapshot after mobile review; use separate
+  years, year/detail and on-demand collection routes instead.
 - [x] Restore `artist.features`; add exact-date, anniversary, recent, top, and
   random show browsing with focused HTTP tests and real-data review links.
 - [x] Complete the ten search/popularity/trending/momentum reads and verify
@@ -258,9 +259,10 @@ apply entrypoint, not only DTO renaming. The in-place account change retains
 ## Implementation sequence
 
 The numbers below identify components, not a single deployment. C1 native browse,
-playback, discovery and snapshot/resolver responses are implemented. C2 typed
+playback, discovery and resolver responses are implemented. C2 typed
 account APIs and the first account-client upgrade have been reviewed locally;
-mobile catalog reads remain on v3. C3 proves a small v4 mobile catalog journey.
+mobile v4 browsing is opt-in; v3 remains the default. C3 proves a small v4 mobile
+catalog journey.
 C4 qualifies the native API and verifies coexistence with unchanged legacy reads.
 C5 finishes mobile adoption and release checks. Legacy route conversion is not a
 prerequisite for any checkpoint.
@@ -481,10 +483,10 @@ by accepting this plan.
   uses its own typed ID directly; tour counts describe catalog show assignments.
   Keep source sets embedded, with no direct set lookup.
 
-- 2026-10-30: implement the offline catalog checkpoint with complete artist-owned
-  snapshots and upsert-only saved-reference hydration. Keep recording hierarchies
-  lazy, imported identity intact, and artist metadata cached separately.
-
+- 2026-11-01, Alec: remove the combined artist-catalog endpoint and its mobile
+  callers. Complete replacement applies to each endpoint's list, not all artist
+  collections in one payload. Keep years/year/detail navigation lazy and update
+  the mobile handoff. This supersedes the October 30 full-snapshot decision.
 - 2026-10-30, Alec: keep the familiar `artist.features` name. Extend catalog
   review through date and recent browsing before auth; retain direct lists,
   existing query meanings, ETags, and per-endpoint replacement rules.

@@ -82,10 +82,8 @@ HTTP ETag is the cache validator. For example:
 
 A list endpoint returns an array of those resources or its documented browse
 entries. Search and grouped ranking endpoints retain their meaningful named
-result groups. Full artist bootstrap returns a direct catalog object with
-`artist`, `years`, `shows`, `tours`, `eras`, `imported_venues`, `imported_songs`,
-`venue_entries`, `song_entries`, `artist_venues`, `venues` and `songs`.
-These are domain collections, not a generic response wrapper.
+result groups. Browse artist years, year shows and recording details through
+their own endpoints; there is no full artist bootstrap payload.
 
 Sync replacement is a property of each endpoint, not a server-supplied boolean.
 Every endpoint in [endpoints.json](endpoints.json) declares its response shape
@@ -580,32 +578,22 @@ Source sets remain embedded in full source/show responses with their typed IDs
 and tracks. There is deliberately no direct `/source-sets/{sourceSetId}` endpoint;
 clients fetch the owning source to inspect a complete set.
 
-## Complete artist snapshots
+## Load collections as needed
 
-`GET /artists/{artistId}/catalog` returns the artist and 11 domain collections:
-`years`, `shows`, `tours`, `eras`, `imported_venues`, `imported_songs`,
-`venue_entries`, `song_entries`, `artist_venues`, `venues`, and `songs`.
-The artist and all collections use one repeatable-read session and one payload
-ETag. The collection resources have the same metadata, counts, ordering, approval,
-and fallback rules as their individual list routes. Show summaries omit recording
-hierarchies: no source, set, or track collections are downloaded in this snapshot.
-Playback detail remains lazy through show/source/track reads.
+There is no combined artist-catalog endpoint. Fetch `/artists` for cached artist
+metadata, `/artists/{artistId}/years` for year navigation, and
+`/artists/{artistId}/years/{yearId}` (or `/years/by-number/{year}`) for the selected
+year and its complete `shows` list. Fetch show/source/track detail on demand.
+Venue, song, tour, era and imported inventories have separate list routes; load
+them when the relevant screen or explicit sync operation needs them. Do not
+recreate an eager artist-wide download by calling every list during navigation.
 
-Mobile atomically applies the artist and its complete artist-owned memberships,
-including empty collections, then saves the ETag. `venue_entries` and `song_entries`
-own visible browse membership. `artist_venues` includes every available approved
-stored relationship, including retained zero-count rows that disappear from browse.
-It upserts relationship entities; `venues` and `songs` likewise upsert shared entity
-patches. An omitted shared entity is not globally deleted. Keep records needed by
-other artists, downloads, queues, favorites, and other query results.
-
-A 304 retains the applied artist snapshot. A failed fetch or apply retains the
-last complete state. Do not use imported parent timestamps to suppress changed
-metadata or membership. The ETag covers only represented fields: a track-part
-correction that changes no catalog field does not change this artist validator.
-Recording endpoints own validators for their returned track normalization.
-Unknown artists return 404; malformed or wrong-kind IDs return 422; a dependency
-failure returns a no-store 503 instead of partially filled collections.
+Each complete list replaces only its endpoint's membership, including an empty
+list. Year detail replaces only that year's show membership. Upsert returned
+entities and supplied related fields, retaining unrelated memberships, richer
+recording detail, downloads and personal data. Persist each endpoint's ETag with
+its successful apply; a failed fetch/apply retains that endpoint's previous
+state. This requires no global artist revision or combined-response validator.
 
 ## Canonical redirects and retirement
 
@@ -699,7 +687,7 @@ Source-set IDs can resolve here despite having no direct GET route.
 These are upsert-only entity patches. Never replace unreturned child collections,
 delete catalog rows, or remove library membership from a resolver result.
 Imported identities remain imported, even when normalization exists. There is no
-additional imported-to-canonical mapping result: the artist snapshot and browse
+additional imported-to-canonical mapping result: the show and browse
 resources already expose approved normalization without assuming a raw venue has
 one canonical target. Resolving a saved imported target preserves that exact kind.
 
@@ -891,7 +879,7 @@ not change imported date/update/rating rank. GETs never refresh stored aggregate
 
 Mobile replaces only the cached membership of each exact discovery URL/query,
 including empty lists, and upserts returned show summaries. A limited or filtered
-list never removes shows from the artist snapshot, detail memberships, or personal
+list never removes shows from other collection/detail memberships or the personal
 library. Full exact-date and random responses apply the existing `full_show`
 replacement policy to the selected show; random carries no saved validator.
 

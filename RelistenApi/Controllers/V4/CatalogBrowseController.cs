@@ -20,7 +20,6 @@ namespace Relisten.Controllers.V4;
 [ProducesResponseType(typeof(ProblemDetails), 503)]
 public sealed class CatalogBrowseController(
     CatalogBrowseReader reader,
-    CatalogArtistSnapshotReader snapshots,
     PopularityRefreshRequest refresh,
     ILogger<CatalogBrowseController> logger
 ) : CatalogControllerBase(logger, refresh)
@@ -47,19 +46,6 @@ public sealed class CatalogBrowseController(
             {
                 var artist = await reader.ReadArtist(uuid, cancellationToken);
                 return artist is null ? null : CatalogBrowseProjection.Artist(artist);
-            }
-        );
-
-    [HttpGet("{artistId}/catalog")]
-    [ProducesResponseType(typeof(ArtistCatalogResource), 200)]
-    public Task<IActionResult> Catalog(string artistId, CancellationToken cancellationToken) =>
-        Read(
-            artistId,
-            ArtistId.Prefix,
-            async uuid =>
-            {
-                var snapshot = await snapshots.Read(uuid, cancellationToken);
-                return snapshot is null ? null : V4CatalogProjection.ArtistCatalog(snapshot);
             }
         );
 

@@ -64,7 +64,8 @@ associations; they retain offline files and favorite references.
 Ordinary responses have ETags; repeating a list with its `If-None-Match` validator
 returns 304 when its represented data is unchanged. Dates/rankings can change
 membership without imported metadata changes, so mobile must revalidate the
-query itself. The complete artist snapshot remains the offline artist inventory.
+query itself. Offline browsing uses separately loaded collection memberships; there is no
+combined artist snapshot.
 
 The [search and ranking review](search-rankings.md) now completes the ten
 mobile-facing operations that followed this discovery checkpoint. The remaining

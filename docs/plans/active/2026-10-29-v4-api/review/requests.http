@@ -298,12 +298,6 @@ GET {{base}}/api/v4/artists/artist_6aaf982021nrst0m68ew1djerc/eras
 ### Recording reviews: complete upstream text and ratings
 GET {{base}}/api/v4/sources/source_2cr3tmxwvyxp5g9jxzk1jf944x/reviews
 
-### Approved artist: complete catalog snapshot with imported fallback
-GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/catalog
-
-### Raw artist: the same complete snapshot contract
-GET {{base}}/api/v4/artists/artist_1e72h78badf1zvzkvkzcp7kk2a/catalog
-
 ### Resolve saved typed and legacy references (upsert-only patches, no-store)
 POST {{base}}/api/v4/catalog/resolve
 Content-Type: application/json

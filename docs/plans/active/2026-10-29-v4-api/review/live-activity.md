@@ -47,7 +47,7 @@ for an artist or hydrates each event separately.
 
 Mobile can append and deduplicate these events by sequence, and periodically
 replace the recent window with a request without a cursor. This best-effort activity
-window is separate from personal playback history and full artist snapshots.
+window is separate from personal playback history and persisted catalog collections.
 Keep a separate window/cursor for each artist selection. When the selection
 changes, load a fresh window without `after_sequence`.
 Replica delay and overlapping commits can omit events from a cursor poll; this
