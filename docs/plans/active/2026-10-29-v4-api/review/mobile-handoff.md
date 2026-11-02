@@ -4,14 +4,14 @@ Use the smaller v4 endpoints for artist → years → year → show → source �
 track navigation. The combined `/artists/{id}/catalog` endpoint has been removed.
 The earlier handoff directed the pilot to fetch all artist collections; that
 instruction is superseded. Do not replace it with an eager fan-out to every list.
-Alec and Switz review the real journey, including an offline restart, before
-broader mobile adoption. Account/auth work stays separate; catalog reads need no
-login.
+The local C3 playback proof and first C5 venue/song/favorite journeys are complete.
+Alec and Switz can review them on the retained iPhone 17. Account/auth deployment
+and release activation stay separate; catalog reads need no login.
 
 ## Current integration
 
 The mobile pilot is in the sibling `relisten-mobile` checkout on
-`codex/v4-mobile-pilot`, with additive Realm schema 18 storage. Recheck its current
+`codex/v4-mobile-pilot`, with Realm schema 20 storage. Recheck its current
 branch and working tree before editing. Its public entrypoints are
 `relisten/api/client.ts`, `relisten/api/v4/catalog_client.ts` and the existing
 Realm repositories. Keep one repository set and the existing player.
@@ -89,3 +89,37 @@ full-artist snapshot results describe the removed endpoint. The large Drums file
 list remains separate and uses gzip as agreed. Do not eagerly download song file
 matches. Cloudflare owns downstream caching. Production capacity, deployment and
 full venue/song UI adoption remain later checkpoints.
+
+## November 1 local checkpoint
+
+The mobile implementation now uses mixed canonical/imported venue and song
+lists, artist-scoped and global venue detail, canonical song shows and lazy file
+matches, and the existing favorite repository. My Library has a separate Venues
+destination. Canonical venue favorites span artists and never add implicit show
+favorites; canonical song favorites contribute their owning artist only.
+
+The retained iPhone 17 proved artist/year/show/source browsing, source switching,
+selected song-file playback and the original downloaded file after a cold launch.
+The offline test used Always Offline Mode plus an unreachable catalog origin;
+it did not disable the simulator radio. Cached content rendered immediately,
+playback restored stopped at 16.352 seconds, and explicit Play advanced it using
+the existing UUID-named MP3.
+
+Red Rocks returned 20 Grateful Dead shows in artist context and 176 across
+12 artists globally in this local snapshot. Removing its venue favorite left the
+existing two show favorites intact. China Cat Sunflower's 4,459 file matches
+retained imported titles and opened the exact selected recording for playback.
+
+Independent checks passed all 335 mobile tests, TypeScript and lint, plus four
+real-API/production-client/Realm integration cases. Those cases include failure
+recovery, overlapping year/show and song-track repairs, and a real merged venue
+ID returning its survivor. Shared metadata invalidation retains cached detail
+membership, only changed fields make related details stale, and an ordinary
+second song-recordings open makes no new requests. Empty cached lists remain
+usable after offline refresh failure. UUID-backed routes retain exact ID checks;
+canonical routes accept the server's merge survivor while checking ownership.
+
+Implementation commits, screenshots and the detailed native record belong in
+the sibling mobile plan, `docs/plans/active/2026-10-31-v4-catalog-mobile-pilot.md`.
+V3 remains the default; the v4 build is an explicit development opt-in. No
+production migration, release build, OTA or deployment occurred in this checkpoint.

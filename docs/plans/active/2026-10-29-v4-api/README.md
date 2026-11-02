@@ -2,8 +2,9 @@
 
 Status: C1 includes playback navigation, collection reads, and saved-reference
 resolution, date browsing, search, listening rankings, and anonymous live activity,
-2026-10-31. The final local contract/performance audit is complete; start the
-[mobile handoff](review/mobile-handoff.md) for C3.
+2026-11-01. The local API audit, C3 playback pilot and first C5 venue/song/favorite
+journeys are verified. The [mobile handoff](review/mobile-handoff.md) records the
+current loading contracts and local checkpoint.
 C2 server and initial client upgrades have been reviewed locally;
 mobile v4 browsing is opt-in; v3 remains the default. The catalog API reads the
 restored production catalog. Account migrations ran only on disposable local rehearsal databases; no
@@ -240,8 +241,14 @@ Implement mobile's actual queries, not a generic interpreter of all server route
   the [contract and origin performance audit](review/api-qualification.md), and
   publish the [mobile handoff](review/mobile-handoff.md). Keep Cloudflare caching
   downstream; add no application response cache or zero-allocation requirement.
-- [ ] Complete the C3 mobile pilot, then C4/C5 production and mobile release
-  qualification. There is no legacy-adapter migration backlog.
+- [x] Complete C3 on the retained iPhone 17: source switching, imported titles,
+  exact-file playback and a cold offline restart using the existing UUID-named file.
+- [x] Implement and locally verify grouped venue browsing, canonical song shows
+  and lazy recordings, and global venue favorites in a separate My Library
+  Venues destination. Keep imported fallback and v3 catalog fallback usable.
+- [ ] Complete production and mobile release qualification. Local C3/C5 proof
+  does not activate v4 traffic or deploy the account migrations. There is no
+  legacy-adapter migration backlog.
 
 ## Discoveries and changes from the exploration
 
