@@ -372,7 +372,9 @@ remain typed; the projection adapter bridges catalog records to account targets.
 Apply resources, owned associations, query results and ETag in one Realm transaction,
 using each endpoint's replacement rule. Bypass legacy timestamp guards for v4;
 preserve richer detail when shallow related objects arrive. Discard superseded
-query/account/transport generations. Failed apply commits no validator or cursor.
+same-query responses. Public catalog reads use a fixed transport and need no
+account fences; account-owned library work retains its existing scope guards.
+Failed apply commits no validator or cursor.
 Test upgrades from the current schema-17 account build as well as direct older
 schema upgrades and staged account-only then catalog upgrades.
 

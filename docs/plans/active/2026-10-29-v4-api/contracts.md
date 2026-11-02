@@ -1134,11 +1134,12 @@ Do not sum mixed browse-entry counts to infer an artist total: partially
 normalized imported collections can overlap canonical ones. Keep one canonical
 venue row shared across artists and preserve the imported venue rows for display.
 
-Add an applied query state scoped by endpoint/filters and account where relevant.
-Each request captures its scope generation and account/session fence. Apply
-only the current request for that scope, current account and selected transport
-generation. Discard in-flight results after a transport switch. HTTP ETag
-equality supports 304; it is not lexically ordered. Do not use the legacy synthetic
+Public catalog query state is scoped by endpoint and filters. Discard superseded
+requests for the same query. Catalog transport is fixed when the client is
+constructed; these public reads do not need account/session fences or runtime
+transport-switch generations. Account-owned library reads retain their own
+account/session guards. HTTP ETag equality supports 304; it is not lexically
+ordered. Do not use the legacy synthetic
 ETag, 24-hour equality suppression, one-hour request cooldown, or timestamp-only
 Realm guards for v4 data. Use a 15-minute default v4 query refresh interval;
 manual refresh bypasses it, reconnect retries pending work, and offline views
