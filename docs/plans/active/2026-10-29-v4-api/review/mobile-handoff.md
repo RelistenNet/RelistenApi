@@ -18,7 +18,7 @@ Realm repositories. Keep one repository set and the existing player.
 
 For simulator review, set
 `EXPO_PUBLIC_RELISTEN_CATALOG_ORIGIN=http://127.0.0.1:43823` (without `/api`) and
-opt into `EXPO_PUBLIC_RELISTEN_CATALOG_TRANSPORT=v4`. V3 remains the default.
+opt into `EXPO_PUBLIC_RELISTEN_CATALOG_TRANSPORT=v4`. V3 remains the pre-cutover default; adopting v4 is one-way.
 Start the API with `./local-dev/v4-review/run.sh` and inspect
 [Swagger](http://127.0.0.1:43823/api-docs-v4/index.html). Physical devices need a
 reachable HTTPS origin.
@@ -121,5 +121,8 @@ canonical routes accept the server's merge survivor while checking ownership.
 
 Implementation commits, screenshots and the detailed native record belong in
 the sibling mobile plan, `docs/plans/active/2026-10-31-v4-catalog-mobile-pilot.md`.
-V3 remains the default; the v4 build is an explicit development opt-in. No
-production migration, release build, OTA or deployment occurred in this checkpoint.
+V3 remains the pre-cutover default; the v4 build is an explicit development opt-in.
+Alec clarified that the cutover is one-way: a v4-populated install does not switch
+back to v3. No fallback-only routing or downgrade verification is required.
+Imported fallback inside v4 and legacy server support for older releases remain.
+No production migration, release build, OTA or deployment occurred in this checkpoint.

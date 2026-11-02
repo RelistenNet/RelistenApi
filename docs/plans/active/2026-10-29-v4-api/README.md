@@ -245,7 +245,7 @@ Implement mobile's actual queries, not a generic interpreter of all server route
   exact-file playback and a cold offline restart using the existing UUID-named file.
 - [x] Implement and locally verify grouped venue browsing, canonical song shows
   and lazy recordings, and global venue favorites in a separate My Library
-  Venues destination. Keep imported fallback and v3 catalog fallback usable.
+  Venues destination. Keep imported-only and partially normalized artists usable.
 - [ ] Complete production and mobile release qualification. Local C3/C5 proof
   does not activate v4 traffic or deploy the account migrations. There is no
   legacy-adapter migration backlog.
@@ -405,13 +405,19 @@ migration invariants, mobile/device/offline journeys, measured primary/legacy
 performance and pinned rollback builds. Deploy server contracts before catalog
 activation. The account/auth cutover is a separate event from catalog activation.
 
-Use v3 catalog fallback only in a schema-compatible mobile build. A shared-core
-regression needs server rollback; a converted account schema needs compatible
-code/forward repair. Measure and agree capacity budgets before traffic expansion.
+The mobile catalog cutover is one-way. V3 can serve the pre-cutover app, but a
+v4-populated install does not switch back to v3. Recovery after cutover uses code
+compatible with the v4 store; account/auth schema recovery stays separate.
+Existing v2/v3 server routes remain available for older app releases. Measure
+and agree capacity budgets before traffic expansion.
 No migration, deployment, session revocation or public release is authorized merely
 by accepting this plan.
 
 ## Decision Log
+
+- 2026-11-01, Alec: the mobile catalog cutover is one-way: “Once we go to V4,
+  we will never go back.” Remove post-v4 fallback-only routing and verification.
+  This does not remove imported fallback within v4 or existing legacy server routes.
 
 - 2026-10-31, Alec: prioritize independent v4 iteration. Freeze v2/v3 on existing
   services and stop blanket legacy-adapter migration. Remove the experimental

@@ -177,8 +177,9 @@ alias details refresh while the imported venue label stays unchanged.
 Test offline restart, unchanged file paths, queue/history restoration and a
 failed apply followed by retry. Data and applied ETag commit together.
 
-Keep catalog fallback usable in the upgraded build. A successful pilot proves
-the response-to-storage mapping; it does not qualify complete API coverage.
+The mobile cutover is one-way; this checkpoint does not require a v4-populated
+install to switch back to v3. A successful pilot proves the response-to-storage
+mapping; it does not qualify complete API coverage.
 
 ## C4 — Finish and review the complete API
 
@@ -205,10 +206,11 @@ Venue favorites span artists; they do not implicitly favorite shows. Keep the
 agreed simple behavior for merged/retired exact favorite targets.
 
 Alec reviews the end-to-end mobile journeys, including schema upgrade from
-existing data, offline cold start and v3 catalog fallback with typed accounts.
+existing data and offline cold start with typed accounts preserved.
 Attach full API coverage, migration results and representative performance
 measurements. Agree primary-capacity/latency budgets before expanding traffic.
-Rehearse each applicable rollback with the schema-compatible builds.
+Rehearse applicable server/account recovery with compatible builds. Mobile
+recovery preserves the v4 store; it does not downgrade catalog reads to v3.
 
 ## How to keep the work reviewable
 

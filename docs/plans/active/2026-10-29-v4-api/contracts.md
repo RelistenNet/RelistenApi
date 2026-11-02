@@ -1154,11 +1154,17 @@ without the validator. Failed apply retries; failed/mixed-snapshot fetch never
 tombstones associations. Independent query scopes may converge asynchronously;
 do not claim a globally ordered client catalog snapshot.
 
+The mobile catalog cutover is one-way. A pre-cutover build can use v3; after an
+install adopts v4, do not support switching its populated store back to v3.
+Keep recovery builds compatible with the v4 store. Imported-only artists and
+partial normalization remain supported within v4. Existing v2/v3 server routes
+continue to serve older releases.
+
 Favorite kind selection follows model identity, not the catalog transport flag.
 Update `FavoriteIconButton`'s model mapping and artist song/venue favorite filters:
 imported `Song→imported_song`, `Venue→imported_venue`, `SourceTrack→track`.
-The schema-aware build uses these mappings with either v4 or v2/v3 catalog reads.
-Its revised account library stays enabled during catalog fallback. Never send a
+The schema-aware build uses these mappings before and after the v4 cutover.
+The revised account library is independent of that cutover. Never send a
 raw UUID as canonical `song`/`venue` because a legacy screen retained an old kind
 constant. Normalized models map to canonical kinds and short IDs. Convert an
 imported catalog row's UUID into its canonical target ID before invoking library
