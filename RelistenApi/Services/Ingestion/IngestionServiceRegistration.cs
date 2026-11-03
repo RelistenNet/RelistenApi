@@ -4,6 +4,7 @@ using Relisten.Data;
 using Relisten.Import;
 using Relisten.Normalization;
 using Relisten.Services.Indexing;
+using Relisten.Services.Live;
 using Relisten.Services.Normalization;
 using Relisten.Services.Notifications;
 using Relisten.Services.Popularity;
@@ -58,6 +59,7 @@ public static class IngestionServiceRegistration
         services.AddScoped<CatalogReferenceResolver, CatalogReferenceResolver>();
         services.AddScoped<LinkService, LinkService>();
         services.AddScoped<SourceTrackPlaysService, SourceTrackPlaysService>();
+        services.AddScoped<LiveSummaryService, LiveSummaryService>();
         services
             .AddHttpClient<IDiscordWebhookNotifier, DiscordWebhookNotifier>(client =>
                 client.Timeout = TimeSpan.FromSeconds(10)
