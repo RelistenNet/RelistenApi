@@ -182,6 +182,13 @@ namespace Relisten.Api
                 }
             }
 
+            // An action that knows how long its response stays fresh (live/summary) sets
+            // Cache-Control itself; the path-based defaults below would override it.
+            if (ctx.HttpContext.Response.Headers.ContainsKey("Cache-Control"))
+            {
+                return;
+            }
+
             var path = request.Path.Value ?? string.Empty;
             var isRandom = path.IndexOf("/random", StringComparison.OrdinalIgnoreCase) >= 0;
             var isLive = path.IndexOf("/live", StringComparison.OrdinalIgnoreCase) >= 0;
