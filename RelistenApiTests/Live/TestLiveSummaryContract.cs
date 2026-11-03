@@ -97,7 +97,7 @@ public class TestLiveSummaryContract
         var high = Create(
             minutes: 600,
             showsLimit: 500,
-            artistsLimit: 99,
+            artistsLimit: 500,
             maxPerArtist: 99,
             freshDays: 365
         );
@@ -107,7 +107,7 @@ public class TestLiveSummaryContract
                 {
                     Minutes = 60,
                     ShowsLimit = 50,
-                    ArtistsLimit = 25,
+                    ArtistsLimit = 100,
                     MaxPerArtist = 10,
                     FreshDays = 30,
                 }

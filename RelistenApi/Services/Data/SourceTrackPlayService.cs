@@ -81,6 +81,7 @@ namespace Relisten.Data
                 windowEnd = window.End,
                 showBaselineStart = window.Start.AddDays(-LiveSummaryRanking.ShowBaselineDays),
                 dailyLagStart = window.Start.AddDays(-DailyAggregateMaxLagDays),
+                fallbackTrackSeconds = FallbackTrackSeconds,
                 baselineWeeks = LiveSummaryRanking.ArtistBaselineWeeks,
                 // The outer edges of every prior same-hour-of-week window. The start is an
                 // hour earlier so the hourly bucket overlapping the oldest window's start
@@ -121,6 +122,12 @@ namespace Relisten.Data
         /// </summary>
         private const int DailyAggregateMaxLagDays = 4;
 
+        /// <summary>
+        /// Counted for a track with no recorded duration when summing listened time;
+        /// roughly the site-wide average track length.
+        /// </summary>
+        private const int FallbackTrackSeconds = 7 * 60;
+
         // Plays in [@windowStart, @windowEnd) joined to the catalog the way the
         // source_track_plays_hourly/_daily continuous aggregates are (see
         // Migrations/timescaledb_migration.sql), so plays whose track, source or show was
@@ -138,6 +145,7 @@ namespace Relisten.Data
                     t.slug AS track_slug,
                     t.track_position,
                     t.duration AS track_duration,
+                    coalesce(t.duration, @fallbackTrackSeconds) AS track_seconds,
                     s.id AS source_id,
                     s.created_at AS source_created_at,
                     sh.id AS show_id,
@@ -197,7 +205,8 @@ namespace Relisten.Data
                     count(DISTINCT source_id) AS source_count,
                     min(created_at) AS first_played_at,
                     max(created_at) AS last_played_at,
-                    max(id) AS last_play_id
+                    max(id) AS last_play_id,
+                    sum(track_seconds) AS listened_seconds
                 FROM window_plays
                 GROUP BY show_id, show_uuid, artist_id, display_date
             ),
@@ -320,7 +329,8 @@ namespace Relisten.Data
                     artist_name,
                     artist_slug,
                     count(*) AS plays,
-                    count(DISTINCT show_id) AS show_count
+                    count(DISTINCT show_id) AS show_count,
+                    sum(track_seconds) AS listened_seconds
                 FROM window_plays
                 GROUP BY artist_id, artist_uuid, artist_name, artist_slug
             ),

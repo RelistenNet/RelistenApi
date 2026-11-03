@@ -23,6 +23,14 @@ namespace Relisten.Api.Models.Api
         /// <summary>Largest source_track_plays.id in the window; null when it is empty.</summary>
         public long? last_play_id { get; set; }
         public long total_plays { get; set; }
+
+        /// <summary>
+        /// Sum of the played tracks' durations, counting 420 s for a track with no
+        /// duration. listened_seconds / 60 / window_minutes estimates how many people are
+        /// listening (Little's law); it reads a little high, because a skipped track
+        /// counts as if it played through.
+        /// </summary>
+        public long listened_seconds { get; set; }
         public IReadOnlyList<LiveSummaryAppTypePlays> app_types { get; set; } =
             new List<LiveSummaryAppTypePlays>();
 
@@ -62,6 +70,9 @@ namespace Relisten.Api.Models.Api
     {
         public Guid show_uuid { get; set; }
         public long plays { get; set; }
+
+        /// <summary>See <see cref="LiveSummary.listened_seconds"/>.</summary>
+        public long listened_seconds { get; set; }
 
         /// <summary>
         /// Plays in the 30 days before the window, from the continuous aggregates, which
@@ -137,7 +148,17 @@ namespace Relisten.Api.Models.Api
         public string name { get; set; } = string.Empty;
         public string slug { get; set; } = string.Empty;
         public long plays { get; set; }
+
+        /// <summary>See <see cref="LiveSummary.listened_seconds"/>.</summary>
+        public long listened_seconds { get; set; }
         public int show_count { get; set; }
+
+        /// <summary>
+        /// The artist's show with the most listened time in the window, ties going to
+        /// more plays, then the most recent play. Null only in a rare race: its source
+        /// was deleted, or its plays were not visible, while the window was queried.
+        /// </summary>
+        public LiveSummaryShow? top_show { get; set; }
 
         /// <summary>plays / total_plays.</summary>
         public double share { get; set; }

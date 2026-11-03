@@ -61,7 +61,7 @@ namespace Relisten.Services.Live
             request = new LiveSummaryRequest(
                 Math.Clamp(minutes, 5, 60),
                 Math.Clamp(showsLimit, 1, 50),
-                Math.Clamp(artistsLimit, 1, 25),
+                Math.Clamp(artistsLimit, 1, 100),
                 resolvedMonthDay,
                 resolvedSort,
                 Math.Clamp(maxPerArtist, 0, 10),

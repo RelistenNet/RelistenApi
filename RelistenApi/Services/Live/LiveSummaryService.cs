@@ -77,10 +77,25 @@ namespace Relisten.Services.Live
             var fresh = LiveSummaryRanking.Fresh(scoredShows, request, window);
             var topArtists = LiveSummaryRanking.TopArtists(plays.Artists, request);
             var onThisDay = LiveSummaryRanking.OnThisDay(scoredShows, request.MonthDay);
+            // Artists and shows come from separate statements, each with its own snapshot,
+            // so an artist can in principle lack show rows; it then has no top_show.
+            var allTopShowsByArtist = LiveSummaryRanking.TopShowPerArtist(scoredShows);
+            var artistTopShows = topArtists
+                .Where(artist => allTopShowsByArtist.ContainsKey(artist.Row.artist_id))
+                .Select(artist => allTopShowsByArtist[artist.Row.artist_id])
+                .ToList();
 
-            var sources = await RepresentativeSources(topShows.Concat(deepCuts).Concat(fresh));
+            var sources = await RepresentativeSources(
+                topShows.Concat(deepCuts).Concat(fresh).Concat(artistTopShows)
+            );
 
             var showDtos = ToShowDtos<LiveSummaryShow>(topShows, sources);
+            var topShowDtosByArtist = artistTopShows
+                .Where(show => sources.ContainsKey(show.Row.source_id))
+                .ToDictionary(
+                    show => show.Row.artist_id,
+                    show => ToShowDto<LiveSummaryShow>(show, sources[show.Row.source_id])
+                );
             var totalPlays = plays.AppTypes.Sum(appType => appType.plays);
 
             return new LiveSummary
@@ -92,12 +107,21 @@ namespace Relisten.Services.Live
                 last_play_id =
                     plays.Shows.Count == 0 ? null : plays.Shows.Max(show => show.last_play_id),
                 total_plays = totalPlays,
+                listened_seconds = plays.Shows.Sum(show => show.listened_seconds),
                 app_types = plays.AppTypes.Select(ToAppTypeDto).ToList(),
                 timeline = plays.Timeline.Select(ToTimelineDto).ToList(),
                 artist_count = plays.Artists.Count,
                 other_artists_plays = totalPlays - topArtists.Sum(artist => artist.Row.plays),
                 shows = showDtos,
-                artists = topArtists.Select(artist => ToArtistDto(artist, totalPlays)).ToList(),
+                artists = topArtists
+                    .Select(artist =>
+                        ToArtistDto(
+                            artist,
+                            totalPlays,
+                            topShowDtosByArtist.GetValueOrDefault(artist.Row.artist_id)
+                        )
+                    )
+                    .ToList(),
                 deep_cuts = ToShowDtos<LiveSummaryShow>(deepCuts, sources),
                 fresh = ToShowDtos<LiveSummaryFreshShow>(fresh, sources),
                 on_this_day = ToOnThisDayDto(onThisDay, showDtos, request.MonthDay),
@@ -147,6 +171,7 @@ namespace Relisten.Services.Live
             {
                 show_uuid = row.show_uuid,
                 plays = row.plays,
+                listened_seconds = row.listened_seconds,
                 plays_30d = row.plays_30d,
                 expected_plays = Math.Round(show.ExpectedPlays, 3),
                 surprise = Math.Round(show.Surprise, 3),
@@ -195,7 +220,11 @@ namespace Relisten.Services.Live
             };
         }
 
-        private static LiveSummaryArtist ToArtistDto(ScoredArtist artist, long totalPlays)
+        private static LiveSummaryArtist ToArtistDto(
+            ScoredArtist artist,
+            long totalPlays,
+            LiveSummaryShow? topShow
+        )
         {
             var row = artist.Row;
 
@@ -205,7 +234,9 @@ namespace Relisten.Services.Live
                 name = row.artist_name,
                 slug = row.artist_slug,
                 plays = row.plays,
+                listened_seconds = row.listened_seconds,
                 show_count = row.show_count,
+                top_show = topShow,
                 share = totalPlays == 0 ? 0 : Math.Round((double)row.plays / totalPlays, 4),
                 expected_plays = Math.Round(row.expected_plays, 3),
                 surprise = Math.Round(artist.Surprise, 3),

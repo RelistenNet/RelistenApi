@@ -43,6 +43,7 @@ namespace Relisten.Services.Live
         public DateTime first_played_at { get; set; }
         public DateTime last_played_at { get; set; }
         public long last_play_id { get; set; }
+        public long listened_seconds { get; set; }
         public long plays_30d { get; set; }
         public long source_id { get; set; }
         public DateTime source_created_at { get; set; }
@@ -63,6 +64,7 @@ namespace Relisten.Services.Live
         public string artist_slug { get; set; } = string.Empty;
         public long plays { get; set; }
         public int show_count { get; set; }
+        public long listened_seconds { get; set; }
         public double expected_plays { get; set; }
     }
 }

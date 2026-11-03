@@ -177,6 +177,28 @@ namespace Relisten.Services.Live
         }
 
         /// <summary>
+        /// Each artist's show with the most listened time, ties going to more plays,
+        /// then the most recent play. Every show in the window is considered, unranked
+        /// and uncapped, because this describes the artist rather than headlining a show.
+        /// </summary>
+        public static IReadOnlyDictionary<int, ScoredShow> TopShowPerArtist(
+            IEnumerable<ScoredShow> shows
+        )
+        {
+            return shows
+                .GroupBy(show => show.Row.artist_id)
+                .ToDictionary(
+                    artistShows => artistShows.Key,
+                    artistShows =>
+                        artistShows
+                            .OrderByDescending(show => show.Row.listened_seconds)
+                            .ThenByDescending(show => show.Row.plays)
+                            .ThenByRecency()
+                            .First()
+                );
+        }
+
+        /// <summary>
         /// Shows dated on the given MM-DD in any year. Partial dates such as 1977-05-XX
         /// never match, rather than guessing the missing day. MinShowPlays does not apply:
         /// on_this_day counts every play, and lists only shows already in shows.

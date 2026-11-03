@@ -76,6 +76,14 @@ public class TestLiveSummaryIntegration
         await InsertShow("B2", smallBandId, "1980-03-15", "1980-03-15"); // on this day
         await InsertShow("B3", smallBandId, "1980-03-XX", "1980-03-01"); // partial date
 
+        // Listened time counts a track without a duration as 420 s.
+        await db.WithWriteConnection(connection =>
+            connection.ExecuteAsync(
+                "UPDATE source_tracks SET duration = NULL WHERE uuid = @uuid",
+                new { uuid = shows["A5"].TrackUuids[0][0] }
+            )
+        );
+
         await SeedWindowPlays();
         await SeedBaselines();
     }
@@ -162,6 +170,38 @@ public class TestLiveSummaryIntegration
         (summary.artists.Sum(a => a.plays) + summary.other_artists_plays)
             .Should()
             .Be(summary.total_plays);
+    }
+
+    [Test]
+    public async Task ListenedSeconds_SumTrackDurationsWithAFallbackForMissingOnes()
+    {
+        var summary = await Summarize(sort: "plays");
+
+        // 19 plays of 300 s tracks, and A5's one play of a track with no duration.
+        summary.listened_seconds.Should().Be(19 * 300 + 420);
+        summary
+            .artists.Single(a => a.name == "Big Band")
+            .listened_seconds.Should()
+            .Be(11 * 300 + 420);
+        summary.artists.Single(a => a.name == "Small Band").listened_seconds.Should().Be(8 * 300);
+        summary
+            .shows.Single(s => s.show_uuid == shows["A1"].ShowUuid)
+            .listened_seconds.Should()
+            .Be(4 * 300);
+    }
+
+    [Test]
+    public async Task Artists_CarryTheirMostListenedShow()
+    {
+        var summary = await Summarize(sort: "plays");
+
+        var bigBand = summary.artists.Single(a => a.name == "Big Band");
+        bigBand.top_show!.show_uuid.Should().Be(shows["A1"].ShowUuid);
+        bigBand.top_show.source.id.Should().Be((int)shows["A1"].SourceIds[1]);
+
+        // B1 and B2 tie on listened time and plays; B2 was played more recently.
+        var smallBand = summary.artists.Single(a => a.name == "Small Band");
+        smallBand.top_show!.show_uuid.Should().Be(shows["B2"].ShowUuid);
     }
 
     [Test]
