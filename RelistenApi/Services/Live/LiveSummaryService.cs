@@ -71,7 +71,7 @@ namespace Relisten.Services.Live
         {
             var plays = await sourceTrackPlaysService.PlaysInLiveWindow(window);
 
-            var scoredShows = LiveSummaryRanking.ScoreShows(plays.Shows, window.Minutes);
+            var scoredShows = LiveSummaryRanking.ScoreShows(plays.Shows, request, window);
             var topShows = LiveSummaryRanking.TopShows(scoredShows, request);
             var deepCuts = LiveSummaryRanking.DeepCuts(scoredShows, request);
             var fresh = LiveSummaryRanking.Fresh(scoredShows, request, window);
@@ -150,6 +150,7 @@ namespace Relisten.Services.Live
                 plays_30d = row.plays_30d,
                 expected_plays = Math.Round(show.ExpectedPlays, 3),
                 surprise = Math.Round(show.Surprise, 3),
+                is_anniversary = show.IsAnniversary,
                 source_created_at = row.source_created_at,
                 source_count = row.source_count,
                 first_played_at = row.first_played_at,

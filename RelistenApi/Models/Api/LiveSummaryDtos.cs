@@ -72,8 +72,17 @@ namespace Relisten.Api.Models.Api
         /// <summary>The show's average 30-day rate scaled to the window length.</summary>
         public double expected_plays { get; set; }
 
-        /// <summary>(plays + K) / (expected_plays + K); see LiveSummaryRanking.</summary>
+        /// <summary>
+        /// (plays + K) / (expected_plays + K), reduced for anniversaries; see
+        /// LiveSummaryRanking.
+        /// </summary>
         public double surprise { get; set; }
+
+        /// <summary>
+        /// The show is from a past year and its date falls on month_day. Its surprise is
+        /// multiplied by LiveSummaryRanking.AnniversarySurpriseMultiplier.
+        /// </summary>
+        public bool is_anniversary { get; set; }
 
         /// <summary>
         /// When the representative source's row was created. Re-ingestion can recreate

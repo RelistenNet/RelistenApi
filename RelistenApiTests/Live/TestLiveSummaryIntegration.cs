@@ -184,11 +184,32 @@ public class TestLiveSummaryIntegration
     [Test]
     public async Task Shows_AreRankedBySurpriseAndCappedPerArtist()
     {
-        var capped = await Summarize(sort: "surprise");
-        var uncapped = await Summarize(sort: "surprise", maxPerArtist: 0);
+        // No show's anniversary, so surprise alone decides the order.
+        var capped = await Summarize(sort: "surprise", monthDay: "06-01");
+        var uncapped = await Summarize(sort: "surprise", maxPerArtist: 0, monthDay: "06-01");
 
         ShowKeys(capped.shows).Should().Equal("A1", "B1", "B2", "A2");
         ShowKeys(uncapped.shows).Should().Equal("A1", "B1", "B2", "A2", "B3", "A4", "A3");
+    }
+
+    [Test]
+    public async Task Shows_FromPastYearsOnTheirAnniversaryAreDowngraded()
+    {
+        var onB2Anniversary = await Summarize(maxPerArtist: 0, monthDay: "03-15");
+        var onB1Date = await Summarize(maxPerArtist: 0, monthDay: "03-12");
+
+        var b2 = onB2Anniversary.shows.Single(s => s.show_uuid == shows["B2"].ShowUuid);
+        b2.is_anniversary.Should().BeTrue();
+        b2.surprise.Should()
+            .BeApproximately(
+                LiveSummaryRanking.Surprise(3, b2.expected_plays)
+                    * LiveSummaryRanking.AnniversarySurpriseMultiplier,
+                0.001
+            );
+        ShowKeys(onB2Anniversary.shows).Should().Equal("A1", "B1", "A2", "B3", "A4", "A3", "B2");
+
+        // B1 is from this year: a show played on the day it happened is not an anniversary.
+        onB1Date.shows.Should().OnlyContain(s => !s.is_anniversary);
     }
 
     [Test]
@@ -235,7 +256,7 @@ public class TestLiveSummaryIntegration
     [Test]
     public async Task OnThisDay_MatchesFullDatesOnly()
     {
-        var march15 = await Summarize(monthDay: "03-15");
+        var march15 = await Summarize(maxPerArtist: 0, monthDay: "03-15");
         var march1 = await Summarize(monthDay: "03-01");
 
         march15.on_this_day.month_day.Should().Be("03-15");

@@ -6,7 +6,12 @@ using System.Linq;
 namespace Relisten.Services.Live
 {
     /// <summary>A show from the window with its baseline and surprise score.</summary>
-    public sealed record ScoredShow(LiveShowRow Row, double ExpectedPlays, double Surprise);
+    public sealed record ScoredShow(
+        LiveShowRow Row,
+        double ExpectedPlays,
+        double Surprise,
+        bool IsAnniversary
+    );
 
     /// <summary>An artist from the window with its surprise score.</summary>
     public sealed record ScoredArtist(LiveArtistRow Row, double Surprise);
@@ -36,6 +41,14 @@ namespace Relisten.Services.Live
         /// <summary>A show with at most this many plays over 30 days is a deep cut.</summary>
         public const long DeepCutMaxPlays30d = 25;
 
+        /// <summary>
+        /// Multiplies the surprise of a show from a past year played on its anniversary
+        /// (the request's month_day). The apps feature "today in history", so those shows
+        /// get hundreds of times their usual plays every year on that date; without this
+        /// they fill the top of the list daily. They are still counted in on_this_day.
+        /// </summary>
+        public const double AnniversarySurpriseMultiplier = 0.25;
+
         public const int DeepCutsLimit = 10;
         public const int FreshLimit = 10;
 
@@ -60,14 +73,27 @@ namespace Relisten.Services.Live
 
         public static IReadOnlyList<ScoredShow> ScoreShows(
             IEnumerable<LiveShowRow> shows,
-            int windowMinutes
+            LiveSummaryRequest request,
+            LiveWindow window
         )
         {
             return shows
                 .Select(row =>
                 {
-                    var expected = ShowExpectedPlays(row.plays_30d, windowMinutes);
-                    return new ScoredShow(row, expected, Surprise(row.plays, expected));
+                    var expected = ShowExpectedPlays(row.plays_30d, window.Minutes);
+                    var surprise = Surprise(row.plays, expected);
+                    var isAnniversary = IsPastYearAnniversary(
+                        row.display_date,
+                        request.MonthDay,
+                        window.End.Year
+                    );
+
+                    return new ScoredShow(
+                        row,
+                        expected,
+                        isAnniversary ? surprise * AnniversarySurpriseMultiplier : surprise,
+                        isAnniversary
+                    );
                 })
                 .ToList();
         }
@@ -163,10 +189,26 @@ namespace Relisten.Services.Live
             return shows
                 .Where(show =>
                     TryParseFullDate(show.Row.display_date, out var date)
-                    && date.ToString("MM-dd", CultureInfo.InvariantCulture) == monthDay
+                    && IsOnMonthDay(date, monthDay)
                 )
                 .ToList();
         }
+
+        /// <summary>
+        /// A show from an earlier year whose full date falls on month_day. A show played
+        /// on the day it happened (this year) is news, not an anniversary.
+        /// </summary>
+        private static bool IsPastYearAnniversary(
+            string displayDate,
+            string monthDay,
+            int currentYear
+        ) =>
+            TryParseFullDate(displayDate, out var date)
+            && date.Year < currentYear
+            && IsOnMonthDay(date, monthDay);
+
+        private static bool IsOnMonthDay(DateOnly date, string monthDay) =>
+            date.ToString("MM-dd", CultureInfo.InvariantCulture) == monthDay;
 
         /// <summary>
         /// Keeps each artist's first <paramref name="maxPerArtist"/> shows in the given
