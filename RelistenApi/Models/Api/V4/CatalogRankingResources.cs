@@ -8,13 +8,11 @@ namespace Relisten.Api.Models.Api.V4;
 public sealed record RankedArtistResource : ArtistResource
 {
     public int Rank { get; init; }
-    public PopularityResource Popularity { get; init; } = null!;
 }
 
 public sealed record RankedYearResource : YearResource
 {
     public int Rank { get; init; }
-    public PopularityResource Popularity { get; init; } = null!;
 }
 
 public sealed record RankedShowResource : ShowSummaryResource

@@ -18,6 +18,7 @@ public sealed class CatalogShowMetadataReader(
     CatalogVenueMetadataReader venueMetadata,
     CatalogArtistVenueMetadataReader artistVenueMetadata,
     CatalogTourMetadataReader tourMetadata,
+    CatalogPopularityMetadataReader popularityMetadata,
     PopularityRefreshRequest refresh
 )
 {
@@ -61,6 +62,7 @@ public sealed class CatalogShowMetadataReader(
                 )
             )
         ).ToDictionary(x => x.uuid);
+        await popularityMetadata.ApplyYears(session, years.Values.ToArray(), cancellationToken);
         var tourUuids = shows
             .Where(x => x.tour_uuid.HasValue)
             .Select(x => x.tour_uuid!.Value)

@@ -700,10 +700,27 @@ than silently switching to a client-local or new hardcoded clock. Callers can
 continue sending explicit month/day. Recent-update sorting remains imported
 recording changes.
 
-### Popularity on every show resource
+### Popularity on ordinary catalog resources
+
+Every `ArtistResource` includes nullable `popularity` from the global artist
+population. Every `YearResource` includes nullable artist-local `popularity`,
+including years embedded in shows and returned by the resolver. Lists and details
+use the same scores. Global popular/trending year lists instead use global scores.
+These meanings match the legacy artist/year browsing behavior.
+
+Mobile stores these fields through its existing repositories, so Popular and
+Trending sorts need no separate ranking request. A null value clears any stored
+score. Score-only changes alter the response ETag even when imported `updated_at`
+does not change. When overlapping responses overwrite a shared score, mobile
+invalidates the affected cached response validators while retaining membership;
+the next owning read repairs the score rather than accepting an obsolete 304.
+
+`CatalogPopularityMetadataReader` adds artist/year scores in SQL batches inside
+the caller's catalog snapshot. It reuses the existing refresh collector and
+storage described below. It adds no schema, schedule or calculation on reads.
 
 Every `ShowSummaryResource` and full `ShowResource` includes nullable `popularity`.
-Ordinary artist/year, date/recent, song/venue/tour, search, full-show, snapshot and
+Ordinary artist/year, date/recent, song/venue/tour, search, full-show and
 resolver reads use raw artist-local metrics. Artist-specific popular/trending
 groups also use artist-local metrics. Global popular/trending show lists use
 their global input map; momentum publishes its organic score, falling back to
@@ -725,7 +742,7 @@ defines that context. All nine ranking operations use `transient_ranking` in
 unchanged.
 
 Popularity participates in the represented JSON and ETag. An artist-score refresh
-changes ordinary show/list/detail/snapshot validators without requiring imported
+changes ordinary show/list/detail validators without requiring imported
 `updated_at` changes. Global-ranking validators depend on their global scores,
 not unrelated artist-score refreshes. Both also include returned catalog metadata.
 
@@ -738,7 +755,7 @@ missing rankings remain empty while the first calculation is queued.
 
 Every current catalog target receives a stored row. Inactive targets have zero
 counters, null momentum, and a `generated_at` timestamp. They remain null in
-public show resources and are excluded from ranking selection. A population with
+public catalog resources and are excluded from ranking selection. A population with
 no catalog targets does not need a refresh. There is no separate freshness table
 or scheduled refresh. The same one-hour age policy is used by legacy maps.
 

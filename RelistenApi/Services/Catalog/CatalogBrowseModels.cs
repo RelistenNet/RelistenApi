@@ -16,6 +16,7 @@ public sealed class CatalogArtist : CatalogTimestamps
     public int featured { get; set; }
     public int show_count { get; set; }
     public int source_count { get; set; }
+    public Relisten.Api.Models.PopularityMetrics? Popularity { get; set; }
     public CatalogFeatures Features { get; set; } = new();
     public List<CatalogProviderAssignment> UpstreamSources { get; set; } = [];
 }

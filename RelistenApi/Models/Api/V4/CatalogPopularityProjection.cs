@@ -5,7 +5,7 @@ namespace Relisten.Api.Models.Api.V4;
 // One score conversion for ordinary resources and rankings; selection stays in readers.
 public static partial class V4CatalogProjection
 {
-    private static PopularityResource ProjectPopularity(PopularityMetrics metrics)
+    internal static PopularityResource ProjectPopularity(PopularityMetrics metrics)
     {
         static PopularityWindowResource Window(PopularityWindowMetrics value) =>
             new(

@@ -36,6 +36,7 @@ public sealed class CatalogSearchResults
 /// </summary>
 public sealed class CatalogSearchReader(
     DbService db,
+    CatalogBrowseReader browse,
     CatalogShowMetadataReader shows,
     CatalogTourMetadataReader tours,
     CatalogImportedVenueMetadataReader importedVenues,
@@ -74,7 +75,7 @@ public sealed class CatalogSearchReader(
             ).ToArray()
             : [];
         var artistResources = (
-            await CatalogBrowseReader.ReadArtists(session, artistIds, cancellationToken)
+            await browse.ReadArtists(session, artistIds, cancellationToken)
         ).ToDictionary(artist => artist.uuid);
         var showResults = options.Shows
             ? (

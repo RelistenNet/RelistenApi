@@ -8,7 +8,11 @@ using Dapper;
 namespace Relisten.Catalog;
 
 /// <summary>Reads artist/year navigation and show summaries in one snapshot per request.</summary>
-public sealed class CatalogBrowseReader(DbService db, CatalogShowMetadataReader metadata)
+public sealed class CatalogBrowseReader(
+    DbService db,
+    CatalogShowMetadataReader metadata,
+    CatalogPopularityMetadataReader popularity
+)
 {
     /// <summary>Preserves the legacy autocreated filter and featured/name ordering.</summary>
     public async Task<IReadOnlyList<CatalogArtist>> ReadArtists(
@@ -56,7 +60,7 @@ public sealed class CatalogBrowseReader(DbService db, CatalogShowMetadataReader 
     }
 
     /// <summary>Hydrates only explicitly requested resolver artists, within the caller's snapshot.</summary>
-    internal static async Task<IReadOnlyList<CatalogArtist>> ReadArtists(
+    internal async Task<IReadOnlyList<CatalogArtist>> ReadArtists(
         CatalogReadSession session,
         IReadOnlyList<Guid> artistUuids,
         CancellationToken cancellationToken
@@ -86,7 +90,7 @@ public sealed class CatalogBrowseReader(DbService db, CatalogShowMetadataReader 
         {
             return null;
         }
-        return (
+        var years = (
             await session.Connection.QueryAsync<CatalogYear>(
                 session.Command(
                     YearSelect + " WHERE a.uuid=@artistUuid ORDER BY y.year,y.uuid",
@@ -95,6 +99,8 @@ public sealed class CatalogBrowseReader(DbService db, CatalogShowMetadataReader 
                 )
             )
         ).ToArray();
+        await popularity.ApplyYears(session, years, cancellationToken);
+        return years;
     }
 
     /// <summary>Eras are ordered artist-owned metadata, without a separate public identity.</summary>
@@ -154,6 +160,7 @@ public sealed class CatalogBrowseReader(DbService db, CatalogShowMetadataReader 
         {
             return null;
         }
+        await popularity.ApplyYears(session, [year], cancellationToken);
         var shows = await ReadShowSummaries(session, artistUuid, year.uuid, cancellationToken);
         return new(year, shows);
     }
@@ -205,7 +212,7 @@ public sealed class CatalogBrowseReader(DbService db, CatalogShowMetadataReader 
             )
         );
 
-    private static async Task ReadArtistMetadata(
+    private async Task ReadArtistMetadata(
         CatalogReadSession session,
         IReadOnlyList<CatalogArtist> artists,
         CancellationToken cancellationToken
@@ -243,6 +250,7 @@ public sealed class CatalogBrowseReader(DbService db, CatalogShowMetadataReader 
             artist.Features = features.GetValueOrDefault(artist.id) ?? new();
             artist.UpstreamSources = providers[artist.id].ToList();
         }
+        await popularity.ApplyArtists(session, artists, cancellationToken);
     }
 
     // Selected artists use bounded index counts; the all-artist list aggregates

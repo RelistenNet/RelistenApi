@@ -209,6 +209,8 @@ public sealed record TrackNormalizationResource(
 [JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
 public record YearResource
 {
+    /// <summary>Artist-local listening scores; null when no scored activity is stored.</summary>
+    public PopularityResource? Popularity { get; init; }
     public YearId Id { get; init; }
     public ArtistId ArtistId { get; init; }
     public int ShowCount { get; init; }

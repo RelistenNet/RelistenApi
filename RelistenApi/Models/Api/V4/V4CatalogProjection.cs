@@ -324,6 +324,7 @@ public static partial class V4CatalogProjection
             AvgDuration = value.avg_duration,
             AvgRating = value.avg_rating,
             Year = value.year,
+            Popularity = value.Popularity is { } metrics ? ProjectPopularity(metrics) : null,
             CreatedAt = value.created_at,
             UpdatedAt = value.updated_at,
         };

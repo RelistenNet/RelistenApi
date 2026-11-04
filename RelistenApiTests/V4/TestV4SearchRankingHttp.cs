@@ -39,7 +39,13 @@ public sealed partial class TestV4CatalogHttp
         refreshJobs
             .Batches.Last()
             .Should()
-            .Equal(new PopularityPopulation(PopularityPopulationKind.Show, owner));
+            .BeEquivalentTo(
+                new[]
+                {
+                    new PopularityPopulation(PopularityPopulationKind.Year, owner),
+                    new PopularityPopulation(PopularityPopulationKind.Show, owner),
+                }
+            );
         var etag = initial.Headers.ETag!.ToString();
 
         refreshJobs.FailNext = true;
@@ -63,6 +69,7 @@ public sealed partial class TestV4CatalogHttp
             DateTime.UtcNow
         );
         await store.ReplaceGlobalShows(new Dictionary<Guid, PopularityMetrics>(), DateTime.UtcNow);
+        await store.ReplaceYears(owner, new Dictionary<Guid, PopularityMetrics>(), DateTime.UtcNow);
         var count = refreshJobs.Batches.Count;
         (await GetJson(ShowPath(4)))["popularity"].Should().BeNull();
         (await GetJson("/api/v4/popular/shows")).AsArray().Should().BeEmpty();

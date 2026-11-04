@@ -12,6 +12,8 @@ namespace Relisten.Catalog;
 /// parents are shallow patches, so resolving one file cannot clear sibling files.
 /// </summary>
 public sealed class CatalogResolverHydrator(
+    CatalogBrowseReader browse,
+    CatalogPopularityMetadataReader popularity,
     CatalogShowMetadataReader showMetadata,
     CatalogTrackNormalizationReader trackNormalization,
     CatalogTourMetadataReader tourMetadata,
@@ -115,6 +117,7 @@ public sealed class CatalogResolverHydrator(
             Uuids(targets, CatalogReferenceKind.Year),
             cancellationToken
         );
+        await popularity.ApplyYears(session, years, cancellationToken);
         var tours = await tourMetadata.Read(
             session,
             Uuids(targets, CatalogReferenceKind.Tour)
@@ -134,7 +137,7 @@ public sealed class CatalogResolverHydrator(
         {
             // Mobile caches the artist catalog separately. Only explicitly requested
             // artists belong here; recording parents do not duplicate that catalog.
-            Artists = await CatalogBrowseReader.ReadArtists(
+            Artists = await browse.ReadArtists(
                 session,
                 Uuids(targets, CatalogReferenceKind.Artist),
                 cancellationToken

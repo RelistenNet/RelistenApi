@@ -21,6 +21,9 @@ public record ArtistResource
     public int Featured { get; init; }
     public int ShowCount { get; init; }
     public int SourceCount { get; init; }
+
+    /// <summary>Global listening scores; null when no scored activity is stored.</summary>
+    public PopularityResource? Popularity { get; init; }
     public DateTime CreatedAt { get; init; }
     public DateTime UpdatedAt { get; init; }
     public ArtistFeaturesResource Features { get; init; } = null!;

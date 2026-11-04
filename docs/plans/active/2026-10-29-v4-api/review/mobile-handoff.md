@@ -29,10 +29,18 @@ and inspect [Swagger](http://127.0.0.1:43823/api-docs-v4/index.html). Physical
 devices need a reachable HTTPS origin. Rebuild the native app when its playback
 protocol differs from current JS; an old debug artifact is not a playback test.
 
-Open cutover decision: artist/year catalog resources omit popularity, which
-leaves the existing mobile Popular/Trending sorts without scores on a fresh
-install. Alec is choosing between including popularity on those resources and
-separate ranking reads. Complete and verify that choice before release.
+Ordinary artist/year resources now include nullable popularity: global for
+artists, artist-local for years. Mobile applies those fields through the existing
+repositories, with no separate ranking fetch for Popular/Trending sorts. Missing
+scores clear stored values. Score-only changes revalidate independently of
+imported timestamps. Scoped validator invalidation repairs shared scores
+overwritten by an overlapping response without discarding cached membership.
+
+This addition passed 171 v4/popularity API tests and all 319 mobile tests, plus
+TypeScript and lint. A real API-to-repository-to-Realm check and simulator
+Popular/Trending browsing passed. The local year scores were calculated from
+the real aggregate snapshot captured on October 30; they are review data, not
+current production telemetry. No popularity schema or refresh mechanism changed.
 
 ## Fetch what the screen needs
 

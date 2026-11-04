@@ -21,6 +21,9 @@ public static class CatalogBrowseProjection
             Featured = value.featured,
             ShowCount = value.show_count,
             SourceCount = value.source_count,
+            Popularity = value.Popularity is { } metrics
+                ? V4CatalogProjection.ProjectPopularity(metrics)
+                : null,
             CreatedAt = value.created_at,
             UpdatedAt = value.updated_at,
             Features = Features(value.Features),

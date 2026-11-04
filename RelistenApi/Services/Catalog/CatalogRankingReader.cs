@@ -24,6 +24,7 @@ public sealed record CatalogArtistRankings(
 /// </summary>
 public sealed class CatalogRankingReader(
     DbService db,
+    CatalogBrowseReader browse,
     CatalogShowMetadataReader metadata,
     PopularityRefreshRequest refresh
 )
@@ -44,7 +45,7 @@ public sealed class CatalogRankingReader(
             cancellationToken
         );
         var artists = (
-            await CatalogBrowseReader.ReadArtists(
+            await browse.ReadArtists(
                 session,
                 scores.Select(row => row.uuid).ToArray(),
                 cancellationToken

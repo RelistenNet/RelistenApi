@@ -201,6 +201,7 @@ public sealed record CatalogNormalization(
 
 public sealed class CatalogYear : CatalogTimestamps
 {
+    public Relisten.Api.Models.PopularityMetrics? Popularity { get; set; }
     public Guid uuid { get; set; }
     public Guid artist_uuid { get; set; }
     public int show_count { get; set; }
