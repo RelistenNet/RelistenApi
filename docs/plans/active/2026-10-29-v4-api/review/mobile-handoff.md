@@ -10,24 +10,35 @@ and release activation stay separate; catalog reads need no login.
 
 ## Current integration
 
-The mobile pilot is in the sibling `relisten-mobile` checkout on
-`codex/v4-mobile-pilot`, with Realm schema 20 storage. Recheck its current
-branch and working tree before editing. Its public entrypoints are
-`relisten/api/client.ts`, `relisten/api/v4/catalog_client.ts` and the existing
-Realm repositories. Keep one repository set and the existing player.
+The mobile implementation is in the sibling `relisten-mobile` checkout on
+`codex/v4-mobile-pilot`. It now has one v4 catalog path. `RelistenApiClient`
+returns typed API resources; the existing Realm repositories apply them. The
+existing executor owns freshness, conditional reads, retry and atomic storage
+of records, ETags and ordered query membership. The separate persistent v4
+client/coordinator and mobile v3 branches are removed.
+
+Realm schema 18 is the final unreleased v4 addition above account schema 17.
+Canonical song membership lives once in each query's ordered IDs, with no
+second show/track list on `NormalizedSong`. Preserve the schema 17 upgrade test;
+intermediate pilot schemas never shipped and need no migration code.
 
 For simulator review, set
-`EXPO_PUBLIC_RELISTEN_CATALOG_ORIGIN=http://127.0.0.1:43823` (without `/api`) and
-opt into `EXPO_PUBLIC_RELISTEN_CATALOG_TRANSPORT=v4`. V3 remains the pre-cutover default; adopting v4 is one-way.
-Start the API with `./local-dev/v4-review/run.sh` and inspect
-[Swagger](http://127.0.0.1:43823/api-docs-v4/index.html). Physical devices need a
-reachable HTTPS origin.
+`EXPO_PUBLIC_RELISTEN_CATALOG_ORIGIN=http://127.0.0.1:43823` (without `/api`).
+There is no transport switch. Start the API with `./local-dev/v4-review/run.sh`
+and inspect [Swagger](http://127.0.0.1:43823/api-docs-v4/index.html). Physical
+devices need a reachable HTTPS origin. Rebuild the native app when its playback
+protocol differs from current JS; an old debug artifact is not a playback test.
+
+Open cutover decision: artist/year catalog resources omit popularity, which
+leaves the existing mobile Popular/Trending sorts without scores on a fresh
+install. Alec is choosing between including popularity on those resources and
+separate ranking reads. Complete and verify that choice before release.
 
 ## Fetch what the screen needs
 
 | Use | Endpoint | Local replacement |
 | --- | --- | --- |
-| Artist metadata | `GET /artists` or `/artists/{artistId}` | Upsert returned artist fields. |
+| Artist metadata | `GET /artists?include_autocreated=true` | Store the complete list; filter automatically created visibility locally. |
 | Artist's years | `GET /artists/{artistId}/years` | Replace only that artist's year membership. |
 | Selected year | `GET /artists/{artistId}/years/{yearId}` or `/years/by-number/{year}` | Upsert year metadata; replace only that year's show membership. |
 | Show / source | `GET /shows/{showId}` or `/sources/{sourceId}` | Replace children only for the fully returned owner. |
@@ -37,9 +48,15 @@ reachable HTTPS origin.
 All paths above are under `/api/v4`. A complete empty list clears its own cached
 membership. Omission never globally deletes a shared entity or another query's
 membership. Search and filtered results own only their exact query results;
-rankings stay transient online views. Resolver responses are shallow entity
+ranking query membership stays transient; shared metadata can still be patched. Resolver responses are shallow entity
 patches. Read [endpoints.json](../endpoints.json) and
 [contracts](../contracts.md#load-collections-as-needed) for the full map.
+
+The song-recordings response contains show IDs, not show bodies. On a cold
+recordings entry, the song repository loads `/songs/{id}` first to establish
+its parent shows/years. A warm entry reuses that query's freshness. Favorite
+resolution likewise loads the shared artist list before applying parent patches;
+it never owns catalog list membership.
 
 Keep response apply and its validator in one Realm transaction. Use ordinary
 ETags/304s, the existing refresh interval, manual refresh and reconnect retry.
@@ -121,8 +138,8 @@ canonical routes accept the server's merge survivor while checking ownership.
 
 Implementation commits, screenshots and the detailed native record belong in
 the sibling mobile plan, `docs/plans/active/2026-10-31-v4-catalog-mobile-pilot.md`.
-V3 remains the pre-cutover default; the v4 build is an explicit development opt-in.
-Alec clarified that the cutover is one-way: a v4-populated install does not switch
-back to v3. No fallback-only routing or downgrade verification is required.
+That checkpoint used a development opt-in. The November 4 cutover removes the
+mobile switch and v3 branches. Legacy server routes remain for older releases;
+no mobile downgrade path or intermediate-schema migration is required.
 Imported fallback inside v4 and legacy server support for older releases remain.
 No production migration, release build, OTA or deployment occurred in this checkpoint.
