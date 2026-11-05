@@ -44,8 +44,7 @@ dotnet run --project RelistenApi/RelistenApi.csproj
 You can also open the repository in your C# editor and use its debugger.
 
 Open the catalog API at: [http://localhost:3823/api-docs](http://localhost:3823/api-docs).
-The definition selector defaults to v4 and also offers v3 and v2. Existing
-`/api-docs-v4` and `/api-docs-v3` links remain available.
+The definition selector defaults to v4 and also offers v3 and v2.
 
 ## API documentation
 
