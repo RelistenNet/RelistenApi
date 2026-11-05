@@ -100,8 +100,7 @@ local-dev/accounts.sh google  # Your real Google account, stored locally.
 ```
 
 The catalog API listens on `http://localhost:3823`; open
-[Swagger](http://localhost:3823/api-docs-v4/index.html) or use the
-[HTTP examples](../docs/api/requests.http). Development uses client-only Temporal
+[Swagger](http://localhost:3823/api-docs-v4/index.html). Development uses client-only Temporal
 composition, registers no legacy import schedules and starts no Hangfire workers.
 No Temporal server is needed for catalog reads.
 
@@ -195,22 +194,14 @@ Redis stores oversized Temporal payloads as well as API caches. Keep Redis while
 manual workflow histories matter; clearing its data can make those histories
 unreadable. The temporary test servers have no history to retain after teardown.
 
-## Review with restored data
+## Working with a larger catalog
 
-The checked-in seed supports routine development. For real normalization and
-large-list investigation, use a restored local backup, then follow the
-[catalog contract](../docs/api/catalog.md), [mobile sync](../docs/api/mobile-sync.md)
-and [performance reference](../docs/api/performance.md). The normal API command
-uses either dataset. Missing normalization remains a supported artist state;
-startup does not require it or enable approval flags.
+Use the explicit backup restore above when a performance or normalization
+investigation needs more data than the seed. The normal API command uses either
+dataset. Missing normalization is supported; startup neither requires it nor
+enables approval flags.
 
-The October 29 local backup omits playback analytics. Its review scores came
-from a separately approved real production read-only aggregate snapshot, also
-published to local Postgres. Their provenance is retained locally under ignored
-`local-dev/v4-review/.output/`; the pilot scripts are retired. Keep Hangfire
-workers stopped when using those scores: empty local telemetry cannot reproduce
-them. No production data or flags are changed by local review.
-
-That local snapshot's original normalization flags and restore SQL are also in
-its ignored `.output/` directory. Keep those files with their matching snapshot;
-they are not daily setup requirements or a production rollout mechanism.
+A catalog-only backup may omit play telemetry. Do not run popularity calculations
+against empty local telemetry if you want to retain separately captured review
+scores. Keep snapshot provenance and any local restore commands with that backup,
+not in the API contract.

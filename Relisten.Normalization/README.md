@@ -33,7 +33,7 @@ refresh after committing source work; admin edits refresh atomically. Failures
 in post-commit maintenance require explicit repair, without repeating successful
 imports or model work.
 
-See the [count reference](../docs/api/derived-counts.md) for definitions, identity
+See the [count reference](../docs/normalization-counts.md) for definitions, identity
 lifecycle, scoped concurrency, timestamps and repair SQL. The
-[catalog contract](../docs/api/catalog.md) describes the public resources and
+[catalog contract](../docs/api/README.md) describes the public resources and
 approval/fallback rules.

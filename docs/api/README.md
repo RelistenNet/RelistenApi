@@ -1,47 +1,90 @@
-# Catalog and account APIs
+# Integrating the catalog API
 
-The catalog API serves `/api/v4`; the separate User Service owns authentication,
-`/v1/me` and `/v1/library`. Anonymous browsing and playback do not require login.
-V4 has its own readers and resources. Existing v2/v3 implementations remain for
-older clients and do not constrain v4's application interfaces.
+Read this when adding a catalog screen or changing how catalog data reaches a
+client. [Swagger](http://localhost:3823/api-docs-v4/index.html) defines the routes,
+parameters and response fields. This guide explains how the music entities relate
+and which data a client may treat as authoritative.
 
-Start here according to the change you need to make:
+## Shows group recordings; tracks identify playable files
 
-- [Catalog contract](catalog.md): response conventions, normalization, browsing, discovery and activity.
-- [Public IDs](ids.md): approved prefixes, storage and saved-reference resolution.
-- [Mobile sync](mobile-sync.md): endpoint membership, conditional reads and playback identity.
-- [Accounts and library](accounts.md): typed identities, authentication and exact-target favorites.
-- [Derived counts](derived-counts.md): venue/song definitions, maintenance and repair.
-- [Stored popularity](../popularity/README.md): calculation/publication ownership and demand refresh.
-- [Performance](performance.md): local measurements and their limits.
-- [Deployment](deployment.md): migrations, writer coordination, warm-up and fix-forward recovery.
+One show can have several recordings, each represented by a source. A source
+contains sets and playable tracks. A track identifies a file, so a medley can
+contain several songs without becoming several playable tracks. Normalized parts
+provide song matches, qualifiers and transitions; they do not provide seek offsets.
+Normalization adds metadata to a file while preserving its imported title,
+playback URL and ordering.
 
-[OpenAPI](http://localhost:3823/api-docs-v4/index.html) documents request parameters,
-DTOs and enums. The [endpoint map](endpoints.json) records each operation's response
-shape and local replacement policy. The [HTTP examples](requests.http) use real
-IDs from the local restored catalog; choose returned IDs when using another DB.
-Use the [normal local setup](../../local-dev/README.md): v4 is served by the same
-API process as the retained legacy routes, without a pilot launcher or separate DB.
+Start with artist → years → selected year → show. Fetch sources, song file matches
+and other collections when the listener opens them. Full show detail includes the
+recording hierarchy; a show summary does not. Retain that distinction when applying
+responses to a local database: a summary's omitted children say nothing about the
+children already stored. See [local persistence](mobile-sync.md).
 
-## Responsibilities
+## Imported observations and canonical entities serve different purposes
 
-Catalog controllers validate public requests and own HTTP/cache behavior.
-[Catalog readers](../../RelistenApi/Services/Catalog/) select domain results;
-[resource projections](../../RelistenApi/Models/Api/V4/) own the wire representation.
-One read session supplies the connection and transaction to all readers in an
-ordinary request. Serialization starts after that session is disposed.
-Normalization owns accepted canonical identities, links and interpretation.
-Imports retain original titles, venue labels and playable-file metadata.
+An imported venue or song belongs to an artist's upstream catalog. A canonical
+venue identifies a shared physical place; a canonical song is still artist-owned.
+Changing an imported ID's prefix cannot convert one into the other. Their link
+requires accepted normalization evidence. A show's venue assignment can differ
+from its source's imported venue observation.
 
-The User Service owns membership and account history independently of catalog
-availability. Mobile's HTTP client returns API DTOs; repositories apply them to
-Realm and own query membership. Avoid a second persistent API client or sync engine.
+Normalization is optional and can be incomplete. Artist venue/song browse lists
+choose canonical targets and imported fallbacks on the server. Follow each entry's
+kind; a client does not need a feature-flag decision to select a browsing route.
+`features.normalization` permits normalized reads but does not promise coverage.
 
-## Release status
+Display imported show venue labels and track titles. Link a venue label to its
+canonical venue when one exists; use canonical display metadata only when the
+imported observation is absent. Canonical aliases aid discovery. They are not a
+history from which a client should infer the venue's name on the concert date.
 
-The stack has been exercised locally with restored catalog/normalization data,
-real captured popularity aggregates and simulator sign-in/playback. That is not
-production qualification. Release-signed physical-device callbacks, deployment
-migrations and production load still need verification. Follow the deployment
-guide before enabling the release. No combined artist-catalog endpoint exists;
-load years, a selected year and recording details as the listener navigates.
+A show's `artist_venue` represents the artist/place pair, with that artist's show
+count. Its nested venue's global count spans approved artists. An imported venue's
+count covers its entire imported group. During partial normalization, an imported
+group can overlap canonical groups, so adding browse-entry counts can double-count
+shows. Canonical song counts/shows require exact recording matches; imported song
+counts/shows use setlist evidence and cannot identify a playable file. See
+[count maintenance](../normalization-counts.md) before changing these definitions.
+
+## Identity and saved references
+
+UUID-backed public IDs losslessly encode the existing catalog UUID. Canonical
+venue/song and artist-venue IDs are native short strings. Clients generally keep
+all IDs opaque; mobile decodes UUID-backed catalog IDs at its storage adapter to
+preserve existing download filenames and playback references.
+
+Canonical merges return a survivor ID. Deleted canonical IDs are reserved against
+reuse so a saved reference cannot silently point to a different place or song.
+Saved references may therefore resolve as redirected, retired or unavailable.
+Unavailable metadata does not imply that a listener removed a favorite. The
+resolver returns entity patches, without ownership of unreturned child collections.
+
+The [catalog types and codec](../../Relisten.Identifiers/),
+[normalization IDs](../../Relisten.Normalization/NormIds.cs) and
+[reference lookup](../../RelistenApi/Services/Catalog/CatalogReferenceLookup.cs)
+define supported identities and lookup schemes. Swagger publishes their wire forms.
+
+## Ranking scores have a comparison population
+
+Ordinary show/year resources carry artist-local popularity. Artist resources and
+global popular/trending views use global comparisons; momentum is a separate
+discovery score. The same show can legitimately have different scores in different
+views. Treat ranking views as online results rather than writing their contextual
+scores into the ordinary offline catalog. Opening a ranked item loads its ordinary
+detail before catalog persistence. [Stored popularity](../popularity/README.md)
+explains refresh ownership and failure recovery.
+
+## Where changes belong
+
+Ordinary [catalog reads](../../RelistenApi/Services/Catalog/) select data in one primary,
+read-only repeatable-read session. [Resource projections](../../RelistenApi/Models/Api/V4/)
+produce the public representation. Normalization owns canonical links and vocabulary;
+imports own original recording metadata. Keep batch hydration shared across routes.
+Existing v2/v3 readers remain independent for older clients.
+
+A client transport returns API responses; its repositories own local mapping and
+collection membership. The [User Service](accounts.md) owns account membership
+independently of catalog availability. Public play activity represents anonymous
+track starts, not an authenticated listener's history or measured listening time.
+Live history selects events separately from catalog hydration and is a best-effort
+activity view.

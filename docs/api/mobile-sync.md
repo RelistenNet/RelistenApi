@@ -1,96 +1,50 @@
-# Mobile catalog loading and persistence
+# Persisting catalog responses
 
-Use artist → years → selected year → show → source → playable track requests.
-Load venues, songs, tours, reviews and song file matches on demand. There is no
-combined artist-catalog endpoint and no eager fan-out to every artist collection.
+Use this when implementing a repository that saves catalog responses locally.
+The API supplies resources and complete collections; it does not synchronize the
+client database or declare which unrelated records to delete. Keep the HTTP
+transport separate from repository mapping and persistence.
 
-The mobile `RelistenApiClient` returns typed API responses. Existing repositories
-map them into Realm; the network executor owns freshness, retry and conditional
-reads. One catalog implementation replaces the old transport switch. Catalog
-authentication is not required; account sync is a separate protocol.
+## Replace only the collection that was requested
 
-## Apply the endpoint's collection
+Identify a cached query by its endpoint and normalized filters. In one local
+transaction, upsert returned entity fields, replace that query's ordered membership
+when complete, and save the response's ETag. A complete empty list clears its own
+membership. Fetch or apply failure leaves the previous data and validator intact.
 
-[The endpoint map](endpoints.json) assigns the replacement policy to each route.
-The request URL and normalized filters identify its query membership. Within
-one Realm transaction, upsert returned fields, replace that query's ordered IDs
-when authoritative, and save its applied ETag. A complete empty list clears its
-own membership. Failed fetch/apply leaves records, membership and validator intact.
+- An artist collection owns only that collection: years, venues, songs or tours.
+- Year, venue, song and tour details own their returned `shows` membership.
+- Full show/source detail owns the children fully returned for that owner. A show summary or shallow parent is only a field patch.
+- A song's `/tracks` owns its file-match membership, independently of the song detail's shows. Reviews and eras similarly own their separate collections.
+- Search, date, recent and limited queries own only their exact filtered result.
+- Resolver entities are patches; rankings and live summary are transient online views.
 
-- `/artists?include_autocreated=true` owns artist-list membership and covers artists referenced by other collections.
-- Artist year/venue/song/tour routes each own their requested list, independently.
-- A year, venue, song or tour detail owns its complete `shows` membership.
-- Full show detail replaces that show's sources and the fully returned source/set children. Full source detail replaces its own children, not siblings.
-- Song `/tracks` owns only song-file membership; it has no show collection. On cold entry load song detail to establish parent show/year data first.
-- Source reviews and artist eras replace their own complete ordered collections.
-- Search/date/recent/limited results own only their exact query result.
-- Resolver entities and shallow parents are field patches; they own no unreturned child lists.
-- Popular/trending/momentum lists and live summary are transient online views; they do not overwrite ordinary offline membership or contextual scores.
+An absent shared entity does not authorize deletion. Other queries, downloads,
+queue/history entries or favorites may still reference it. A compact patch must
+not clear richer metadata or child lists it did not supply. Track normalization
+is one ordered interpretation to replace, not a collection of new file identities.
 
-An omitted shared record is not deleted. Keep records referenced by other
-queries, downloads, queues, history or favorites. A compact song/parent patch
-updates supplied fields without clearing richer aliases, counts, children or
-reviews. Track normalization is one ordered replacement list within the track.
-Canonical song membership lives in query IDs once, without duplicate show/track
-lists on the song entity.
+For example, an empty venue detail removes all shows from that venue's cached list.
+It does not delete those show records or their downloaded files. Loading a show
+summary afterward cannot clear the full recording hierarchy saved earlier.
 
-## Conditional reads and overlapping responses
+## An ETag validates a response, not each stored object
 
-Ordinary mobile reads use the existing 15-minute refresh interval and ETags.
-304 avoids transfer/application but still performs the server read and
-serialization. Manual refresh omits the validator and fetches a complete body.
-Reconnect retries failed work. Superseded requests for the same query must not
-replace that query's newer result.
+The server hashes represented JSON, including normalization and scores. Changes
+can alter an ETag without advancing imported `updated_at`. Conditional GET saves
+transfer and client application work, but still performs the origin read and
+serialization. It is not a revision cursor or a write-concurrency token.
 
-Independent endpoints do not invalidate one another. Shared metadata applies in
-response arrival order; an older overlapping response can overwrite a field.
-An unchanged owning endpoint can then return 304, preserving that overwritten
-field until a body refresh. This is the accepted simple contract. Use required
-root/local-data checks; do not add a cross-query invalidation graph, ordered
-catalog revision or a full source/set/track audit before cached reads.
+Different endpoints can patch the same entity. Shared fields apply in response
+arrival order; the client suppresses superseded requests for the same query.
+There is no total order across different queries. An older response from another
+endpoint can overwrite a field while the owning query's ETag remains unchanged.
+Its next conditional GET can return 304 and leave that value in place. Manual
+refresh fetches a body to restore the owning response's fields. Keep this limitation
+in mind before treating a saved ETag as proof that every shared object is current.
 
-Score-only and normalization-only changes alter payload ETags independently of
-imported timestamps. Null popularity clears stored scores. Ranking results have
-different comparison populations and remain online-only; opening one loads the
-ordinary detail endpoint before catalog persistence.
-
-## Preserve listening identity and display
-
-Decode UUID-backed catalog IDs at the adapter and keep existing Realm UUID keys,
-download filenames, queues and history. Short `venue_`, `song_`, `artist_venue_`
-IDs stay opaque strings. Account identities/targets retain canonical typed IDs.
-
-Display imported venue labels and track titles. Link to canonical venues when
-available; keep canonical track parts for discovery/details. A medley remains
-one playable file without inferred offsets. Browse lists contain canonical or
-imported targets according to server evidence; follow each entry's kind rather
-than selecting list routes from artist feature flags.
-
-Global venue favorites span artists and have a separate My Library Venues
-section. They never implicitly favorite shows. Favorites remain exact targets;
-merged alias and survivor favorites may coexist. No catalog correction silently
-rewrites personal membership.
-
-The catalog schema additions have not shipped publicly. Keep the migration from
-the last released schema and imported/download identities; do not add migrations
-for discarded intermediate normalization pilot schemas. The account identity
-upgrade has separate credential/cache rules in [accounts](accounts.md).
-
-## Verify the journey
-
-Use [HTTP examples](requests.http), [local services](../../local-dev/README.md)
-and the sibling mobile repository's current tests. Check through the production
-client/repository/Realm boundary:
-
-1. Artist/year/show browsing, source switching and exact selected-file playback.
-2. Raw, disabled, partial and fully interpreted artists/tracks with unchanged imported display.
-3. Normalization-only corrections, complete empty collections, failed apply/retry and overlapping shallow/full responses.
-4. A downloaded file after offline cold start, without changing its UUID filename or losing queue/history.
-5. Mixed venue/song browsing, global venue favorites independent of show favorites, and lazy song file matches.
-
-Large lists require device measurements. One local Drums response was 15.49 MB
-JSON / 3.85 MB gzip; gzip is the chosen initial mitigation. Do not eagerly fetch
-it, retain a diagnostic response copy or duplicate membership lists. If real
-phone parse/apply memory requires pagination, first define that endpoint's cursor
-and replacement contract; silently truncating a complete list is incorrect.
-Physical release-signed callback and playback checks remain release work.
+Use a saved validator only when its query membership and required root records
+are still available locally; otherwise fetch a body. A stored empty membership is
+a valid result. This is a local usability check, not an audit of every related
+record. The mobile executor owns freshness and retries; repositories apply
+responses and validators atomically. Account membership uses its own revision/cursor protocol.

@@ -84,35 +84,18 @@ both previous populations available. If Redis fails afterward, Postgres retains
 its new population and the job fails for retry. A warm legacy cache hit does not
 backfill Postgres. No v4 body cache or invalidation system is involved.
 
-## Rollout and recovery
+## Repair and diagnosis
 
-Apply migration 17 before deploying the writer/readers. Seed the initial
-populations after the new Hangfire worker is running, then verify stored
-`generated_at` and representative rankings. Missing/stale populations otherwise
-refresh on demand. Monitor job failure and row age.
+Check the affected rows' `generated_at` and the Hangfire job result when scores
+are stale. Use `PopularityJobs.RefreshReadModel` through the normal job runner
+for an explicit full repair; it calculates scopes sequentially and can take much
+longer than refreshing one artist. Correct and rerun a failed calculation while
+retaining the last successful population.
 
-Fix forward while preserving stable identities and last successful populations.
-Repair calculations by correcting and rerunning them. The [deployment guide](../api/deployment.md)
-contains writer coordination, origin warm-up and schema constraints.
-
-For local review, publish the existing real Redis snapshot through the writer,
-retaining its timestamps. Local workers stay disabled, so queued refreshes cannot
-replace that snapshot with results calculated from the empty local play history.
-
-## Verification
-
-`./test-local.sh --filter FullyQualifiedName~Popularity` exercises real publication,
-scoped replacement, late-calculation rejection, empty-population freshness, one
-batch for stale/missing scopes, and dual-publication failure/retry in a disposable
-catalog. V4 HTTP tests cover ordering, enrichment, ETags, and queue-failure recovery
-without registering Redis map readers or calculation services.
-
-A temporary-table comparison using the real catalog measured global show layout
-at 215,939 rows versus 38,628 scored rows. Storage was 51 MB versus 14.6 MB;
-stamping all rows took 1.35 seconds versus 0.38 seconds. Indexed top-five reads
-remained 0.12 ms. These are local layout measurements without foreign-key or
-calculation cost, not a production budget. The additional background writes
-are accepted to keep publication and freshness in the three resource tables.
+An initial PostgreSQL population needs calculation/publication; a warm Redis
+cache hit alone cannot seed it. Empty local play telemetry cannot reproduce
+production scores. Keep workers stopped when using a captured review population
+that must remain intact.
 
 ## Calculation sources
 
@@ -120,5 +103,5 @@ are accepted to keep publication and freshness in the three resource tables.
 use the hourly/daily Timescale aggregates installed by the
 [Timescale migration SQL](../../RelistenApi/Migrations/timescaledb_migration.sql).
 [PopularityService](../../RelistenApi/Services/Popularity/PopularityService.cs)
-owns the implemented scoring rules. Treat older dataset sizes and proposed
-formulas as historical analysis, not a second algorithm specification.
+owns the scoring rules. Change the calculation there rather than maintaining
+a second formula specification in documentation.

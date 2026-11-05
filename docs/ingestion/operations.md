@@ -336,7 +336,7 @@ Fix forward while keeping the schema, grants and stable relationship IDs.
 Older admin builds/workers can leave counts stale; deploy matching maintenance
 before resuming edits and explicitly repair affected counts. Recounts do not
 introduce a sync revision protocol.
-See the [count reference](../api/derived-counts.md#artistvenue-relationships) for
+See the [count reference](../normalization-counts.md) for
 tests and the detailed storage contract.
 
 ## Storage, backups, and recovery

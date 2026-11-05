@@ -1,4 +1,10 @@
-# Deploy the catalog and account changes
+# Catalog and account launch — November 2026
+
+This is a one-time launch procedure for catalog migrations 15–18 and the typed
+account-ID cutover. It records the pre-launch state; recheck it before acting.
+Remove this note when rollout is complete. Routine development uses
+[local setup](../../local-dev/README.md); count repair uses the
+[maintenance guide](../normalization-counts.md).
 
 Merge the API stack after review, then deploy catalog and accounts in coordinated
 stages. Merging does not deploy an image. Catalog schema/backfill comes first;
@@ -13,8 +19,8 @@ required. A version-14 API cannot restart on catalog version 18.
 ## Pre-release observations — November 5, 2026
 
 Read-only checks on November 5 found catalog version 14 and account migrations
-through `AddDurableBrowserSessions`. New count/popularity tables are absent.
-Both Timescale aggregates exist; TimescaleDB is 2.28.2. No artist has
+through `AddDurableBrowserSessions`. New count/popularity tables were absent.
+Both Timescale aggregates exist; TimescaleDB is 2.28.2. No artist had
 `features.norm_catalogue` enabled. API has three replicas, its Hangfire worker one,
 and ingestion runs separately. Accounts has one replica; confirm its no-surge
 strategy before the breaking migration. The image workflow is manually dispatched,
