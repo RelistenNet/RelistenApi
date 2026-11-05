@@ -4,10 +4,12 @@ WORKDIR /src
 
 COPY RelistenApi/RelistenApi.csproj RelistenApi/
 COPY Relisten.Normalization/Relisten.Normalization.csproj Relisten.Normalization/
+COPY Relisten.Identifiers/Relisten.Identifiers.csproj Relisten.Identifiers/
 RUN dotnet restore RelistenApi/RelistenApi.csproj
 
 COPY RelistenApi/ RelistenApi/
 COPY Relisten.Normalization/ Relisten.Normalization/
+COPY Relisten.Identifiers/ Relisten.Identifiers/
 RUN dotnet publish RelistenApi/RelistenApi.csproj -c Release -o /app/publish --no-restore
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime

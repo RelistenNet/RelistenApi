@@ -5,6 +5,8 @@
 /RelistenApi/obj/
 /Relisten.Accounts.Contracts/bin/
 /Relisten.Accounts.Contracts/obj/
+/Relisten.Identifiers/bin/
+/Relisten.Identifiers/obj/
 /RelistenUserService/bin/
 /RelistenUserService/obj/
 /RelistenUserService/.local-openiddict/
