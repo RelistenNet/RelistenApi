@@ -33,8 +33,9 @@ Ordinary artist/year resources now include nullable popularity: global for
 artists, artist-local for years. Mobile applies those fields through the existing
 repositories, with no separate ranking fetch for Popular/Trending sorts. Missing
 scores clear stored values. Score-only changes revalidate independently of
-imported timestamps. Scoped validator invalidation repairs shared scores
-overwritten by an overlapping response without discarding cached membership.
+imported timestamps. Shared metadata uses response arrival order; an older
+response may overwrite a newer score. Explicit manual refresh fetches a body
+without an ETag to restore the owning endpoint's fields.
 
 This addition passed 171 v4/popularity API tests and all 319 mobile tests, plus
 TypeScript and lint. A real API-to-repository-to-Realm check and simulator
@@ -66,12 +67,18 @@ its parent shows/years. A warm entry reuses that query's freshness. Favorite
 resolution likewise loads the shared artist list before applying parent patches;
 it never owns catalog list membership.
 
-Keep response apply and its validator in one Realm transaction. Use ordinary
-ETags/304s, the existing refresh interval, manual refresh and reconnect retry.
-Fetch/apply failure must leave prior local data and validator intact. Do not add
-an artist-wide validator or invalidate every query after a write. Smaller
-responses can still overlap shared entities; removing the full download alone
-is not proof that every overlapping-response race is resolved.
+Keep response apply and its validator in one Realm transaction. Ordinary reads
+use ETags/304s and the 15-minute refresh interval. Manual refresh bypasses both
+freshness and the validator so it applies a body. Reconnect retries failures;
+failed fetch/apply leaves prior records, membership and validator intact.
+
+Different endpoints do not invalidate each other's query state. Shared fields
+use arrival order, including older overlapping responses. An ordinary 304 may
+therefore leave an overwritten field in place; manual refresh repairs it. Use
+cheap required-root/local-data checks, with no source/set/track graph audit before
+every cached read. Preserve complete empty results, write-time ownership checks,
+shallow parent semantics and downloaded playback data. No revision protocol,
+response-body cache or generic invalidation framework is needed.
 
 ## Preserve the existing player and imported display
 

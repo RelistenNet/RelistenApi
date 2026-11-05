@@ -91,11 +91,11 @@ and `sync_policy`; the manifest also defines each policy. Mobile dispatches by
 that route contract and the request it made. It computes its local request key
 from the endpoint and normalized filters. No returned scope identifier is needed.
 
-- Full artist collection routes replace only that artist/query's association
-  list. Bootstrap replaces only its named artist-owned collections. Its
-  `artist_venues`, `venues`, and `songs` arrays upsert entities; `venue_entries`
-  owns the visible artist-venue query membership. An absent entity patch does
-  not delete a record referenced by another cached query or offline playback.
+- Full collection routes replace only that endpoint's association list. The
+  artist list owns artist membership; an artist's years, venues and songs routes
+  each own their respective query membership. Canonical and imported entries
+  upsert their shared entities. An absent entity patch does not delete a record
+  referenced by another cached query or offline playback.
 - Full show/source/set detail replaces active source/set/track associations only
   for the fully returned owners. Keep entity records needed for offline playback,
   saved references and other query results. Missing shallow parent fields do not
@@ -711,9 +711,10 @@ These meanings match the legacy artist/year browsing behavior.
 Mobile stores these fields through its existing repositories, so Popular and
 Trending sorts need no separate ranking request. A null value clears any stored
 score. Score-only changes alter the response ETag even when imported `updated_at`
-does not change. When overlapping responses overwrite a shared score, mobile
-invalidates the affected cached response validators while retaining membership;
-the next owning read repairs the score rather than accepting an obsolete 304.
+does not change. Mobile applies shared scores in response arrival order. Another
+endpoint may overwrite a score without changing the owning query's ETag; an
+ordinary 304 preserves that value. Explicit manual refresh omits the validator
+and applies the owning response body. There is no cross-endpoint invalidation.
 
 `CatalogPopularityMetadataReader` adds artist/year scores in SQL batches inside
 the caller's catalog snapshot. It reuses the existing refresh collector and
@@ -1159,17 +1160,21 @@ account/session guards. HTTP ETag equality supports 304; it is not lexically
 ordered. Do not use the legacy synthetic
 ETag, 24-hour equality suppression, one-hour request cooldown, or timestamp-only
 Realm guards for v4 data. Use a 15-minute default v4 query refresh interval;
-manual refresh bypasses it, reconnect retries pending work, and offline views
-use the last successfully applied local state.
+manual refresh bypasses it and omits the ETag, reconnect retries pending work,
+and offline views use the last successfully applied local state.
 
 Apply returned resources, supplied related entities, owned relationships and
 the endpoint-defined query replacement in one Realm transaction. Write the
 response ETag to applied-query state in that same transaction; it becomes an
 applied validator only when the transaction commits. A 304 preserves rows and updates
 successful check time only when a matching applied ETag exists; otherwise refetch
-without the validator. Failed apply retries; failed/mixed-snapshot fetch never
-tombstones associations. Independent query scopes may converge asynchronously;
-do not claim a globally ordered client catalog snapshot.
+without the validator. Required local roots use cheap presence checks; mobile
+does not audit every source, set and track before reusing a cached response.
+Failed apply retries; failed/mixed-snapshot fetch never tombstones associations.
+Independent endpoints apply shared metadata in arrival order without invalidating
+other query state. A 304 cannot repair an overwrite by another endpoint; manual
+refresh is the explicit repair path. Do not claim a globally ordered client
+catalog snapshot.
 
 The mobile catalog cutover is one-way. A pre-cutover build can use v3; after an
 install adopts v4, do not support switching its populated store back to v3.
