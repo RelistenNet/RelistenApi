@@ -75,7 +75,7 @@ public sealed class CatalogRankingReader(
         var years = (
             await session.Connection.QueryAsync<CatalogYear>(
                 session.Command(
-                    "SELECT y.*,a.uuid artist_uuid FROM years y JOIN artists a ON a.id=y.artist_id WHERE y.uuid=ANY(@ids)",
+                    CatalogBrowseReader.YearSelect + " WHERE y.uuid=ANY(@ids)",
                     new { ids = scores.Select(row => row.uuid).ToArray() },
                     cancellationToken
                 )

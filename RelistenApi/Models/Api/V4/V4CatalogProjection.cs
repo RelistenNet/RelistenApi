@@ -269,6 +269,7 @@ public static partial class V4CatalogProjection
         new()
         {
             Id = VenueId.Parse(value.id),
+            Slug = value.slug,
             GlobalShowCount = value.global_show_count,
             Name = value.name,
             Kind = NormalizationEnums.Parse<VenueKind>(value.kind),
@@ -320,6 +321,7 @@ public static partial class V4CatalogProjection
             ArtistId = new(value.artist_uuid),
             ShowCount = value.show_count,
             SourceCount = value.source_count,
+            HasSoundboardSource = value.has_soundboard_source,
             Duration = value.duration,
             AvgDuration = value.avg_duration,
             AvgRating = value.avg_rating,

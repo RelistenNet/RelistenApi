@@ -12,13 +12,21 @@ namespace RelistenApiTests.V4;
 public sealed partial class TestV4CatalogHttp
 {
     [Test]
-    public async Task Ordinary_artist_and_year_resources_share_scores_across_lists_details_and_parents()
+    public async Task Ordinary_artist_and_year_resources_share_metadata_and_scores_across_reads()
     {
         var owner = Guid.Parse(ReferenceUuid(14));
         var year = Guid.Parse(ReferenceUuid(64));
         var store = new PopularityStore(app.Services.GetRequiredService<DbService>());
+        await using var connection = await MigratedTestDatabase.OpenAsync();
         try
         {
+            await connection.ExecuteAsync(
+                """
+                INSERT INTO show_source_information
+                    (show_id,artist_id,max_created_at,max_updated_at,source_count,has_soundboard_source)
+                VALUES(910004,910004,'2026-01-01','2026-01-01',1,true);
+                """
+            );
             await store.ReplaceArtists(
                 new Dictionary<Guid, PopularityMetrics> { [owner] = Score(100) },
                 DateTime.UtcNow
@@ -44,6 +52,12 @@ public sealed partial class TestV4CatalogHttp
             (await GetJson(ArtistPath(11)))["popularity"].Should().BeNull();
 
             var years = (await GetJson(BrowseArtistPath + "/years")).AsArray();
+            years.Single(item => item!["year"]!.GetValue<string>() == "1994")![
+                "has_soundboard_source"
+            ]!
+                .GetValue<bool>()
+                .Should()
+                .BeFalse();
             var detail = await GetJson(BrowseArtistPath + "/years/" + CatalogId("year", 64));
             var listedYear = years.Single(item =>
                 item!["id"]!.GetValue<string>() == CatalogId("year", 64)
@@ -63,6 +77,7 @@ public sealed partial class TestV4CatalogHttp
                 var resource in new[] { listedYear, detail, embeddedYear, resolved["years"]![0]! }
             )
             {
+                resource["has_soundboard_source"]!.GetValue<bool>().Should().BeTrue();
                 resource["popularity"]!["windows"]!["30d"]!["plays"]!
                     .GetValue<int>()
                     .Should()
@@ -72,9 +87,9 @@ public sealed partial class TestV4CatalogHttp
                     .Should()
                     .BeTrue();
             }
-            (await GetJson("/api/v4/popular/years?limit=1"))[0]!["popularity"]!["windows"]!["30d"]![
-                "plays"
-            ]!
+            var rankedYear = (await GetJson("/api/v4/popular/years?limit=1"))[0]!;
+            rankedYear["has_soundboard_source"]!.GetValue<bool>().Should().BeTrue();
+            rankedYear["popularity"]!["windows"]!["30d"]!["plays"]!
                 .GetValue<int>()
                 .Should()
                 .Be(900);
@@ -91,6 +106,9 @@ public sealed partial class TestV4CatalogHttp
         }
         finally
         {
+            await connection.ExecuteAsync(
+                "DELETE FROM show_source_information WHERE show_id=910004"
+            );
             await ClearBrowseScores(owner);
         }
     }

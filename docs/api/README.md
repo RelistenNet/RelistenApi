@@ -59,6 +59,12 @@ Saved references may therefore resolve as redirected, retired or unavailable.
 Unavailable metadata does not imply that a listener removed a favorite. The
 resolver returns entity patches, without ownership of unreturned child collections.
 
+Canonical venue slugs support readable URLs through the explicit global and
+artist-scoped `venues/by-slug/{slug}` routes. They return the same resource as an
+ID lookup, including the survivor's current ID and slug after a merge. Imported
+artist-specific slugs can identify different show collections; resolve saved
+imported URLs with the reference resolver's `legacy_slug` scheme and imported kind.
+
 The [catalog types and codec](../../Relisten.Identifiers/),
 [normalization IDs](../../Relisten.Normalization/NormIds.cs) and
 [reference lookup](../../RelistenApi/Services/Catalog/CatalogReferenceLookup.cs)

@@ -188,6 +188,20 @@ public sealed class CatalogVenueReader(
         return await ReadArtistVenue(session, artistUuid, venueId, cancellationToken);
     }
 
+    /// <summary>Looks up a canonical slug within the artist's approved venue collections.</summary>
+    public async Task<CatalogArtistVenueDetail?> ReadArtistVenueBySlug(
+        Guid artistUuid,
+        string slug,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await using var session = await CatalogReadSession.Open(db, cancellationToken);
+        var venueId = await ReadVenueIdBySlug(session, slug, cancellationToken);
+        return venueId is null
+            ? null
+            : await ReadArtistVenue(session, artistUuid, venueId, cancellationToken);
+    }
+
     private async Task<CatalogArtistVenueDetail?> ReadArtistVenue(
         CatalogReadSession session,
         Guid artistUuid,
@@ -227,6 +241,39 @@ public sealed class CatalogVenueReader(
     )
     {
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
+        return await ReadVenueDetail(session, venueId, cancellationToken);
+    }
+
+    /// <summary>Looks up a stored canonical slug, following merges to the current venue.</summary>
+    public async Task<CatalogVenueDetail?> ReadVenueBySlug(
+        string slug,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await using var session = await CatalogReadSession.Open(db, cancellationToken);
+        var venueId = await ReadVenueIdBySlug(session, slug, cancellationToken);
+        return venueId is null ? null : await ReadVenueDetail(session, venueId, cancellationToken);
+    }
+
+    private static Task<string?> ReadVenueIdBySlug(
+        CatalogReadSession session,
+        string slug,
+        CancellationToken cancellationToken
+    ) =>
+        session.Connection.QuerySingleOrDefaultAsync<string?>(
+            session.Command(
+                "SELECT id FROM norm.venues WHERE slug=@slug",
+                new { slug },
+                cancellationToken
+            )
+        );
+
+    private async Task<CatalogVenueDetail?> ReadVenueDetail(
+        CatalogReadSession session,
+        string venueId,
+        CancellationToken cancellationToken
+    )
+    {
         var venue = await ReadVenue(session, venueId, cancellationToken);
         if (venue is null)
         {

@@ -269,7 +269,14 @@ public sealed class CatalogBrowseReader(
         LEFT JOIN (SELECT artist_id,count(*) source_count FROM sources GROUP BY artist_id) src ON src.artist_id=a.id
         """;
 
-    private const string YearSelect = """
-        SELECT y.*,a.uuid artist_uuid FROM years y JOIN artists a ON a.id=y.artist_id
+    internal const string YearSelect = """
+        SELECT y.*,a.uuid artist_uuid,
+               EXISTS (
+                   SELECT 1 FROM shows sh
+                   JOIN show_source_information info ON info.show_id=sh.id
+                   WHERE sh.artist_id=y.artist_id AND sh.year_id=y.id
+                     AND info.has_soundboard_source
+               ) has_soundboard_source
+        FROM years y JOIN artists a ON a.id=y.artist_id
         """;
 }

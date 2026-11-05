@@ -367,10 +367,7 @@ public sealed class CatalogResolverHydrator(
         (
             await session.Connection.QueryAsync<CatalogYear>(
                 session.Command(
-                    """
-                    SELECT y.*,a.uuid artist_uuid FROM years y JOIN artists a ON a.id=y.artist_id
-                    WHERE y.uuid=ANY(@uuids) ORDER BY y.uuid
-                    """,
+                    CatalogBrowseReader.YearSelect + " WHERE y.uuid=ANY(@uuids) ORDER BY y.uuid",
                     new { uuids },
                     cancellationToken
                 )

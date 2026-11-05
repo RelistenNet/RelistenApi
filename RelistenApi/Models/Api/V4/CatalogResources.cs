@@ -170,6 +170,9 @@ public record VenueResource
 {
     public VenueId Id { get; init; }
 
+    /// <summary>The canonical venue's URL slug; imported artist-specific slugs remain separate.</summary>
+    public string Slug { get; init; } = null!;
+
     /// <summary>Stored show memberships across artists approved for normalized reads, independent of request filters.</summary>
     public int GlobalShowCount { get; init; }
 
@@ -215,6 +218,9 @@ public record YearResource
     public ArtistId ArtistId { get; init; }
     public int ShowCount { get; init; }
     public int SourceCount { get; init; }
+
+    /// <summary>Whether any show in this year has a soundboard recording.</summary>
+    public bool HasSoundboardSource { get; init; }
     public int? Duration { get; init; }
     public float? AvgDuration { get; init; }
     public float AvgRating { get; init; }
