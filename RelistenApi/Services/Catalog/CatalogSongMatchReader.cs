@@ -65,6 +65,119 @@ public sealed class CatalogSongMatchReader
                 )
             )
         ).ToArray();
+
+    /// <summary>
+    /// Aggregates source maxima without transferring the full recording match list.
+    /// Shows remain members even when no file has a classifiable, positive duration.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<Guid, CatalogSongShowStatistics>> ReadShowStatistics(
+        CatalogReadSession session,
+        Guid artistUuid,
+        string canonicalId,
+        CancellationToken cancellationToken
+    )
+    {
+        // Matching ordinals include this song's merged aliases. Classify each file
+        // once before choosing per-source maxima, even when its parts repeat the song.
+        var rows = await session.Connection.QueryAsync<ShowStatisticsRow>(
+            session.Command(
+                """
+                WITH files AS (
+                    SELECT m.track_uuid,m.show_uuid,m.source_uuid,
+                           CASE WHEN bool_or(p.resolved AND p.song_id IS NOT NULL
+                                             AND NOT p.part=ANY(m.matching_part_ordinals)) THEN true
+                                WHEN bool_and(p.resolved) THEN false END is_multi_song,
+                           CASE WHEN t.duration>0 THEN t.duration END duration
+                    FROM norm.song_recording_matches(@artistUuid,@canonicalIds::text[]) m
+                    JOIN source_tracks t ON t.uuid=m.track_uuid
+                    JOIN norm.track_songs p ON p.track_uuid=m.track_uuid
+                    GROUP BY m.track_uuid,m.show_uuid,m.source_uuid,t.duration
+                ), sources AS (
+                    SELECT show_uuid,source_uuid,
+                           max(duration) FILTER (WHERE NOT is_multi_song) single_song_duration,
+                           max(duration) FILTER (WHERE is_multi_song) multi_song_duration
+                    FROM files GROUP BY show_uuid,source_uuid
+                )
+                SELECT show_uuid,sample.kind,count(sample.value)::integer source_count,
+                       min(sample.value) min,max(sample.value) max,avg(sample.value)::double precision avg,
+                       percentile_cont(0.5) WITHIN GROUP (ORDER BY sample.value) median
+                FROM sources CROSS JOIN LATERAL (
+                    VALUES ('single_song',single_song_duration),
+                           ('multi_song',multi_song_duration)
+                ) sample(kind,value)
+                GROUP BY show_uuid,sample.kind
+                """,
+                new { artistUuid, canonicalIds = new[] { canonicalId } },
+                cancellationToken
+            )
+        );
+
+        var statistics = new Dictionary<Guid, CatalogSongShowStatistics>();
+        foreach (var row in rows)
+        {
+            if (!statistics.TryGetValue(row.show_uuid, out var show))
+            {
+                show = new();
+                statistics.Add(row.show_uuid, show);
+            }
+
+            if (row.source_count == 0)
+            {
+                continue;
+            }
+
+            var values = new CatalogSourceStatistics(
+                row.source_count,
+                row.min,
+                row.max,
+                row.avg,
+                row.median
+            );
+            switch (row.kind)
+            {
+                case "single_song":
+                    show.SingleSong = values;
+                    break;
+                case "multi_song":
+                    show.MultiSong = values;
+                    break;
+            }
+        }
+        return statistics;
+    }
+
+    /// <summary>One slim row per matched file, including files without usable timing samples.</summary>
+    public async Task<IReadOnlyList<CatalogSongShowTrack>> ReadShowTracks(
+        CatalogReadSession session,
+        Guid artistUuid,
+        string canonicalId,
+        CancellationToken cancellationToken
+    ) =>
+        (
+            await session.Connection.QueryAsync<CatalogSongShowTrack>(
+                session.Command(
+                    """
+                    SELECT m.track_uuid uuid,m.source_uuid,m.show_uuid,t.title,t.slug,t.duration
+                    FROM norm.song_recording_matches(@artistUuid,@canonicalIds::text[]) m
+                    JOIN source_tracks t ON t.uuid=m.track_uuid
+                    ORDER BY m.show_date,m.show_uuid,m.source_uuid,m.track_position,m.track_uuid
+                    """,
+                    new { artistUuid, canonicalIds = new[] { canonicalId } },
+                    cancellationToken
+                )
+            )
+        ).ToArray();
+
+    private sealed class ShowStatisticsRow
+    {
+        public Guid show_uuid { get; set; }
+        public string kind { get; set; } = null!;
+        public int source_count { get; set; }
+        public int min { get; set; }
+        public int max { get; set; }
+        public double avg { get; set; }
+        public double median { get; set; }
+    }
 }
 
 public sealed record CatalogSongMatchCounts(

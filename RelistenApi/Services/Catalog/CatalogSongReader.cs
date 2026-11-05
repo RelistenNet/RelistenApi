@@ -62,6 +62,7 @@ public sealed class CatalogSongReader(
     /// <summary>Metadata and complete recording-backed show membership share one snapshot.</summary>
     public async Task<CatalogSongWithShows?> ReadSong(
         string songId,
+        bool includeTracks = false,
         CancellationToken cancellationToken = default
     )
     {
@@ -72,7 +73,7 @@ public sealed class CatalogSongReader(
             return null;
         }
 
-        var membership = await matches.ReadMatches(
+        var statistics = await matches.ReadShowStatistics(
             session,
             song.artist_uuid,
             song.id,
@@ -81,10 +82,24 @@ public sealed class CatalogSongReader(
         var shows = await ReadShows(
             session,
             CatalogShowMetadataReader.ShowSelect + " WHERE s.uuid=ANY(@uuids)",
-            new { uuids = membership.Select(row => row.show_uuid).Distinct().ToArray() },
+            new { uuids = statistics.Keys.ToArray() },
             cancellationToken
         );
-        return new(song, shows);
+        var tracks = includeTracks
+            ? (
+                await matches.ReadShowTracks(session, song.artist_uuid, song.id, cancellationToken)
+            ).ToLookup(track => track.show_uuid)
+            : null;
+        return new(
+            song,
+            shows
+                .Select(show => new CatalogSongShow(
+                    show,
+                    statistics[show.uuid],
+                    tracks?[show.uuid].ToArray()
+                ))
+                .ToArray()
+        );
     }
 
     /// <summary>Large file-match collections have their own snapshot and owning song metadata.</summary>

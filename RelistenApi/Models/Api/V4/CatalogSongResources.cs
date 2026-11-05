@@ -26,8 +26,56 @@ public record SongDetailResource
 [JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
 public sealed record SongWithShowsResource : SongDetailResource
 {
-    public IReadOnlyList<ShowSummaryResource> Shows { get; init; } = [];
+    public IReadOnlyList<SongShowResource> Shows { get; init; } = [];
 }
+
+/// <summary>A recording-backed show with the requested song's file-duration statistics.</summary>
+[JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
+public sealed record SongShowResource(
+    ShowSummaryResource Show,
+    SongShowTimingsResource Timings,
+    [property: JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        IReadOnlyList<SongShowTrackResource>? Tracks
+);
+
+/// <summary>A matching file, included in its show entry only with include_tracks=true.</summary>
+[JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
+public sealed record SongShowTrackResource(
+    TrackId Id,
+    SourceId SourceId,
+    ShowId ShowId,
+    string Title,
+    string Slug,
+    int? Duration
+);
+
+/// <summary>
+/// Whole-file durations in seconds, not song-segment timings. Each source contributes its
+/// longest matching file independently in each bucket, so reprises do not dilute timing averages.
+/// Null buckets have no positive, known durations. Single-song files have fully resolved
+/// parts identifying only this song (resolved non-song parts are ignored). Multi-song files
+/// contain this song and at least one other canonical song, even if other parts are unresolved.
+/// Files with only this song plus unresolved parts contribute to neither bucket.
+/// </summary>
+[JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
+public sealed record SongShowTimingsResource(
+    SourceStatisticsResource? SingleSong,
+    SourceStatisticsResource? MultiSong
+);
+
+/// <summary>
+/// Statistics across contributing sources. Avg and median are rounded to two decimals;
+/// even medians average the middle pair. Values summarize each source's longest
+/// positive matching file duration in seconds within the containing timing bucket.
+/// </summary>
+[JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
+public sealed record SourceStatisticsResource(
+    int SourceCount,
+    int Min,
+    int Max,
+    double Avg,
+    double Median
+);
 
 /// <summary>
 /// A song and its complete playable files, each returned once. Matching normalization

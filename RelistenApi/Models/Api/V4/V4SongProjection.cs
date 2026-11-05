@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using Relisten.Catalog;
 using Relisten.Normalization;
@@ -19,8 +20,35 @@ public static partial class V4CatalogProjection
     public static SongWithShowsResource SongWithShows(CatalogSongWithShows detail) =>
         ProjectSong<SongWithShowsResource>(detail.Song) with
         {
-            Shows = detail.Shows.Select(ShowSummary).ToArray(),
+            Shows = detail
+                .Shows.Select(entry => new SongShowResource(
+                    ShowSummary(entry.Show),
+                    new SongShowTimingsResource(
+                        entry.Statistics.SingleSong is { } single ? SourceStatistics(single) : null,
+                        entry.Statistics.MultiSong is { } multi ? SourceStatistics(multi) : null
+                    ),
+                    entry
+                        .Tracks?.Select(track => new SongShowTrackResource(
+                            new(track.uuid),
+                            new(track.source_uuid),
+                            new(track.show_uuid),
+                            track.title,
+                            track.slug,
+                            track.duration
+                        ))
+                        .ToArray()
+                ))
+                .ToArray(),
         };
+
+    private static SourceStatisticsResource SourceStatistics(CatalogSourceStatistics statistics) =>
+        new(
+            statistics.SourceCount,
+            statistics.Min,
+            statistics.Max,
+            Math.Round(statistics.Avg, 2, MidpointRounding.AwayFromZero),
+            Math.Round(statistics.Median, 2, MidpointRounding.AwayFromZero)
+        );
 
     public static SongWithTracksResource SongWithTracks(CatalogSongWithTracks detail) =>
         ProjectSong<SongWithTracksResource>(detail.Song) with

@@ -38,7 +38,40 @@ public sealed record CatalogImportedSongDetail(
     IReadOnlyList<CatalogShow> Shows
 );
 
-public sealed record CatalogSongWithShows(CatalogSongDetail Song, IReadOnlyList<CatalogShow> Shows);
+public sealed record CatalogSongWithShows(
+    CatalogSongDetail Song,
+    IReadOnlyList<CatalogSongShow> Shows
+);
+
+public sealed record CatalogSongShow(
+    CatalogShow Show,
+    CatalogSongShowStatistics Statistics,
+    IReadOnlyList<CatalogSongShowTrack>? Tracks
+);
+
+public sealed class CatalogSongShowTrack
+{
+    public Guid uuid { get; set; }
+    public Guid source_uuid { get; set; }
+    public Guid show_uuid { get; set; }
+    public string title { get; set; } = null!;
+    public string slug { get; set; } = null!;
+    public int? duration { get; set; }
+}
+
+public sealed class CatalogSongShowStatistics
+{
+    public CatalogSourceStatistics? SingleSong { get; set; }
+    public CatalogSourceStatistics? MultiSong { get; set; }
+}
+
+public sealed record CatalogSourceStatistics(
+    int SourceCount,
+    int Min,
+    int Max,
+    double Avg,
+    double Median
+);
 
 public sealed record CatalogSongWithTracks(
     CatalogSongDetail Song,

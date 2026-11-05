@@ -3,6 +3,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Reflection;
 using Microsoft.OpenApi;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 using Relisten.Api.Models.Api.V4;
 using Swashbuckle.AspNetCore.SwaggerGen;
@@ -26,16 +27,34 @@ internal sealed class CatalogResourceSchemaFilter : ISchemaFilter
             return;
         }
 
-        // Responses include every field, even nulls. Required means present, not
-        // non-null. Request schemas keep their own validation rules.
+        // Responses include nullable fields unless explicitly omitted by their JSON
+        // contract. Required means present, not non-null. Requests keep their own rules.
         if (context.Type.Name.EndsWith("Resource", StringComparison.Ordinal))
         {
-            model.Required = schema.Properties.Keys.ToHashSet();
+            model.Required = schema
+                .Properties.Keys.Except(
+                    contract
+                        .Properties.Where(property =>
+                            property.NullValueHandling == NullValueHandling.Ignore
+                        )
+                        .Select(property => property.PropertyName!)
+                )
+                .ToHashSet();
         }
 
         var nullability = new NullabilityInfoContext();
         foreach (var property in contract.Properties)
         {
+            if (property.NullValueHandling == NullValueHandling.Ignore)
+            {
+                // These fields are absent when null, so a present value is non-null.
+                if (schema.Properties[property.PropertyName!] is OpenApiSchema optional)
+                {
+                    optional.Type &= ~JsonSchemaType.Null;
+                }
+                continue;
+            }
+
             var member = property.DeclaringType?.GetProperty(property.UnderlyingName!);
             if (Nullable.GetUnderlyingType(property.PropertyType!) is { IsEnum: true } enumType)
             {

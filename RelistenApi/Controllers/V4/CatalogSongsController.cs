@@ -40,12 +40,16 @@ public sealed class CatalogSongsController(
 
     [HttpGet("songs/{songId}")]
     [ProducesResponseType(typeof(SongWithShowsResource), 200)]
-    public Task<IActionResult> Song(string songId, CancellationToken cancellationToken) =>
+    public Task<IActionResult> Song(
+        string songId,
+        [FromQuery(Name = "include_tracks")] bool includeTracks = false,
+        CancellationToken cancellationToken = default
+    ) =>
         ReadSong(
             songId,
             async () =>
             {
-                var song = await reader.ReadSong(songId, cancellationToken);
+                var song = await reader.ReadSong(songId, includeTracks, cancellationToken);
                 return song is null ? null : V4CatalogProjection.SongWithShows(song);
             }
         );
