@@ -390,7 +390,8 @@ public sealed class TestArtistVenueCounts
     [Test]
     public async Task MigrationBackfillsExistingAssignments()
     {
-        await using var database = await MigrationTestDatabase.CreateAsync(14);
+        await using var database =
+            await MigrationTestDatabase.CreateBeforeAsync<Migrations.ArtistVenues>();
         var catalog = database.Connection;
         Fixture seeded;
         await using (var seed = await catalog.BeginTransactionAsync())
@@ -398,7 +399,7 @@ public sealed class TestArtistVenueCounts
             seeded = await Seed(catalog, seed);
             await seed.CommitAsync();
         }
-        database.Migrator.MigrateTo(15);
+        database.ApplyMigration();
         var rows = (
             await catalog.QueryAsync<Relationship>(RowSql, new { artists = seeded.Artists })
         ).ToArray();

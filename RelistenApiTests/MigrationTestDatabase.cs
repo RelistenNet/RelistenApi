@@ -9,6 +9,7 @@ namespace RelistenApiTests;
 internal sealed class MigrationTestDatabase : IAsyncDisposable
 {
     private readonly string name;
+    private long migrationVersion;
 
     private MigrationTestDatabase(string name, NpgsqlConnection connection)
     {
@@ -22,9 +23,11 @@ internal sealed class MigrationTestDatabase : IAsyncDisposable
     }
 
     public NpgsqlConnection Connection { get; }
-    public SimpleMigrator Migrator { get; }
+    private SimpleMigrator Migrator { get; }
 
-    public static async Task<MigrationTestDatabase> CreateAsync(int version)
+    /// <summary>Creates the schema immediately before the named migration, ready for fixture data.</summary>
+    public static async Task<MigrationTestDatabase> CreateBeforeAsync<TMigration>()
+        where TMigration : Migration
     {
         var name = "migration_test_" + Guid.NewGuid().ToString("N");
         await using var admin = AdminConnection();
@@ -47,7 +50,17 @@ internal sealed class MigrationTestDatabase : IAsyncDisposable
             await database.Connection.ExecuteAsync(schema, commandTimeout: 120);
             database.Migrator.Load();
             database.Migrator.Baseline(12);
-            database.Migrator.MigrateTo(version);
+            database.migrationVersion = database
+                .Migrator.Migrations.Single(migration =>
+                    migration.TypeInfo?.AsType() == typeof(TMigration)
+                )
+                .Version;
+            var previousVersion = database
+                .Migrator.Migrations.Where(migration =>
+                    migration.Version < database.migrationVersion
+                )
+                .Max(migration => migration.Version);
+            database.Migrator.MigrateTo(previousVersion);
             return database;
         }
         catch
@@ -56,6 +69,9 @@ internal sealed class MigrationTestDatabase : IAsyncDisposable
             throw;
         }
     }
+
+    /// <summary>Applies the selected migration after the test has seeded its pre-upgrade data.</summary>
+    public void ApplyMigration() => Migrator.MigrateTo(migrationVersion);
 
     public async ValueTask DisposeAsync()
     {
