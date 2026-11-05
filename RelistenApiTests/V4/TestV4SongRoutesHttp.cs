@@ -62,7 +62,7 @@ public sealed partial class TestV4CatalogHttp
             foreach (
                 var (bucket, count, min, max, avg, median) in new[]
                 {
-                    ("single_song", 3, 100, 400, 601d / 3, 101d),
+                    ("single_song", 3, 100, 400, 200.33d, 101d),
                     ("multi_song", 4, 200, 1000, 675d, 750d),
                 }
             )

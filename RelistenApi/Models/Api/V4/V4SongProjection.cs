@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using Relisten.Catalog;
 using Relisten.Normalization;
@@ -39,8 +40,8 @@ public static partial class V4CatalogProjection
                 statistics.TrackCount,
                 statistics.Min,
                 statistics.Max,
-                statistics.Avg,
-                statistics.Median
+                Math.Round(statistics.Avg, 2, MidpointRounding.AwayFromZero),
+                Math.Round(statistics.Median, 2, MidpointRounding.AwayFromZero)
             );
 
     public static SongWithTracksResource SongWithTracks(CatalogSongWithTracks detail) =>
