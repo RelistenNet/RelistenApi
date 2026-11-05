@@ -19,7 +19,7 @@ public sealed class TestNormalizedPublicIds
     public async Task CreateDatabase()
     {
         MigratedTestDatabase.RequireLocalDatabase();
-        database = await MigrationTestDatabase.CreateAsync(16);
+        database = await MigrationTestDatabase.CreateBeforeAsync<Migrations.PublicIds>();
         await using (var tx = await Db.BeginTransactionAsync())
         {
             var store = await NormStore.BeginAsync(Db, tx, AuthorTypes.Importer, "public-id-test");
@@ -37,7 +37,7 @@ public sealed class TestNormalizedPublicIds
             await tx.CommitAsync();
         }
         historyBefore = await History();
-        database.Migrator.MigrateTo(17);
+        database.ApplyMigration();
         historyAfterMigration = await History();
     }
 
