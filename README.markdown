@@ -43,14 +43,15 @@ dotnet run --project RelistenApi/RelistenApi.csproj
 
 You can also open the repository in your C# editor and use its debugger.
 
-Open the catalog API at: [http://localhost:3823/api-docs-v4](http://localhost:3823/api-docs-v4).
-Legacy schemas remain at `/api-docs` (v2) and `/api-docs-v3`.
+Open the catalog API at: [http://localhost:3823/api-docs](http://localhost:3823/api-docs).
+The definition selector defaults to v4 and also offers v3 and v2. Existing
+`/api-docs-v4` and `/api-docs-v3` links remain available.
 
 ## API documentation
 
 Start with the [documentation index](docs/README.md) for catalog/account contracts,
 mobile sync, stored counts and deployment. Open the native catalog schema at
-[http://localhost:3823/api-docs-v4](http://localhost:3823/api-docs-v4).
+[http://localhost:3823/api-docs](http://localhost:3823/api-docs).
 
 ## Ingestion and operations
 

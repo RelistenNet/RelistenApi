@@ -11,7 +11,7 @@
     "RelistenApi": {
       "commandName": "Project",
       "launchBrowser": false,
-      "launchUrl": "http://localhost:3823/api-docs-v4",
+      "launchUrl": "http://localhost:3823/api-docs",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       }

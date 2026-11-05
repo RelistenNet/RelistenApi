@@ -1,7 +1,7 @@
 # Integrating the catalog API
 
 Read this when adding a catalog screen or changing how catalog data reaches a
-client. [Swagger](http://localhost:3823/api-docs-v4/index.html) defines the routes,
+client. [Swagger](http://localhost:3823/api-docs/index.html) defines the routes,
 parameters and response fields. This guide explains how the music entities relate
 and which data a client may treat as authoritative.
 

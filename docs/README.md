@@ -12,7 +12,7 @@ Start with the task you need to do:
 - [Work on normalization](../Relisten.Normalization/README.md): shared vocabulary and storage contracts.
 - [Index Archive artists](archive-org-artist-indexing.md): collection discovery.
 
-[Swagger](http://localhost:3823/api-docs-v4/index.html) is the catalog route and
+[Swagger](http://localhost:3823/api-docs/index.html) is the catalog route and
 payload reference. The docs above explain domain meaning, responsibilities and
 operational procedures that span multiple components.
 
