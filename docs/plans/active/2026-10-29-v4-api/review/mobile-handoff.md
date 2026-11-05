@@ -11,13 +11,23 @@ and release activation stay separate; catalog reads need no login.
 ## Current integration
 
 The mobile implementation is in the sibling `relisten-mobile` checkout on
-`codex/v4-mobile-pilot`. It now has one v4 catalog path. `RelistenApiClient`
+`codex/v4-mobile-pilot`. It now has one catalog implementation. Internal resources, identity, resolver
+and transport live under `relisten/api/catalog/`; Realm mapping lives in
+`relisten/realm/catalog_apply.ts`. Public `/api/v4` paths and the resolver scheme
+remain versioned. `RelistenApiClient`
 returns typed API resources; the existing Realm repositories apply them. The
 existing executor owns freshness, conditional reads, retry and atomic storage
 of records, ETags and ordered query membership. The separate persistent v4
 client/coordinator and mobile v3 branches are removed.
 
-Realm schema 18 is the final unreleased v4 addition above account schema 17.
+The unused mobile v3 schema/DTO wrappers are removed. Persisted provider and
+source-link JSON shapes remain intact beside their Realm owners. Browse/detail
+projections select saved IDs before creating JavaScript row maps; song recordings
+reuse matching owning-song references within one response. These changes add no
+cache or sync protocol. See the sibling mobile plan for measurements and checks:
+`docs/plans/active/2026-10-31-v4-catalog-mobile-pilot.md`.
+
+Realm schema 18 is the final unreleased catalog addition above account schema 17.
 Canonical song membership lives once in each query's ordered IDs, with no
 second show/track list on `NormalizedSong`. Preserve the schema 17 upgrade test;
 intermediate pilot schemas never shipped and need no migration code.
