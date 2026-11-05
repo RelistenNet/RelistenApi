@@ -51,6 +51,82 @@ public sealed class TestNormalizedPublicIds
     }
 
     [Test]
+    public async Task RestrictedWriterMaintainsReservationsWithoutDirectRegistryWrites()
+    {
+        await using var upgraded =
+            await MigrationTestDatabase.CreateBeforeAsync<Migrations.PublicIdTriggerPermissions>();
+        upgraded.ApplyMigration();
+        var connection = upgraded.Connection;
+        await using var tx = await connection.BeginTransactionAsync();
+        var store = await NormStore.BeginAsync(connection, tx, AuthorTypes.Moderator, "admin-test");
+        var role = "canonical_writer_" + Guid.NewGuid().ToString("N");
+        await connection.ExecuteAsync(
+            $"""
+            CREATE ROLE {role} NOLOGIN;
+            GRANT USAGE ON SCHEMA norm TO {role};
+            GRANT SELECT ON norm.runs TO {role};
+            GRANT SELECT, INSERT, UPDATE, DELETE ON norm.venues, norm.songs TO {role};
+            GRANT INSERT ON norm.changes TO {role};
+            GRANT USAGE ON ALL SEQUENCES IN SCHEMA norm TO {role};
+            SET LOCAL ROLE {role};
+            """,
+            transaction: tx
+        );
+
+        await store.CreateVenuesAsync([Venue("venue_00000009", "Admin venue")]);
+        await store.WriteSongsAsync([
+            new(SongId.Parse("song_00000009"), Guid.NewGuid(), "Admin song"),
+        ]);
+        await connection.ExecuteAsync(
+            """
+            DELETE FROM norm.venues WHERE id='venue_00000009';
+            DELETE FROM norm.songs WHERE id='song_00000009';
+            RESET ROLE;
+            """,
+            transaction: tx
+        );
+        (
+            await connection.QuerySingleAsync<int>(
+                "SELECT count(*)::int FROM norm.public_ids WHERE id IN ('venue_00000009','song_00000009') AND retired_at IS NOT NULL",
+                transaction: tx
+            )
+        )
+            .Should()
+            .Be(2);
+
+        await connection.ExecuteAsync($"SET LOCAL ROLE {role}", transaction: tx);
+        await tx.SaveAsync("before_remint");
+        var remint = () => store.CreateVenuesAsync([Venue("venue_00000009", "Replacement")]);
+        (await remint.Should().ThrowAsync<PostgresException>())
+            .Which.SqlState.Should()
+            .Be(PostgresErrorCodes.UniqueViolation);
+        await tx.RollbackAsync("before_remint");
+
+        await connection.ExecuteAsync(
+            "CREATE TEMP TABLE fake_venue(id text, name text)",
+            transaction: tx
+        );
+        var attachTrigger = () =>
+            connection.ExecuteAsync(
+                "CREATE TRIGGER reserve_id AFTER INSERT ON fake_venue FOR EACH ROW EXECUTE FUNCTION norm.keep_public_id()",
+                transaction: tx
+            );
+        (await attachTrigger.Should().ThrowAsync<PostgresException>())
+            .Which.SqlState.Should()
+            .Be(PostgresErrorCodes.InsufficientPrivilege);
+        await tx.RollbackAsync("before_remint");
+
+        var eraseReservation = () =>
+            connection.ExecuteAsync(
+                "DELETE FROM norm.public_ids WHERE id='venue_00000009'",
+                transaction: tx
+            );
+        (await eraseReservation.Should().ThrowAsync<PostgresException>())
+            .Which.SqlState.Should()
+            .Be(PostgresErrorCodes.InsufficientPrivilege);
+    }
+
+    [Test]
     public async Task MigrationReservesActiveAndHistoricallyDeletedIdsWithoutChangingHistory()
     {
         var rows = (
