@@ -69,6 +69,7 @@ public class TestIngestionPersistence
                 ["Temporal:Address"] = temporal.Client.Connection.Options.TargetHost,
                 ["Temporal:Namespace"] = testNamespace,
                 ["Ingestion:Engine"] = "Temporal",
+                ["PHISHNET_API_KEY"] = "test-key",
             }
         );
         builder.Services.AddSingleton(sp => new DbService(

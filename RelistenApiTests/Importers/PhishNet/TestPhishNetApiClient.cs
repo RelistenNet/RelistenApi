@@ -19,7 +19,9 @@ public class TestPhishNetApiClient
             using var handler = new ReviewResponseHandler();
             using var http = new HttpClient(handler);
 
-            var reviews = (await new PhishNetApiClient(http).Reviews("1983-12-02", null)).ToArray();
+            var reviews = (
+                await new PhishNetApiClient(http, "test-key").Reviews("1983-12-02", null)
+            ).ToArray();
 
             reviews
                 .Select(review => review.posted_at)
@@ -41,13 +43,51 @@ public class TestPhishNetApiClient
         }
     }
 
+    [Test]
+    public async Task SendsTheApiKeyInAHeaderAndIdentifiesRelisten()
+    {
+        using var handler = new ReviewResponseHandler();
+        using var http = new HttpClient(handler);
+        http.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (scraper default)");
+
+        await new PhishNetApiClient(http, "test-key").Reviews("1997-11-22", null);
+
+        var request = handler.Requests.Should().ContainSingle().Subject;
+        request
+            .RequestUri!.ToString()
+            .Should()
+            .Be("https://api.phish.net/v5/reviews/showdate/1997-11-22.json");
+        request.Headers.GetValues("X-API-KEY").Should().Equal("test-key");
+        request.Headers.UserAgent.ToString().Should().StartWith("Relisten/");
+    }
+
+    [Test]
+    public async Task AMissingApiKeyFailsBeforeAnyRequest()
+    {
+        using var handler = new ReviewResponseHandler();
+        using var http = new HttpClient(handler);
+
+        Func<Task> fetch = async () =>
+            await new PhishNetApiClient(http, null).Reviews("1997-11-22", null);
+
+        await fetch
+            .Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*PHISHNET_API_KEY*");
+        handler.Requests.Should().BeEmpty();
+    }
+
     private sealed class ReviewResponseHandler : HttpMessageHandler
     {
+        public List<HttpRequestMessage> Requests { get; } = [];
+
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken
         )
         {
+            Requests.Add(request);
+
             var fixture = Path.Combine(
                 TestContext.CurrentContext.TestDirectory,
                 "Fixtures",

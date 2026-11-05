@@ -13,6 +13,8 @@ handoff](#switch-from-hangfire) when changing ingestion ownership.
 |---|---|
 | `DATABASE_URL` | Application catalog PostgreSQL URL |
 | `SENTRY_DSN` | Optional Sentry error reporting; omitted for local development |
+| `PHISHIN_KEY` | Phish.in API bearer token |
+| `PHISHNET_API_KEY` | Phish.net API v5 key, sent in the `X-API-KEY` header. Phish.net imports fail without it. Production reads it from `relistenapi-secrets`. |
 | `REDIS_URL` | Catalog cache and local default for oversized Temporal payload bytes |
 | `Temporal__PayloadRedisUrl` | Optional separate Redis for payload bytes. Production uses the persistent payload store; configure the same URL on API clients and workers. |
 | `PGBOUNCER_WRITE_HOST`, `PGBOUNCER_READ_ONLY_HOST` | Optional existing database routing |
