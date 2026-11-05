@@ -82,24 +82,21 @@ public sealed class CatalogSongMatchReader
         var rows = await session.Connection.QueryAsync<ShowTimingRow>(
             session.Command(
                 """
-                WITH tracks AS (
-                    SELECT m.show_uuid,
-                           CASE WHEN parts.has_other_song THEN true
-                                WHEN parts.fully_resolved THEN false END is_multi_song,
+                WITH files AS (
+                    SELECT m.track_uuid,m.show_uuid,
+                           CASE WHEN bool_or(p.resolved AND p.song_id IS NOT NULL
+                                             AND NOT p.part=ANY(m.matching_part_ordinals)) THEN true
+                                WHEN bool_and(p.resolved) THEN false END is_multi_song,
                            CASE WHEN t.duration>0 THEN t.duration END duration
                     FROM norm.song_recording_matches(@artistUuid,@canonicalIds::text[]) m
                     JOIN source_tracks t ON t.uuid=m.track_uuid
-                    CROSS JOIN LATERAL (
-                        SELECT bool_and(p.resolved) fully_resolved,
-                               bool_or(p.resolved AND p.song_id IS NOT NULL
-                                       AND NOT p.part=ANY(m.matching_part_ordinals)) has_other_song
-                        FROM norm.track_songs p WHERE p.track_uuid=m.track_uuid
-                    ) parts
+                    JOIN norm.track_songs p ON p.track_uuid=m.track_uuid
+                    GROUP BY m.track_uuid,m.show_uuid,t.duration
                 )
                 SELECT show_uuid,is_multi_song,count(duration)::integer track_count,
                        min(duration) min,max(duration) max,avg(duration)::double precision avg,
                        percentile_cont(0.5) WITHIN GROUP (ORDER BY duration) median
-                FROM tracks GROUP BY show_uuid,is_multi_song
+                FROM files GROUP BY show_uuid,is_multi_song
                 """,
                 new { artistUuid, canonicalIds = new[] { canonicalId } },
                 cancellationToken
