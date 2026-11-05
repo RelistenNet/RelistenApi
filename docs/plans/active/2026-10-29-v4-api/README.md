@@ -1,12 +1,14 @@
 # Deliver the complete v4 catalog and mobile adapter
 
-Status, November 4: catalog routes, typed account APIs and the mobile catalog
+Status, November 5: the API stack is rebased onto master, including the new native
+[live summary and rollout review](review/master-refresh.md). Catalog routes,
+typed account APIs and the mobile catalog
 cutover are implemented and verified locally. Mobile has one catalog client:
 typed HTTP results flow through existing repositories into Realm. Collections
 load as needed; there is no full-artist catalog endpoint or v3 transport switch.
 The [mobile handoff](review/mobile-handoff.md) describes the current contracts
 and distinguishes local proofs from remaining device and release qualification.
-Account migrations ran only in disposable local rehearsal databases. No production
+Account migrations ran only in local development/rehearsal databases. No production
 migration, deployment, session revocation or mobile release occurred.
 
 This is a living ExecPlan. The checkpoint sequence below records how the work was
