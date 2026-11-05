@@ -130,6 +130,21 @@ These are browser and native-protocol server checks using Development personas.
 They do not establish real Google/Apple integration or native app, deep-link,
 SecureStore, Realm, offline or restart behavior.
 
+## Production iOS callback registration, November 4
+
+`20261105035500_ConfigureProductionIosHttpsCallback` updates an already-installed
+`relisten-mobile-ios` application to accept only
+`https://relisten.net/auth/mobile/ios/callback`, matching the release app. The
+separate development client keeps its private-scheme callback. This data-only
+migration preserves application identity, permissions and PKCE; it does not add a
+runtime initializer or change the original registration migration.
+
+The focused upgrade test failed before this migration and now uses OpenIddict's
+redirect validator to accept the exact HTTPS callback and reject the private
+scheme and a different path. All 169 account tests pass on disposable local
+PostgreSQL. No live registration was changed. Associated-domain handling and
+real provider sign-in still need release-signed physical-device testing.
+
 ## Deployment and next checkpoint
 
 Do not deploy this breaking server contract while the current mobile alpha client
