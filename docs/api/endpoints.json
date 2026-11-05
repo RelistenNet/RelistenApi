@@ -1,0 +1,437 @@
+{
+  "status": "Catalog and account endpoint response shapes and local replacement policies. OpenAPI owns parameters and DTO schemas.",
+  "catalog_endpoints": [
+    {
+      "method": "GET",
+      "path": "/api/v4/artist-venues/{artistVenueId}",
+      "response_shape": "resource_with_shows",
+      "sync_policy": "detail_shows"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/artists",
+      "response_shape": "list",
+      "sync_policy": "query_result"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/artists/{artistId}",
+      "response_shape": "resource",
+      "sync_policy": "resource"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/artists/{artistId}/eras",
+      "response_shape": "list",
+      "sync_policy": "artist_eras"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/artists/{artistId}/imported-songs",
+      "response_shape": "list",
+      "sync_policy": "artist_collection"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/artists/{artistId}/imported-venues",
+      "response_shape": "list",
+      "sync_policy": "artist_collection"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/artists/{artistId}/shows",
+      "response_shape": "list",
+      "sync_policy": "artist_collection"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/artists/{artistId}/shows/by-date/{showDate}",
+      "response_shape": "resource",
+      "sync_policy": "full_show"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/artists/{artistId}/shows/on-date",
+      "response_shape": "list",
+      "sync_policy": "query_result"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/artists/{artistId}/shows/popular-trending",
+      "response_shape": "ranking_groups",
+      "sync_policy": "transient_ranking"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/artists/{artistId}/shows/random",
+      "response_shape": "resource",
+      "sync_policy": "full_show"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/artists/{artistId}/shows/recently-added",
+      "response_shape": "list",
+      "sync_policy": "query_result"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/artists/{artistId}/shows/recently-performed",
+      "response_shape": "list",
+      "sync_policy": "query_result"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/artists/{artistId}/shows/recently-updated",
+      "response_shape": "list",
+      "sync_policy": "query_result"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/artists/{artistId}/shows/today",
+      "response_shape": "list",
+      "sync_policy": "query_result"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/artists/{artistId}/shows/top",
+      "response_shape": "list",
+      "sync_policy": "query_result"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/artists/{artistId}/songs",
+      "response_shape": "list",
+      "sync_policy": "artist_collection"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/artists/{artistId}/tours",
+      "response_shape": "list",
+      "sync_policy": "artist_collection"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/artists/{artistId}/venues",
+      "response_shape": "list",
+      "sync_policy": "artist_collection"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/artists/{artistId}/venues/{venueId}",
+      "response_shape": "resource_with_shows",
+      "sync_policy": "detail_shows"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/artists/{artistId}/years",
+      "response_shape": "list",
+      "sync_policy": "artist_collection"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/artists/{artistId}/years/by-number/{year}",
+      "response_shape": "resource_with_shows",
+      "sync_policy": "detail_shows"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/artists/{artistId}/years/{yearId}",
+      "response_shape": "resource_with_shows",
+      "sync_policy": "detail_shows"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v4/catalog/resolve",
+      "response_shape": "resolver_result",
+      "sync_policy": "resolver"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/imported-songs/{importedSongId}",
+      "response_shape": "resource_with_shows",
+      "sync_policy": "detail_shows"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/imported-venues/{importedVenueId}",
+      "response_shape": "resource_with_shows",
+      "sync_policy": "detail_shows"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/live/history",
+      "response_shape": "list",
+      "sync_policy": "history"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v4/live/play",
+      "response_shape": "command_result",
+      "sync_policy": "command"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/live/summary",
+      "response_shape": "live_summary",
+      "sync_policy": "live_summary"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/popular/artists",
+      "response_shape": "list",
+      "sync_policy": "transient_ranking"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/popular/shows",
+      "response_shape": "list",
+      "sync_policy": "transient_ranking"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/popular/years",
+      "response_shape": "list",
+      "sync_policy": "transient_ranking"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/search",
+      "response_shape": "search_results",
+      "sync_policy": "query_result"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/shows/momentum",
+      "response_shape": "list",
+      "sync_policy": "transient_ranking"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/shows/on-date",
+      "response_shape": "list",
+      "sync_policy": "query_result"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/shows/popular-trending",
+      "response_shape": "ranking_groups",
+      "sync_policy": "transient_ranking"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/shows/recently-added",
+      "response_shape": "list",
+      "sync_policy": "query_result"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/shows/recently-performed",
+      "response_shape": "list",
+      "sync_policy": "query_result"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/shows/recently-updated",
+      "response_shape": "list",
+      "sync_policy": "query_result"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/shows/today",
+      "response_shape": "list",
+      "sync_policy": "query_result"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/shows/{showId}",
+      "response_shape": "resource",
+      "sync_policy": "full_show"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/songs/{songId}",
+      "response_shape": "resource_with_shows",
+      "sync_policy": "detail_shows"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/songs/{songId}/tracks",
+      "response_shape": "resource_with_tracks",
+      "sync_policy": "detail_tracks"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/source-tracks/{sourceTrackId}",
+      "response_shape": "resource",
+      "sync_policy": "resource"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/sources/{sourceId}",
+      "response_shape": "resource",
+      "sync_policy": "full_source"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/sources/{sourceId}/reviews",
+      "response_shape": "list",
+      "sync_policy": "source_reviews"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/tours/{tourId}",
+      "response_shape": "resource_with_shows",
+      "sync_policy": "detail_shows"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/trending/artists",
+      "response_shape": "list",
+      "sync_policy": "transient_ranking"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/trending/shows",
+      "response_shape": "list",
+      "sync_policy": "transient_ranking"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/trending/years",
+      "response_shape": "list",
+      "sync_policy": "transient_ranking"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/venues/{venueId}",
+      "response_shape": "resource_with_shows",
+      "sync_policy": "detail_shows"
+    }
+  ],
+  "account_endpoints": [
+    {
+      "method": "GET",
+      "path": "/v1/library/snapshot",
+      "response_shape": "library_protocol_result",
+      "sync_policy": "library_snapshot",
+      "response_id_fields": {
+        "favorites[].favorite_id": "favorite_",
+        "favorites[].target.id": "catalog target prefix"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/v1/library/changes",
+      "response_shape": "library_protocol_result",
+      "sync_policy": "library_changes",
+      "response_id_fields": {
+        "changes[].change_id": "library_change_",
+        "changes[].favorite_id": "favorite_",
+        "changes[].target.id": "catalog target prefix"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/v1/library/favorite-mutations:batch",
+      "response_shape": "library_protocol_result",
+      "sync_policy": "command",
+      "request_id_fields": {
+        "mutations[].mutation_id": "mutation_",
+        "mutations[].favorite_id": "favorite_ (required only for add)",
+        "mutations[].target.id": "catalog target prefix"
+      },
+      "response_id_fields": {
+        "results[].mutation_id": "mutation_",
+        "results[].submitted_favorite_id": "favorite_ (optional)",
+        "results[].canonical_favorite_id": "favorite_ (optional)",
+        "conflicting_mutation_ids[]": "mutation_",
+        "conflicting_favorite_ids[]": "favorite_"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/v1/me",
+      "response_shape": "resource",
+      "sync_policy": "resource",
+      "response_id_fields": {
+        "user_id": "user_",
+        "native_session_id": "session_ (optional)"
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/v1/me",
+      "response_shape": "resource",
+      "sync_policy": "command",
+      "response_id_fields": {
+        "user_id": "user_",
+        "native_session_id": "session_ (optional)"
+      },
+      "request_id_fields": {
+        "command_id": "command_"
+      }
+    }
+  ],
+  "sync_policies": {
+    "command": "Apply the explicit command result only; no collection replacement inferred.",
+    "resource": "Upsert the returned resource and supplied related fields; omission never removes unrelated entities or associations.",
+    "artist_collection": "Replace this artist endpoint’s association list for the exact request/filter; retain entity records, other query associations, favorites and offline data.",
+    "full_show": "Upsert the show and nested sources/sets/tracks; replace active source associations for this show and set/track associations for each fully returned source/set. Retain entity records needed for offline playback and favorites.",
+    "full_source": "Upsert source and nested sets/tracks; replace active sets for this source and tracks for each fully returned set. Related artist/show summaries are patches.",
+    "detail_shows": "Upsert the resource and returned show summaries; replace only this resource’s complete show association list, including an empty list. Save the payload ETag in the same local transaction. Retain shared show entities, downloads, favorites, and other query memberships. Artist-venue ID and artist-plus-venue alias identify the same membership owner.",
+    "query_result": "Replace only the cached result of this exact URL and normalized query parameters; upsert returned entities. Never infer absence elsewhere from search/ranking/filtered/limited results.",
+    "history": "With after_sequence append/deduplicate by event sequence; without it replace only the cached recent-history window for the exact request. Never delete catalog rows or personal playback history from omissions.",
+    "resolver": "Apply per-reference availability and target results in input order; upsert deduplicated supplied entities and shallow parents only. Never replace unreturned child collections or remove catalog/favorite membership. POST is no-store without an ETag; no artist hydration unless explicitly requested.",
+    "library_snapshot": "Apply authoritative membership for the authenticated account under the revised in-place library snapshot/cursor contract, not catalog replacement rules.",
+    "library_changes": "Apply explicit ordered membership changes and advance the account cursor atomically; omissions do not remove membership.",
+    "detail_tracks": "Upsert song metadata and returned track resources; replace only this song’s complete file-match membership, including an empty list. Save the payload ETag in the same local transaction. This response has no shows property and does not change song-show membership or shared offline entities.",
+    "artist_eras": "Replace only this artist’s complete ordered era metadata, including an empty list. Eras have no public identity and are not shared entities. Save the ETag with the replacement.",
+    "source_reviews": "Upsert returned review resources and replace this source’s complete review membership, including an empty list. Save its ETag atomically. Other sources, catalog entities, and personal library membership remain unchanged.",
+    "transient_ranking": "Use only as a transient online ranking view; do not apply its context-dependent popularity or entity membership to the persisted offline catalog. ETags support online revalidation. Open resources through their ordinary detail routes for catalog apply.",
+    "live_summary": "Transient online activity for one completed window; use ordinary typed catalog resources for navigation. Replace only this exact summary view; omissions do not delete catalog records or account history. ETags support revalidation; shared caching lasts until the next minute, with up to one extra minute of stale serving."
+  },
+  "account_identity_storage": "Canonical full prefixed strings for application-owned IDs and catalog targets; OpenIddict/private surrogate keys remain internal UUIDs.",
+  "account_routes": "Change existing /v1/library and /v1/me in place; no parallel library route version.",
+  "retained_operator_endpoints": [
+    {
+      "method": "POST",
+      "path": "/api/v2/artists",
+      "authorization": "existing_operator_authorization"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v2/artists/{artistIdOrSlug}",
+      "authorization": "existing_operator_authorization"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/import/all-years-and-shows",
+      "authorization": "existing_operator_authorization"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/import/{idOrSlug}",
+      "authorization": "existing_operator_authorization"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/import/{idOrSlug}/debug",
+      "authorization": "existing_operator_authorization"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/import/{idOrSlug}/{showIdentifier}",
+      "authorization": "existing_operator_authorization"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/import/{idOrSlug}/{showIdentifier}/debug",
+      "authorization": "existing_operator_authorization"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/import/phishin",
+      "authorization": "provider_api_key"
+    }
+  ]
+}

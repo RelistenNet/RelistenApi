@@ -1,5 +1,10 @@
 # Build Relisten identity, user data, offline sync, history, and Sonos handoff
 
+> Scope: this dated document includes work beyond the current account release.
+> The [current account contract](../../api/accounts.md) supersedes its UUID identity,
+> favorite payload and alpha-cutover details. Unimplemented playlist/history/Sonos
+> proposals remain future work.
+
 This ExecPlan is a living document. Keep `Progress`, `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` current while implementation proceeds.
 
 The architecture contract for this work is [Relisten identity, user data, and Sonos architecture](../../architecture/2026-07-18-relisten-identity-user-data-and-sonos-architecture.md). [Deliver Relisten accounts from API to TestFlight](./2026-07-18-relisten-mobile-first-account-delivery-plan.md) is the execution source of truth for ordering work across `RelistenApi` and `relisten-mobile`, deciding what blocks a TestFlight build, and defining the testing and rollout policy. The mobile-specific implementation contract is [Relisten mobile accounts, library sync, and Sonos implementation](../../../../relisten-mobile/docs/plans/active/2026-07-18-relisten-mobile-accounts-library-sync-and-sonos-implementation.md). [Implement durable browser sessions for Relisten web](./2026-08-26-web-session-foundation.md) is the execution source of truth for the first credentialed Timber web slice. This file supplies the detailed server work within the mobile vertical slices. If the documents disagree about delivery order or initial scope, the mobile-first delivery plan wins for mobile work and the browser-session plan wins for its three-repository web scope. If implementation changes a durable architecture decision, update the relevant architecture document and this plan in the same pull request and record the reason below.

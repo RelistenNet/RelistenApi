@@ -17,10 +17,6 @@
     <ProjectReference Include="..\RelistenUserService\RelistenUserService.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <None
-      Include="../local-dev/accounts-review/pre-typed-fixture.sql"
-      Link="Fixtures/pre-typed-accounts.sql"
-      CopyToOutputDirectory="PreserveNewest"
-    />
+    <None Update="Fixtures/pre-typed-accounts.sql" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

@@ -1,0 +1,112 @@
+@base = http://localhost:3823
+
+# Real IDs from the restored local snapshot. Use returned IDs with another DB.
+# POST /live/play writes telemetry; the examples below are reads only.
+
+### OpenAPI
+GET {{base}}/api-docs/v4/swagger.json
+
+### Public activity for selected artists (repeat the query key)
+GET {{base}}/api/v4/live/history?artist_ids=artist_3qmp7zjbg1rpebhtyfy43096vj&artist_ids=artist_6aaf982021nrst0m68ew1djerc&limit=20
+
+### Browse: artists
+GET {{base}}/api/v4/artists
+
+### Browse: years
+GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/years
+
+### Browse: year-by-number
+GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/years/by-number/1985
+
+### Browse: artist-venues
+GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/venues
+
+### Discovery: artist-anniversary
+GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/shows/on-date?month=7&day=7
+
+### Discovery: exact-date-show
+GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/shows/by-date/1978-07-07
+
+### Discovery: artist-recently-added
+GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/shows/recently-added?limit=5
+
+### Search and rankings: search
+GET {{base}}/api/v4/search?q=Scarlet&artist_id=artist_3qmp7zjbg1rpebhtyfy43096vj
+
+### Search and rankings: trending-artists
+GET {{base}}/api/v4/trending/artists?limit=5
+
+### Search and rankings: popular-shows
+GET {{base}}/api/v4/popular/shows?limit=5
+
+### Search and rankings: momentum-shows
+GET {{base}}/api/v4/shows/momentum?artist_ids=artist_3qmp7zjbg1rpebhtyfy43096vj&limit=5
+
+### Shared venue: metadata and shows across approved artists
+GET {{base}}/api/v4/venues/venue_fp4h900f
+
+### Shared venue: artist collection beside global metadata
+GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/venues/venue_fp4h900f
+
+### Direct relationship agrees with the artist and venue lookup
+GET {{base}}/api/v4/artist-venues/artist_venue_344wrm28
+
+### Requested imported venue: direct lookup with shows
+GET {{base}}/api/v4/imported-venues/imported_venue_78331pxdqjdg434rrgm1d2pnrj
+
+### raw track: Grateful Dead — Intro
+GET {{base}}/api/v4/source-tracks/track_37vdexm28htz4xmsdbp491ekt9
+
+### matched track: Grateful Dead — Mama Tried -> Me And My Uncle
+GET {{base}}/api/v4/source-tracks/track_3s1y1rg4yaxa7nqw31wk617b0d
+
+### matched show: Grateful Dead — Mama Tried -> Me And My Uncle
+GET {{base}}/api/v4/shows/show_2jn80dqf5ntfxmmkwx11j27gdk
+
+### Direct source for matched: sets and playable tracks
+GET {{base}}/api/v4/sources/source_2wwgekk9qbskw2gp5v68znz9pa
+
+### partial track: Grateful Dead — Beat/It/On/Down/The/Line#
+GET {{base}}/api/v4/source-tracks/track_7b6v6pgvzqfvhd0s7avr18bdw5
+
+### disabled track: The Higgs — Make You Mine
+GET {{base}}/api/v4/source-tracks/track_4qt7bmm86zca756k4t9xh39ebh
+
+### Song browse: canonical songs plus imported fallbacks
+GET {{base}}/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/songs
+
+### Scarlet Begonias: metadata, distinct recording-backed shows
+GET {{base}}/api/v4/songs/song_62mhvjyd
+
+### Scarlet Begonias: metadata and exact files as complete track resources
+GET {{base}}/api/v4/songs/song_62mhvjyd/tracks
+
+### Imported Scarlet Begonias: independent setlist-backed shows
+GET {{base}}/api/v4/imported-songs/imported_song_3km7ryr3hc5dm877wmc69zpdb5
+
+### Phish: compact tour inventory and catalog show counts
+GET {{base}}/api/v4/artists/artist_6aaf982021nrst0m68ew1djerc/tours
+
+### Phish Fall Tour 1997: direct tour metadata and complete shows
+GET {{base}}/api/v4/tours/tour_4emejbsvpbph76zy5kh1n954vt
+
+### Phish: ordered era metadata, no public era identity
+GET {{base}}/api/v4/artists/artist_6aaf982021nrst0m68ew1djerc/eras
+
+### Recording reviews: complete upstream text and ratings
+GET {{base}}/api/v4/sources/source_2cr3tmxwvyxp5g9jxzk1jf944x/reviews
+
+### Completed live activity window
+GET {{base}}/api/v4/live/summary?minutes=15&sort=surprise
+
+### Resolve typed and legacy references (read-only POST; patches, not replacement)
+POST {{base}}/api/v4/catalog/resolve
+Content-Type: application/json
+
+{
+  "references": [
+    { "kind": "artist", "scheme": "legacy_slug", "id": "grateful-dead" },
+    { "kind": "track", "scheme": "legacy_uuid", "id": "790f8388-13ca-ea8f-5bf0-61e4cc13ac0d" },
+    { "kind": "venue", "scheme": "v4", "id": "venue_fp4h900f" }
+  ]
+}

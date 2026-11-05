@@ -164,7 +164,7 @@ cascade relationship deletion; count refreshes need no source triggers or pendin
 queue. Venue merges remain owned by
 `norm.venues`; the relationship table stores the resulting counts, without copied
 merge pointers.
-See the [artist venue foundation plan](../plans/active/2026-10-30-artist-venues/README.md)
+See the [artist–venue count reference](../api/derived-counts.md#artistvenue-relationships)
 for identity, merge, and recovery contracts. Existing import workflow command
 order and provider deletion rules are unchanged.
 

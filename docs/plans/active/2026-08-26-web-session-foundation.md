@@ -1,5 +1,10 @@
 # Implement durable browser sessions for Relisten web
 
+> Scope: this dated document includes work beyond the current account release.
+> The [current account contract](../../api/accounts.md) supersedes its UUID identity,
+> favorite payload and alpha-cutover details. Unimplemented playlist/history/Sonos
+> proposals remain future work.
+
 This file is the execution source of truth for the browser-session work in
 RelistenApi, relisten-web, and relisten-flux. Keep the progress, decisions,
 evidence, and approval status current. Do not use this plan as an iteration log.

@@ -332,11 +332,11 @@ If a transaction will need a full recount, acquire the venue gate exclusively
 before editing source rows, as the admin does; do not upgrade a scoped shared
 gate to exclusive while other scopes run.
 
-For application rollback, keep the additive schema and grant. Older admin builds
-and workers can leave counts stale after source edits; run an explicit refresh
-when repairing them. No down migration deletes identities. This work does not add
-sync revision counters or change v4 responses.
-See the [foundation plan](../plans/active/2026-10-30-artist-venues/README.md) for
+Fix forward while keeping the schema, grants and stable relationship IDs.
+Older admin builds/workers can leave counts stale; deploy matching maintenance
+before resuming edits and explicitly repair affected counts. Recounts do not
+introduce a sync revision protocol.
+See the [count reference](../api/derived-counts.md#artistvenue-relationships) for
 tests and the detailed storage contract.
 
 ## Storage, backups, and recovery

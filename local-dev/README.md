@@ -85,7 +85,7 @@ planner statistics. See `./restore-local-database.sh --help` for reset options.
 
 ## Run the .NET services
 
-Run the anonymous catalog API in one terminal:
+Run the catalog API in one terminal (v4 and legacy routes share this process):
 
 ```sh
 dotnet run --project RelistenApi/RelistenApi.csproj
@@ -99,8 +99,17 @@ local-dev/accounts.sh dummy   # Fixed personas for agent and automated work.
 local-dev/accounts.sh google  # Your real Google account, stored locally.
 ```
 
-The catalog API listens on `http://localhost:3823`. The development User Service
-listens on `https://127.0.0.1:5443` and serves the exact
+The catalog API listens on `http://localhost:3823`; open
+[Swagger](http://localhost:3823/api-docs-v4/index.html) or use the
+[HTTP examples](../docs/api/requests.http). Development uses client-only Temporal
+composition, registers no legacy import schedules and starts no Hangfire workers.
+No Temporal server is needed for catalog reads.
+
+To keep an existing mobile local-origin setting on port 43823, run the same API
+with `PORT=43823 dotnet run --project RelistenApi/RelistenApi.csproj`; this changes
+only the listening port, not its readers or database.
+
+The development User Service listens on `https://127.0.0.1:5443` and serves the exact
 `localhost:5443` and `accounts.relisten.localhost:5443` hosts. Run
 `pnpm setup:browser-session` once from the sibling `relisten-web` checkout before
 starting the User Service. That command creates and trusts the local certificate
@@ -127,9 +136,9 @@ before editing account-owned data. Neither mode uses the production account DB.
 
 Development signing/encryption keys persist under ignored
 `RelistenUserService/.local-openiddict`, so service restarts do not rotate them.
-Personas remain restricted to exact local Development hosts. The named databases
-under `accounts-review/` are historical migration fixtures, not daily development
-requirements; automated suites create and remove disposable test databases.
+Personas remain restricted to exact local Development hosts. Automated suites
+create and remove disposable test databases; daily development uses the same
+`relisten_db` for catalog and account data.
 
 With the User Service running, check its account/session security invariants:
 
@@ -139,7 +148,8 @@ RelistenUserService/SmokeTests/refresh-token-replay.sh
 
 ## Run an ingestion worker manually
 
-The development API does not start Hangfire workers. Ordinary worker startup
+Development HTTP import commands also use Temporal and need the server/worker
+below. The API itself starts no Hangfire workers. Ordinary worker startup
 creates no schedules, and the seed contains no queued imports. Importing a whole
 artist can fetch far more shows than the seed contains; keep live imports explicit.
 
@@ -184,3 +194,23 @@ See [ingestion operations](../docs/ingestion/operations.md) for operator command
 Redis stores oversized Temporal payloads as well as API caches. Keep Redis while
 manual workflow histories matter; clearing its data can make those histories
 unreadable. The temporary test servers have no history to retain after teardown.
+
+## Review with restored data
+
+The checked-in seed supports routine development. For real normalization and
+large-list investigation, use a restored local backup, then follow the
+[catalog contract](../docs/api/catalog.md), [mobile sync](../docs/api/mobile-sync.md)
+and [performance reference](../docs/api/performance.md). The normal API command
+uses either dataset. Missing normalization remains a supported artist state;
+startup does not require it or enable approval flags.
+
+The October 29 local backup omits playback analytics. Its review scores came
+from a separately approved real production read-only aggregate snapshot, also
+published to local Postgres. Their provenance is retained locally under ignored
+`local-dev/v4-review/.output/`; the pilot scripts are retired. Keep Hangfire
+workers stopped when using those scores: empty local telemetry cannot reproduce
+them. No production data or flags are changed by local review.
+
+That local snapshot's original normalization flags and restore SQL are also in
+its ignored `.output/` directory. Keep those files with their matching snapshot;
+they are not daily setup requirements or a production rollout mechanism.

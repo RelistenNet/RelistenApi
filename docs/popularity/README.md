@@ -35,9 +35,8 @@ an entirely uninitialized population triggers the first background calculation.
 New catalog targets join the next population calculation, as with the legacy
 whole-map cache.
 
-This replaces the separate freshness table and its scope key. Per-row timestamp
-comparisons reject old publications; inactive rows replace the former deletion
-step. There is no placeholder catalog ID or special global UUID.
+Per-row timestamp comparisons reject old publications. Inactive rows preserve
+population freshness without a separate freshness table or placeholder ID.
 
 ## Read and refresh ownership
 
@@ -87,21 +86,14 @@ backfill Postgres. No v4 body cache or invalidation system is involved.
 
 ## Rollout and recovery
 
-1. Apply migration 17 and deploy this foundation. Legacy calculations can begin
-   dual publication while existing clients continue reading Redis.
-2. Run `PopularityJobs.RefreshReadModel` through the normal job runner before
-   deploying v4, so its first requests have stored scores. Measure a full repair
-   on real telemetry; it invokes existing scoped calculations sequentially.
-3. Deploy v4. Stale or missing required populations refresh on demand. Monitor
-   queue failures and the affected rows' `generated_at` when diagnosing age.
+Apply migration 17 before deploying the writer/readers. Seed the initial
+populations after the new Hangfire worker is running, then verify stored
+`generated_at` and representative rankings. Missing/stale populations otherwise
+refresh on demand. Monitor job failure and row age.
 
-Fix forward while preserving the additive tables, stable identities and Redis
-data. Pre-stack binaries cannot restart after later catalog migrations; no separate
-recovery build is required. Repair a calculation by correcting and rerunning it,
-without truncating last successful data. See the
-[current rollout review](../plans/active/2026-10-29-v4-api/review/master-refresh.md).
-The schema is still unshipped in this PR; local preview schema changes are applied
-explicitly. No production schema or schedules changed during development.
+Fix forward while preserving stable identities and last successful populations.
+Repair calculations by correcting and rerunning them. The [deployment guide](../api/deployment.md)
+contains writer coordination, origin warm-up and schema constraints.
 
 For local review, publish the existing real Redis snapshot through the writer,
 retaining its timestamps. Local workers stay disabled, so queued refreshes cannot
@@ -121,3 +113,12 @@ stamping all rows took 1.35 seconds versus 0.38 seconds. Indexed top-five reads
 remained 0.12 ms. These are local layout measurements without foreign-key or
 calculation cost, not a production budget. The additional background writes
 are accepted to keep publication and freshness in the three resource tables.
+
+## Calculation sources
+
+`source_track_plays` stores anonymous track-start events. Popularity calculations
+use the hourly/daily Timescale aggregates installed by the
+[Timescale migration SQL](../../RelistenApi/Migrations/timescaledb_migration.sql).
+[PopularityService](../../RelistenApi/Services/Popularity/PopularityService.cs)
+owns the implemented scoring rules. Treat older dataset sizes and proposed
+formulas as historical analysis, not a second algorithm specification.

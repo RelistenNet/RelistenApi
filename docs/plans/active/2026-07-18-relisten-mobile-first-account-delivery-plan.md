@@ -1,5 +1,10 @@
 # Deliver Relisten accounts from API to TestFlight
 
+> Scope: this dated document includes work beyond the current account release.
+> The [current account contract](../../api/accounts.md) supersedes its UUID identity,
+> favorite payload and alpha-cutover details. Unimplemented playlist/history/Sonos
+> proposals remain future work.
+
 This is the execution source of truth for account work that crosses `RelistenApi` and `relisten-mobile`. The architecture documents define the long-lived boundaries and data model. This plan defines what gets built together, what waits, and how a slice earns a TestFlight build.
 
 ## Decision
