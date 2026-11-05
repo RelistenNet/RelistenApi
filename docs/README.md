@@ -16,7 +16,6 @@ Start with the task you need to do:
 payload reference. The docs above explain domain meaning, responsibilities and
 operational procedures that span multiple components.
 
-The [November 2026 launch note](launch/2026-11-catalog-account-cutover.md) is a
-one-time cutover procedure, pending rollout. Dated playlist/history/Sonos documents
-under `architecture/`, `design/` and `plans/active/` describe broader future work;
-use the account guide above for implemented behavior.
+Dated playlist/history/Sonos documents under `architecture/`, `design/` and
+`plans/active/` describe broader future work; use the account guide above for
+implemented behavior.
