@@ -1,22 +1,18 @@
 # Deliver the complete v4 catalog and mobile adapter
 
-Status: C1 includes playback navigation, collection reads, and saved-reference
-resolution, date browsing, search, listening rankings, and anonymous live activity,
-2026-11-01. The local API audit, C3 playback pilot and first C5 venue/song/favorite
-journeys are verified. The [mobile handoff](review/mobile-handoff.md) records the
-current loading contracts and local checkpoint.
-C2 server and initial client upgrades have been reviewed locally;
-mobile v4 browsing is opt-in; v3 remains the default. The catalog API reads the
-restored production catalog. Account migrations ran only on disposable local rehearsal databases; no
-production deployment or migration occurred. This is a living ExecPlan: update Progress,
-Discoveries, Decision Log, and Outcomes as work proceeds.
+Status, November 4: catalog routes, typed account APIs and the mobile catalog
+cutover are implemented and verified locally. Mobile has one catalog client:
+typed HTTP results flow through existing repositories into Realm. Collections
+load as needed; there is no full-artist catalog endpoint or v3 transport switch.
+The [mobile handoff](review/mobile-handoff.md) describes the current contracts
+and distinguishes local proofs from remaining device and release qualification.
+Account migrations ran only in disposable local rehearsal databases. No production
+migration, deployment, session revocation or mobile release occurred.
 
-Build and review this in stages. First deliver a running browse and playback API that
-Alec can inspect directly. Review artist/year, venue-to-playback, and song-to-playback responses before
-account/auth work. The later breaking
-account/auth cutover runs against the existing v3 catalog; prove a small normalized
-mobile journey before completing the remaining API/UI.
-The [review guide](review-guide.md) defines five checkpoints and what Alec sees.
+This is a living ExecPlan. The checkpoint sequence below records how the work was
+built; its completed stages do not imply deployment approval. Read
+[contracts](contracts.md) for current behavior and the [review guide](review-guide.md)
+for the checkpoint evidence.
 
 ## Outcome and readers
 
@@ -115,8 +111,7 @@ needs explicit snapshot reads and authoritative apply. Imported UUIDs also ident
 mobile downloads/queues/history, so they remain stored behind the API adapter.
 
 The [artist-venue foundation](../2026-10-30-artist-venues/README.md) is stacked
-between shared normalization enums and v4. Local `relisten_db` is at migration 15.
-Its full refresh was verified against real assignments: 5,397 pairs for 12 artists,
+between shared normalization enums and v4. Its migration-15 local full refresh was verified against real assignments: 5,397 pairs for 12 artists,
 covering 13,418 show memberships, with zero count mismatches. Production was not
 changed. Current v4 reads use this materialized relationship and retain imported
 fallback when an approved assignment has no stored pair yet.
@@ -265,14 +260,12 @@ apply entrypoint, not only DTO renaming. The in-place account change retains
 
 ## Implementation sequence
 
-The numbers below identify components, not a single deployment. C1 native browse,
-playback, discovery and resolver responses are implemented. C2 typed
-account APIs and the first account-client upgrade have been reviewed locally;
-mobile v4 browsing is opt-in; v3 remains the default. C3 proves a small v4 mobile
-catalog journey.
-C4 qualifies the native API and verifies coexistence with unchanged legacy reads.
-C5 finishes mobile adoption and release checks. Legacy route conversion is not a
-prerequisite for any checkpoint.
+The numbers identify components, not a single deployment. C1 catalog routes and
+C2 typed account/client changes are implemented. C3 playback and C5 venue/song/
+favorite journeys have local proof; mobile now uses the catalog exclusively.
+C4 records API contract and local performance checks. Physical-device and
+production qualification remain separate. Legacy services stay in place for
+older app releases; no adapter conversion is required.
 
 Use small PRs with one reviewable outcome. Account/auth and catalog work can be
 developed independently after C1, but deploy the breaking account cutover and
@@ -371,10 +364,11 @@ After C1/C2, add only the show/track adapter and storage needed for C3. Prove
 raw/normalized playback, correction refresh, failed-apply retry and offline recovery
 before route expansion. Complete the remaining mobile reads after C4.
 
-Add `relisten/api/v4/` and additive Realm normalized venue/song rows, embedded
-track interpretation, show display/browse fields and applied-query state. Keep
-one repository/model set and existing imported UUID/file keys. Account IDs/targets
-remain typed; the projection adapter bridges catalog records to account targets.
+Use `relisten/api/catalog/` for typed HTTP resources and transport. Existing
+repositories own mapping through `relisten/realm/catalog_apply.ts`. Keep one
+repository/model set with additive canonical venue/song rows, embedded track
+interpretation and per-query state. Preserve imported UUID/file keys. Account
+IDs/targets remain typed; the catalog adapter supplies their public typed IDs.
 
 Apply resources, owned associations, query results and ETag in one Realm transaction,
 using each endpoint's replacement rule. Bypass legacy timestamp guards for v4;
@@ -382,8 +376,8 @@ preserve richer detail when shallow related objects arrive. Discard superseded
 same-query responses. Public catalog reads use a fixed transport and need no
 account fences; account-owned library work retains its existing scope guards.
 Failed apply commits no validator or cursor.
-Test upgrades from the current schema-17 account build as well as direct older
-schema upgrades and staged account-only then catalog upgrades.
+Keep the schema-17 account-to-catalog upgrade test. Schema 18 is the final
+unreleased catalog addition; intermediate pilot schemas need no migrations.
 
 ### 6. Complete browsing and global favorites for C5
 
@@ -523,18 +517,18 @@ by accepting this plan.
 
 Planning is complete. Independent feasibility and mobile/account reviewers
 confirmed the corrected plan has no remaining blockers in their reviewed areas.
-The handoff includes 51 v4 catalog/playback endpoints and eight retained operator
+The current manifest includes 50 v4 catalog/playback operations and eight retained operator
 endpoints, three in-place library
 endpoints, two profile actions, contracts, five personal review checkpoints,
 migration/rollback steps and verification. The full thread was reread during the
 simplification pass; later decisions supersede the exploration's old epoch,
 generic metadata, library versioning and UUID-backed account-storage proposals.
 
-Earlier C1 runtime and local HTTP/snapshot checks are recorded in the
-[response review](review/README.md). The stored artist–venue graph is the current
-review update; its final response verification is pending. Migration 15 and the
-full derived-count refresh have been applied to local `relisten_db`. Canonical
-identity/deletion behavior still needs production release qualification. Mobile schema
-upgrades, production load measurements and deployment remain unperformed. Primary capacity and deployment
-configuration are execution gates, not assumed facts. Record implementation
-results here as milestones are completed.
+The [response review](review/README.md) records local HTTP/snapshot checks and
+real-data count backfills. The mobile schema-17 upgrade is covered by the current
+test suite; that does not establish physical-device upgrade behavior. Final
+Drums navigation/scrolling, release-build provider sign-in and offline cold restart
+still need device verification. Production capacity, client callback registration,
+migration execution and deployment remain unverified. The final native stack
+retains the recording optimization and removes the abandoned legacy adapter;
+its PR can be reviewed directly against the live-activity branch.
