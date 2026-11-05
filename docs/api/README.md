@@ -46,6 +46,17 @@ shows. Canonical song counts/shows require exact recording matches; imported son
 counts/shows use setlist evidence and cannot identify a playable file. See
 [count maintenance](../normalization-counts.md) before changing these definitions.
 
+Canonical song detail's `shows` entries contain `{ show, timings }`. Timing buckets
+summarize positive, known file durations across recordings of that show, in seconds:
+`track_count`, `min`, `max`, `avg` and `median`. They do not measure a song's segment
+within a file. `single_song` requires fully resolved parts with only that canonical
+song; resolved non-song parts are ignored. `multi_song` requires at least two known
+canonical songs. One-song files with unresolved parts contribute to neither bucket.
+Each file counts once, including reprises and merged aliases. An empty timing bucket
+is null; missing durations or incomplete interpretations never remove a matched show.
+Imported song details still return plain show summaries because setlists cannot
+identify the file to time.
+
 ## Identity and saved references
 
 UUID-backed public IDs losslessly encode the existing catalog UUID. Canonical

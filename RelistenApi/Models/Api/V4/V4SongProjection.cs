@@ -19,8 +19,29 @@ public static partial class V4CatalogProjection
     public static SongWithShowsResource SongWithShows(CatalogSongWithShows detail) =>
         ProjectSong<SongWithShowsResource>(detail.Song) with
         {
-            Shows = detail.Shows.Select(ShowSummary).ToArray(),
+            Shows = detail
+                .Shows.Select(entry => new SongShowResource(
+                    ShowSummary(entry.Show),
+                    new SongShowTimingsResource(
+                        TrackDurationStatistics(entry.Timings.SingleSong),
+                        TrackDurationStatistics(entry.Timings.MultiSong)
+                    )
+                ))
+                .ToArray(),
         };
+
+    private static TrackDurationStatisticsResource? TrackDurationStatistics(
+        CatalogTrackDurationStatistics? statistics
+    ) =>
+        statistics is null
+            ? null
+            : new(
+                statistics.TrackCount,
+                statistics.Min,
+                statistics.Max,
+                statistics.Avg,
+                statistics.Median
+            );
 
     public static SongWithTracksResource SongWithTracks(CatalogSongWithTracks detail) =>
         ProjectSong<SongWithTracksResource>(detail.Song) with

@@ -72,7 +72,7 @@ public sealed class CatalogSongReader(
             return null;
         }
 
-        var membership = await matches.ReadMatches(
+        var timings = await matches.ReadShowTimings(
             session,
             song.artist_uuid,
             song.id,
@@ -81,10 +81,13 @@ public sealed class CatalogSongReader(
         var shows = await ReadShows(
             session,
             CatalogShowMetadataReader.ShowSelect + " WHERE s.uuid=ANY(@uuids)",
-            new { uuids = membership.Select(row => row.show_uuid).Distinct().ToArray() },
+            new { uuids = timings.Keys.ToArray() },
             cancellationToken
         );
-        return new(song, shows);
+        return new(
+            song,
+            shows.Select(show => new CatalogSongShow(show, timings[show.uuid])).ToArray()
+        );
     }
 
     /// <summary>Large file-match collections have their own snapshot and owning song metadata.</summary>

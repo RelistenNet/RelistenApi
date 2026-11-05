@@ -65,6 +65,90 @@ public sealed class CatalogSongMatchReader
                 )
             )
         ).ToArray();
+
+    /// <summary>
+    /// Aggregates file durations per show without transferring the full recording match list.
+    /// Shows remain members even when no file has a classifiable, positive duration.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<Guid, CatalogSongShowTimings>> ReadShowTimings(
+        CatalogReadSession session,
+        Guid artistUuid,
+        string canonicalId,
+        CancellationToken cancellationToken
+    )
+    {
+        // Matching ordinals already include this song's merged aliases. Any other
+        // resolved song part identifies a different song; repeated parts still count one file.
+        var rows = await session.Connection.QueryAsync<ShowTimingRow>(
+            session.Command(
+                """
+                WITH tracks AS (
+                    SELECT m.show_uuid,
+                           CASE WHEN parts.has_other_song THEN true
+                                WHEN parts.fully_resolved THEN false END is_multi_song,
+                           CASE WHEN t.duration>0 THEN t.duration END duration
+                    FROM norm.song_recording_matches(@artistUuid,@canonicalIds::text[]) m
+                    JOIN source_tracks t ON t.uuid=m.track_uuid
+                    CROSS JOIN LATERAL (
+                        SELECT bool_and(p.resolved) fully_resolved,
+                               bool_or(p.resolved AND p.song_id IS NOT NULL
+                                       AND NOT p.part=ANY(m.matching_part_ordinals)) has_other_song
+                        FROM norm.track_songs p WHERE p.track_uuid=m.track_uuid
+                    ) parts
+                )
+                SELECT show_uuid,is_multi_song,count(duration)::integer track_count,
+                       min(duration) min,max(duration) max,avg(duration)::double precision avg,
+                       percentile_cont(0.5) WITHIN GROUP (ORDER BY duration) median
+                FROM tracks GROUP BY show_uuid,is_multi_song
+                """,
+                new { artistUuid, canonicalIds = new[] { canonicalId } },
+                cancellationToken
+            )
+        );
+
+        var timings = new Dictionary<Guid, CatalogSongShowTimings>();
+        foreach (var row in rows)
+        {
+            if (!timings.TryGetValue(row.show_uuid, out var show))
+            {
+                show = new();
+                timings.Add(row.show_uuid, show);
+            }
+
+            if (row.track_count == 0 || row.is_multi_song is null)
+            {
+                continue;
+            }
+
+            var statistics = new CatalogTrackDurationStatistics(
+                row.track_count,
+                row.min,
+                row.max,
+                row.avg,
+                row.median
+            );
+            if (row.is_multi_song == false)
+            {
+                show.SingleSong = statistics;
+            }
+            else
+            {
+                show.MultiSong = statistics;
+            }
+        }
+        return timings;
+    }
+
+    private sealed class ShowTimingRow
+    {
+        public Guid show_uuid { get; set; }
+        public bool? is_multi_song { get; set; }
+        public int track_count { get; set; }
+        public int min { get; set; }
+        public int max { get; set; }
+        public double avg { get; set; }
+        public double median { get; set; }
+    }
 }
 
 public sealed record CatalogSongMatchCounts(

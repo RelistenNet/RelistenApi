@@ -420,7 +420,6 @@ public sealed partial class TestV4CatalogHttp
             {
                 (BrowseArtistPath + "/shows", (string?)null),
                 (BrowseArtistPath + "/years/by-number/1995", "shows"),
-                ("/api/v4/songs/song_00000003", "shows"),
                 ("/api/v4/venues/venue_00000001", "shows"),
                 (BrowseArtistPath + "/venues/venue_00000001", "shows"),
                 ("/api/v4/imported-venues/" + CatalogId("imported_venue", 74), "shows"),
@@ -437,6 +436,12 @@ public sealed partial class TestV4CatalogHttp
             var show = list.Single(item => item!["id"]!.GetValue<string>() == ShowId(4))!;
             JsonNode.DeepEquals(show["popularity"], expectedPopularity).Should().BeTrue(path);
         }
+
+        var song = await GetJson("/api/v4/songs/song_00000003");
+        var songShow = song["shows"]!
+            .AsArray()
+            .Single(entry => entry!["show"]!["id"]!.GetValue<string>() == ShowId(4))!["show"]!;
+        JsonNode.DeepEquals(songShow["popularity"], expectedPopularity).Should().BeTrue();
     }
 
     [Test]

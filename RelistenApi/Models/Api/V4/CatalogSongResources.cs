@@ -26,8 +26,35 @@ public record SongDetailResource
 [JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
 public sealed record SongWithShowsResource : SongDetailResource
 {
-    public IReadOnlyList<ShowSummaryResource> Shows { get; init; } = [];
+    public IReadOnlyList<SongShowResource> Shows { get; init; } = [];
 }
+
+/// <summary>A recording-backed show with the requested song's file-duration statistics.</summary>
+[JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
+public sealed record SongShowResource(ShowSummaryResource Show, SongShowTimingsResource Timings);
+
+/// <summary>
+/// Whole-file durations in seconds, not song-segment timings. Each matched file counts once.
+/// Null buckets have no positive, known durations. Single-song files have fully resolved
+/// parts identifying only this song (resolved non-song parts are ignored). Multi-song files
+/// contain this song and at least one other canonical song, even if other parts are unresolved.
+/// Files with only this song plus unresolved parts contribute to neither bucket.
+/// </summary>
+[JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
+public sealed record SongShowTimingsResource(
+    TrackDurationStatisticsResource? SingleSong,
+    TrackDurationStatisticsResource? MultiSong
+);
+
+/// <summary>Statistics across positive, known file durations; even medians average the middle pair.</summary>
+[JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
+public sealed record TrackDurationStatisticsResource(
+    int TrackCount,
+    int Min,
+    int Max,
+    double Avg,
+    double Median
+);
 
 /// <summary>
 /// A song and its complete playable files, each returned once. Matching normalization
