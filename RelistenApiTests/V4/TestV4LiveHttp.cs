@@ -4,6 +4,9 @@ using System.Text;
 using System.Text.Json.Nodes;
 using Dapper;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
+using Relisten;
+using Relisten.Data;
 
 namespace RelistenApiTests.V4;
 
@@ -118,7 +121,7 @@ public sealed partial class TestV4CatalogHttp
     }
 
     [Test]
-    public async Task Activity_polling_selects_and_pages_by_sequence_within_the_recent_window()
+    public async Task Activity_polling_uses_sequences_without_changing_legacy_timestamp_selection()
     {
         var clientUuid = Guid.NewGuid();
         await using var connection = await MigratedTestDatabase.OpenAsync();
@@ -142,6 +145,13 @@ public sealed partial class TestV4CatalogHttp
                 """,
                 new { clientUuid }
             );
+
+            var legacy = new SourceTrackPlaysService(app.Services.GetRequiredService<DbService>());
+            (await legacy.PlayedTracksSince(limit: 1)).Single().id.Should().Be(sequences[0]);
+            (await legacy.PlayedTracksSince(sequences[0], limit: 1))
+                .Single()
+                .id.Should()
+                .Be(sequences[2]);
 
             var initial = (await GetJson("/api/v4/live/history?limit=2")).AsArray();
             initial
