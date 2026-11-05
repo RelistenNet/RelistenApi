@@ -62,6 +62,7 @@ public sealed class CatalogSongReader(
     /// <summary>Metadata and complete recording-backed show membership share one snapshot.</summary>
     public async Task<CatalogSongWithShows?> ReadSong(
         string songId,
+        bool includeTracks = false,
         CancellationToken cancellationToken = default
     )
     {
@@ -84,9 +85,20 @@ public sealed class CatalogSongReader(
             new { uuids = statistics.Keys.ToArray() },
             cancellationToken
         );
+        var tracks = includeTracks
+            ? (
+                await matches.ReadShowTracks(session, song.artist_uuid, song.id, cancellationToken)
+            ).ToLookup(track => track.show_uuid)
+            : null;
         return new(
             song,
-            shows.Select(show => new CatalogSongShow(show, statistics[show.uuid])).ToArray()
+            shows
+                .Select(show => new CatalogSongShow(
+                    show,
+                    statistics[show.uuid],
+                    tracks?[show.uuid].ToArray()
+                ))
+                .ToArray()
         );
     }
 

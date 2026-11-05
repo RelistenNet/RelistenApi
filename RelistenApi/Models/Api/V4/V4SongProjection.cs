@@ -27,7 +27,16 @@ public static partial class V4CatalogProjection
                         entry.Statistics.SingleSong is { } single ? SourceStatistics(single) : null,
                         entry.Statistics.MultiSong is { } multi ? SourceStatistics(multi) : null
                     ),
-                    SourceStatistics(entry.Statistics.Occurrences)
+                    entry
+                        .Tracks?.Select(track => new SongShowTrackResource(
+                            new(track.uuid),
+                            new(track.source_uuid),
+                            new(track.show_uuid),
+                            track.title,
+                            track.slug,
+                            track.duration
+                        ))
+                        .ToArray()
                 ))
                 .ToArray(),
         };

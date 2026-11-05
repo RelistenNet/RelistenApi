@@ -46,7 +46,7 @@ shows. Canonical song counts/shows require exact recording matches; imported son
 counts/shows use setlist evidence and cannot identify a playable file. See
 [count maintenance](../normalization-counts.md) before changing these definitions.
 
-Canonical song detail's `shows` entries contain `{ show, timings, occurrences }`.
+Canonical song detail's `shows` entries contain `{ show, timings }`.
 Each timing bucket takes the longest positive, known matching file per source,
 then reports `source_count`, `min`, `max`, `avg` and `median` across those maxima.
 A short reprise therefore does not dilute a recording's timing sample. Durations
@@ -55,14 +55,17 @@ are whole-file seconds; they do not measure a song's segment within a medley.
 non-song parts are ignored. `multi_song` requires at least two known canonical songs.
 One-song files with unresolved parts contribute to neither timing bucket.
 
-`occurrences` reports the same statistics across the number of accepted matching
-parts per source, including repeated appearances within one file. Merged aliases
-count toward the same canonical song. These are normalized recording appearances,
-including reprises or split continuations, rather than a deduced performance count.
-Only sources with matched evidence contribute; missing matches do not imply zero.
-Occurrence counts do not depend on duration availability or timing classification.
 Average and median values are rounded to two decimals. An empty timing bucket is
 null; missing durations or incomplete interpretations never remove a matched show.
+
+Add `?include_tracks=true` to include a `tracks` array in each song-show entry.
+Each matching file appears once with only `id`, `source_id`, `show_id`, `title`,
+`slug` and `duration`, including files without usable timing samples. The key is
+omitted by default and with `include_tracks=false`; omission does not clear any
+files already stored by a client. This is the song's matching-file list, not the
+show's complete recording hierarchy. Use the song's `/tracks` route for full
+playable track resources, including normalization and playback URLs.
+
 Imported song details still return plain show summaries because setlists cannot
 identify the file to time.
 

@@ -17,7 +17,105 @@ public sealed partial class TestV4CatalogHttp
         "/api/v4/imported-songs/" + CatalogId("imported_song", songSuffix);
 
     [Test]
-    public async Task Song_show_statistics_use_source_maxima_and_preserve_repeat_counts_without_durations()
+    public async Task Song_show_tracks_are_opt_in_slim_file_matches_with_independent_validators()
+    {
+        using var response = await http.GetAsync(DiscoverySongPath);
+        var ordinary = JsonNode.Parse(await response.Content.ReadAsStringAsync())!;
+        foreach (var entry in ordinary["shows"]!.AsArray())
+        {
+            entry!.AsObject().ContainsKey("tracks").Should().BeFalse();
+            entry.AsObject().ContainsKey("occurrences").Should().BeFalse();
+        }
+        JsonNode
+            .DeepEquals(ordinary, await GetJson(DiscoverySongPath + "?include_tracks=false"))
+            .Should()
+            .BeTrue();
+
+        var includedPath = DiscoverySongPath + "?include_tracks=true";
+        using var includedResponse = await http.GetAsync(includedPath);
+        var included = JsonNode.Parse(await includedResponse.Content.ReadAsStringAsync())!;
+        var slimSample = included["shows"]![0]!["tracks"]![0]!;
+        var fullTracks = (await GetJson(DiscoverySongPath + "/tracks"))["tracks"]!
+            .AsArray()
+            .ToDictionary(track => track!["id"]!.GetValue<string>());
+        var includedIds = new List<string>();
+        foreach (var entry in included["shows"]!.AsArray())
+        {
+            foreach (var track in entry!["tracks"]!.AsArray())
+            {
+                var fields = new[] { "id", "source_id", "show_id", "title", "slug", "duration" };
+                track!.AsObject().Select(field => field.Key).Should().BeEquivalentTo(fields);
+                var id = track["id"]!.GetValue<string>();
+                includedIds.Add(id);
+                foreach (var field in fields)
+                {
+                    JsonNode
+                        .DeepEquals(track[field], fullTracks[id]![field])
+                        .Should()
+                        .BeTrue(field);
+                }
+                track["show_id"]!
+                    .GetValue<string>()
+                    .Should()
+                    .Be(entry["show"]!["id"]!.GetValue<string>());
+            }
+            entry!.AsObject().Remove("tracks");
+        }
+        includedIds.Should().BeEquivalentTo(fullTracks.Keys).And.OnlyHaveUniqueItems();
+        JsonNode.DeepEquals(ordinary, included).Should().BeTrue();
+
+        var document = await GetJson("/api-docs/v4/swagger.json");
+        var schema = document["components"]!["schemas"]!;
+        schema["SongShowResource"]!["required"]!
+            .AsArray()
+            .Select(field => field!.GetValue<string>())
+            .Should()
+            .BeEquivalentTo(ordinary["shows"]![0]!.AsObject().Select(field => field.Key));
+        schema["SongShowResource"]!["properties"]!["tracks"]!["type"]!
+            .GetValue<string>()
+            .Should()
+            .Be("array");
+        schema["SongShowResource"]!["properties"]!["tracks"]!
+            ["nullable"]
+            ?.GetValue<bool>()
+            .Should()
+            .NotBe(true);
+        AssertSchemaFields(document, "SongShowTrackResource", slimSample);
+
+        await using var connection = await MigratedTestDatabase.OpenAsync();
+        var originalTitle = fullTracks[CatalogId("track", 341)]!["title"]!.GetValue<string>();
+        try
+        {
+            await connection.ExecuteAsync(
+                "UPDATE source_tracks SET title='Corrected file title' WHERE id=925041"
+            );
+            using var unchanged = await Conditional(
+                DiscoverySongPath,
+                response.Headers.ETag!.ToString()
+            );
+            unchanged.StatusCode.Should().Be(HttpStatusCode.NotModified);
+            using var changed = await Conditional(
+                includedPath,
+                includedResponse.Headers.ETag!.ToString()
+            );
+            changed.StatusCode.Should().Be(HttpStatusCode.OK);
+            var current = JsonNode.Parse(await changed.Content.ReadAsStringAsync())!;
+            current["shows"]![0]!["tracks"]![0]!["title"]!
+                .GetValue<string>()
+                .Should()
+                .Be("Corrected file title");
+        }
+        finally
+        {
+            await connection.ExecuteAsync(
+                "UPDATE source_tracks SET title=@originalTitle WHERE id=925041",
+                new { originalTitle }
+            );
+        }
+    }
+
+    [Test]
+    public async Task Song_show_timings_use_source_maxima_and_keep_shows_without_durations()
     {
         await using var connection = await MigratedTestDatabase.OpenAsync();
         try
@@ -70,7 +168,6 @@ public sealed partial class TestV4CatalogHttp
                 {
                     (first["timings"]!["single_song"]!, 3, 100, 400, 200.33d, 101d),
                     (first["timings"]!["multi_song"]!, 2, 900, 1001, 950.5d, 950.5d),
-                    (first["occurrences"]!, 3, 1, 8, 4d, 3d),
                 }
             )
             {
@@ -83,10 +180,7 @@ public sealed partial class TestV4CatalogHttp
             // The second show has a positive duration, but an unresolved ending.
             shows[1]!["timings"]!["single_song"].Should().BeNull();
             shows[1]!["timings"]!["multi_song"].Should().BeNull();
-            shows[1]!["occurrences"]!["source_count"]!.GetValue<int>().Should().Be(1);
-            shows[1]!["occurrences"]!["min"]!.GetValue<int>().Should().Be(1);
             var schema = await GetJson("/api-docs/v4/swagger.json");
-            AssertSchemaFields(schema, "SongShowResource", first);
             AssertSchemaFields(schema, "SongShowTimingsResource", first["timings"]!);
             AssertSchemaFields(
                 schema,
@@ -117,30 +211,12 @@ public sealed partial class TestV4CatalogHttp
                 .Should()
                 .Be(2);
 
-            // Another appearance changes only occurrence statistics, not file membership or maxima.
-            await ChangeNormalization(
-                connection,
-                "UPDATE norm.track_songs SET song_id='song_00000101',resolved=true,basis='ruling' WHERE track_uuid='00000000-0000-0000-0000-000000000341' AND part=4"
-            );
-            using var repeated = await Conditional(
-                DiscoverySongPath,
-                reclassified.Headers.ETag!.ToString()
-            );
-            repeated.StatusCode.Should().Be(HttpStatusCode.OK);
-            var counted = JsonNode.Parse(await repeated.Content.ReadAsStringAsync())!;
-            JsonNode
-                .DeepEquals(counted["shows"]![0]!["timings"], shifted["shows"]![0]!["timings"])
-                .Should()
-                .BeTrue();
-            counted["shows"]![0]!["occurrences"]!["max"]!.GetValue<int>().Should().Be(9);
-            counted["shows"]![0]!["occurrences"]!["avg"]!.GetValue<double>().Should().Be(4.33);
-
             await connection.ExecuteAsync(
                 "UPDATE source_tracks SET duration=NULL WHERE source_id IN(925021,925022,926020)"
             );
             using var changed = await Conditional(
                 DiscoverySongPath,
-                repeated.Headers.ETag!.ToString()
+                reclassified.Headers.ETag!.ToString()
             );
             changed.StatusCode.Should().Be(HttpStatusCode.OK);
             var unknown = JsonNode.Parse(await changed.Content.ReadAsStringAsync())!;
@@ -151,13 +227,6 @@ public sealed partial class TestV4CatalogHttp
             unknown["shows"]!.AsArray().Should().HaveCount(2);
             unknown["shows"]![0]!["timings"]!["single_song"].Should().BeNull();
             unknown["shows"]![0]!["timings"]!["multi_song"].Should().BeNull();
-            JsonNode
-                .DeepEquals(
-                    unknown["shows"]![0]!["occurrences"],
-                    counted["shows"]![0]!["occurrences"]
-                )
-                .Should()
-                .BeTrue();
         }
         finally
         {
@@ -353,6 +422,7 @@ public sealed partial class TestV4CatalogHttp
     [TestCase("/api/v4/songs/song_zzzzzzzz", HttpStatusCode.NotFound)]
     [TestCase("/api/v4/songs/venue_00000101", HttpStatusCode.UnprocessableEntity)]
     [TestCase("/api/v4/songs/song_bad/tracks", HttpStatusCode.UnprocessableEntity)]
+    [TestCase("/api/v4/songs/song_00000101?include_tracks=bad", HttpStatusCode.UnprocessableEntity)]
     public async Task Song_routes_distinguish_unavailable_unknown_and_invalid_targets(
         string path,
         HttpStatusCode expected

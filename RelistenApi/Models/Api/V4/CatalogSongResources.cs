@@ -34,7 +34,19 @@ public sealed record SongWithShowsResource : SongDetailResource
 public sealed record SongShowResource(
     ShowSummaryResource Show,
     SongShowTimingsResource Timings,
-    SourceStatisticsResource Occurrences
+    [property: JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        IReadOnlyList<SongShowTrackResource>? Tracks
+);
+
+/// <summary>A matching file, included in its show entry only with include_tracks=true.</summary>
+[JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
+public sealed record SongShowTrackResource(
+    TrackId Id,
+    SourceId SourceId,
+    ShowId ShowId,
+    string Title,
+    string Slug,
+    int? Duration
 );
 
 /// <summary>
@@ -53,9 +65,8 @@ public sealed record SongShowTimingsResource(
 
 /// <summary>
 /// Statistics across contributing sources. Avg and median are rounded to two decimals;
-/// even medians average the middle pair. The containing field defines the unit:
-/// timings use seconds, while occurrences count matched normalization parts per source,
-/// including reprises and split continuations, regardless of duration availability.
+/// even medians average the middle pair. Values summarize each source's longest
+/// positive matching file duration in seconds within the containing timing bucket.
 /// </summary>
 [JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
 public sealed record SourceStatisticsResource(
