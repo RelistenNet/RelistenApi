@@ -58,10 +58,15 @@ with `deploy` defaulting to **true**. Merging alone does not trigger deployment.
 
 ## Merge and rollout
 
-Merge **#109 → #108 → #111 → #112 → #113 → #114 → #115 → #117**. Prefer merge
-commits while consuming the stack. After each merge, retarget the next PR to master
-before merging it or deleting its parent branch. Squashing/rebasing parents requires
-restacking descendants. #116 is obsolete and remains closed.
+This is native GitHub stack **#119**, in order
+**#109 → #108 → #111 → #112 → #113 → #114 → #115 → #117**. All eight have the
+correct parent branches and share current master ancestry. Use the stack merge
+box on top PR #117 to merge all eight after reviews/checks pass. GitHub supports
+merge, squash or rebase for the whole stack and preserves the per-PR ordering.
+Alternatively merge a bottom-up subset; GitHub automatically rebases/retargets
+what remains. Do not manually edit the base branches: GitHub owns those links
+while the PRs belong to a native stack. #116 is obsolete and remains outside it.
+See [GitHub's stack merge instructions](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/merging-stacked-pull-requests).
 
 The complete stack can merge while its components deploy separately:
 
