@@ -89,7 +89,7 @@ public static class V4CatalogRegistration
         options.MapType<Relisten.Normalization.ArtistVenueId>(() =>
             ShortId(PublicIdPrefixes.ArtistVenue)
         );
-        options.SchemaFilter<NullableCatalogSchemaFilter>();
+        options.SchemaFilter<CatalogResourceSchemaFilter>();
         options.ParameterFilter<CatalogQueryParameterSchema>();
         options.SchemaFilter<CatalogResolveRequestSchema>();
         options.OperationFilter<CatalogResolveRequestSchema>();

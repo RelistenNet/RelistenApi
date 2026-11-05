@@ -1034,6 +1034,11 @@ public sealed partial class TestV4CatalogHttp
             .Select(field => field.Key)
             .Should()
             .BeEquivalentTo(response.AsObject().Select(field => field.Key));
+        document["components"]!["schemas"]![schema]!["required"]!
+            .AsArray()
+            .Select(field => field!.GetValue<string>())
+            .Should()
+            .BeEquivalentTo(response.AsObject().Select(field => field.Key));
     }
 
     [Test]
