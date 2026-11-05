@@ -402,54 +402,46 @@ fallback while this is resolved.
    catalog backup/restore, replica/ingress configuration and current capacity.
    Install reservation triggers/backfill atomically while canonical writes are
    briefly locked; no row may escape the baseline. Keep v2/v3 available and v4
-   mobile activation off. Pin known-good server/core rollback builds against the
-   additive schema. Bounded production read-only smoke checks start no imports.
+   mobile activation off. Fix forward against the installed schema while preserving
+   stable IDs and accepted writes. Bounded production read-only smoke checks
+   start no imports.
 5. **C5, complete mobile and controlled activation.** Finish normalized storage,
    browse screens and global venue favorites. Qualify current schema-17, direct schema-15
-   upgrades and staged C2→C5 upgrades. Deploy the schema-compatible mobile build
-   with catalog v4 disabled; confirm v3 playback first, then enable v4 for developer
-   testing. Review raw/approved/partial and global favorite journeys, and record
+   upgrades and staged C2→C5 upgrades. Deploy the compatible mobile build to
+   developers and confirm imported playback remains usable within v4. Review
+   raw/approved/partial and global favorite journeys, and record
    offline/correction/load evidence. Expand only after Alec's review, full route
    coverage and the agreed capacity budgets pass.
 
 C2 is a separate account/auth release event from C4/C5 catalog deployment and
 activation. C1/C3 are local/developer review checkpoints, not partial public v4
 releases. Server catalog work can progress independently of the account migration.
-Use existing controls for account admission, artist approval and mobile catalog
-transport; do not add per-endpoint/model flags or a release orchestration service.
+Use existing controls for account admission, artist approval and developer
+distribution; do not add per-endpoint/model flags or a release orchestration service.
 
-## Rollback and restart rules
+## Fix-forward and restart rules
 
-- V4 projection/transport issue: disable v4 transport/overlays in the schema-compatible mobile
-  build and use v2/v3. Preserve new tables/fields and imported UUID keys/files.
-  An old binary/OTA that cannot open the new Realm schema is not a safe rollback.
-- Shared catalog reader/command regression: mobile fallback alone is insufficient
-  because both wire versions use the same core. Disable affected admissions and
-  roll the API back to a pinned known-good core/pre-refactor build verified against
-  the additive catalog schema/reservations. Keep v4 clients disabled until the
-  forward fix. Test that rollback compatibility before release; preserve catalog
-  rows and identity reservations. A command bug also requires stopping affected
-  command admission while its accepted jobs/data effects are assessed.
-- V4-only server result/serializer regression: disable v4 admission or roll that
-  build back; legacy projections remain an available fallback only if core reads
-  pass their compatibility probes.
-- Account/auth issue: stop the affected account/auth admission and use a
-  schema-compatible build or forward fix. Converted user/session PKs make the
-  pre-migration account binary incompatible, not only its library routes. Do not
-  downcast keys/targets or discard user/favorite data. A pre-migration binary
-  requires restoring the coordinated account backup before new-format writes
-  are accepted; after writes exist, preserve them and forward-fix instead.
-- Interrupted account migration: keep admission closed; resume its transaction/
-  verified map or restore the coordinated backup before reopening auth/account
-  writes. Verify actual deployed migration mode and startup behavior.
+- Catalog/API or mobile defect: preserve installed schemas, IDs, offline files,
+  query memberships and accepted writes, then deploy a correction. Mobile keeps
+  its one-way v4 catalog; do not switch a populated install back to v3.
+- A write-path defect can require pausing affected admission while its accepted
+  jobs and data effects are assessed. Keep unrelated legacy reads available.
+- Account/auth issue: pause affected admission and fix forward against typed
+  storage. Pre-migration binaries cannot read converted keys; do not downcast
+  IDs/targets or discard users and favorites.
+- No separate recovery image is required. Retain backups for data loss or
+  corruption, rather than using a restore as routine software-bug recovery.
+- Interrupted account migration: keep admission closed, inspect committed migration
+  history and transaction state, then correct and retry the migration. Verify the
+  resulting schema and stored data before reopening auth/account writes.
 - Interrupted mobile bootstrap/apply: transaction rollback leaves old applied
   state; rerun from new snapshot. A one-time version marker and account fence prevent
   repeated account resets and cross-account data application. Test interruption
   between SecureStore clearing and Realm commit: auth stays fenced until complete,
   and a later retry cannot clear newly issued credentials.
 
-Keep migration `Down` guarded against destructive identity/target loss; prefer
-forward repair after typed-account traffic exists. Repeat read/apply operations safely;
+Keep migration `Down` guarded against destructive identity/target loss; use
+forward repair while preserving typed-account data. Repeat read/apply operations safely;
 retry mutations only with their original typed mutation ID and canonical payload.
 
 ## Evidence to attach to the implementation handoff
@@ -457,7 +449,7 @@ retry mutations only with their original typed mutation ID and canonical payload
 Record passing route/OpenAPI/HTTP reports, executed integration counts, migration
 before/after invariants, shared codec fixture hashes, mobile schema-upgrade and
 offline journey results, representative query/load measurements, and exact
-rollout/rollback switches and versions. Passing source-level documentation checks
+deployed versions and any temporary admission controls. Passing source-level documentation checks
 is not evidence that these runtime release gates have passed.
 
 

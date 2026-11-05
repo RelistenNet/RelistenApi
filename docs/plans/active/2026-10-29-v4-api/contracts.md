@@ -1185,7 +1185,7 @@ catalog snapshot.
 
 The mobile catalog cutover is one-way. A pre-cutover build can use v3; after an
 install adopts v4, do not support switching its populated store back to v3.
-Keep recovery builds compatible with the v4 store. Imported-only artists and
+Fixes must remain compatible with the populated v4 store. Imported-only artists and
 partial normalization remain supported within v4. Existing v2/v3 server routes
 continue to serve older releases.
 

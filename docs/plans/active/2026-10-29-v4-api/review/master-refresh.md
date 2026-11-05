@@ -70,12 +70,11 @@ See [GitHub's stack merge instructions](https://docs.github.com/en/pull-requests
 
 The complete stack can merge while its components deploy separately:
 
-1. Publish images with `deploy=false`; retain immutable digests. Prepare a recovery
-   image that recognizes migrations 15-18 and keeps count-maintaining writers.
-   Today's version-14 binary cannot restart on version 18: Production startup
-   rejects migration definitions it does not know. Keep the current digest for
-   provenance, but do not promise that `rollout undo` alone can recover after DDL.
-   Do not use the root `deploy` shortcut for a build-only operation.
+1. Publish images with `deploy=false`; retain immutable digests for provenance.
+   Fix forward after deployment; no separate recovery image is required. Today's
+   version-14 binary cannot restart on version 18, so a correction must retain
+   the installed schema and current contracts. Do not use the root `deploy`
+   shortcut for a build-only operation.
 2. Verify backup/recovery. Pause imports, normalization writes and admin edits
    during catalog migration. Run the new ingestion-worker image once with
    `--migrate`, using its production database configuration, before rolling API
@@ -136,13 +135,13 @@ ANALYZE public.show_popularity;
 ANALYZE public.year_popularity;
 ```
 
-Catalog rollback keeps the additive schema, stable IDs/counts and Redis. Use a
-prepared schema-18-aware recovery image or a forward fix; today's pre-stack API
-cannot restart on the new schema. Once mobile uses v4, its fallback must also
-serve v4. Do not drop derived tables. Account rollback after conversion needs a forward
-fix or coordinated restore; the old binary alone cannot read typed storage, and
-restoring an old backup can discard accepted writes. Normalization read flags can
-be disabled independently while imported playback remains available.
+Fix forward for catalog and account issues. Preserve the additive schema,
+stable IDs/counts, Redis data and accepted writes. Pause affected writes when
+correctness is at risk, then deploy the correction against the installed schema.
+Do not prepare a recovery image, revert to pre-migration binaries, or downcast
+account IDs. Backups remain protection against data loss, not the routine response
+to an application bug. Normalization read flags can be disabled independently
+while imported playback remains available within v4.
 
 No PR was merged, image published or production schema, data, flag, registration or
 deployment changed by this review. Verification results belong to the refreshed PRs;

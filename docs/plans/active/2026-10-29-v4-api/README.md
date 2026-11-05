@@ -398,7 +398,8 @@ artist, without adding all matching shows to the library.
 
 Follow [verification](verification.md): HTTP/coverage and compatibility evidence,
 migration invariants, mobile/device/offline journeys, measured primary/legacy
-performance and pinned rollback builds. Deploy server contracts before catalog
+performance and fix-forward procedures that preserve installed schemas and accepted
+writes. Deploy server contracts before catalog
 activation. The account/auth cutover is a separate event from catalog activation.
 
 The mobile catalog cutover is one-way. V3 can serve the pre-cutover app, but a

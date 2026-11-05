@@ -95,12 +95,11 @@ backfill Postgres. No v4 body cache or invalidation system is involved.
 3. Deploy v4. Stale or missing required populations refresh on demand. Monitor
    queue failures and the affected rows' `generated_at` when diagnosing age.
 
-A recovery image must recognize the installed migration versions; the pre-stack
-production binary cannot restart after later catalog migrations. Keep the additive
-tables and Redis data, and use a schema-compatible recovery build or forward fix.
-See the [current rollout review](../plans/active/2026-10-29-v4-api/review/master-refresh.md).
-Repair by
-correcting and rerunning a calculation, without truncating last successful data.
+Fix forward while preserving the additive tables, stable identities and Redis
+data. Pre-stack binaries cannot restart after later catalog migrations; no separate
+recovery build is required. Repair a calculation by correcting and rerunning it,
+without truncating last successful data. See the
+[current rollout review](../plans/active/2026-10-29-v4-api/review/master-refresh.md).
 The schema is still unshipped in this PR; local preview schema changes are applied
 explicitly. No production schema or schedules changed during development.
 
