@@ -1,3 +1,5 @@
+using Relisten.Accounts.Contracts.Identifiers;
+
 namespace Relisten.Accounts.Contracts.Library;
 
 public sealed record FavoriteMutationBatchRequest(
@@ -6,11 +8,10 @@ public sealed record FavoriteMutationBatchRequest(
 );
 
 public sealed record FavoriteMutationRequestItem(
-    Guid MutationUuid,
-    string? CatalogType,
-    Guid CatalogUuid,
+    MutationId MutationId,
+    FavoriteTarget? Target,
     string? DesiredState,
-    Guid? FavoriteUuid
+    FavoriteId? FavoriteId
 );
 
 public sealed record FavoriteMutationBatchResponse(
@@ -20,12 +21,11 @@ public sealed record FavoriteMutationBatchResponse(
 );
 
 public sealed record FavoriteMutationResult(
-    Guid MutationUuid,
-    string CatalogType,
-    Guid CatalogUuid,
+    MutationId MutationId,
+    FavoriteTarget Target,
     string DesiredState,
     bool Changed,
-    Guid? SubmittedFavoriteUuid,
-    Guid? CanonicalFavoriteUuid,
+    FavoriteId? SubmittedFavoriteId,
+    FavoriteId? CanonicalFavoriteId,
     long LibraryRevision
 );

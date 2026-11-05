@@ -12,12 +12,16 @@ public sealed class NativeSessionConfiguration : IEntityTypeConfiguration<Native
         builder.ToTable(
             "native_sessions",
             "identity",
-            table => table.HasCheckConstraint("ck_native_sessions_id_uuid_v7", UuidV7Constraint.Sql)
+            table =>
+                table.HasCheckConstraint(
+                    "ck_native_sessions_id_typed_id",
+                    AccountIdConstraint.Sql("session")
+                )
         );
         builder.HasKey(session => session.Id);
         builder
             .Property(session => session.Id)
-            .HasValueGenerator<UuidV7ValueGenerator>()
+            .HasValueGenerator<AccountIdValueGenerator<SessionId>>()
             .ValueGeneratedOnAdd();
         builder.Property(session => session.ClientId).HasMaxLength(100);
         builder.Property(session => session.DeviceName).HasMaxLength(120);

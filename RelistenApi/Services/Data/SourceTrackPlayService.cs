@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
 using Relisten.Api.Models;
@@ -13,54 +15,94 @@ namespace Relisten.Data
         public SourceTrackPlaysService(DbService db)
             : base(db) { }
 
+        private const string InsertPlay = """
+            INSERT INTO source_track_plays (source_track_uuid,user_uuid,app_type)
+            SELECT @source_track_uuid,@user_uuid,@app_type
+            """;
+
+        private const string PlayableTracks = """
+            SELECT t.uuid FROM source_tracks t
+            JOIN sources src ON src.id=t.source_id
+            JOIN source_sets sets ON sets.id=t.source_set_id AND sets.source_id=src.id
+            JOIN shows sh ON sh.id=src.show_id JOIN artists a ON a.id=src.artist_id
+            WHERE NOT t.is_orphaned
+            """;
+
         public async Task<SourceTrackPlay> RecordPlayedTrack(SourceTrackPlay track)
         {
             return await db.WithWriteConnection(con =>
-                con.QuerySingleAsync<SourceTrackPlay>(
-                    @"
-				INSERT INTO
-					source_track_plays
+                con.QuerySingleAsync<SourceTrackPlay>(InsertPlay + " RETURNING *", track)
+            );
+        }
 
-					(
-						source_track_uuid,
-						user_uuid,
-						app_type
-					)
-				VALUES
-					(
-						@source_track_uuid,
-						@user_uuid,
-						@app_type
-					)
-
-				RETURNING *
-			",
-                    track
+        /// <summary>
+        /// Records v4 telemetry only for a playable catalog track. Validation and
+        /// insertion share one statement; a missing/orphaned track writes nothing.
+        /// The client UUID is anonymous telemetry, never an account identity.
+        /// </summary>
+        public async Task<SourceTrackPlay?> RecordPlayableTrack(
+            SourceTrackPlay track,
+            CancellationToken cancellationToken
+        )
+        {
+            await using var con = db.CreateConnection(longTimeout: false, readOnly: false);
+            await con.OpenAsync(cancellationToken);
+            // Keep the UUID predicate inside EXISTS so validation uses the track
+            // index instead of building a catalog-wide membership set.
+            return await con.QuerySingleOrDefaultAsync<SourceTrackPlay>(
+                new CommandDefinition(
+                    InsertPlay
+                        + " WHERE EXISTS ("
+                        + PlayableTracks
+                        + " AND t.uuid=@source_track_uuid) RETURNING *",
+                    track,
+                    commandTimeout: 30,
+                    cancellationToken: cancellationToken
                 )
             );
         }
 
+        /// <summary>
+        /// Selects a recent window, then returns it in ascending sequence order.
+        /// V4 filters public eligibility before LIMIT so removed tracks cannot block polling;
+        /// artistUuids optionally restricts that public window to any selected artist.
+        /// Legacy selection remains timestamp-based; v4 selects by its sequence cursor.
+        /// </summary>
         public async Task<IEnumerable<SourceTrackPlay>> PlayedTracksSince(
             int? lastSeenId = null,
-            int limit = 2000
+            int limit = 2000,
+            bool publicActivityOnly = false,
+            Guid[]? artistUuids = null,
+            CancellationToken cancellationToken = default
         )
         {
-            var tracks = await db.WithConnection(con =>
-                con.QueryAsync<SourceTrackPlay>(
-                    $@"
-				SELECT
-					t.*
-				FROM
-					source_track_plays t
-				WHERE
-					t.created_at > now() - interval '1 hour'
-					{(lastSeenId != null ? "AND t.id > @lastSeenId" : "")}
-				ORDER BY
-					t.created_at {(lastSeenId != null ? "" : "DESC")}, t.id {(lastSeenId != null ? "" : "DESC")}
-				LIMIT
-					@limit
-			",
-                    new { lastSeenId, limit }
+            await using var con = db.CreateConnection(longTimeout: false, readOnly: true);
+            await con.OpenAsync(cancellationToken);
+            var eligibility = publicActivityOnly
+                ? $"AND EXISTS ({PlayableTracks} AND t.uuid=p.source_track_uuid AND (@artistUuids::uuid[] IS NULL OR a.uuid=ANY(@artistUuids))) AND p.app_type IN (1,2,3,4)"
+                : "";
+            var direction = lastSeenId != null ? "" : "DESC";
+            var ordering = publicActivityOnly
+                ? $"p.id {direction}"
+                : $"p.created_at {direction}, p.id {direction}";
+            var tracks = await con.QueryAsync<SourceTrackPlay>(
+                new CommandDefinition(
+                    $"""
+                    SELECT p.* FROM source_track_plays p
+                    WHERE p.created_at > now() - interval '1 hour'
+                      {(lastSeenId != null ? "AND p.id > @lastSeenId" : "")}
+                      {eligibility}
+                    ORDER BY {ordering}
+                    LIMIT @limit
+                    """,
+                    new
+                    {
+                        lastSeenId,
+                        limit,
+                        artistUuids,
+                    },
+                    commandTimeout: 30,
+                    cancellationToken: cancellationToken
                 )
             );
 
@@ -75,6 +117,22 @@ namespace Relisten.Data
         /// </summary>
         public async Task<LiveWindowPlays> PlaysInLiveWindow(LiveWindow window)
         {
+            return await db.WithConnection(con => PlaysInLiveWindow(window, con));
+        }
+
+        /// <summary>
+        /// Uses the caller's snapshot for native catalog aggregation and hydration.
+        /// Public activity excludes unplayable recordings and unsupported app types
+        /// before every aggregate; legacy callers retain their original population.
+        /// </summary>
+        public async Task<LiveWindowPlays> PlaysInLiveWindow(
+            LiveWindow window,
+            IDbConnection connection,
+            IDbTransaction? transaction = null,
+            bool publicActivityOnly = false,
+            CancellationToken cancellationToken = default
+        )
+        {
             var parameters = new
             {
                 windowStart = window.Start,
@@ -83,36 +141,41 @@ namespace Relisten.Data
                 dailyLagStart = window.Start.AddDays(-DailyAggregateMaxLagDays),
                 fallbackTrackSeconds = FallbackTrackSeconds,
                 baselineWeeks = LiveSummaryRanking.ArtistBaselineWeeks,
-                // The outer edges of every prior same-hour-of-week window. The start is an
-                // hour earlier so the hourly bucket overlapping the oldest window's start
-                // is included. These constant bounds let the planner exclude chunks.
+                // Include the hourly bucket overlapping the oldest prior window.
+                // Constant outer bounds let Timescale prune unrelated chunks.
                 artistBaselineStart = window
                     .Start.AddDays(-7 * LiveSummaryRanking.ArtistBaselineWeeks)
                     .AddHours(-1),
                 artistBaselineEnd = window.End.AddDays(-7),
             };
-
-            return await db.WithConnection(async con =>
+            var eligibility = publicActivityOnly
+                ? " AND p.app_type IN (1,2,3,4) AND EXISTS ("
+                    + PlayableTracks
+                    + " AND t.uuid=p.source_track_uuid)"
+                : "";
+            var windowSql = LiveWindowPlaysCte + eligibility + ")";
+            var sql = string.Join(
+                ";\n",
+                new[] { LiveAppTypesSql, LiveTimelineSql, LiveShowsSql, LiveArtistsSql }.Select(
+                    query => windowSql + query
+                )
+            );
+            using var results = await connection.QueryMultipleAsync(
+                new CommandDefinition(
+                    sql,
+                    parameters,
+                    transaction,
+                    commandTimeout: 30,
+                    cancellationToken: cancellationToken
+                )
+            );
+            return new LiveWindowPlays
             {
-                using var results = await con.QueryMultipleAsync(
-                    string.Join(
-                        ";\n",
-                        LiveAppTypesSql,
-                        LiveTimelineSql,
-                        LiveShowsSql,
-                        LiveArtistsSql
-                    ),
-                    parameters
-                );
-
-                return new LiveWindowPlays
-                {
-                    AppTypes = (await results.ReadAsync<LiveAppTypeRow>()).ToList(),
-                    Timeline = (await results.ReadAsync<LiveTimelineRow>()).ToList(),
-                    Shows = (await results.ReadAsync<LiveShowRow>()).ToList(),
-                    Artists = (await results.ReadAsync<LiveArtistRow>()).ToList(),
-                };
-            });
+                AppTypes = (await results.ReadAsync<LiveAppTypeRow>()).ToArray(),
+                Timeline = (await results.ReadAsync<LiveTimelineRow>()).ToArray(),
+                Shows = (await results.ReadAsync<LiveShowRow>()).ToArray(),
+                Artists = (await results.ReadAsync<LiveArtistRow>()).ToArray(),
+            };
         }
 
         /// <summary>
@@ -164,19 +227,17 @@ namespace Relisten.Data
                 WHERE
                     p.created_at >= @windowStart
                     AND p.created_at < @windowEnd
-            )";
+            ";
 
         private const string LiveAppTypesSql =
-            LiveWindowPlaysCte
-            + @"
+            @"
             SELECT app_type, count(*) AS plays
             FROM window_plays
             GROUP BY app_type
             ORDER BY plays DESC, app_type";
 
         private const string LiveTimelineSql =
-            LiveWindowPlaysCte
-            + @",
+            @",
             minute_counts AS (
                 SELECT bucket_start, count(*) AS plays
                 FROM window_plays
@@ -193,8 +254,7 @@ namespace Relisten.Data
             ORDER BY b.bucket_start";
 
         private const string LiveShowsSql =
-            LiveWindowPlaysCte
-            + @",
+            @",
             show_totals AS (
                 SELECT
                     show_id,
@@ -320,8 +380,7 @@ namespace Relisten.Data
                 LEFT JOIN show_baselines b ON b.show_uuid = st.show_uuid";
 
         private const string LiveArtistsSql =
-            LiveWindowPlaysCte
-            + @",
+            @",
             artist_totals AS (
                 SELECT
                     artist_id,

@@ -3,7 +3,7 @@ namespace RelistenUserService.Identity.Entities;
 public sealed class ExternalIdentity
 {
     public Guid Id { get; set; }
-    public Guid UserId { get; set; }
+    public UserId UserId { get; set; }
     public string Issuer { get; set; } = "";
     public string ProviderSubject { get; set; } = "";
     public string? EmailAtProvider { get; set; }

@@ -15,15 +15,15 @@ public sealed class TestFavoriteLibraryIntegration
     private readonly PostgresIntegrationDatabase _database = new();
     private IDataProtectionProvider _dataProtection = null!;
     private DirectoryInfo _dataProtectionDirectory = null!;
-    private Guid _userA;
-    private Guid _userB;
-    private Guid _catalogUuid;
+    private UserId _userA;
+    private UserId _userB;
+    private string _catalogId = "";
 
     [OneTimeSetUp]
     public async Task SetUp()
     {
         await _database.StartAsync();
-        _catalogUuid = Guid.NewGuid();
+        _catalogId = global::Relisten.Identifiers.UuidTypeId.Format("artist", Guid.NewGuid());
         _dataProtectionDirectory = new(
             Path.Combine(Path.GetTempPath(), $"relisten-cursors-{Guid.NewGuid():N}")
         );
@@ -48,16 +48,16 @@ public sealed class TestFavoriteLibraryIntegration
     }
 
     [Test]
-    public async Task Missing_catalog_uuid_can_be_favorited_and_unfavorited_through_sync()
+    public async Task Missing_catalog_id_can_be_favorited_and_unfavorited_through_sync()
     {
-        var missingCatalogUuid = Guid.NewGuid();
+        var missingCatalogId = Relisten.Identifiers.UuidTypeId.Format("artist", Guid.NewGuid());
         var cursorProtector = new LibraryCursorProtector(_dataProtection);
         var before = await SnapshotAsync(_userA, cursorProtector);
-        var add = Add(missingCatalogUuid);
+        var add = Add(missingCatalogId);
 
         var addExecution = await ExecuteAsync(_userA, [add]);
         var addedSnapshot = await SnapshotAsync(_userA, cursorProtector);
-        var removeExecution = await ExecuteAsync(_userA, [Remove(missingCatalogUuid)]);
+        var removeExecution = await ExecuteAsync(_userA, [Remove(missingCatalogId)]);
         var currentSnapshot = await SnapshotAsync(_userA, cursorProtector);
         var changes = await ChangesAsync(_userA, before.NextCursor, cursorProtector);
 
@@ -67,16 +67,15 @@ public sealed class TestFavoriteLibraryIntegration
             .Which.Should()
             .Match<FavoriteMutationResult>(result =>
                 result.Changed
-                && result.CanonicalFavoriteUuid == add.FavoriteUuid
-                && result.CatalogUuid == missingCatalogUuid
+                && result.CanonicalFavoriteId == add.FavoriteId
+                && result.Target.Id == missingCatalogId
             );
         addedSnapshot
             .Favorites.Should()
             .ContainSingle()
             .Which.Should()
             .Match<FavoriteSnapshotItem>(favorite =>
-                favorite.FavoriteUuid == add.FavoriteUuid
-                && favorite.CatalogUuid == missingCatalogUuid
+                favorite.FavoriteId == add.FavoriteId && favorite.Target.Id == missingCatalogId
             );
         removeExecution
             .Response!.Results.Should()
@@ -84,8 +83,8 @@ public sealed class TestFavoriteLibraryIntegration
             .Which.Should()
             .Match<FavoriteMutationResult>(result =>
                 result.Changed
-                && result.CanonicalFavoriteUuid == add.FavoriteUuid
-                && result.CatalogUuid == missingCatalogUuid
+                && result.CanonicalFavoriteId == add.FavoriteId
+                && result.Target.Id == missingCatalogId
             );
         currentSnapshot.Favorites.Should().BeEmpty();
         changes
@@ -96,16 +95,16 @@ public sealed class TestFavoriteLibraryIntegration
                         .Should()
                         .Match<FavoriteLibraryChange>(change =>
                             change.ChangeType == FavoriteChangeTypes.Added
-                            && change.FavoriteUuid == add.FavoriteUuid
-                            && change.CatalogUuid == missingCatalogUuid
+                            && change.FavoriteId == add.FavoriteId
+                            && change.Target.Id == missingCatalogId
                         ),
                 removed =>
                     removed
                         .Should()
                         .Match<FavoriteLibraryChange>(change =>
                             change.ChangeType == FavoriteChangeTypes.Removed
-                            && change.FavoriteUuid == add.FavoriteUuid
-                            && change.CatalogUuid == missingCatalogUuid
+                            && change.FavoriteId == add.FavoriteId
+                            && change.Target.Id == missingCatalogId
                         )
             );
     }
@@ -113,26 +112,26 @@ public sealed class TestFavoriteLibraryIntegration
     [Test]
     public async Task Retry_is_exact_and_the_first_membership_uuid_is_canonical()
     {
-        var first = Add(_catalogUuid);
+        var first = Add(_catalogId);
         var firstExecution = await ExecuteAsync(_userA, [first]);
-        var second = Add(_catalogUuid);
+        var second = Add(_catalogId);
         var secondExecution = await ExecuteAsync(_userA, [second]);
         var replay = await ExecuteAsync(_userA, [second]);
 
-        var canonicalUuid = first.FavoriteUuid!.Value;
+        var canonicalUuid = first.FavoriteId!.Value;
         firstExecution
             .Response!.Results.Single()
             .Should()
             .Match<FavoriteMutationResult>(result =>
-                result.Changed && result.CanonicalFavoriteUuid == canonicalUuid
+                result.Changed && result.CanonicalFavoriteId == canonicalUuid
             );
         secondExecution
             .Response!.Results.Single()
             .Should()
             .Match<FavoriteMutationResult>(result =>
                 !result.Changed
-                && result.SubmittedFavoriteUuid == second.FavoriteUuid
-                && result.CanonicalFavoriteUuid == canonicalUuid
+                && result.SubmittedFavoriteId == second.FavoriteId
+                && result.CanonicalFavoriteId == canonicalUuid
                 && result.LibraryRevision == 1
             );
         replay.Response!.Should().BeEquivalentTo(secondExecution.Response);
@@ -141,9 +140,9 @@ public sealed class TestFavoriteLibraryIntegration
             _userA,
             [
                 new(
-                    second.MutationUuid,
+                    second.MutationId,
                     second.CatalogType,
-                    second.CatalogUuid,
+                    second.CatalogId,
                     FavoriteDesiredStates.NotFavorite,
                     null
                 ),
@@ -166,9 +165,9 @@ public sealed class TestFavoriteLibraryIntegration
     [Test]
     public async Task Retry_preserves_its_original_response_after_an_intervening_mutation()
     {
-        var add = Add(_catalogUuid);
+        var add = Add(_catalogId);
         var original = await ExecuteAsync(_userA, [add]);
-        var removal = await ExecuteAsync(_userA, [Remove(_catalogUuid)]);
+        var removal = await ExecuteAsync(_userA, [Remove(_catalogId)]);
 
         var retry = await ExecuteAsync(_userA, [add]);
 
@@ -190,7 +189,7 @@ public sealed class TestFavoriteLibraryIntegration
     {
         var cursorProtector = new LibraryCursorProtector(_dataProtection);
         var before = await SnapshotAsync(_userA, cursorProtector);
-        var mutation = Add(_catalogUuid);
+        var mutation = Add(_catalogId);
         var mutationResult = await ExecuteAsync(_userA, [mutation]);
 
         var changes = await ChangesAsync(_userA, before.NextCursor, cursorProtector);
@@ -202,8 +201,8 @@ public sealed class TestFavoriteLibraryIntegration
             .Which.Should()
             .Match<FavoriteLibraryChange>(change =>
                 change.ChangeType == FavoriteChangeTypes.Added
-                && change.FavoriteUuid == mutation.FavoriteUuid
-                && change.CatalogUuid == _catalogUuid
+                && change.FavoriteId == mutation.FavoriteId
+                && change.Target.Id == _catalogId
             );
 
         var crossAccountCursor = await ChangesAsync(_userB, before.NextCursor, cursorProtector);
@@ -230,7 +229,7 @@ public sealed class TestFavoriteLibraryIntegration
             CancellationToken.None
         );
 
-        var mutationTask = ExecuteAsync(_userA, [Add(_catalogUuid)]);
+        var mutationTask = ExecuteAsync(_userA, [Add(_catalogId)]);
         await Task.Delay(100);
 
         mutationTask
@@ -251,7 +250,7 @@ public sealed class TestFavoriteLibraryIntegration
     }
 
     private async Task<FavoriteMutationExecution> ExecuteAsync(
-        Guid userId,
+        UserId userId,
         IReadOnlyList<FavoriteMutationCommand> mutations
     )
     {
@@ -266,7 +265,7 @@ public sealed class TestFavoriteLibraryIntegration
     }
 
     private async Task<FavoriteLibrarySnapshot> SnapshotAsync(
-        Guid userId,
+        UserId userId,
         LibraryCursorProtector cursorProtector
     )
     {
@@ -276,7 +275,7 @@ public sealed class TestFavoriteLibraryIntegration
     }
 
     private async Task<LibraryChangesExecution> ChangesAsync(
-        Guid userId,
+        UserId userId,
         string cursor,
         LibraryCursorProtector cursorProtector
     )
@@ -291,20 +290,20 @@ public sealed class TestFavoriteLibraryIntegration
         LibraryCursorProtector cursorProtector
     ) => new(dbContext, new LibraryStateStore(dbContext), cursorProtector, TimeProvider.System);
 
-    private static FavoriteMutationCommand Add(Guid catalogUuid) =>
+    private static FavoriteMutationCommand Add(string catalogId) =>
         new(
-            Guid.CreateVersion7(),
+            MutationId.New(),
             FavoriteCatalogTypes.Artist,
-            catalogUuid,
+            catalogId,
             FavoriteDesiredStates.Favorite,
-            Guid.CreateVersion7()
+            FavoriteId.New()
         );
 
-    private static FavoriteMutationCommand Remove(Guid catalogUuid) =>
+    private static FavoriteMutationCommand Remove(string catalogId) =>
         new(
-            Guid.CreateVersion7(),
+            MutationId.New(),
             FavoriteCatalogTypes.Artist,
-            catalogUuid,
+            catalogId,
             FavoriteDesiredStates.NotFavorite,
             null
         );

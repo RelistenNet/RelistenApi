@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
 using NUnit.Framework;
 using RelistenUserService.Identity.Entities;
@@ -14,7 +16,7 @@ public sealed class PostgresIntegrationDatabase
 
     public string ConnectionString { get; private set; } = "";
 
-    public async Task StartAsync()
+    public async Task StartAsync(string? migration = null)
     {
         _adminConnectionString =
             Environment.GetEnvironmentVariable("RELISTEN_TEST_POSTGRES_ADMIN")
@@ -44,7 +46,7 @@ public sealed class PostgresIntegrationDatabase
             Database = _databaseName,
         }.ConnectionString;
         await using var dbContext = CreateContext();
-        await dbContext.Database.MigrateAsync();
+        await dbContext.GetService<IMigrator>().MigrateAsync(migration);
     }
 
     public async Task StopAsync()
@@ -84,10 +86,10 @@ public sealed class PostgresIntegrationDatabase
         return new(options.Options);
     }
 
-    public async Task<Guid> CreateUserAsync(string username)
+    public async Task<UserId> CreateUserAsync(string username)
     {
         var now = DateTimeOffset.UtcNow;
-        var userId = Guid.CreateVersion7();
+        var userId = UserId.New();
         await using var dbContext = CreateContext();
         dbContext.Users.Add(
             new User

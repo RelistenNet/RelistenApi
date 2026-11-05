@@ -32,7 +32,7 @@ public sealed record SongRecord(
     SongId Id,
     Guid ArtistUuid,
     string Name,
-    string? Kind = null,
+    SongKind? Kind = null,
     string? OriginalArtist = null,
     float? Confidence = null
 );
@@ -106,7 +106,7 @@ public sealed record TrackPartRecord(
     SongId? SongId,
     string? Text,
     bool SegueAfter = false,
-    IReadOnlyList<string>? Qualifiers = null,
+    IReadOnlyList<TrackQualifier>? Qualifiers = null,
     float? Confidence = null,
     bool Resolved = true,
     string Basis = TrackBasis.Ruling,
@@ -584,7 +584,9 @@ public sealed partial class NormStore
                 artists = songs.Select(s => s.ArtistUuid).ToArray(),
                 names = songs.Select(s => s.Name).ToArray(),
                 slugs = songs.Select(s => slugs[s.Id]).ToArray(),
-                kinds = songs.Select(s => s.Kind).ToArray(),
+                kinds = songs
+                    .Select(s => s.Kind is { } kind ? NormalizationEnums.Format(kind) : null)
+                    .ToArray(),
                 originals = songs.Select(s => s.OriginalArtist).ToArray(),
                 confidences = songs.Select(s => s.Confidence).ToArray(),
             },
@@ -941,7 +943,11 @@ public sealed partial class NormStore
                 segues = writable.Select(p => p.SegueAfter).ToArray(),
                 // Joined: a text[][] parameter must be rectangular. Notes are free text, so
                 // they join on the unit separator.
-                qualifiers = writable.Select(p => string.Join(',', p.Qualifiers ?? [])).ToArray(),
+                qualifiers = writable
+                    .Select(p =>
+                        string.Join(',', (p.Qualifiers ?? []).Select(NormalizationEnums.Format))
+                    )
+                    .ToArray(),
                 notes = writable.Select(p => string.Join('\u001f', p.Notes ?? [])).ToArray(),
                 bases = writable.Select(p => p.Basis).ToArray(),
                 confidences = writable.Select(p => p.Confidence).ToArray(),

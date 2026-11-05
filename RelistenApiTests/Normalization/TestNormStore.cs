@@ -45,6 +45,37 @@ public class TestNormStore
         db.ExecuteScalarAsync<long>("SELECT count(*) FROM norm.changes", transaction: tx);
 
     [Test]
+    public async Task SongKindsRoundTripWithoutChangingStoredTokens()
+    {
+        var jam = SongId.New();
+        var unknown = SongId.New();
+        var bot = await As(AuthorTypes.Algorithm, "typed-song-kinds@1");
+        await bot.WriteSongsAsync([
+            new SongRecord(jam, artist, "Dark Star Jam", SongKind.Jam, Confidence: 0.95f),
+            new SongRecord(unknown, artist, "Unidentified Song", Confidence: 0.95f),
+        ]);
+
+        (
+            await db.QuerySingleAsync<string>(
+                "SELECT kind FROM norm.songs WHERE id = @jam",
+                new { jam },
+                tx
+            )
+        )
+            .Should()
+            .Be("jam");
+        var songs = (
+            await db.QueryAsync<Relisten.Normalization.Songs.CatalogueSong>(
+                "SELECT id, name, kind FROM norm.songs WHERE artist_uuid = @artist",
+                new { artist },
+                tx
+            )
+        ).ToList();
+        songs.Single(s => s.Id == jam).Kind.Should().Be(SongKind.Jam);
+        songs.Single(s => s.Id == unknown).Kind.Should().BeNull();
+    }
+
+    [Test]
     public async Task ReRunningABotChangesAndLogsNothing()
     {
         var song = SongId.New();
@@ -155,7 +186,14 @@ public class TestNormStore
                 SegueAfter: true,
                 Confidence: 0.95f
             ),
-            new TrackPartRecord(track, 2, fire, "Fire", Qualifiers: ["partial"], Confidence: 0.95f),
+            new TrackPartRecord(
+                track,
+                2,
+                fire,
+                "Fire",
+                Qualifiers: [TrackQualifier.Partial],
+                Confidence: 0.95f
+            ),
             new TrackPartRecord(track, 3, null, "crowd", Confidence: 0.95f),
         ]);
 
@@ -168,7 +206,14 @@ public class TestNormStore
                 SegueAfter: true,
                 Confidence: 0.95f
             ),
-            new TrackPartRecord(track, 2, fire, "Fire", Qualifiers: ["partial"], Confidence: 0.95f),
+            new TrackPartRecord(
+                track,
+                2,
+                fire,
+                "Fire",
+                Qualifiers: [TrackQualifier.Partial],
+                Confidence: 0.95f
+            ),
         ]);
 
         (
@@ -404,7 +449,7 @@ public class TestNormStore
                 Country: "US",
                 Latitude: 39.665,
                 Longitude: -105.205,
-                CoordinatePrecision: "city",
+                CoordinatePrecision: VenueCoordinatePrecision.City,
                 Confidence: 0.95f
             ),
         ]);
@@ -417,7 +462,7 @@ public class TestNormStore
                 Country: "US",
                 Latitude: 39.665,
                 Longitude: -105.205,
-                CoordinatePrecision: "venue",
+                CoordinatePrecision: VenueCoordinatePrecision.Venue,
                 Confidence: 0.95f
             ),
         ]);
@@ -431,6 +476,16 @@ public class TestNormStore
         )
             .Should()
             .Be("venue");
+
+        var stored = await db.QuerySingleAsync<(
+            VenueKind Kind,
+            VenueCoordinatePrecision Precision
+        )>(
+            "SELECT kind, coordinate_precision FROM norm.venues WHERE id = @venue",
+            new { venue },
+            tx
+        );
+        stored.Should().Be((VenueKind.Site, VenueCoordinatePrecision.Venue));
     }
 
     [Test]
@@ -458,14 +513,14 @@ public class TestNormStore
                 new VenueNameRecord(
                     venue,
                     "The Spectrum",
-                    VenueNameKinds.Official,
+                    VenueNameKind.Official,
                     ValidTo: new DateOnly(1994, 1, 1),
                     Confidence: 0.9f
                 ),
                 new VenueNameRecord(
                     venue,
                     "CoreStates Spectrum",
-                    VenueNameKinds.Official,
+                    VenueNameKind.Official,
                     ValidFrom: new DateOnly(1994, 1, 1),
                     Confidence: 0.9f
                 ),
@@ -520,7 +575,7 @@ public class TestNormStore
             new VenueNameRecord(
                 comcast,
                 "Xfinity Center",
-                VenueNameKinds.Official,
+                VenueNameKind.Official,
                 ValidFrom: new DateOnly(2014, 1, 1),
                 Confidence: 0.9f
             ),
@@ -529,7 +584,7 @@ public class TestNormStore
             new VenueNameRecord(
                 xfinity,
                 "Great Woods",
-                VenueNameKinds.Official,
+                VenueNameKind.Official,
                 ValidTo: new DateOnly(2001, 1, 1),
                 Confidence: 0.9f
             ),
@@ -632,7 +687,7 @@ public class TestNormStore
             new VenueNameRecord(
                 spectrum,
                 "The Spectrum",
-                VenueNameKinds.Official,
+                VenueNameKind.Official,
                 new DateOnly(1967, 1, 1),
                 new DateOnly(1994, 1, 1),
                 0.9f
@@ -640,7 +695,7 @@ public class TestNormStore
             new VenueNameRecord(
                 spectrum,
                 "Wachovia Spectrum",
-                VenueNameKinds.Official,
+                VenueNameKind.Official,
                 new DateOnly(2003, 1, 1),
                 new DateOnly(2009, 1, 1),
                 0.9f
@@ -648,13 +703,13 @@ public class TestNormStore
             new VenueNameRecord(
                 pavilion,
                 "Bank of America Pavilion",
-                VenueNameKinds.Official,
+                VenueNameKind.Official,
                 Confidence: 0.9f
             ),
             new VenueNameRecord(
                 pavilion,
                 "Leader Bank Pavilion",
-                VenueNameKinds.Official,
+                VenueNameKind.Official,
                 Confidence: 0.9f
             ),
         ]);
@@ -681,7 +736,7 @@ public class TestNormStore
         VenueRecord At(
             VenueId id,
             string name,
-            string kind = VenueKinds.Site,
+            VenueKind kind = VenueKind.Site,
             VenueId? parent = null
         ) => new(id, name, kind, parent, "Chillicothe", "IL", "US", Confidence: 0.95f);
         await bot.WriteVenuesAsync([
@@ -689,8 +744,8 @@ public class TestNormStore
             At(twinSite, "Three Sisters Park"),
         ]);
         await bot.WriteVenuesAsync([
-            At(stage, "Main Stage", VenueKinds.Room, site),
-            At(twinStage, "Main Stage", VenueKinds.Room, twinSite),
+            At(stage, "Main Stage", VenueKind.Room, site),
+            At(twinStage, "Main Stage", VenueKind.Room, twinSite),
         ]);
         await bot.WriteVenueNamesAsync([
             new VenueNameRecord(site, "Three Sisters Park", Confidence: 0.95f),

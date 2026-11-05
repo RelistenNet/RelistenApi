@@ -1,5 +1,10 @@
 # Relisten identity, user data, and Sonos architecture
 
+> Scope: this dated document includes work beyond the current account release.
+> The [current account contract](../api/accounts.md) supersedes its UUID identity,
+> favorite payload and alpha-cutover details. Unimplemented playlist/history/Sonos
+> proposals remain future work.
+
 **Status:** Proposed
 
 **Date:** 2026-07-18

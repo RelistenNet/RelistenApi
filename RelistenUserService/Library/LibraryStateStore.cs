@@ -13,7 +13,7 @@ public enum LibraryStateLockMode
 public sealed class LibraryStateStore(AccountsDbContext dbContext)
 {
     public async Task<LibraryState> GetOrCreateAsync(
-        Guid userId,
+        UserId userId,
         DateTimeOffset now,
         LibraryStateLockMode lockMode,
         CancellationToken cancellationToken
@@ -24,7 +24,7 @@ public sealed class LibraryStateStore(AccountsDbContext dbContext)
             $"""
             INSERT INTO user_data.library_states
                 (id, user_id, revision, created_at, updated_at)
-            VALUES ({stateId}, {userId}, 0, {now}, {now})
+            VALUES ({stateId}, {userId.Value}, 0, {now}, {now})
             ON CONFLICT (user_id) DO NOTHING
             """,
             cancellationToken
@@ -36,7 +36,7 @@ public sealed class LibraryStateStore(AccountsDbContext dbContext)
                     $"""
                         SELECT *
                         FROM user_data.library_states
-                        WHERE user_id = {userId}
+                        WHERE user_id = {userId.Value}
                         FOR UPDATE
                     """
                 )
@@ -46,7 +46,7 @@ public sealed class LibraryStateStore(AccountsDbContext dbContext)
                     $"""
                     SELECT *
                     FROM user_data.library_states
-                    WHERE user_id = {userId}
+                    WHERE user_id = {userId.Value}
                     FOR SHARE
                     """
                 )

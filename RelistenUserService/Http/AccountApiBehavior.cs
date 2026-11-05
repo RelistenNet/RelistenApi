@@ -11,21 +11,17 @@ public static class AccountApiBehavior
         {
             // Type-conversion failures never reach the controller. Preserve the same stable
             // wire codes that semantic validation returns for these two command fields.
-            var invalidCommandUuid = HasErrorFor(
-                context.ModelState.Keys,
-                "client_command_uuid",
-                "ClientCommandUuid"
-            );
+            var invalidCommandId = HasErrorFor(context.ModelState.Keys, "command_id", "CommandId");
             var invalidContractVersion = HasErrorFor(
                 context.ModelState.Keys,
                 "contract_version",
                 "ContractVersion"
             );
-            var (status, code) = (invalidCommandUuid, invalidContractVersion) switch
+            var (status, code) = (invalidCommandId, invalidContractVersion) switch
             {
                 (true, _) => (
                     StatusCodes.Status422UnprocessableEntity,
-                    AccountErrorCodes.InvalidCommandUuid
+                    AccountErrorCodes.InvalidCommandId
                 ),
                 (_, true) => (
                     StatusCodes.Status422UnprocessableEntity,

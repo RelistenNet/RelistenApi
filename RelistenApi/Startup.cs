@@ -58,6 +58,7 @@ namespace Relisten
         public void ConfigureServices(IServiceCollection services)
         {
             services.AddCors();
+            Relisten.Controllers.V4.V4CatalogRegistration.AddV4Catalog(services);
             services.AddResponseCompression();
             services.AddHttpContextAccessor();
             services.AddTransient<
@@ -362,11 +363,19 @@ namespace Relisten
                 };
             });
 
-            app.UseCors(builder =>
-                builder
-                    .WithMethods("GET", "POST", "OPTIONS", "HEAD")
-                    .WithOrigins("*")
-                    .AllowAnyMethod()
+            // Legacy global CORS handles preflight before MVC sees controller attributes.
+            // Select v4's validator policy first so browsers may send If-None-Match.
+            Relisten.Controllers.V4.V4CatalogRegistration.UseV4CatalogCors(app);
+
+            app.UseWhen(
+                context => !context.Request.Path.StartsWithSegments("/api/v4"),
+                legacy =>
+                    legacy.UseCors(builder =>
+                        builder
+                            .WithMethods("GET", "POST", "OPTIONS", "HEAD")
+                            .WithOrigins("*")
+                            .AllowAnyMethod()
+                    )
             );
 
             app.UseAuthentication();
@@ -395,15 +404,25 @@ namespace Relisten
 
             app.UseSwaggerUI(ctx =>
             {
+                ctx.RoutePrefix = "api-docs-v4";
+                ctx.SwaggerEndpoint("/api-docs/v4/swagger.json", "Relisten catalog v4");
+            });
+
+            app.UseSwaggerUI(ctx =>
+            {
                 ctx.RoutePrefix = "api-docs-v3";
                 ctx.SwaggerEndpoint("/api-docs/v3/swagger.json", "Relisten API v3");
             });
 
-            app.UseCors(builder =>
-                builder
-                    .WithMethods("GET", "POST", "OPTIONS", "HEAD")
-                    .WithOrigins("*")
-                    .AllowAnyMethod()
+            app.UseWhen(
+                context => !context.Request.Path.StartsWithSegments("/api/v4"),
+                legacy =>
+                    legacy.UseCors(builder =>
+                        builder
+                            .WithMethods("GET", "POST", "OPTIONS", "HEAD")
+                            .WithOrigins("*")
+                            .AllowAnyMethod()
+                    )
             );
         }
 
@@ -473,6 +492,7 @@ namespace Relisten
         {
             settings.DateFormatString = "yyyy'-'MM'-'dd'T'HH':'mm':'ssK";
             settings.DateTimeZoneHandling = DateTimeZoneHandling.Utc;
+            settings.Converters.Add(new NormalizationEnumConverter());
             return settings;
         }
     }

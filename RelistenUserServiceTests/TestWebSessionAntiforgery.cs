@@ -17,11 +17,11 @@ public sealed class TestWebSessionAntiforgery
     public async Task A_token_is_valid_only_for_the_session_that_created_it()
     {
         using var provider = BuildProvider();
-        var firstSessionId = Guid.NewGuid();
+        var firstSessionId = SessionId.New();
         var tokens = CreateTokens(provider, firstSessionId);
 
         (await IsValidAsync(provider, firstSessionId, tokens)).Should().BeTrue();
-        (await IsValidAsync(provider, Guid.NewGuid(), tokens)).Should().BeFalse();
+        (await IsValidAsync(provider, SessionId.New(), tokens)).Should().BeFalse();
     }
 
     [Test]
@@ -40,7 +40,7 @@ public sealed class TestWebSessionAntiforgery
             context.Response.Headers.SetCookie.Should().ContainSingle();
         }
 
-        var sessionId = Guid.CreateVersion7();
+        var sessionId = SessionId.New();
         var first = CreateRequestToken(provider, sessionId, cookieToken);
         var second = CreateRequestToken(provider, sessionId, cookieToken);
 
@@ -78,7 +78,7 @@ public sealed class TestWebSessionAntiforgery
     public async Task Every_web_mutation_requires_the_exact_origin_and_a_valid_token(string method)
     {
         using var provider = BuildProvider();
-        var sessionId = Guid.CreateVersion7();
+        var sessionId = SessionId.New();
         var tokens = CreateTokens(provider, sessionId);
         using var scope = provider.CreateScope();
         var context = Context(scope, sessionId);
@@ -129,8 +129,8 @@ public sealed class TestWebSessionAntiforgery
     {
         var currentAccount = new CurrentAccountContext();
         currentAccount.SetWeb(
-            new User { Id = Guid.CreateVersion7() },
-            Guid.CreateVersion7(),
+            new User { Id = UserId.New() },
+            SessionId.New(),
             AuthenticationConstants.LocalWebOrigin,
             IdentitySessionCapabilities.AllWeb
         );
@@ -157,7 +157,7 @@ public sealed class TestWebSessionAntiforgery
     public async Task Web_mutation_rejects_a_missing_or_invalid_csrf_header(string? requestToken)
     {
         using var provider = BuildProvider();
-        var sessionId = Guid.CreateVersion7();
+        var sessionId = SessionId.New();
         var tokens = CreateTokens(provider, sessionId);
         using var scope = provider.CreateScope();
         var context = Context(scope, sessionId);
@@ -184,9 +184,9 @@ public sealed class TestWebSessionAntiforgery
     public async Task Web_mutation_rejects_a_token_from_a_previous_session()
     {
         using var provider = BuildProvider();
-        var tokens = CreateTokens(provider, Guid.CreateVersion7());
+        var tokens = CreateTokens(provider, SessionId.New());
         using var scope = provider.CreateScope();
-        var context = Context(scope, Guid.CreateVersion7());
+        var context = Context(scope, SessionId.New());
         context.Request.Method = HttpMethods.Post;
         context.Request.Headers.Origin = AuthenticationConstants.LocalWebOrigin;
         context.Request.Headers.Cookie =
@@ -237,7 +237,7 @@ public sealed class TestWebSessionAntiforgery
         return services.BuildServiceProvider();
     }
 
-    private static AntiforgeryTokenSet CreateTokens(ServiceProvider provider, Guid sessionId)
+    private static AntiforgeryTokenSet CreateTokens(ServiceProvider provider, SessionId sessionId)
     {
         using var scope = provider.CreateScope();
         var context = Context(scope, sessionId);
@@ -246,7 +246,7 @@ public sealed class TestWebSessionAntiforgery
 
     private static async Task<bool> IsValidAsync(
         ServiceProvider provider,
-        Guid sessionId,
+        SessionId sessionId,
         AntiforgeryTokenSet tokens
     )
     {
@@ -257,7 +257,7 @@ public sealed class TestWebSessionAntiforgery
 
     private static async Task<bool> IsValidAsync(
         ServiceProvider provider,
-        Guid sessionId,
+        SessionId sessionId,
         string cookieToken,
         string requestToken
     )
@@ -274,7 +274,7 @@ public sealed class TestWebSessionAntiforgery
 
     private static (string RequestToken, string?[] SetCookieHeaders) CreateRequestToken(
         ServiceProvider provider,
-        Guid sessionId,
+        SessionId sessionId,
         string cookieToken
     )
     {
@@ -288,13 +288,13 @@ public sealed class TestWebSessionAntiforgery
         return (tokens.RequestToken!, context.Response.Headers.SetCookie.ToArray());
     }
 
-    private static DefaultHttpContext Context(IServiceScope scope, Guid sessionId)
+    private static DefaultHttpContext Context(IServiceScope scope, SessionId sessionId)
     {
         var context = new DefaultHttpContext { RequestServices = scope.ServiceProvider };
         scope
             .ServiceProvider.GetRequiredService<CurrentAccountContext>()
             .SetWeb(
-                new User { Id = Guid.NewGuid() },
+                new User { Id = UserId.New() },
                 sessionId,
                 AuthenticationConstants.LocalWebOrigin,
                 IdentitySessionCapabilities.AllWeb

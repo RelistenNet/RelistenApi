@@ -16,13 +16,13 @@ public sealed class FavoriteMutationService(
     public const int MaximumActiveFavorites = 10_000;
 
     public async Task<FavoriteMutationExecution> ExecuteAsync(
-        Guid userId,
+        UserId userId,
         IReadOnlyList<FavoriteMutationCommand> mutations,
         CancellationToken cancellationToken
     )
     {
         var hashes = mutations.ToDictionary(
-            mutation => mutation.MutationUuid,
+            mutation => mutation.MutationId,
             FavoriteMutationHasher.Hash
         );
         await using var transaction = await dbContext.Database.BeginTransactionAsync(
@@ -35,24 +35,24 @@ public sealed class FavoriteMutationService(
             .ToDictionaryAsync(receipt => receipt.Id, cancellationToken);
         var conflictingMutations = mutations
             .Where(mutation =>
-                receiptById.TryGetValue(mutation.MutationUuid, out var receipt)
+                receiptById.TryGetValue(mutation.MutationId, out var receipt)
                 && (
                     receipt.UserId != userId
                     || !CryptographicOperations.FixedTimeEquals(
                         receipt.PayloadHash,
-                        hashes[mutation.MutationUuid]
+                        hashes[mutation.MutationId]
                     )
                 )
             )
-            .Select(mutation => mutation.MutationUuid)
+            .Select(mutation => mutation.MutationId)
             .ToArray();
         if (conflictingMutations.Length > 0)
         {
             return FavoriteMutationExecution.Failed(
                 new(
                     FavoriteMutationFailureKind.IdempotencyConflict,
-                    "A mutation_uuid was already used by another account or semantic mutation.",
-                    conflictingMutations
+                    "A mutation_id was already used by another account or semantic mutation.",
+                    conflictingMutations.Select(id => id.Value).ToArray()
                 )
             );
         }
@@ -60,7 +60,7 @@ public sealed class FavoriteMutationService(
         if (receiptById.Count == mutations.Count)
         {
             var storedResults = mutations
-                .Select(mutation => ToResult(receiptById[mutation.MutationUuid]))
+                .Select(mutation => ToResult(receiptById[mutation.MutationId]))
                 .ToArray();
             await transaction.CommitAsync(cancellationToken);
             return FavoriteMutationExecution.Succeeded(
@@ -73,7 +73,7 @@ public sealed class FavoriteMutationService(
         }
 
         var newMutations = mutations
-            .Where(mutation => !receiptById.ContainsKey(mutation.MutationUuid))
+            .Where(mutation => !receiptById.ContainsKey(mutation.MutationId))
             .ToArray();
         var favoriteIdentityFailure = await FindFavoriteIdentityConflictAsync(
             userId,
@@ -112,7 +112,7 @@ public sealed class FavoriteMutationService(
         var results = new List<FavoriteMutationResult>(mutations.Count);
         foreach (var mutation in mutations)
         {
-            if (receiptById.TryGetValue(mutation.MutationUuid, out var storedReceipt))
+            if (receiptById.TryGetValue(mutation.MutationId, out var storedReceipt))
             {
                 results.Add(ToResult(storedReceipt));
                 continue;
@@ -122,15 +122,15 @@ public sealed class FavoriteMutationService(
             dbContext.FavoriteMutationReceipts.Add(
                 new()
                 {
-                    Id = mutation.MutationUuid,
+                    Id = mutation.MutationId,
                     UserId = userId,
                     CatalogType = mutation.CatalogType,
-                    CatalogUuid = mutation.CatalogUuid,
+                    CatalogId = mutation.CatalogId,
                     DesiredState = mutation.DesiredState,
-                    SubmittedFavoriteId = mutation.FavoriteUuid,
-                    PayloadHash = hashes[mutation.MutationUuid],
+                    SubmittedFavoriteId = mutation.FavoriteId,
+                    PayloadHash = hashes[mutation.MutationId],
                     Changed = result.Changed,
-                    CanonicalFavoriteId = result.CanonicalFavoriteUuid,
+                    CanonicalFavoriteId = result.CanonicalFavoriteId,
                     LibraryRevision = result.LibraryRevision,
                     CreatedAt = now,
                 }
@@ -152,30 +152,30 @@ public sealed class FavoriteMutationService(
     ) =>
         advisoryLocks.LockAllAsync(
             mutations
-                .Select(mutation => $"favorite-mutation:{mutation.MutationUuid:D}")
+                .Select(mutation => $"favorite-mutation:{mutation.MutationId}")
                 .Concat(
                     mutations
                         .Where(IsAdd)
-                        .Select(mutation => $"favorite-row:{mutation.FavoriteUuid!.Value:D}")
+                        .Select(mutation => $"favorite-row:{mutation.FavoriteId!.Value}")
                 )
                 .Distinct(StringComparer.Ordinal),
             cancellationToken
         );
 
     private async Task<FavoriteMutationFailure?> FindFavoriteIdentityConflictAsync(
-        Guid userId,
+        UserId userId,
         IReadOnlyList<FavoriteMutationCommand> mutations,
         CancellationToken cancellationToken
     )
     {
-        var expectedById = new Dictionary<Guid, CatalogReference>();
+        var expectedById = new Dictionary<FavoriteId, CatalogReference>();
         foreach (var mutation in mutations.Where(IsAdd))
         {
-            var favoriteId = mutation.FavoriteUuid!.Value;
+            var favoriteId = mutation.FavoriteId!.Value;
             var target = ToReference(mutation);
             if (expectedById.TryGetValue(favoriteId, out var expected) && expected != target)
             {
-                return FavoriteUuidConflict([favoriteId]);
+                return FavoriteIdConflict([favoriteId]);
             }
 
             expectedById[favoriteId] = target;
@@ -194,7 +194,7 @@ public sealed class FavoriteMutationService(
                 favorite.Id,
                 favorite.UserId,
                 favorite.CatalogType,
-                favorite.CatalogUuid
+                favorite.CatalogId
             ))
             .ToArrayAsync(cancellationToken);
         var changeRows = await dbContext
@@ -203,7 +203,7 @@ public sealed class FavoriteMutationService(
                 change.FavoriteId,
                 change.UserId,
                 change.CatalogType,
-                change.CatalogUuid
+                change.CatalogId
             ))
             .ToArrayAsync(cancellationToken);
         var receiptRows = await dbContext
@@ -215,7 +215,7 @@ public sealed class FavoriteMutationService(
                 receipt.SubmittedFavoriteId!.Value,
                 receipt.UserId,
                 receipt.CatalogType,
-                receipt.CatalogUuid
+                receipt.CatalogId
             ))
             .ToArrayAsync(cancellationToken);
 
@@ -225,13 +225,13 @@ public sealed class FavoriteMutationService(
             .Where(identity =>
                 identity.UserId != userId
                 || !expectedById.TryGetValue(identity.FavoriteId, out var expected)
-                || expected != new CatalogReference(identity.CatalogType, identity.CatalogUuid)
+                || expected != new CatalogReference(identity.CatalogType, identity.CatalogId)
             )
             .Select(identity => identity.FavoriteId)
             .Distinct()
-            .Order()
+            .OrderBy(id => id.Value, StringComparer.Ordinal)
             .ToArray();
-        return conflicts.Length == 0 ? null : FavoriteUuidConflict(conflicts);
+        return conflicts.Length == 0 ? null : FavoriteIdConflict(conflicts);
     }
 
     private static int CountFavoritesAfterMutations(
@@ -259,8 +259,7 @@ public sealed class FavoriteMutationService(
     private static FavoriteMutationResult ToResult(FavoriteMutationReceipt receipt) =>
         new(
             receipt.Id,
-            receipt.CatalogType,
-            receipt.CatalogUuid,
+            new FavoriteTarget(receipt.CatalogType, receipt.CatalogId),
             receipt.DesiredState,
             receipt.Changed,
             receipt.SubmittedFavoriteId,
@@ -269,25 +268,25 @@ public sealed class FavoriteMutationService(
         );
 
     private static CatalogReference ToReference(Favorite favorite) =>
-        new(favorite.CatalogType, favorite.CatalogUuid);
+        new(favorite.CatalogType, favorite.CatalogId);
 
     private static CatalogReference ToReference(FavoriteMutationCommand mutation) =>
-        new(mutation.CatalogType, mutation.CatalogUuid);
+        new(mutation.CatalogType, mutation.CatalogId);
 
     private static bool IsAdd(FavoriteMutationCommand mutation) =>
         mutation.DesiredState == FavoriteDesiredStates.Favorite;
 
-    private static FavoriteMutationFailure FavoriteUuidConflict(IReadOnlyList<Guid> ids) =>
+    private static FavoriteMutationFailure FavoriteIdConflict(IReadOnlyList<FavoriteId> ids) =>
         new(
-            FavoriteMutationFailureKind.FavoriteUuidConflict,
-            "A favorite_uuid was already assigned to another account or catalog target.",
-            ids
+            FavoriteMutationFailureKind.FavoriteIdConflict,
+            "A favorite_id was already assigned to another account or catalog target.",
+            ids.Select(id => id.Value).ToArray()
         );
 
     private sealed record FavoriteIdentity(
-        Guid FavoriteId,
-        Guid UserId,
+        FavoriteId FavoriteId,
+        UserId UserId,
         string CatalogType,
-        Guid CatalogUuid
+        string CatalogId
     );
 }

@@ -44,7 +44,7 @@ await app
     .Services.GetRequiredService<WebClientApplicationInitializer>()
     .InitializeAsync(app.Lifetime.ApplicationStopping);
 
-if (runtime.Options.EnableDevelopmentPersonas)
+if (runtime.IsLocalDevelopment)
 {
     // Finish local client setup before Data Protection's hosted service tries to
     // load its database-backed key ring during app startup.

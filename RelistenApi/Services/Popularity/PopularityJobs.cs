@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using Hangfire;
 
@@ -13,6 +14,26 @@ namespace Relisten.Services.Popularity
         {
             this.popularityService = popularityService;
         }
+
+        /// <summary>Explicit full backfill/repair; this is not a recurring job.</summary>
+        [Queue("default")]
+        public Task RefreshReadModel(CancellationToken cancellationToken) =>
+            popularityService.RefreshReadModel(cancellationToken);
+
+        /// <summary>Recalculates the stale populations selected by one catalog request.</summary>
+        [Queue("default")]
+        public Task RefreshPopulations(
+            PopularityPopulation[] populations,
+            CancellationToken cancellationToken
+        ) => popularityService.RefreshPopulations(populations, cancellationToken);
+
+        [Queue("default")]
+        public Task RefreshGlobalShowPopularityMap() =>
+            popularityService.RefreshGlobalShowPopularityMap();
+
+        [Queue("default")]
+        public Task RefreshGlobalYearPopularityMap() =>
+            popularityService.RefreshGlobalYearPopularityMap();
 
         [Queue("default")]
         public Task RefreshArtistPopularityMap()

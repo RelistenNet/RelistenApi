@@ -107,7 +107,10 @@ namespace Relisten
 
                     webBuilder
                         .UseContentRoot(Directory.GetCurrentDirectory())
-                        .UseUrls($"http://*:{port}/")
+                        .UseUrls(
+                            Environment.GetEnvironmentVariable("ASPNETCORE_URLS")
+                                ?? $"http://*:{port}/"
+                        )
                         .UseStartup<Startup>();
                 });
         }

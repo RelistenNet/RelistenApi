@@ -82,13 +82,13 @@ public sealed class LibraryController(
                 StatusCodes.Status409Conflict,
                 AccountErrorCodes.IdempotencyConflict,
                 failure.Detail,
-                new() { ["conflicting_mutation_uuids"] = failure.ConflictingUuids }
+                new() { ["conflicting_mutation_ids"] = failure.ConflictingIds }
             ),
-            FavoriteMutationFailureKind.FavoriteUuidConflict => LibraryProblem(
+            FavoriteMutationFailureKind.FavoriteIdConflict => LibraryProblem(
                 StatusCodes.Status409Conflict,
-                LibraryErrorCodes.FavoriteUuidConflict,
+                LibraryErrorCodes.FavoriteIdConflict,
                 failure.Detail,
-                new() { ["conflicting_favorite_uuids"] = failure.ConflictingUuids }
+                new() { ["conflicting_favorite_ids"] = failure.ConflictingIds }
             ),
             FavoriteMutationFailureKind.QuotaExceeded => LibraryProblem(
                 StatusCodes.Status422UnprocessableEntity,

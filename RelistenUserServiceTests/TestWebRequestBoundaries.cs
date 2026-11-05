@@ -159,11 +159,7 @@ public sealed class TestWebRequestBoundaries
     {
         var response = new DefaultHttpContext().Response;
         var expires = DateTimeOffset.UtcNow.AddDays(30);
-        var session = new IssuedIdentitySession(
-            Guid.CreateVersion7(),
-            expires,
-            "opaque-test-value"
-        );
+        var session = new IssuedIdentitySession(SessionId.New(), expires, "opaque-test-value");
 
         new SessionCookieManager().SetWeb(response, session);
         var parsed = SetCookieHeaderValue.Parse(response.Headers.SetCookie.Single());

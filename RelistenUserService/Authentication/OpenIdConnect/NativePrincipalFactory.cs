@@ -16,9 +16,9 @@ public sealed class NativePrincipalFactory(Configuration.AccountsRuntimeConfigur
             Claims.Name,
             Claims.Role
         );
-        identity.AddClaim(new Claim(Claims.Subject, user.Id.ToString("D")));
+        identity.AddClaim(new Claim(Claims.Subject, user.Id.ToString()));
         identity.AddClaim(new Claim(Claims.Name, user.Username));
-        identity.AddClaim(new Claim(RelistenClaims.SessionId, session.Id.ToString("D")));
+        identity.AddClaim(new Claim(RelistenClaims.SessionId, session.Id.ToString()));
         identity.AddClaim(new Claim(Claims.ClientId, session.ClientId));
         identity.AddClaim(
             new Claim(

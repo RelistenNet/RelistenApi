@@ -48,8 +48,15 @@ login_roles="$(query postgres \
 [[ "$login_roles" == "$DB_USER" ]] || die \
   "expected relisten to be the only local login role; found: ${login_roles:-none}"
 
+# A restored catalog's disabled Timescale policies retain ownership by app.
+# Allow that inert role while continuing to reject extra logins/elevated roles.
 unexpected_roles="$(query postgres \
-  "select coalesce(string_agg(rolname, ',' order by rolname), '') from pg_roles where rolname !~ '^pg_' and rolname <> '$DB_USER';")"
+  "select coalesce(string_agg(rolname, ',' order by rolname), '')
+   from pg_roles
+   where rolname !~ '^pg_' and rolname <> '$DB_USER'
+     and not (rolname = 'app' and not rolcanlogin and not rolsuper
+              and not rolcreaterole and not rolcreatedb
+              and not rolreplication and not rolbypassrls);")"
 [[ -z "$unexpected_roles" ]] || die \
   "unexpected local roles found: $unexpected_roles. A prior restore may be incomplete; rerun ./restore-local-database.sh"
 

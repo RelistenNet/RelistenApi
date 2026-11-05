@@ -19,6 +19,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Relisten.Normalization", "R
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Relisten.NormalizationTests", "Relisten.NormalizationTests\Relisten.NormalizationTests.csproj", "{BE767E47-B1C5-421D-9A3C-34F6640C0E6B}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Relisten.Identifiers", "Relisten.Identifiers\Relisten.Identifiers.csproj", "{36C46049-B4D1-450B-8CCA-35CD2B2186AF}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -125,6 +127,18 @@ Global
 		{BE767E47-B1C5-421D-9A3C-34F6640C0E6B}.Release|x64.Build.0 = Release|Any CPU
 		{BE767E47-B1C5-421D-9A3C-34F6640C0E6B}.Release|x86.ActiveCfg = Release|Any CPU
 		{BE767E47-B1C5-421D-9A3C-34F6640C0E6B}.Release|x86.Build.0 = Release|Any CPU
+		{36C46049-B4D1-450B-8CCA-35CD2B2186AF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{36C46049-B4D1-450B-8CCA-35CD2B2186AF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{36C46049-B4D1-450B-8CCA-35CD2B2186AF}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{36C46049-B4D1-450B-8CCA-35CD2B2186AF}.Debug|x64.Build.0 = Debug|Any CPU
+		{36C46049-B4D1-450B-8CCA-35CD2B2186AF}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{36C46049-B4D1-450B-8CCA-35CD2B2186AF}.Debug|x86.Build.0 = Debug|Any CPU
+		{36C46049-B4D1-450B-8CCA-35CD2B2186AF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{36C46049-B4D1-450B-8CCA-35CD2B2186AF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{36C46049-B4D1-450B-8CCA-35CD2B2186AF}.Release|x64.ActiveCfg = Release|Any CPU
+		{36C46049-B4D1-450B-8CCA-35CD2B2186AF}.Release|x64.Build.0 = Release|Any CPU
+		{36C46049-B4D1-450B-8CCA-35CD2B2186AF}.Release|x86.ActiveCfg = Release|Any CPU
+		{36C46049-B4D1-450B-8CCA-35CD2B2186AF}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

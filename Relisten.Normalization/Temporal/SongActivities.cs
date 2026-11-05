@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
+using Npgsql;
 using Relisten.Normalization.Songs;
 using Temporalio.Activities;
 
@@ -17,19 +19,26 @@ public sealed record SongForgetInput(Guid Artist, IReadOnlyList<string> Spelling
 
 /// The norm catalogue's steps. Each reads the artist's state fresh from the database, so a
 /// retried or resumed step continues from what earlier steps committed.
-public sealed class SongActivities(CatalogueLlm llm, CatalogueMatch match)
+public sealed class SongActivities(
+    CatalogueLlm llm,
+    CatalogueMatch match,
+    SongCounts counts,
+    ILogger<SongActivities> logger
+)
 {
     [Activity("Songs.CatalogueChunk")]
     public async Task<CatalogueChunkResult> CatalogueChunk(SongCatalogueChunkInput input)
     {
         using var heartbeat = new ActivityHeartbeat();
-        return await llm.RunChunkAsync(
+        var result = await llm.RunChunkAsync(
             input.Artist,
             input.Skip,
             ActivityExecutionContext.Current.CancellationToken,
             input.Review,
             input.Only
         );
+        await RefreshCountsAsync(input.Artist);
+        return result;
     }
 
     /// The first step of a targeted re-ask: forget the machine's decisions about these
@@ -43,6 +52,7 @@ public sealed class SongActivities(CatalogueLlm llm, CatalogueMatch match)
             input.Spellings,
             ActivityExecutionContext.Current.CancellationToken
         );
+        await RefreshCountsAsync(input.Artist);
         return tracks;
     }
 
@@ -50,6 +60,33 @@ public sealed class SongActivities(CatalogueLlm llm, CatalogueMatch match)
     public async Task<CatalogueMatchResult> MatchTracks(Guid artist)
     {
         using var heartbeat = new ActivityHeartbeat();
-        return await match.RunAsync(artist, ActivityExecutionContext.Current.CancellationToken);
+        var result = await match.RunAsync(
+            artist,
+            ActivityExecutionContext.Current.CancellationToken
+        );
+        await RefreshCountsAsync(artist);
+        return result;
+    }
+
+    private async Task RefreshCountsAsync(Guid artist)
+    {
+        var cancellationToken = ActivityExecutionContext.Current.CancellationToken;
+        try
+        {
+            await counts.RefreshArtistsAsync([artist], cancellationToken);
+        }
+        catch (Exception exception)
+            when (!cancellationToken.IsCancellationRequested
+                && exception is NpgsqlException or TimeoutException
+            )
+        {
+            // Source work already committed. Do not repeat a paid model call because
+            // a derived recount failed; an operator can refresh this artist explicitly.
+            logger.LogWarning(
+                exception,
+                "Song count refresh failed after normalizing {Artist}; rerun the refresh explicitly",
+                artist
+            );
+        }
     }
 }

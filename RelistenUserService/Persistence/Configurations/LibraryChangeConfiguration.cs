@@ -14,10 +14,13 @@ public sealed class LibraryChangeConfiguration : IEntityTypeConfiguration<Librar
             "user_data",
             table =>
             {
-                table.HasCheckConstraint("ck_library_changes_id_uuid_v7", UuidV7Constraint.Sql);
                 table.HasCheckConstraint(
-                    "ck_library_changes_favorite_id_uuid_v7",
-                    "uuid_extract_version(favorite_id) IS NOT DISTINCT FROM 7"
+                    "ck_library_changes_id_typed_id",
+                    AccountIdConstraint.Sql("library_change")
+                );
+                table.HasCheckConstraint(
+                    "ck_library_changes_favorite_id_typed_id",
+                    AccountIdConstraint.Sql("favorite", "favorite_id")
                 );
                 table.HasCheckConstraint(
                     "ck_library_changes_catalog_type",
@@ -33,7 +36,7 @@ public sealed class LibraryChangeConfiguration : IEntityTypeConfiguration<Librar
         builder.HasKey(change => change.Id);
         builder
             .Property(change => change.Id)
-            .HasValueGenerator<UuidV7ValueGenerator>()
+            .HasValueGenerator<AccountIdValueGenerator<LibraryChangeId>>()
             .ValueGeneratedOnAdd();
         builder.Property(change => change.CatalogType).HasMaxLength(16);
         builder.Property(change => change.ChangeType).HasMaxLength(24);

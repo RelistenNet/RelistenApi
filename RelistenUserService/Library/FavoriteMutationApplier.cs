@@ -10,17 +10,17 @@ namespace RelistenUserService.Library;
 internal sealed class FavoriteMutationApplier(AccountsDbContext dbContext)
 {
     public FavoriteMutationResult Apply(
-        Guid userId,
+        UserId userId,
         FavoriteMutationCommand mutation,
         LibraryState state,
         IDictionary<CatalogReference, Favorite> activeByTarget,
-        IDictionary<Guid, Favorite> knownById,
+        IDictionary<FavoriteId, Favorite> knownById,
         DateTimeOffset now
     )
     {
-        var target = new CatalogReference(mutation.CatalogType, mutation.CatalogUuid);
+        var target = new CatalogReference(mutation.CatalogType, mutation.CatalogId);
         var changed = false;
-        Guid? canonicalFavoriteId;
+        FavoriteId? canonicalFavoriteId;
         if (mutation.DesiredState == FavoriteDesiredStates.Favorite)
         {
             if (activeByTarget.TryGetValue(target, out var existing))
@@ -30,7 +30,7 @@ internal sealed class FavoriteMutationApplier(AccountsDbContext dbContext)
             else
             {
                 var favorite = RestoreOrCreateFavorite(
-                    mutation.FavoriteUuid!.Value,
+                    mutation.FavoriteId!.Value,
                     userId,
                     target,
                     knownById,
@@ -55,22 +55,21 @@ internal sealed class FavoriteMutationApplier(AccountsDbContext dbContext)
         }
 
         return new(
-            mutation.MutationUuid,
-            mutation.CatalogType,
-            mutation.CatalogUuid,
+            mutation.MutationId,
+            new FavoriteTarget(mutation.CatalogType, mutation.CatalogId),
             mutation.DesiredState,
             changed,
-            mutation.FavoriteUuid,
+            mutation.FavoriteId,
             canonicalFavoriteId,
             state.Revision
         );
     }
 
     private Favorite RestoreOrCreateFavorite(
-        Guid favoriteId,
-        Guid userId,
+        FavoriteId favoriteId,
+        UserId userId,
         CatalogReference target,
-        IDictionary<Guid, Favorite> knownById,
+        IDictionary<FavoriteId, Favorite> knownById,
         DateTimeOffset now
     )
     {
@@ -81,7 +80,7 @@ internal sealed class FavoriteMutationApplier(AccountsDbContext dbContext)
                 Id = favoriteId,
                 UserId = userId,
                 CatalogType = target.CatalogType,
-                CatalogUuid = target.CatalogUuid,
+                CatalogId = target.CatalogId,
             };
             knownById.Add(favoriteId, favorite);
         }
@@ -109,7 +108,7 @@ internal sealed class FavoriteMutationApplier(AccountsDbContext dbContext)
                 ChangeType = changeType,
                 FavoriteId = favorite.Id,
                 CatalogType = favorite.CatalogType,
-                CatalogUuid = favorite.CatalogUuid,
+                CatalogId = favorite.CatalogId,
                 ChangedAt = now,
             }
         );

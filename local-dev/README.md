@@ -85,33 +85,59 @@ planner statistics. See `./restore-local-database.sh --help` for reset options.
 
 ## Run the .NET services
 
-Run the anonymous catalog API in one terminal:
+Run the catalog API in one terminal (v4 and legacy routes share this process):
 
 ```sh
 dotnet run --project RelistenApi/RelistenApi.csproj
 ```
 
-Run the User Service in another terminal:
+Run the User Service in another terminal. Pick the sign-in provider:
 
 ```sh
-dotnet run --project RelistenUserService/RelistenUserService.csproj
+local-dev/accounts.sh dummy   # Fixed personas for agent and automated work.
+# Stop with Ctrl-C, then switch using the same service and database:
+local-dev/accounts.sh google  # Your real Google account, stored locally.
 ```
 
-The catalog API listens on `http://localhost:3823`. The development User Service
-listens on `https://127.0.0.1:5443` and serves the exact
-`auth.relisten.localhost:5443` and `accounts.relisten.localhost:5443` hosts. Run
+The catalog API listens on `http://localhost:3823`; open
+[Swagger](http://localhost:3823/api-docs-v4/index.html). Development uses client-only Temporal
+composition, registers no legacy import schedules and starts no Hangfire workers.
+No Temporal server is needed for catalog reads.
+
+To keep an existing mobile local-origin setting on port 43823, run the same API
+with `PORT=43823 dotnet run --project RelistenApi/RelistenApi.csproj`; this changes
+only the listening port, not its readers or database.
+
+The development User Service listens on `https://127.0.0.1:5443` and serves the exact
+`localhost:5443` and `accounts.relisten.localhost:5443` hosts. Run
 `pnpm setup:browser-session` once from the sibling `relisten-web` checkout before
 starting the User Service. That command creates and trusts the local certificate
 outside Git and writes its paths through .NET Secret Manager.
 
-Development startup applies the checked-in identity and user-data migrations,
-seeds the local clients, and offers fixed Apple and Google personas. The
-personas exercise the real authorization-code, PKCE, token, session, account,
-and favorites paths without contributor-owned provider secrets. Development
-signing and encryption keys persist under the ignored
-`RelistenUserService/.local-openiddict` directory, so ordinary issuer restarts
-do not invalidate local credentials. Development personas and runtime
-migrations remain disabled outside `Development`.
+Both modes use `relisten_db`, issuer `https://localhost:5443` and accounts API
+`https://accounts.relisten.localhost:5443`. The mobile development defaults match
+these URLs; changing modes requires only a service restart. Reload an already
+running mobile app once after moving from the older auth hostname.
+
+Development startup applies missing account migrations and seeds native/web
+clients in either mode. Dummy mode offers fixed Apple/Google personas; Google
+mode uses the real provider and disables the persona endpoints. Configure Google
+credentials in .NET Secret Manager and register
+`https://localhost:5443/signin-google` on the Google web OAuth client. The
+localhost callback works in a simulator/browser on this Mac; testing a phone's
+HTTPS callback remains separate release qualification.
+
+Dummy and real users coexist in the local database and are identified by their
+provider issuer and subject, not email. Switching modes preserves users,
+favorites and sessions. If already signed in, use **Switch account** or sign out
+to choose a different identity. Agents should explicitly select a dummy persona
+before editing account-owned data. Neither mode uses the production account DB.
+
+Development signing/encryption keys persist under ignored
+`RelistenUserService/.local-openiddict`, so service restarts do not rotate them.
+Personas remain restricted to exact local Development hosts. Automated suites
+create and remove disposable test databases; daily development uses the same
+`relisten_db` for catalog and account data.
 
 With the User Service running, check its account/session security invariants:
 
@@ -121,7 +147,8 @@ RelistenUserService/SmokeTests/refresh-token-replay.sh
 
 ## Run an ingestion worker manually
 
-The development API does not start Hangfire workers. Ordinary worker startup
+Development HTTP import commands also use Temporal and need the server/worker
+below. The API itself starts no Hangfire workers. Ordinary worker startup
 creates no schedules, and the seed contains no queued imports. Importing a whole
 artist can fetch far more shows than the seed contains; keep live imports explicit.
 
@@ -166,3 +193,15 @@ See [ingestion operations](../docs/ingestion/operations.md) for operator command
 Redis stores oversized Temporal payloads as well as API caches. Keep Redis while
 manual workflow histories matter; clearing its data can make those histories
 unreadable. The temporary test servers have no history to retain after teardown.
+
+## Working with a larger catalog
+
+Use the explicit backup restore above when a performance or normalization
+investigation needs more data than the seed. The normal API command uses either
+dataset. Missing normalization is supported; startup neither requires it nor
+enables approval flags.
+
+A catalog-only backup may omit play telemetry. Do not run popularity calculations
+against empty local telemetry if you want to retain separately captured review
+scores. Keep snapshot provenance and any local restore commands with that backup,
+not in the API contract.

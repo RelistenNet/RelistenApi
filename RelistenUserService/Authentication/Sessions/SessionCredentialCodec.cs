@@ -5,14 +5,17 @@ namespace RelistenUserService.Authentication.Sessions;
 
 public sealed class SessionCredentialCodec
 {
-    private const string Version = "v1";
+    private const string Version = "v2";
     private const int ValidatorLength = 32;
 
-    public IssuedSessionCredential Issue(Guid sessionId)
+    public IssuedSessionCredential Issue(SessionId sessionId)
     {
-        if (sessionId.Version != 7)
+        if (sessionId.IsEmpty)
         {
-            throw new ArgumentException("The session ID must be a UUIDv7.", nameof(sessionId));
+            throw new ArgumentException(
+                "The session ID must be a session_ UUIDv7 ID.",
+                nameof(sessionId)
+            );
         }
 
         var validator = RandomNumberGenerator.GetBytes(ValidatorLength);
@@ -21,7 +24,7 @@ public sealed class SessionCredentialCodec
             var cookieValue = string.Join(
                 '.',
                 Version,
-                sessionId.ToString("N"),
+                sessionId.Value,
                 WebEncoders.Base64UrlEncode(validator)
             );
             return new IssuedSessionCredential(cookieValue, SHA256.HashData(validator));
@@ -44,9 +47,7 @@ public sealed class SessionCredentialCodec
         if (
             parts.Length != 3
             || !string.Equals(parts[0], Version, StringComparison.Ordinal)
-            || !Guid.TryParseExact(parts[1], "N", out var sessionId)
-            || sessionId.Version != 7
-            || !string.Equals(parts[1], sessionId.ToString("N"), StringComparison.Ordinal)
+            || !SessionId.TryParse(parts[1], out var sessionId)
         )
         {
             return false;
@@ -100,9 +101,9 @@ public sealed class IssuedSessionCredential(string cookieValue, byte[] validator
     internal byte[] ValidatorHash { get; } = validatorHash;
 }
 
-public sealed class ParsedSessionCredential(Guid sessionId, byte[] validatorHash)
+public sealed class ParsedSessionCredential(SessionId sessionId, byte[] validatorHash)
 {
-    public Guid SessionId { get; } = sessionId;
+    public SessionId SessionId { get; } = sessionId;
     internal byte[] ValidatorHash { get; } = validatorHash;
 
     internal void Clear() => CryptographicOperations.ZeroMemory(ValidatorHash);

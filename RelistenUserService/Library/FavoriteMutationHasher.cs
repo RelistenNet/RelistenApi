@@ -5,7 +5,7 @@ namespace RelistenUserService.Library;
 
 public static class FavoriteMutationHasher
 {
-    private const string Domain = "relisten-favorite-mutation-v1";
+    private const string Domain = "relisten-favorite-mutation-typed-v2";
 
     public static byte[] Hash(FavoriteMutationCommand mutation)
     {
@@ -14,9 +14,9 @@ public static class FavoriteMutationHasher
             Domain,
             FavoriteMutationRequestValidator.ContractVersion,
             mutation.CatalogType,
-            mutation.CatalogUuid.ToString("D"),
+            mutation.CatalogId,
             mutation.DesiredState,
-            mutation.FavoriteUuid?.ToString("D") ?? "-"
+            mutation.FavoriteId?.ToString() ?? "-"
         );
         return SHA256.HashData(Encoding.UTF8.GetBytes(semanticValue));
     }

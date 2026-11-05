@@ -45,7 +45,7 @@ public sealed class TokenController(
             return await ExchangeWebAsync(request, source, cancellationToken);
         }
 
-        if (!Guid.TryParse(source.GetClaim(RelistenClaims.SessionId), out var sessionId))
+        if (!SessionId.TryParse(source.GetClaim(RelistenClaims.SessionId), out var sessionId))
         {
             return InvalidGrant("The authorization code or refresh token is invalid.");
         }
@@ -83,8 +83,11 @@ public sealed class TokenController(
     {
         if (
             !request.IsAuthorizationCodeGrantType()
-            || !Guid.TryParse(source.GetClaim(Claims.Subject), out var userId)
-            || !Guid.TryParse(source.GetClaim(RelistenClaims.SessionId), out var authSsoSessionId)
+            || !UserId.TryParse(source.GetClaim(Claims.Subject), out var userId)
+            || !SessionId.TryParse(
+                source.GetClaim(RelistenClaims.SessionId),
+                out var authSsoSessionId
+            )
         )
         {
             return InvalidGrant("The web authorization code is invalid.");

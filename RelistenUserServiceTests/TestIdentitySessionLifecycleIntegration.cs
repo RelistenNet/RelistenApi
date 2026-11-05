@@ -20,7 +20,7 @@ public sealed class TestIdentitySessionLifecycleIntegration
         new DateTimeOffset(2026, 8, 26, 12, 0, 0, TimeSpan.Zero)
     );
     private AccountsRuntimeConfiguration _runtime = null!;
-    private Guid _userId;
+    private UserId _userId;
 
     [OneTimeSetUp]
     public async Task SetUpDatabase()
@@ -220,7 +220,7 @@ public sealed class TestIdentitySessionLifecycleIntegration
             (
                 await lifecycle.ValidateAuthSsoBootstrapAsync(
                     authSso.SessionId,
-                    Guid.CreateVersion7(),
+                    UserId.New(),
                     CancellationToken.None
                 )
             )
@@ -399,7 +399,7 @@ public sealed class TestIdentitySessionLifecycleIntegration
         dbContext.Sessions.Add(
             new IdentitySession
             {
-                Id = Guid.CreateVersion7(now),
+                Id = SessionId.New(),
                 UserId = otherUser,
                 Purpose = IdentitySessionPurposes.Web,
                 ValidatorHash = new byte[32],
@@ -449,7 +449,7 @@ public sealed class TestIdentitySessionLifecycleIntegration
         dbContext.Sessions.Add(
             new IdentitySession
             {
-                Id = Guid.CreateVersion7(now),
+                Id = SessionId.New(),
                 UserId = _userId,
                 Purpose = IdentitySessionPurposes.Web,
                 ValidatorHash = new byte[32],
@@ -476,7 +476,7 @@ public sealed class TestIdentitySessionLifecycleIntegration
         return await Lifecycle(dbContext).CreateAuthSsoAsync(_userId, CancellationToken.None);
     }
 
-    private async Task<IssuedIdentitySession> CreateWebAsync(Guid authSsoSessionId)
+    private async Task<IssuedIdentitySession> CreateWebAsync(SessionId authSsoSessionId)
     {
         await using var dbContext = _database.CreateContext();
         return await Lifecycle(dbContext)

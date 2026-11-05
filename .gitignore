@@ -289,3 +289,7 @@ _Pvt_Extensions
 
 # Local secrets (OPENAI_API_KEY for the norm lab)
 .env.local
+
+# Historical local review captures, saved feature flags and credentials
+/local-dev/v4-review/.output/
+/local-dev/accounts-review/.output/

@@ -271,7 +271,9 @@ namespace Relisten.Controllers.Admin
         [Authorize]
         public IActionResult RefreshAllPopularity([FromQuery] int limit = 50)
         {
-            Hangfire.BackgroundJob.Enqueue(() => _popularityJobs.RefreshArtistPopularityMap());
+            Hangfire.BackgroundJob.Enqueue(() =>
+                _popularityJobs.RefreshReadModel(System.Threading.CancellationToken.None)
+            );
             Hangfire.BackgroundJob.Enqueue(() => _popularityJobs.RefreshPopularArtists(limit));
             Hangfire.BackgroundJob.Enqueue(() => _popularityJobs.RefreshTrendingArtists(limit));
             Hangfire.BackgroundJob.Enqueue(() => _popularityJobs.RefreshPopularShows(limit));

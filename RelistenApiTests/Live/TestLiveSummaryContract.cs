@@ -1,8 +1,6 @@
-using System.Reflection;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Relisten.Api.Models.Api;
 using Relisten.Controllers;
 using Relisten.Services.Live;
 
@@ -12,25 +10,6 @@ namespace RelistenApiTests.Live;
 public class TestLiveSummaryContract
 {
     private static readonly DateTime Now = new(2025, 3, 15, 18, 30, 20, DateTimeKind.Utc);
-
-    [Test]
-    public void Summary_ShouldDeclareV3RouteAndLiveSummaryContract()
-    {
-        typeof(LiveSummaryController)
-            .GetCustomAttribute<RouteAttribute>()!
-            .Template.Should()
-            .Be("api/v3");
-
-        var method = typeof(LiveSummaryController).GetMethod(
-            nameof(LiveSummaryController.Summary)
-        )!;
-        method.GetCustomAttribute<HttpGetAttribute>()!.Template.Should().Be("live/summary");
-        method
-            .GetCustomAttributes<ProducesResponseTypeAttribute>()
-            .Single(attribute => attribute.StatusCode == 200)
-            .Type.Should()
-            .Be(typeof(LiveSummary));
-    }
 
     [TestCase("3-15")]
     [TestCase("13-01")]

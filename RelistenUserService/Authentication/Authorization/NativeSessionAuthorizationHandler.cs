@@ -10,7 +10,7 @@ using static OpenIddict.Abstractions.OpenIddictConstants;
 
 namespace RelistenUserService.Authentication.Authorization;
 
-public sealed record AuthenticatedNativeSession(User User, Guid SessionId);
+public sealed record AuthenticatedNativeSession(User User, SessionId SessionId);
 
 public sealed class NativeSessionAuthenticator(
     AccountsDbContext dbContext,
@@ -22,8 +22,8 @@ public sealed class NativeSessionAuthenticator(
     {
         if (
             !principal.HasAudience(runtime.Options.Audience)
-            || !Guid.TryParse(principal.GetClaim(Claims.Subject), out var userId)
-            || !Guid.TryParse(principal.GetClaim(RelistenClaims.SessionId), out var sessionId)
+            || !UserId.TryParse(principal.GetClaim(Claims.Subject), out var userId)
+            || !SessionId.TryParse(principal.GetClaim(RelistenClaims.SessionId), out var sessionId)
             || !int.TryParse(
                 principal.GetClaim(RelistenClaims.SecurityVersion),
                 NumberStyles.None,
