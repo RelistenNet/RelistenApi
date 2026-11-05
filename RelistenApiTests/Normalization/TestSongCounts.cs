@@ -338,7 +338,8 @@ public sealed class TestSongCounts
     [Test]
     public async Task MigrationSeedsExistingSongsAndSetlistsWithoutRewritingTheirEvidence()
     {
-        await using var database = await MigrationTestDatabase.CreateAsync(15);
+        await using var database =
+            await MigrationTestDatabase.CreateBeforeAsync<Migrations.SongCounts>();
         var catalog = database.Connection;
         Fixture fixture;
         await using (var seed = await catalog.BeginTransactionAsync())
@@ -347,7 +348,7 @@ public sealed class TestSongCounts
             await seed.CommitAsync();
         }
         var history = await catalog.QuerySingleAsync<int>("SELECT count(*)::int FROM norm.changes");
-        database.Migrator.MigrateTo(16);
+        database.ApplyMigration();
         (await catalog.QuerySingleAsync<SongTotals>(TotalsSql, new { song = fixture.Main.Value }))
             .Should()
             .Be(new SongTotals(3, 2));
