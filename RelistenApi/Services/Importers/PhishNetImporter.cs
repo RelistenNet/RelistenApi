@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Hangfire.Console;
 using Hangfire.Server;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Relisten.Api.Models;
@@ -17,6 +18,7 @@ namespace Relisten.Import
     public partial class PhishNetImporter : ImporterBase
     {
         readonly LinkService linkService;
+        readonly string? phishNetApiKey;
         PhishNetApiClient phishNetApiClient;
 
         public PhishNetImporter(
@@ -24,6 +26,7 @@ namespace Relisten.Import
             SourceService sourceService,
             SourceReviewService sourceReviewService,
             LinkService linkService,
+            IConfiguration configuration,
             ILogger<PhishNetImporter> log
         )
             : base(catalog, log)
@@ -33,7 +36,8 @@ namespace Relisten.Import
             _log = log;
             _sourceReviewService = sourceReviewService;
             http = new PhishNetHttpClientFactory().HttpClient;
-            phishNetApiClient = new PhishNetApiClient(http);
+            phishNetApiKey = PhishNetApiClient.ApiKeyFrom(configuration);
+            phishNetApiClient = new PhishNetApiClient(http, phishNetApiKey);
         }
 
         protected SourceService _sourceService { get; set; }

@@ -15,7 +15,7 @@ public partial class PhishNetImporter
     public override void UseIngestionHttpClient(HttpClient client)
     {
         base.UseIngestionHttpClient(client);
-        phishNetApiClient = new PhishNetApiClient(client);
+        phishNetApiClient = new PhishNetApiClient(client, phishNetApiKey);
     }
 
     /// <summary>Selects current recordings and their matching Phish.net show metadata.</summary>

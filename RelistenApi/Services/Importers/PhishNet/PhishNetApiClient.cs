@@ -6,14 +6,32 @@ using System.Net.Http;
 using System.Threading.Tasks;
 using Hangfire.Console;
 using Hangfire.Server;
+using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Relisten.Api.Models;
 
 namespace Relisten.Import.PhishNet;
 
-public class PhishNetApiClient(HttpClient httpClient)
+/// <summary>
+/// Calls Phish.net API v5 following its Security Requirements Addendum (effective 2026-11-01,
+/// required by 2027-05-01): the key travels in the X-API-KEY header rather than the URL, and every
+/// request identifies Relisten in its User-Agent. The headers are set per request so the HTML
+/// ratings scraper, which shares this HttpClient, never sends the key to phish.net pages.
+/// </summary>
+public class PhishNetApiClient(HttpClient httpClient, string? apiKey)
 {
+    const string ApiBaseUrl = "https://api.phish.net/v5";
+    const string ApiUserAgent =
+        "Relisten/1.0 (+https://relisten.net; https://github.com/RelistenNet/RelistenApi)";
+
+    /// <summary>Reads PHISHNET_API_KEY. A missing key fails the first API request, not construction.</summary>
+    public static string? ApiKeyFrom(IConfiguration configuration)
+    {
+        var configured = configuration["PHISHNET_API_KEY"];
+        return string.IsNullOrWhiteSpace(configured) ? null : configured;
+    }
+
     static string CleanPhishNetString(string str)
     {
         // I don't know what the heck this garbage is, but we don't want it.
@@ -22,29 +40,44 @@ public class PhishNetApiClient(HttpClient httpClient)
             .Replace("â\u0080\u009c", string.Empty);
     }
 
-    public async Task<IList<PhishNetApiShow>> Shows(PerformContext? ctx)
+    async Task<string> GetApiResponseBody(string path, PerformContext? ctx)
     {
-        const string url = "https://api.phish.net/v5/shows?apikey=C60F490D1358FBBE31DA";
+        // The importer is constructed for every scope in the API and worker, so a missing key is
+        // reported only when a Phish.net import actually runs.
+        if (apiKey == null)
+        {
+            throw new InvalidOperationException(
+                "PHISHNET_API_KEY is not configured; Phish.net API requests require it."
+            );
+        }
+
+        var url = ApiBaseUrl + path;
         ctx?.WriteLine($"Requesting {url}");
 
-        using var resp = await httpClient.GetAsync(url);
-        resp.EnsureSuccessStatusCode();
-        var page = await resp.Content.ReadAsStringAsync();
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.Add("X-API-KEY", apiKey);
+        // A request-level User-Agent replaces the client's default rather than appending to it.
+        request.Headers.TryAddWithoutValidation("User-Agent", ApiUserAgent);
 
-        var shows = JsonConvert.DeserializeObject<PhishNetApiResponse<PhishNetApiShow>>(
-            CleanPhishNetString(page)
-        );
+        using var resp = await httpClient.SendAsync(request);
+        resp.EnsureSuccessStatusCode();
+
+        return CleanPhishNetString(await resp.Content.ReadAsStringAsync());
+    }
+
+    public async Task<IList<PhishNetApiShow>> Shows(PerformContext? ctx)
+    {
+        var page = await GetApiResponseBody("/shows", ctx);
+        var shows = JsonConvert.DeserializeObject<PhishNetApiResponse<PhishNetApiShow>>(page);
 
         if (shows == null || shows.error || shows.data == null)
+        {
             throw new System.IO.InvalidDataException(
                 "Phish.net returned an invalid show response."
             );
-        return shows.data.Where(show => show.artist_name == "Phish").ToList();
-    }
+        }
 
-    string PhishNetApiReviewsUrlForDate(string displayDate)
-    {
-        return $"https://api.phish.net/v5/reviews/showdate/{displayDate}.json?apikey=B6570BEDA805B616AB6C";
+        return shows.data.Where(show => show.artist_name == "Phish").ToList();
     }
 
     public async Task<IEnumerable<PhishNetApiReview>> Reviews(
@@ -52,20 +85,16 @@ public class PhishNetApiClient(HttpClient httpClient)
         PerformContext? ctx
     )
     {
-        var url = PhishNetApiReviewsUrlForDate(displayDate);
-        ctx?.WriteLine($"Requesting {url}");
-        using var resp = await httpClient.GetAsync(url);
-        resp.EnsureSuccessStatusCode();
-        var page = await resp.Content.ReadAsStringAsync();
-
-        var reviews = JsonConvert.DeserializeObject<PhishNetApiResponse<PhishNetApiReview>>(
-            CleanPhishNetString(page)
-        );
+        var page = await GetApiResponseBody($"/reviews/showdate/{displayDate}.json", ctx);
+        var reviews = JsonConvert.DeserializeObject<PhishNetApiResponse<PhishNetApiReview>>(page);
 
         if (reviews == null || reviews.error || reviews.data == null)
+        {
             throw new System.IO.InvalidDataException(
                 "Phish.net returned an invalid review response."
             );
+        }
+
         return reviews.data;
     }
 }

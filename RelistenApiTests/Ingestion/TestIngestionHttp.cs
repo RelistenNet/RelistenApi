@@ -90,7 +90,7 @@ public class TestIngestionHttp
                 InnerHandler = new FixtureRedirectHandler(server.Address),
             }
         );
-        var reviews = await new PhishNetApiClient(http).Reviews("2000-01-01", null);
+        var reviews = await new PhishNetApiClient(http, "test-key").Reviews("2000-01-01", null);
         reviews.Should().ContainSingle().Which.reviewid.Should().Be(42);
     }
 
@@ -106,7 +106,7 @@ public class TestIngestionHttp
             }
         );
         Func<Task> fetch = async () =>
-            await new PhishNetApiClient(http).Reviews("2000-01-01", null);
+            await new PhishNetApiClient(http, "test-key").Reviews("2000-01-01", null);
         await fetch.Should().ThrowAsync<InvalidDataException>();
     }
 }
