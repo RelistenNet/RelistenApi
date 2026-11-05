@@ -128,7 +128,7 @@ public static class AuthenticationServiceCollectionExtensions
                 options => options.ForwardDefaultSelector = AccountCredentialSelector.SelectScheme
             );
 
-        if (runtime.Options.EnableDevelopmentPersonas)
+        if (runtime.IsLocalDevelopment)
         {
             services.AddSingleton<DevelopmentDatabaseInitializer>();
         }

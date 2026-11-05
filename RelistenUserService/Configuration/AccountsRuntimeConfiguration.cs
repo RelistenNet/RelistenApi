@@ -20,6 +20,8 @@ public sealed record AccountsRuntimeConfiguration(
 
     public IReadOnlyList<string> WebOrigins { get; init; } = Options.WebOrigins;
 
+    public bool IsLocalDevelopment { get; init; }
+
     public static AccountsRuntimeConfiguration Create(
         AccountsOptions options,
         IHostEnvironment environment
@@ -37,15 +39,16 @@ public sealed record AccountsRuntimeConfiguration(
             );
         }
 
-        if (
-            options.EnableDevelopmentPersonas
+        var isLocalDevelopmentProfile =
+            environment.IsDevelopment()
+            && options.AccountsHost == "accounts.relisten.localhost:5443"
             && (
-                !environment.IsDevelopment()
-                || issuer != DevelopmentPersonaIssuer
-                || options.AuthHost != "auth.relisten.localhost:5443"
-                || options.AccountsHost != "accounts.relisten.localhost:5443"
-            )
-        )
+                (
+                    issuer == DevelopmentPersonaIssuer
+                    && options.AuthHost == "auth.relisten.localhost:5443"
+                ) || (issuer == LocalGoogleIssuer && options.AuthHost == "localhost:5443")
+            );
+        if (options.EnableDevelopmentPersonas && !isLocalDevelopmentProfile)
         {
             throw new InvalidOperationException(
                 "Development personas require the exact local HTTPS auth and accounts hosts."
@@ -59,15 +62,6 @@ public sealed record AccountsRuntimeConfiguration(
             );
         }
 
-        var isLocalDevelopmentProfile =
-            environment.IsDevelopment()
-            && options.AccountsHost == "accounts.relisten.localhost:5443"
-            && (
-                (
-                    issuer == DevelopmentPersonaIssuer
-                    && options.AuthHost == "auth.relisten.localhost:5443"
-                ) || (issuer == LocalGoogleIssuer && options.AuthHost == "localhost:5443")
-            );
         if (isLocalDevelopmentProfile)
         {
             Require(
@@ -123,6 +117,7 @@ public sealed record AccountsRuntimeConfiguration(
         return new AccountsRuntimeConfiguration(options, issuer, trustedProxyNetworks)
         {
             WebOrigins = webOrigins,
+            IsLocalDevelopment = isLocalDevelopmentProfile,
         };
     }
 

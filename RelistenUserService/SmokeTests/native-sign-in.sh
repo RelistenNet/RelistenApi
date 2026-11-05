@@ -2,7 +2,7 @@
 # Real Development persona -> authorization code + PKCE -> native tokens.
 # Emits credentials on stdout for a caller to keep private; never run under shell tracing.
 set -Eeuo pipefail
-readonly auth_url="${RELISTEN_USER_SERVICE_AUTH_URL:-https://auth.relisten.localhost:5443}"
+readonly auth_url="${RELISTEN_USER_SERVICE_AUTH_URL:-https://localhost:5443}"
 readonly verifier="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~abc"
 readonly challenge="dYSqskoTcWrpu8GYY0XpWlzOc0c5rd9YO3uAgh_zmV4"
 smoke_tmp_dir="$(mktemp -d)"

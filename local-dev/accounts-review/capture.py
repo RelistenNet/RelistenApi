@@ -9,6 +9,7 @@ import json
 import html
 import re
 import tempfile
+import os
 from urllib.parse import urljoin
 from pathlib import Path
 import subprocess
@@ -33,7 +34,7 @@ def typed_id(prefix):
 def sign_in(persona='google-alice'):
     return json.loads(subprocess.check_output([
         str(ROOT / 'RelistenUserService/SmokeTests/native-sign-in.sh'), 'c2-review', persona
-    ], text=True))
+    ], text=True, env={**os.environ, 'RELISTEN_USER_SERVICE_AUTH_URL': AUTH}))
 
 
 def request(path, *, token=None, payload=None, method=None, expected=200, capture=None):

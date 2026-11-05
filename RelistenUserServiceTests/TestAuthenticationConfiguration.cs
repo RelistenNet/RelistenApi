@@ -12,6 +12,7 @@ using OpenIddict.Client;
 using OpenIddict.Client.AspNetCore;
 using OpenIddict.Server;
 using RelistenUserService.Authentication;
+using RelistenUserService.Authentication.Development;
 using RelistenUserService.Configuration;
 
 namespace RelistenUserServiceTests;
@@ -135,20 +136,32 @@ public sealed class TestAuthenticationConfiguration
             .WithMessage("*Accounts:Google:ClientSecret*");
     }
 
-    [Test]
-    public void Local_Google_registers_without_loading_Apple_credentials()
+    [TestCase(true)]
+    [TestCase(false)]
+    public void Local_auth_modes_share_an_issuer_and_clients_but_select_one_identity_provider(
+        bool dummy
+    )
     {
-        using var provider = BuildProvider(CreateLocalGoogleOptions(), Environments.Development);
+        using var provider = BuildProvider(
+            CreateLocalGoogleOptions(dummy),
+            Environments.Development
+        );
+        provider
+            .GetRequiredService<AccountsRuntimeConfiguration>()
+            .Issuer.Should()
+            .Be(new Uri("https://localhost:5443"));
+        provider.GetRequiredService<DevelopmentDatabaseInitializer>().Should().NotBeNull();
 
         var registrations = provider
             .GetRequiredService<IOptions<OpenIddictClientOptions>>()
             .Value.Registrations;
 
         registrations
-            .Should()
-            .ContainSingle(registration =>
+            .Count(registration =>
                 registration.RegistrationId == AuthenticationConstants.GoogleProvider
-            );
+            )
+            .Should()
+            .Be(dummy ? 0 : 1);
         registrations
             .Should()
             .NotContain(registration =>
@@ -368,7 +381,7 @@ public sealed class TestAuthenticationConfiguration
             WebClientSecret = "test-web-client-secret",
         };
 
-    private AccountsOptions CreateLocalGoogleOptions() =>
+    private AccountsOptions CreateLocalGoogleOptions(bool dummy = false) =>
         new()
         {
             Issuer = "https://localhost:5443",
@@ -376,16 +389,17 @@ public sealed class TestAuthenticationConfiguration
             AuthHost = "localhost:5443",
             AccountsHost = "accounts.relisten.localhost:5443",
             WebOrigins = ["https://web.relisten.localhost:5173"],
-            EnableExternalProviders = true,
+            EnableDevelopmentPersonas = dummy,
+            EnableExternalProviders = !dummy,
             DevelopmentCertificateAuthorityPath = CreateCertificateAuthority(
                 $"google-development-ca-{Guid.NewGuid():N}.pem"
             ),
             WebClientSecret = "test-web-client-secret",
             Google = new()
             {
-                Enabled = true,
-                ClientId = "local-google-client",
-                ClientSecret = "local-google-secret",
+                Enabled = !dummy,
+                ClientId = dummy ? "" : "local-google-client",
+                ClientSecret = dummy ? "" : "local-google-secret",
             },
             Apple = new() { Enabled = false },
         };

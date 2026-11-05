@@ -2,7 +2,7 @@
 
 set -Eeuo pipefail
 
-readonly auth_url="${RELISTEN_USER_SERVICE_AUTH_URL:-https://auth.relisten.localhost:5443}"
+readonly auth_url="${RELISTEN_USER_SERVICE_AUTH_URL:-https://localhost:5443}"
 readonly accounts_url="${RELISTEN_USER_SERVICE_ACCOUNTS_URL:-https://accounts.relisten.localhost:5443}"
 smoke_tmp_dir="$(mktemp -d)"
 trap 'rm -r "$smoke_tmp_dir"' EXIT
