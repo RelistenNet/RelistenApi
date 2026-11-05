@@ -35,6 +35,11 @@ can alter an ETag without advancing imported `updated_at`. Conditional GET saves
 transfer and client application work, but still performs the origin read and
 serialization. It is not a revision cursor or a write-concurrency token.
 
+Ordinary catalog responses allow 30 minutes of shared/client caching, followed by
+a 60-second stale-while-revalidate window. Conditional requests still receive an
+ETag on both 200 and 304 responses. Live summary has its own shorter lifetime;
+live history, random results, commands and errors use `no-store`.
+
 Different endpoints can patch the same entity. Shared fields apply in response
 arrival order; the client suppresses superseded requests for the same query.
 There is no total order across different queries. An older response from another

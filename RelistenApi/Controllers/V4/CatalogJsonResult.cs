@@ -42,7 +42,7 @@ internal sealed class CatalogJsonResult(object resource, bool cacheable = true) 
         {
             if (!response.Headers.ContainsKey(HeaderNames.CacheControl))
             {
-                response.Headers.CacheControl = "public, no-cache";
+                response.Headers.CacheControl = "public, max-age=1800, stale-while-revalidate=60";
             }
         }
         else
