@@ -67,23 +67,24 @@ public sealed class CatalogSongMatchReader
         ).ToArray();
 
     /// <summary>
-    /// Aggregates file durations per show without transferring the full recording match list.
+    /// Aggregates source maxima and matched-part counts without transferring the full match list.
     /// Shows remain members even when no file has a classifiable, positive duration.
     /// </summary>
-    public async Task<IReadOnlyDictionary<Guid, CatalogSongShowTimings>> ReadShowTimings(
+    public async Task<IReadOnlyDictionary<Guid, CatalogSongShowStatistics>> ReadShowStatistics(
         CatalogReadSession session,
         Guid artistUuid,
         string canonicalId,
         CancellationToken cancellationToken
     )
     {
-        // Matching ordinals already include this song's merged aliases. Any other
-        // resolved song part identifies a different song; repeated parts still count one file.
-        var rows = await session.Connection.QueryAsync<ShowTimingRow>(
+        // Matching ordinals include this song's merged aliases. Count each part for
+        // occurrences, but classify each file once before choosing per-source maxima.
+        var rows = await session.Connection.QueryAsync<ShowStatisticsRow>(
             session.Command(
                 """
                 WITH files AS (
-                    SELECT m.track_uuid,m.show_uuid,
+                    SELECT m.track_uuid,m.show_uuid,m.source_uuid,
+                           cardinality(m.matching_part_ordinals) occurrences,
                            CASE WHEN bool_or(p.resolved AND p.song_id IS NOT NULL
                                              AND NOT p.part=ANY(m.matching_part_ordinals)) THEN true
                                 WHEN bool_and(p.resolved) THEN false END is_multi_song,
@@ -91,56 +92,71 @@ public sealed class CatalogSongMatchReader
                     FROM norm.song_recording_matches(@artistUuid,@canonicalIds::text[]) m
                     JOIN source_tracks t ON t.uuid=m.track_uuid
                     JOIN norm.track_songs p ON p.track_uuid=m.track_uuid
-                    GROUP BY m.track_uuid,m.show_uuid,t.duration
+                    GROUP BY m.track_uuid,m.show_uuid,m.source_uuid,m.matching_part_ordinals,t.duration
+                ), sources AS (
+                    SELECT show_uuid,source_uuid,
+                           max(duration) FILTER (WHERE NOT is_multi_song) single_song_duration,
+                           max(duration) FILTER (WHERE is_multi_song) multi_song_duration,
+                           sum(occurrences)::integer occurrences
+                    FROM files GROUP BY show_uuid,source_uuid
                 )
-                SELECT show_uuid,is_multi_song,count(duration)::integer track_count,
-                       min(duration) min,max(duration) max,avg(duration)::double precision avg,
-                       percentile_cont(0.5) WITHIN GROUP (ORDER BY duration) median
-                FROM files GROUP BY show_uuid,is_multi_song
+                SELECT show_uuid,sample.kind,count(sample.value)::integer source_count,
+                       min(sample.value) min,max(sample.value) max,avg(sample.value)::double precision avg,
+                       percentile_cont(0.5) WITHIN GROUP (ORDER BY sample.value) median
+                FROM sources CROSS JOIN LATERAL (
+                    VALUES ('single_song',single_song_duration),
+                           ('multi_song',multi_song_duration),
+                           ('occurrences',occurrences)
+                ) sample(kind,value)
+                GROUP BY show_uuid,sample.kind
                 """,
                 new { artistUuid, canonicalIds = new[] { canonicalId } },
                 cancellationToken
             )
         );
 
-        var timings = new Dictionary<Guid, CatalogSongShowTimings>();
+        var statistics = new Dictionary<Guid, CatalogSongShowStatistics>();
         foreach (var row in rows)
         {
-            if (!timings.TryGetValue(row.show_uuid, out var show))
+            if (!statistics.TryGetValue(row.show_uuid, out var show))
             {
                 show = new();
-                timings.Add(row.show_uuid, show);
+                statistics.Add(row.show_uuid, show);
             }
 
-            if (row.track_count == 0 || row.is_multi_song is null)
+            if (row.source_count == 0)
             {
                 continue;
             }
 
-            var statistics = new CatalogTrackDurationStatistics(
-                row.track_count,
+            var values = new CatalogSourceStatistics(
+                row.source_count,
                 row.min,
                 row.max,
                 row.avg,
                 row.median
             );
-            if (row.is_multi_song == false)
+            switch (row.kind)
             {
-                show.SingleSong = statistics;
-            }
-            else
-            {
-                show.MultiSong = statistics;
+                case "single_song":
+                    show.SingleSong = values;
+                    break;
+                case "multi_song":
+                    show.MultiSong = values;
+                    break;
+                case "occurrences":
+                    show.Occurrences = values;
+                    break;
             }
         }
-        return timings;
+        return statistics;
     }
 
-    private sealed class ShowTimingRow
+    private sealed class ShowStatisticsRow
     {
         public Guid show_uuid { get; set; }
-        public bool? is_multi_song { get; set; }
-        public int track_count { get; set; }
+        public string kind { get; set; } = null!;
+        public int source_count { get; set; }
         public int min { get; set; }
         public int max { get; set; }
         public double avg { get; set; }

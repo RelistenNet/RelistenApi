@@ -24,25 +24,22 @@ public static partial class V4CatalogProjection
                 .Shows.Select(entry => new SongShowResource(
                     ShowSummary(entry.Show),
                     new SongShowTimingsResource(
-                        TrackDurationStatistics(entry.Timings.SingleSong),
-                        TrackDurationStatistics(entry.Timings.MultiSong)
-                    )
+                        entry.Statistics.SingleSong is { } single ? SourceStatistics(single) : null,
+                        entry.Statistics.MultiSong is { } multi ? SourceStatistics(multi) : null
+                    ),
+                    SourceStatistics(entry.Statistics.Occurrences)
                 ))
                 .ToArray(),
         };
 
-    private static TrackDurationStatisticsResource? TrackDurationStatistics(
-        CatalogTrackDurationStatistics? statistics
-    ) =>
-        statistics is null
-            ? null
-            : new(
-                statistics.TrackCount,
-                statistics.Min,
-                statistics.Max,
-                Math.Round(statistics.Avg, 2, MidpointRounding.AwayFromZero),
-                Math.Round(statistics.Median, 2, MidpointRounding.AwayFromZero)
-            );
+    private static SourceStatisticsResource SourceStatistics(CatalogSourceStatistics statistics) =>
+        new(
+            statistics.SourceCount,
+            statistics.Min,
+            statistics.Max,
+            Math.Round(statistics.Avg, 2, MidpointRounding.AwayFromZero),
+            Math.Round(statistics.Median, 2, MidpointRounding.AwayFromZero)
+        );
 
     public static SongWithTracksResource SongWithTracks(CatalogSongWithTracks detail) =>
         ProjectSong<SongWithTracksResource>(detail.Song) with

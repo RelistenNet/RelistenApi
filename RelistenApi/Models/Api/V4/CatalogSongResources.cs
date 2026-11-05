@@ -31,10 +31,15 @@ public sealed record SongWithShowsResource : SongDetailResource
 
 /// <summary>A recording-backed show with the requested song's file-duration statistics.</summary>
 [JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
-public sealed record SongShowResource(ShowSummaryResource Show, SongShowTimingsResource Timings);
+public sealed record SongShowResource(
+    ShowSummaryResource Show,
+    SongShowTimingsResource Timings,
+    SourceStatisticsResource Occurrences
+);
 
 /// <summary>
-/// Whole-file durations in seconds, not song-segment timings. Each matched file counts once.
+/// Whole-file durations in seconds, not song-segment timings. Each source contributes its
+/// longest matching file independently in each bucket, so reprises do not dilute timing averages.
 /// Null buckets have no positive, known durations. Single-song files have fully resolved
 /// parts identifying only this song (resolved non-song parts are ignored). Multi-song files
 /// contain this song and at least one other canonical song, even if other parts are unresolved.
@@ -42,14 +47,19 @@ public sealed record SongShowResource(ShowSummaryResource Show, SongShowTimingsR
 /// </summary>
 [JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
 public sealed record SongShowTimingsResource(
-    TrackDurationStatisticsResource? SingleSong,
-    TrackDurationStatisticsResource? MultiSong
+    SourceStatisticsResource? SingleSong,
+    SourceStatisticsResource? MultiSong
 );
 
-/// <summary>Statistics across positive, known file durations; even medians average the middle pair.</summary>
+/// <summary>
+/// Statistics across contributing sources. Avg and median are rounded to two decimals;
+/// even medians average the middle pair. The containing field defines the unit:
+/// timings use seconds, while occurrences count matched normalization parts per source,
+/// including reprises and split continuations, regardless of duration availability.
+/// </summary>
 [JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
-public sealed record TrackDurationStatisticsResource(
-    int TrackCount,
+public sealed record SourceStatisticsResource(
+    int SourceCount,
     int Min,
     int Max,
     double Avg,

@@ -43,16 +43,17 @@ public sealed record CatalogSongWithShows(
     IReadOnlyList<CatalogSongShow> Shows
 );
 
-public sealed record CatalogSongShow(CatalogShow Show, CatalogSongShowTimings Timings);
+public sealed record CatalogSongShow(CatalogShow Show, CatalogSongShowStatistics Statistics);
 
-public sealed class CatalogSongShowTimings
+public sealed class CatalogSongShowStatistics
 {
-    public CatalogTrackDurationStatistics? SingleSong { get; set; }
-    public CatalogTrackDurationStatistics? MultiSong { get; set; }
+    public CatalogSourceStatistics? SingleSong { get; set; }
+    public CatalogSourceStatistics? MultiSong { get; set; }
+    public CatalogSourceStatistics Occurrences { get; set; } = null!;
 }
 
-public sealed record CatalogTrackDurationStatistics(
-    int TrackCount,
+public sealed record CatalogSourceStatistics(
+    int SourceCount,
     int Min,
     int Max,
     double Avg,

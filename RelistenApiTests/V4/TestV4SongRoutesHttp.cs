@@ -17,7 +17,7 @@ public sealed partial class TestV4CatalogHttp
         "/api/v4/imported-songs/" + CatalogId("imported_song", songSuffix);
 
     [Test]
-    public async Task Song_show_timings_separate_complete_single_song_files_from_medleys_and_preserve_unknowns()
+    public async Task Song_show_statistics_use_source_maxima_and_preserve_repeat_counts_without_durations()
     {
         await using var connection = await MigratedTestDatabase.OpenAsync();
         try
@@ -27,12 +27,18 @@ public sealed partial class TestV4CatalogHttp
                 """
                 UPDATE source_tracks SET duration=CASE id WHEN 925041 THEN 900 WHEN 925042 THEN 101 ELSE 500 END
                 WHERE id IN(925041,925042,925043);
+                INSERT INTO sources(id,uuid,show_id,artist_id,is_soundboard,is_remaster,has_jamcharts,upstream_identifier,display_date,updated_at)
+                SELECT 926020,'00000000-0000-0000-0000-000000000720',show_id,artist_id,
+                       false,false,false,'timing-source',display_date,updated_at FROM sources WHERE id=925021;
+                INSERT INTO source_sets(id,uuid,source_id,index,name,updated_at)
+                VALUES(926030,'00000000-0000-0000-0000-000000000730',926020,1,'Set 1','2026-01-01');
                 INSERT INTO source_tracks
                     (id,uuid,artist_id,source_id,source_set_id,track_position,title,slug,mp3_url,duration,updated_at)
                 SELECT 926000+i,('00000000-0000-0000-0000-'||lpad((700+i)::text,12,'0'))::uuid,
-                       925001,925021,925031,10+i,'Timing sample','timing-sample-'||i,
+                       925001,CASE WHEN i IN(1,4,5) THEN 926020 ELSE 925021 END,
+                       CASE WHEN i IN(1,4,5) THEN 926030 ELSE 925031 END,10+i,'Timing sample','timing-sample-'||i,
                        'https://example.invalid/timing/'||i||'.mp3',duration,'2026-01-01'
-                FROM (VALUES(1,100),(2,400),(3,200),(4,600),(5,1000),(6,0),(7,NULL),(8,-1)) samples(i,duration);
+                FROM (VALUES(1,100),(2,400),(3,200),(4,600),(5,1001),(6,0),(7,NULL),(8,-1)) samples(i,duration);
                 INSERT INTO norm.track_songs(track_uuid,part,song_id,resolved,basis,author_type,author_ref,run_uuid)
                 SELECT uuid,1,'song_00000101',true,'ruling','importer','v4-review','00000000-0000-0000-0000-000000000099'
                 FROM source_tracks WHERE id BETWEEN 926001 AND 926008;
@@ -60,15 +66,15 @@ public sealed partial class TestV4CatalogHttp
                 .Single(show => show!["id"]!.GetValue<string>() == CatalogId("show", 311));
             JsonNode.DeepEquals(first["show"], ordinary).Should().BeTrue();
             foreach (
-                var (bucket, count, min, max, avg, median) in new[]
+                var (stats, count, min, max, avg, median) in new[]
                 {
-                    ("single_song", 3, 100, 400, 200.33d, 101d),
-                    ("multi_song", 4, 200, 1000, 675d, 750d),
+                    (first["timings"]!["single_song"]!, 3, 100, 400, 200.33d, 101d),
+                    (first["timings"]!["multi_song"]!, 2, 900, 1001, 950.5d, 950.5d),
+                    (first["occurrences"]!, 3, 1, 8, 4d, 3d),
                 }
             )
             {
-                var stats = first["timings"]![bucket]!;
-                stats["track_count"]!.GetValue<int>().Should().Be(count);
+                stats["source_count"]!.GetValue<int>().Should().Be(count);
                 stats["min"]!.GetValue<int>().Should().Be(min);
                 stats["max"]!.GetValue<int>().Should().Be(max);
                 stats["avg"]!.GetValue<double>().Should().BeApproximately(avg, 1e-9);
@@ -77,12 +83,14 @@ public sealed partial class TestV4CatalogHttp
             // The second show has a positive duration, but an unresolved ending.
             shows[1]!["timings"]!["single_song"].Should().BeNull();
             shows[1]!["timings"]!["multi_song"].Should().BeNull();
+            shows[1]!["occurrences"]!["source_count"]!.GetValue<int>().Should().Be(1);
+            shows[1]!["occurrences"]!["min"]!.GetValue<int>().Should().Be(1);
             var schema = await GetJson("/api-docs/v4/swagger.json");
             AssertSchemaFields(schema, "SongShowResource", first);
             AssertSchemaFields(schema, "SongShowTimingsResource", first["timings"]!);
             AssertSchemaFields(
                 schema,
-                "TrackDurationStatisticsResource",
+                "SourceStatisticsResource",
                 first["timings"]!["single_song"]!
             );
 
@@ -100,21 +108,39 @@ public sealed partial class TestV4CatalogHttp
                 .GetValue<int>()
                 .Should()
                 .Be(detail["matched_track_count"]!.GetValue<int>());
-            shifted["shows"]![0]!["timings"]!["single_song"]!["track_count"]!
+            shifted["shows"]![0]!["timings"]!["single_song"]!["source_count"]!
                 .GetValue<int>()
                 .Should()
                 .Be(2);
-            shifted["shows"]![0]!["timings"]!["multi_song"]!["track_count"]!
+            shifted["shows"]![0]!["timings"]!["multi_song"]!["source_count"]!
                 .GetValue<int>()
                 .Should()
-                .Be(5);
+                .Be(2);
+
+            // Another appearance changes only occurrence statistics, not file membership or maxima.
+            await ChangeNormalization(
+                connection,
+                "UPDATE norm.track_songs SET song_id='song_00000101',resolved=true,basis='ruling' WHERE track_uuid='00000000-0000-0000-0000-000000000341' AND part=4"
+            );
+            using var repeated = await Conditional(
+                DiscoverySongPath,
+                reclassified.Headers.ETag!.ToString()
+            );
+            repeated.StatusCode.Should().Be(HttpStatusCode.OK);
+            var counted = JsonNode.Parse(await repeated.Content.ReadAsStringAsync())!;
+            JsonNode
+                .DeepEquals(counted["shows"]![0]!["timings"], shifted["shows"]![0]!["timings"])
+                .Should()
+                .BeTrue();
+            counted["shows"]![0]!["occurrences"]!["max"]!.GetValue<int>().Should().Be(9);
+            counted["shows"]![0]!["occurrences"]!["avg"]!.GetValue<double>().Should().Be(4.33);
 
             await connection.ExecuteAsync(
-                "UPDATE source_tracks SET duration=NULL WHERE source_id IN(925021,925022)"
+                "UPDATE source_tracks SET duration=NULL WHERE source_id IN(925021,925022,926020)"
             );
             using var changed = await Conditional(
                 DiscoverySongPath,
-                reclassified.Headers.ETag!.ToString()
+                repeated.Headers.ETag!.ToString()
             );
             changed.StatusCode.Should().Be(HttpStatusCode.OK);
             var unknown = JsonNode.Parse(await changed.Content.ReadAsStringAsync())!;
@@ -125,6 +151,13 @@ public sealed partial class TestV4CatalogHttp
             unknown["shows"]!.AsArray().Should().HaveCount(2);
             unknown["shows"]![0]!["timings"]!["single_song"].Should().BeNull();
             unknown["shows"]![0]!["timings"]!["multi_song"].Should().BeNull();
+            JsonNode
+                .DeepEquals(
+                    unknown["shows"]![0]!["occurrences"],
+                    counted["shows"]![0]!["occurrences"]
+                )
+                .Should()
+                .BeTrue();
         }
         finally
         {
@@ -134,6 +167,8 @@ public sealed partial class TestV4CatalogHttp
                 DELETE FROM norm.track_songs WHERE track_uuid IN(SELECT uuid FROM source_tracks WHERE id BETWEEN 926001 AND 926008);
                 DELETE FROM norm.track_songs WHERE track_uuid='00000000-0000-0000-0000-000000000341' AND part=4;
                 DELETE FROM source_tracks WHERE id BETWEEN 926001 AND 926008;
+                DELETE FROM source_sets WHERE id=926030;
+                DELETE FROM sources WHERE id=926020;
                 UPDATE source_tracks SET duration=NULL WHERE id IN(925041,925042,925043);
                 """
             );
