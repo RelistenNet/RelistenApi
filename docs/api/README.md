@@ -1,7 +1,7 @@
 # Integrating the catalog API
 
 Read this when adding a catalog screen or changing how catalog data reaches a
-client. [Swagger](http://localhost:3823/api-docs-v4/index.html) defines the routes,
+client. [Swagger](http://localhost:3823/api-docs/index.html) defines the routes,
 parameters and response fields. This guide explains how the music entities relate
 and which data a client may treat as authoritative.
 
@@ -58,6 +58,12 @@ reuse so a saved reference cannot silently point to a different place or song.
 Saved references may therefore resolve as redirected, retired or unavailable.
 Unavailable metadata does not imply that a listener removed a favorite. The
 resolver returns entity patches, without ownership of unreturned child collections.
+
+Canonical venue slugs support readable URLs through the explicit global and
+artist-scoped `venues/by-slug/{slug}` routes. They return the same resource as an
+ID lookup, including the survivor's current ID and slug after a merge. Imported
+artist-specific slugs can identify different show collections; resolve saved
+imported URLs with the reference resolver's `legacy_slug` scheme and imported kind.
 
 The [catalog types and codec](../../Relisten.Identifiers/),
 [normalization IDs](../../Relisten.Normalization/NormIds.cs) and

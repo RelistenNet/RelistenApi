@@ -399,19 +399,9 @@ namespace Relisten
             app.UseSwaggerUI(ctx =>
             {
                 ctx.RoutePrefix = "api-docs";
-                ctx.SwaggerEndpoint("/api-docs/v2/swagger.json", "Relisten API v2");
-            });
-
-            app.UseSwaggerUI(ctx =>
-            {
-                ctx.RoutePrefix = "api-docs-v4";
                 ctx.SwaggerEndpoint("/api-docs/v4/swagger.json", "Relisten catalog v4");
-            });
-
-            app.UseSwaggerUI(ctx =>
-            {
-                ctx.RoutePrefix = "api-docs-v3";
                 ctx.SwaggerEndpoint("/api-docs/v3/swagger.json", "Relisten API v3");
+                ctx.SwaggerEndpoint("/api-docs/v2/swagger.json", "Relisten API v2");
             });
 
             app.UseWhen(

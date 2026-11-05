@@ -65,6 +65,25 @@ public sealed class CatalogVenuesController(
                 )
         );
 
+    /// <summary>Finds an artist's canonical venue collection by its shared venue slug.</summary>
+    /// <remarks>Imported artist-specific venue slugs identify separate collections.</remarks>
+    [HttpGet("artists/{artistId}/venues/by-slug/{slug}")]
+    [ProducesResponseType(typeof(ArtistVenueWithShowsResource), 200)]
+    public Task<IActionResult> ArtistVenueBySlug(
+        string artistId,
+        string slug,
+        CancellationToken cancellationToken
+    ) =>
+        Read(
+            artistId,
+            ArtistId.Prefix,
+            async artist =>
+            {
+                var detail = await reader.ReadArtistVenueBySlug(artist, slug, cancellationToken);
+                return detail is null ? null : V4CatalogProjection.ArtistVenueWithShows(detail);
+            }
+        );
+
     [HttpGet("artist-venues/{artistVenueId}")]
     [ProducesResponseType(typeof(ArtistVenueWithShowsResource), 200)]
     public Task<IActionResult> ArtistVenueById(
@@ -100,6 +119,17 @@ public sealed class CatalogVenuesController(
                     return venue is null ? null : V4CatalogProjection.VenueWithShows(venue);
                 })
         );
+
+    /// <summary>Finds a canonical venue and its shows by its stored slug.</summary>
+    /// <remarks>A merged venue's slug returns the survivor, including its current ID and slug.</remarks>
+    [HttpGet("venues/by-slug/{slug}")]
+    [ProducesResponseType(typeof(VenueWithShowsResource), 200)]
+    public Task<IActionResult> VenueBySlug(string slug, CancellationToken cancellationToken) =>
+        Execute(async () =>
+        {
+            var detail = await reader.ReadVenueBySlug(slug, cancellationToken);
+            return detail is null ? null : V4CatalogProjection.VenueWithShows(detail);
+        });
 
     [HttpGet("artists/{artistId}/imported-venues")]
     [ProducesResponseType(typeof(ImportedVenueResource[]), 200)]

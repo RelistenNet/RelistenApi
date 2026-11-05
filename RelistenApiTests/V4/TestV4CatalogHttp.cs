@@ -151,11 +151,16 @@ public sealed partial class TestV4CatalogHttp
             .Be(HttpStatusCode.OK, await initial.Content.ReadAsStringAsync());
         var etag = initial.Headers.ETag!;
         etag.IsWeak.Should().BeTrue();
+        initial.Headers.CacheControl!.Public.Should().BeTrue();
+        initial.Headers.CacheControl.NoCache.Should().BeFalse();
+        initial.Headers.CacheControl.MaxAge.Should().NotBeNull();
+        initial.Headers.CacheControl.MaxAge!.Value.Should().BeGreaterThan(TimeSpan.Zero);
         var before = JsonNode.Parse(await initial.Content.ReadAsStringAsync())!;
         using var unchanged = await Conditional(ShowPath(4), etag.ToString());
         unchanged.StatusCode.Should().Be(HttpStatusCode.NotModified);
         (await unchanged.Content.ReadAsByteArrayAsync()).Should().BeEmpty();
         unchanged.Headers.ETag.Should().Be(etag);
+        unchanged.Headers.CacheControl.Should().BeEquivalentTo(initial.Headers.CacheControl);
         await using var connection = await MigratedTestDatabase.OpenAsync();
         try
         {
@@ -1027,6 +1032,11 @@ public sealed partial class TestV4CatalogHttp
         var properties = document["components"]!["schemas"]![schema]!["properties"]!.AsObject();
         properties
             .Select(field => field.Key)
+            .Should()
+            .BeEquivalentTo(response.AsObject().Select(field => field.Key));
+        document["components"]!["schemas"]![schema]!["required"]!
+            .AsArray()
+            .Select(field => field!.GetValue<string>())
             .Should()
             .BeEquivalentTo(response.AsObject().Select(field => field.Key));
     }

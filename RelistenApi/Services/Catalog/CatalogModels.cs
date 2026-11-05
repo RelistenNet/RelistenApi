@@ -148,6 +148,7 @@ public sealed class CatalogVenue
     public string id { get; set; } = null!;
     public int global_show_count { get; set; }
     public string name { get; set; } = null!;
+    public string slug { get; set; } = null!;
     public string kind { get; set; } = null!;
     public string? parent_id { get; set; }
     public string? city { get; set; }
@@ -206,6 +207,7 @@ public sealed class CatalogYear : CatalogTimestamps
     public Guid artist_uuid { get; set; }
     public int show_count { get; set; }
     public int source_count { get; set; }
+    public bool has_soundboard_source { get; set; }
     public int? duration { get; set; }
     public float? avg_duration { get; set; }
     public float avg_rating { get; set; }

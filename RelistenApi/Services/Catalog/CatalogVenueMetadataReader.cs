@@ -54,7 +54,7 @@ public sealed class CatalogVenueMetadataReader(ILogger<CatalogVenueMetadataReade
                       FROM chain c JOIN norm.venues v ON v.id=c.merged_into
                       WHERE cardinality(c.path)<32 AND NOT v.id=ANY(c.path)
                     )
-                    SELECT c.requested_id,c.id,c.name,c.kind,c.parent_id,c.city,c.region,c.country,
+                    SELECT c.requested_id,c.id,c.name,c.slug,c.kind,c.parent_id,c.city,c.region,c.country,
                            c.latitude,c.longitude,c.coordinate_precision,c.merged_into
                     FROM chain c
                     """,

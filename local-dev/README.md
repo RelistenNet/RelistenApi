@@ -100,7 +100,7 @@ local-dev/accounts.sh google  # Your real Google account, stored locally.
 ```
 
 The catalog API listens on `http://localhost:3823`; open
-[Swagger](http://localhost:3823/api-docs-v4/index.html). Development uses client-only Temporal
+[Swagger](http://localhost:3823/api-docs/index.html). Development uses client-only Temporal
 composition, registers no legacy import schedules and starts no Hangfire workers.
 No Temporal server is needed for catalog reads.
 

@@ -78,8 +78,17 @@ namespace Relisten.Data
         {
             await using var con = db.CreateConnection(longTimeout: false, readOnly: true);
             await con.OpenAsync(cancellationToken);
+            // Keep eligibility as one check per candidate play. An EXISTS semijoin can
+            // expand the artist's entire catalog before selecting a few recent events.
             var eligibility = publicActivityOnly
-                ? $"AND EXISTS ({PlayableTracks} AND t.uuid=p.source_track_uuid AND (@artistUuids::uuid[] IS NULL OR a.uuid=ANY(@artistUuids))) AND p.app_type IN (1,2,3,4)"
+                ? $"""
+                    JOIN LATERAL (
+                        {PlayableTracks}
+                        AND t.uuid=p.source_track_uuid
+                        AND (@artistUuids::uuid[] IS NULL OR a.uuid=ANY(@artistUuids))
+                        LIMIT 1
+                    ) eligible ON true
+                    """
                 : "";
             var direction = lastSeenId != null ? "" : "DESC";
             var ordering = publicActivityOnly
@@ -89,9 +98,10 @@ namespace Relisten.Data
                 new CommandDefinition(
                     $"""
                     SELECT p.* FROM source_track_plays p
+                    {eligibility}
                     WHERE p.created_at > now() - interval '1 hour'
                       {(lastSeenId != null ? "AND p.id > @lastSeenId" : "")}
-                      {eligibility}
+                      {(publicActivityOnly ? "AND p.app_type IN (1,2,3,4)" : "")}
                     ORDER BY {ordering}
                     LIMIT @limit
                     """,

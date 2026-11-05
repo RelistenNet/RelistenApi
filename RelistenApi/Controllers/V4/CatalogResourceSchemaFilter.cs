@@ -9,20 +9,28 @@ using Swashbuckle.AspNetCore.SwaggerGen;
 
 namespace Relisten.Controllers.V4;
 
-/// <summary>Preserves nullable v4 values when OpenAPI 3.0 references lose nullability.</summary>
-internal sealed class NullableCatalogSchemaFilter : ISchemaFilter
+/// <summary>Documents always-present response fields and nullable v4 values accurately.</summary>
+internal sealed class CatalogResourceSchemaFilter : ISchemaFilter
 {
     private static readonly DefaultContractResolver Resolver = new();
 
     public void Apply(IOpenApiSchema schema, SchemaFilterContext context)
     {
         if (
-            schema.Properties is null
+            schema is not OpenApiSchema model
+            || schema.Properties is null
             || context.Type.Namespace != typeof(TrackResource).Namespace
             || Resolver.ResolveContract(context.Type) is not JsonObjectContract contract
         )
         {
             return;
+        }
+
+        // Responses include every field, even nulls. Required means present, not
+        // non-null. Request schemas keep their own validation rules.
+        if (context.Type.Name.EndsWith("Resource", StringComparison.Ordinal))
+        {
+            model.Required = schema.Properties.Keys.ToHashSet();
         }
 
         var nullability = new NullabilityInfoContext();

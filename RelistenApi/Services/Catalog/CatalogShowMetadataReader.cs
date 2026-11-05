@@ -56,7 +56,7 @@ public sealed class CatalogShowMetadataReader(
         var years = (
             await session.Connection.QueryAsync<CatalogYear>(
                 session.Command(
-                    "SELECT y.*,a.uuid artist_uuid FROM years y JOIN artists a ON a.id=y.artist_id WHERE y.uuid=ANY(@yearUuids)",
+                    CatalogBrowseReader.YearSelect + " WHERE y.uuid=ANY(@yearUuids)",
                     new { yearUuids },
                     cancellationToken
                 )
