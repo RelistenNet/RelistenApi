@@ -1,5 +1,5 @@
 {
-  "status": "50 v4 catalog/playback operations; eight operator operations remain at their existing v2 paths. Verify runtime contracts and legacy compatibility separately.",
+  "status": "51 v4 catalog/playback operations; eight operator operations remain at their existing v2 paths. Verify runtime contracts and legacy compatibility separately.",
   "catalog_endpoints": [
     {
       "method": "GET",
@@ -196,6 +196,13 @@
       "coverage_source": "other-route-inventory.md",
       "response_shape": "command_result",
       "sync_policy": "command"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v4/live/summary",
+      "coverage_source": "master live summary (#118)",
+      "response_shape": "live_summary",
+      "sync_policy": "live_summary"
     },
     {
       "method": "GET",
@@ -431,7 +438,8 @@
     "detail_tracks": "Upsert song metadata and returned track resources; replace only this song\u2019s complete file-match membership, including an empty list. Save the payload ETag in the same local transaction. This response has no shows property and does not change song-show membership or shared offline entities.",
     "artist_eras": "Replace only this artist\u2019s complete ordered era metadata, including an empty list. Eras have no public identity and are not shared entities. Save the ETag with the replacement.",
     "source_reviews": "Upsert returned review resources and replace this source\u2019s complete review membership, including an empty list. Save its ETag atomically. Other sources, catalog entities, and personal library membership remain unchanged.",
-    "transient_ranking": "Use only as a transient online ranking view; do not apply its context-dependent popularity or entity membership to the persisted offline catalog. ETags support online revalidation. Open resources through their ordinary detail routes for catalog apply."
+    "transient_ranking": "Use only as a transient online ranking view; do not apply its context-dependent popularity or entity membership to the persisted offline catalog. ETags support online revalidation. Open resources through their ordinary detail routes for catalog apply.",
+    "live_summary": "Transient online activity for one completed window; use ordinary typed catalog resources for navigation. Replace only this exact summary view; omissions do not delete catalog records or account history. ETags support revalidation; shared caching lasts until the next minute, with up to one extra minute of stale serving."
   },
   "account_identity_storage": "Canonical full prefixed strings for application-owned IDs and catalog targets; OpenIddict/private surrogate keys remain internal UUIDs.",
   "account_routes": "Change existing /v1/library and /v1/me in place; no parallel library route version.",

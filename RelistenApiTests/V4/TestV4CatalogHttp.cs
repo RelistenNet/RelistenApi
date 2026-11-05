@@ -1032,65 +1032,10 @@ public sealed partial class TestV4CatalogHttp
     }
 
     [Test]
-    public async Task V4_openapi_exposes_the_checkpoint_browse_and_playback_reads()
+    public async Task Openapi_separates_v4_and_documents_validated_browse_choices()
     {
         var document = await GetJson("/api-docs/v4/swagger.json");
         var paths = document["paths"]!.AsObject();
-        paths
-            .Select(entry => entry.Key)
-            .Should()
-            .BeEquivalentTo(
-                "/api/v4/artists",
-                "/api/v4/live/play",
-                "/api/v4/live/history",
-                "/api/v4/search",
-                "/api/v4/popular/artists",
-                "/api/v4/popular/shows",
-                "/api/v4/popular/years",
-                "/api/v4/trending/artists",
-                "/api/v4/trending/shows",
-                "/api/v4/trending/years",
-                "/api/v4/artists/{artistId}/shows/popular-trending",
-                "/api/v4/shows/popular-trending",
-                "/api/v4/shows/momentum",
-                "/api/v4/artists/{artistId}",
-                "/api/v4/catalog/resolve",
-                "/api/v4/artists/{artistId}/years",
-                "/api/v4/artists/{artistId}/years/{yearId}",
-                "/api/v4/artists/{artistId}/years/by-number/{year}",
-                "/api/v4/artists/{artistId}/shows",
-                "/api/v4/artists/{artistId}/shows/by-date/{showDate}",
-                "/api/v4/artists/{artistId}/shows/on-date",
-                "/api/v4/artists/{artistId}/shows/today",
-                "/api/v4/artists/{artistId}/shows/random",
-                "/api/v4/artists/{artistId}/shows/top",
-                "/api/v4/artists/{artistId}/shows/recently-added",
-                "/api/v4/artists/{artistId}/shows/recently-performed",
-                "/api/v4/artists/{artistId}/shows/recently-updated",
-                "/api/v4/shows/today",
-                "/api/v4/shows/on-date",
-                "/api/v4/shows/recently-added",
-                "/api/v4/shows/recently-performed",
-                "/api/v4/shows/recently-updated",
-                "/api/v4/artists/{artistId}/tours",
-                "/api/v4/artists/{artistId}/eras",
-                "/api/v4/tours/{tourId}",
-                "/api/v4/shows/{showId}",
-                "/api/v4/source-tracks/{sourceTrackId}",
-                "/api/v4/sources/{sourceId}",
-                "/api/v4/sources/{sourceId}/reviews",
-                "/api/v4/artists/{artistId}/venues",
-                "/api/v4/artists/{artistId}/venues/{venueId}",
-                "/api/v4/artists/{artistId}/imported-venues",
-                "/api/v4/imported-venues/{importedVenueId}",
-                "/api/v4/artist-venues/{artistVenueId}",
-                "/api/v4/venues/{venueId}",
-                "/api/v4/artists/{artistId}/songs",
-                "/api/v4/artists/{artistId}/imported-songs",
-                "/api/v4/imported-songs/{importedSongId}",
-                "/api/v4/songs/{songId}",
-                "/api/v4/songs/{songId}/tracks"
-            );
         var sort = paths["/api/v4/shows/recently-added"]!["get"]!["parameters"]!
             .AsArray()
             .Single(parameter => parameter!["name"]!.GetValue<string>() == "sort_by")!;

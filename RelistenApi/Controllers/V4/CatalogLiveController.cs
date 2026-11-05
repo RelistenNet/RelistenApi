@@ -12,21 +12,70 @@ using Relisten.Api.Models.Api.V4;
 using Relisten.Catalog;
 using Relisten.Data;
 using Relisten.Identifiers;
+using Relisten.Services.Live;
 using Relisten.Services.Popularity;
 
 namespace Relisten.Controllers.V4;
 
-/// <summary>Anonymous play reporting and public activity. Neither route changes account history.</summary>
+/// <summary>Anonymous play reporting and public activity. These routes do not change account history.</summary>
 [Route("api/v4/live")]
 [ApiExplorerSettings(GroupName = "v4")]
 [Produces("application/json")]
 public sealed class CatalogLiveController(
     CatalogLiveReader reader,
+    CatalogLiveSummaryReader summary,
     SourceTrackPlaysService plays,
     PopularityRefreshRequest refresh,
     ILogger<CatalogLiveController> logger
 ) : CatalogControllerBase(logger, refresh)
 {
+    /// <summary>
+    /// Plays grouped by show and artist over the last completed minute window.
+    /// Minutes clamp to 5–60; list limits and ranking options match live discovery.
+    /// Listened time counts each started track's duration, with 420 seconds for unknown duration.
+    /// </summary>
+    [HttpGet("summary")]
+    [ProducesResponseType(typeof(LiveSummaryResource), 200)]
+    [ProducesResponseType(typeof(ProblemDetails), 422)]
+    [ProducesResponseType(typeof(ProblemDetails), 503)]
+    public Task<IActionResult> Summary(
+        [FromQuery] int minutes = LiveSummaryRequest.DefaultMinutes,
+        [FromQuery] int shows_limit = LiveSummaryRequest.DefaultShowsLimit,
+        [FromQuery] int artists_limit = LiveSummaryRequest.DefaultArtistsLimit,
+        [FromQuery] string? month_day = null,
+        [FromQuery, AllowedValues("surprise", "plays")] string sort = "surprise",
+        [FromQuery] int max_per_artist = LiveSummaryRequest.DefaultMaxPerArtist,
+        [FromQuery] int fresh_days = LiveSummaryRequest.DefaultFreshDays,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var now = DateTime.UtcNow;
+        if (
+            !LiveSummaryRequest.TryCreate(
+                minutes,
+                shows_limit,
+                artists_limit,
+                month_day,
+                sort,
+                max_per_artist,
+                fresh_days,
+                now,
+                out var request,
+                out var error
+            )
+        )
+        {
+            return Task.FromResult<IActionResult>(Failure(422, "invalid_query", error));
+        }
+
+        var window = LiveWindow.EndingBefore(now, request.Minutes);
+        // This public window can be shared until the next minute boundary. Cloudflare
+        // owns response caching; the origin does not keep another serialized copy.
+        var maxAge = Math.Max(1, (int)Math.Ceiling((window.NextRefreshAt - now).TotalSeconds));
+        Response.Headers.CacheControl = $"public, max-age={maxAge}, stale-while-revalidate=60";
+        return Execute(async () => await summary.Read(request, window, cancellationToken));
+    }
+
     [HttpPost("play")]
     [Consumes("application/json")]
     [ProducesResponseType(typeof(PlayReceiptResource), 200)]

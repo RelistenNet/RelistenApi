@@ -36,6 +36,7 @@ internal sealed class CatalogHttpResponseSchema : IOperationFilter
         if (
             context.ApiDescription.HttpMethod != "GET"
             || context.MethodInfo.DeclaringType == typeof(CatalogLiveController)
+                && context.MethodInfo.Name == nameof(CatalogLiveController.History)
             || context.MethodInfo.DeclaringType == typeof(CatalogShowDiscoveryController)
                 && context.MethodInfo.Name == nameof(CatalogShowDiscoveryController.Random)
         )

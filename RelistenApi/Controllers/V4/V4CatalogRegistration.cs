@@ -28,6 +28,7 @@ public static class V4CatalogRegistration
         services.AddTransient<CatalogReader>();
         services.AddTransient<CatalogRecordingReader>();
         services.AddTransient<CatalogLiveReader>();
+        services.AddTransient<CatalogLiveSummaryReader>();
         services.TryAddScoped<Relisten.Data.SourceTrackPlaysService>();
         services.AddTransient<CatalogSourceReviewReader>();
         services.AddTransient<CatalogReferenceLookup>();

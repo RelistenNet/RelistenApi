@@ -38,7 +38,17 @@ internal sealed class CatalogJsonResult(object resource, bool cacheable = true) 
         }
         var bytes = buffer.GetBuffer().AsMemory(0, checked((int)buffer.Length));
         var response = context.HttpContext.Response;
-        response.Headers.CacheControl = cacheable ? "public, no-cache" : "no-store";
+        if (cacheable)
+        {
+            if (!response.Headers.ContainsKey(HeaderNames.CacheControl))
+            {
+                response.Headers.CacheControl = "public, no-cache";
+            }
+        }
+        else
+        {
+            response.Headers.CacheControl = "no-store";
+        }
         if (cacheable)
         {
             var etag = new EntityTagHeaderValue(

@@ -964,6 +964,13 @@ V2 routes retain their request/response formats and
 share telemetry storage; their recent-event selection now also follows sequence
 order so cursor paging does not skip a lower sequence with a later timestamp.
 
+`GET /api/v4/live/summary` is the native equivalent of the new v3 grouped live
+summary. It returns typed show/source/track resources and artist IDs, with window
+aggregates and discovery groups. Its [complete contract and rollout notes](review/master-refresh.md)
+describe current-window eligibility, historical baselines, approximate listened
+time, per-minute shared caching and payload ETags. It is an online view, not an
+authoritative catalog or account-membership replacement.
+
 Ranking/recent bounds and supported sort/window choices are listed in the
 coverage tables; invalid enum values are 422 rather than silently selecting a
 different sort.

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -116,6 +117,22 @@ namespace Relisten.Data
         /// </summary>
         public async Task<LiveWindowPlays> PlaysInLiveWindow(LiveWindow window)
         {
+            return await db.WithConnection(con => PlaysInLiveWindow(window, con));
+        }
+
+        /// <summary>
+        /// Uses the caller's snapshot for native catalog aggregation and hydration.
+        /// Public activity excludes unplayable recordings and unsupported app types
+        /// before every aggregate; legacy callers retain their original population.
+        /// </summary>
+        public async Task<LiveWindowPlays> PlaysInLiveWindow(
+            LiveWindow window,
+            IDbConnection connection,
+            IDbTransaction? transaction = null,
+            bool publicActivityOnly = false,
+            CancellationToken cancellationToken = default
+        )
+        {
             var parameters = new
             {
                 windowStart = window.Start,
@@ -124,36 +141,41 @@ namespace Relisten.Data
                 dailyLagStart = window.Start.AddDays(-DailyAggregateMaxLagDays),
                 fallbackTrackSeconds = FallbackTrackSeconds,
                 baselineWeeks = LiveSummaryRanking.ArtistBaselineWeeks,
-                // The outer edges of every prior same-hour-of-week window. The start is an
-                // hour earlier so the hourly bucket overlapping the oldest window's start
-                // is included. These constant bounds let the planner exclude chunks.
+                // Include the hourly bucket overlapping the oldest prior window.
+                // Constant outer bounds let Timescale prune unrelated chunks.
                 artistBaselineStart = window
                     .Start.AddDays(-7 * LiveSummaryRanking.ArtistBaselineWeeks)
                     .AddHours(-1),
                 artistBaselineEnd = window.End.AddDays(-7),
             };
-
-            return await db.WithConnection(async con =>
+            var eligibility = publicActivityOnly
+                ? " AND p.app_type IN (1,2,3,4) AND EXISTS ("
+                    + PlayableTracks
+                    + " AND t.uuid=p.source_track_uuid)"
+                : "";
+            var windowSql = LiveWindowPlaysCte + eligibility + ")";
+            var sql = string.Join(
+                ";\n",
+                new[] { LiveAppTypesSql, LiveTimelineSql, LiveShowsSql, LiveArtistsSql }.Select(
+                    query => windowSql + query
+                )
+            );
+            using var results = await connection.QueryMultipleAsync(
+                new CommandDefinition(
+                    sql,
+                    parameters,
+                    transaction,
+                    commandTimeout: 30,
+                    cancellationToken: cancellationToken
+                )
+            );
+            return new LiveWindowPlays
             {
-                using var results = await con.QueryMultipleAsync(
-                    string.Join(
-                        ";\n",
-                        LiveAppTypesSql,
-                        LiveTimelineSql,
-                        LiveShowsSql,
-                        LiveArtistsSql
-                    ),
-                    parameters
-                );
-
-                return new LiveWindowPlays
-                {
-                    AppTypes = (await results.ReadAsync<LiveAppTypeRow>()).ToList(),
-                    Timeline = (await results.ReadAsync<LiveTimelineRow>()).ToList(),
-                    Shows = (await results.ReadAsync<LiveShowRow>()).ToList(),
-                    Artists = (await results.ReadAsync<LiveArtistRow>()).ToList(),
-                };
-            });
+                AppTypes = (await results.ReadAsync<LiveAppTypeRow>()).ToArray(),
+                Timeline = (await results.ReadAsync<LiveTimelineRow>()).ToArray(),
+                Shows = (await results.ReadAsync<LiveShowRow>()).ToArray(),
+                Artists = (await results.ReadAsync<LiveArtistRow>()).ToArray(),
+            };
         }
 
         /// <summary>
@@ -205,19 +227,17 @@ namespace Relisten.Data
                 WHERE
                     p.created_at >= @windowStart
                     AND p.created_at < @windowEnd
-            )";
+            ";
 
         private const string LiveAppTypesSql =
-            LiveWindowPlaysCte
-            + @"
+            @"
             SELECT app_type, count(*) AS plays
             FROM window_plays
             GROUP BY app_type
             ORDER BY plays DESC, app_type";
 
         private const string LiveTimelineSql =
-            LiveWindowPlaysCte
-            + @",
+            @",
             minute_counts AS (
                 SELECT bucket_start, count(*) AS plays
                 FROM window_plays
@@ -234,8 +254,7 @@ namespace Relisten.Data
             ORDER BY b.bucket_start";
 
         private const string LiveShowsSql =
-            LiveWindowPlaysCte
-            + @",
+            @",
             show_totals AS (
                 SELECT
                     show_id,
@@ -361,8 +380,7 @@ namespace Relisten.Data
                 LEFT JOIN show_baselines b ON b.show_uuid = st.show_uuid";
 
         private const string LiveArtistsSql =
-            LiveWindowPlaysCte
-            + @",
+            @",
             artist_totals AS (
                 SELECT
                     artist_id,

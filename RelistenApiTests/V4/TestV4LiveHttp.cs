@@ -350,7 +350,8 @@ public sealed partial class TestV4CatalogHttp
                 new { track_id = TrackId(4), app_type = "web" }
             );
             using var history = await http.GetAsync("/api/v4/live/history");
-            foreach (var response in new[] { play, history })
+            using var summary = await http.GetAsync("/api/v4/live/summary");
+            foreach (var response in new[] { play, history, summary })
             {
                 response.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
                 response
@@ -366,5 +367,6 @@ public sealed partial class TestV4CatalogHttp
             );
         }
         (await GetJson("/api/v4/live/history")).AsArray().Should().BeEmpty();
+        (await GetJson("/api/v4/live/summary"))["total_plays"]!.GetValue<int>().Should().Be(0);
     }
 }
