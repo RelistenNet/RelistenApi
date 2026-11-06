@@ -104,11 +104,11 @@ reference validation, and transport limits. Shared REST tests cover merges,
 retirement, approval, canonical counts, and ETags. The cyclic-merge fixture now
 checks GraphQL field errors while an independent artist read succeeds.
 
-`TestV4SearchRankingHttp` checks ordinary/global/organic score contexts in one
-operation. `TestV4GraphQLWorkloads` measures batching, complete recordings, refresh
-union across actual fetch scopes, and concurrent requests. Its concurrent writer
-case establishes that the graph read-unit wrapper shares a snapshot between
-membership and hydration, while the next HTTP read sees the new value.
-`TestCatalogReadSession` checks read-only enforcement and cancellation/disposal
-with a one-connection pool. See [qualification results](performance.md) for the
-measurement environment and remaining production capacity qualification.
+`TestV4SearchRankingHttp` checks ordinary/global/organic score contexts and
+selected ranking series. `TestV4GraphQLReadBoundaries` checks bounded batching,
+complete recordings, search continuation, and request-wide refresh collection.
+`TestCatalogSongShowPaging` checks membership and entity hydration against a
+concurrent writer in a caller-owned snapshot. `TestCatalogReadSession` checks
+read-only enforcement and cancellation/disposal with a one-connection pool.
+See [performance checks](performance.md) for real-catalog measurements and
+remaining production capacity qualification.

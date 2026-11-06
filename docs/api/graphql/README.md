@@ -5,11 +5,9 @@ Send a JSON `POST` to `/api/v4/graphql` with `query` and optional `variables` an
 The endpoint serves web clients that want selected catalog relationships without
 a local sync engine. Responses use `Cache-Control: no-store`.
 
-The [performance report](performance-fixes/README.md) records the shared-reader
-fixes and actual-catalog qualification for the demonstrated web queries. The
-[original review](review/README.md) also identifies additional UI capabilities and
-search-specific work, which remain separate. [Runnable web queries](review/queries/)
-and measured variables accompany the evidence.
+See [performance and verification](performance.md) for the read strategy, service
+checks and measured limits. [Runnable web queries](operations/) demonstrate the
+supported client operations.
 
 ```graphql
 query ArtistShows($artist: ID!, $after: String) {
@@ -168,8 +166,8 @@ These limits allow the [measured workloads](performance.md) with substantial
 headroom. List costs include fan-out and estimated complete recording sizes;
 runtime accounting also bounds materialized entities, tracks, links, and parts.
 Direct bounded views reserve their result ceiling; grouped rankings reserve the
-combined artist × per-ranking limit before querying. A row limit raises an error
-and never returns a truncated recording. This is not a serialized-byte ceiling.
+combined artist × selected-series limit before querying. A row limit raises an
+error and never returns a truncated recording. This is not a serialized-byte ceiling.
 
 The HTTP deadline and abort token reach loader waits, session opening, and Dapper
 commands. The shared SQL command timeout remains 30 seconds; the graph's shorter
@@ -187,8 +185,9 @@ read duration, batch size, active-read, and row-budget instruments;
 reservations, so it measures budget accounting rather than exact SQL row counts.
 Raw variables are not logged by these additions.
 
-This is an additive route with no migrations, imports, backfill, or client cutover.
-Remove the route registration to roll back exposure; shared reader changes retain
-REST contracts. Correctness and the selected actual-catalog web corpus have local
-qualification. Search-specific work remains deferred; production capacity and
-arbitrary global fan-outs remain unqualified.
+This is an additive route with no imports, backfill, or client cutover. Normal
+migration 20 installs the shared scoped song matcher and retains its existing
+signatures. Remove the route registration to roll back exposure; shared reader
+changes retain REST contracts. Correctness and the selected actual-catalog web
+corpus have local qualification. Search-specific work remains deferred; production
+capacity and arbitrary global fan-outs remain unqualified.

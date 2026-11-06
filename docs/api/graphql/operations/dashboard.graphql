@@ -1,5 +1,12 @@
-query WebDashboard($historySize: Int! = 10) {
-  artist(id: "artist_3qmp7zjbg1rpebhtyfy43096vj") {
+query WebDashboard(
+  $artist: ID! = "artist_3qmp7zjbg1rpebhtyfy43096vj"
+  $scarlet: ID! = "song_62mhvjyd"
+  $drums: ID! = "song_pxnavq74"
+  $venue: String! = "venue_yn1268r4"
+  $recording: ID! = "source_0d6jj9kcqwayrky1qpbwb2m6a1"
+  $historySize: Int! = 10
+) {
+  artist(id: $artist) {
     id name showCount sourceCount
     years(first: 5, orderBy: RATING) {
       nodes { id year showCount sourceCount }
@@ -14,12 +21,12 @@ query WebDashboard($historySize: Int! = 10) {
     }
   }
 
-  scarlet: song(id: "song_62mhvjyd") { ...SongHistory }
-  drums: song(id: "song_pxnavq74") { ...SongHistory }
+  scarlet: song(id: $scarlet) { ...SongHistory }
+  drums: song(id: $drums) { ...SongHistory }
 
   oakland: artistVenueFor(
-    artistId: "artist_3qmp7zjbg1rpebhtyfy43096vj"
-    venueId: "venue_yn1268r4"
+    artistId: $artist
+    venueId: $venue
   ) {
     artistShowCount
     venue { id name city region latitude longitude }
@@ -30,7 +37,7 @@ query WebDashboard($historySize: Int! = 10) {
     }
   }
 
-  recording: source(id: "source_0d6jj9kcqwayrky1qpbwb2m6a1") {
+  recording: source(id: $recording) {
     id displayDate isSoundboard taper lineage
     sets {
       id index isEncore
