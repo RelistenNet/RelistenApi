@@ -254,12 +254,15 @@ There are no remaining partially validated findings presented as confirmed bugs.
 
 ## Recommended implementation order
 
-1. Fix correlated tour counts and owner scoping in the shared collection reader.
-   Rerun identical-payload REST cases before continuing. Preserve fallback policy,
-   ordering, complete relationships and projection fields.
-2. Batch song matching and restrict shows before ranking; make timings conditional
-   on selection. Retain existing read-unit snapshots, full interpretation validation,
-   cancellation and failure behavior. No partial-read recovery machinery is needed.
+Priority update, 2026-11-06: Alec expects to replace search and considers it the
+least important endpoint. The [implementation plan](../../../plans/active/2026-11-06-graphql-performance-fixes.md)
+therefore prioritizes existing playback and pagination. Search findings remain
+valid, but do not lead or block that work.
+
+1. Batch song matching and restrict shows before source ranking in the shared reader.
+2. Fix owner scoping and make timings conditional on selection. Retain existing
+   read-unit snapshots, full interpretation validation, cancellation and failure
+   behavior. Preserve REST fallback policy, ordering and complete relationships.
 3. Re-run this actual-catalog corpus and inspect plans. Verify ten parent requests
    no longer compute the same whole-song population ten times. Add only indexes
    justified by the remaining plans. Recheck ingestion implications of any index.
@@ -268,6 +271,8 @@ There are no remaining partially validated findings presented as confirmed bugs.
    scope; they should not be smuggled into the performance fixes.
 5. Qualify production-sized plans and concurrent pool/CPU behavior before rollout.
    The existing small-pool correctness test does not establish production capacity.
+6. Handle any remaining search regression separately, without search-specific
+   indexes or a redesign in the playback/pagination implementation.
 
 ## Reproduce
 

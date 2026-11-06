@@ -4,6 +4,8 @@ Status: implemented with synthetic correctness verification on
 `codex/v4-catalog-graphql-plan`. Actual-catalog performance qualification failed;
 see the [adversarial review](../../api/graphql/review/README.md) for required reader
 fixes, measured REST regressions and proposed additional UI capabilities.
+The [performance fix plan](2026-11-06-graphql-performance-fixes.md) puts song-history
+playback and scoped pagination first; search is a low-priority follow-up per Alec.
 
 This ExecPlan is a living document. Update Progress, Surprises & Discoveries,
 Decision Log, and Outcomes & Retrospective as work proceeds. Paths below are
