@@ -1,0 +1,28 @@
+{
+  "query": "query($include:Boolean!){song(id:\"song_62mhvjyd\"){shows(first:25){nodes{show{id} timings @include(if:$include){singleSong{median} multiSong{median}}}}}}",
+  "method": "Serial HTTP requests; count completed Npgsql SQL log entries containing percentile_cont(0.5). Application logs are separate from the test host. Absolute command totals are excluded because startup/freshness work can also occur.",
+  "before": [
+    {
+      "includeTimings": false,
+      "statisticsCommands": 1,
+      "shows": 25
+    },
+    {
+      "includeTimings": true,
+      "statisticsCommands": 1,
+      "shows": 25
+    }
+  ],
+  "after": [
+    {
+      "includeTimings": false,
+      "statisticsCommands": 0,
+      "shows": 25
+    },
+    {
+      "includeTimings": true,
+      "statisticsCommands": 1,
+      "shows": 25
+    }
+  ]
+}

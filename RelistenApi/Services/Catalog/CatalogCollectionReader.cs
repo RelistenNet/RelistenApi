@@ -379,8 +379,15 @@ public sealed class CatalogCollectionReader
             ),
         };
 
-    private static string ShowCandidates(CatalogCollection collection) =>
-        $$"""
+    private static string ShowCandidates(CatalogCollection collection)
+    {
+        var ownerApproval = collection.OwnerKind
+            is CatalogReferenceKind.Song
+                or CatalogReferenceKind.Venue
+                or CatalogReferenceKind.ArtistVenue
+            ? "COALESCE(f.norm_catalogue,false)"
+            : "TRUE";
+        return $$"""
             SELECT s.uuid::text key,'Show' kind,
               CASE r.sort WHEN 'DateDescending' THEN 0
                  WHEN 'Updated' THEN COALESCE(extract(epoch FROM CASE WHEN r.recency='Added' THEN cnt.max_updated_at ELSE s.updated_at END),-1e30)
@@ -414,8 +421,9 @@ public sealed class CatalogCollectionReader
               AND (r.venue IS NULL OR COALESCE(f.norm_catalogue,false) AND {{CatalogVenueReader.ShowMembershipSql(
                 "r.venue"
             )}})
-              AND {{(collection.OwnerKind is CatalogReferenceKind.Song or CatalogReferenceKind.Venue or CatalogReferenceKind.ArtistVenue ? "COALESCE(f.norm_catalogue,false)" : "TRUE")}}
+              AND {{ownerApproval}}
             """;
+    }
 
     private static string ArtistPredicate(CatalogCollection collection) =>
         collection.Filters?.Artist is not null ? "a.uuid=r.artist" : "TRUE";

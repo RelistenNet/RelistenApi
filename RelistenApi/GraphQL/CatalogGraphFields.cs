@@ -175,20 +175,22 @@ internal static class CatalogGraphFields
                 var page = new CatalogPageRequest(first, after, context.IsSelected("totalCount"));
                 var recordings =
                     kind == CatalogReferenceKind.Source
-                    && (
-                        context.IsSelected("nodes", "sets")
-                        || context.IsSelected("edges", "node", "sets")
-                        || context.IsSelected("nodes", "links")
-                        || context.IsSelected("edges", "node", "links")
-                    );
+                    && (SelectsNodeField(context, "sets") || SelectsNodeField(context, "links"));
+                var statistics = songShows && SelectsNodeField(context, "timings");
                 return await context
                     .DataLoader<CatalogPageLoader>()
                     .LoadAsync(
-                        new CatalogPageLoad(collection, page, recordings, songShows),
+                        new CatalogPageLoad(collection, page, recordings, songShows, statistics),
                         context.RequestAborted
                     );
             });
     }
+
+    // IsSelected arguments are sibling alternatives, not a path. Use the single-field
+    // collection overload: HC 16.7.3's multi-field overload does not unwrap list types.
+    private static bool SelectsNodeField(IResolverContext context, string field) =>
+        context.Select("nodes").IsSelected(field)
+        || context.Select("edges").Select("node").IsSelected(field);
 
     private static void ValidateCollection(CatalogCollection collection)
     {

@@ -1,10 +1,120 @@
+using System.Net.Http.Json;
 using System.Text.Json.Nodes;
+using Dapper;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
+using Relisten;
+using Relisten.GraphQL;
 
 namespace RelistenApiTests.V4;
 
 public sealed partial class TestV4CatalogHttp
 {
+    [Test]
+    public async Task GraphQL_source_headers_do_not_consume_the_complete_recording_budget()
+    {
+        var options = app.Services.GetRequiredService<CatalogGraphOptions>();
+        var original = options.MaxMaterializedRows;
+        options.MaxMaterializedRows = 2;
+        try
+        {
+            var shallow = await Graph(
+                "query($show: ID!) { show(id: $show) { sources(first: 1) { nodes { id } } } }",
+                new { show = CatalogId("show", 4) }
+            );
+            shallow["show"]!["sources"]!["nodes"]!.AsArray().Should().ContainSingle();
+
+            // A source, set and track already exceed this budget. Header-only reads
+            // must succeed without paying for those complete recording children.
+            using var response = await http.PostAsJsonAsync(
+                "/api/v4/graphql",
+                new
+                {
+                    query = "query($show: ID!) { show(id: $show) { sources(first: 1) { nodes { id sets { id tracks { id } } } } } }",
+                    variables = new { show = CatalogId("show", 4) },
+                }
+            );
+            var json = JsonNode.Parse(await response.Content.ReadAsStringAsync())!;
+            json["errors"].Should().NotBeNull(json.ToJsonString());
+            json["errors"]!
+                .AsArray()
+                .Should()
+                .Contain(error =>
+                    error!["extensions"]!["code"]!.GetValue<string>() == "catalog_row_limit"
+                );
+        }
+        finally
+        {
+            options.MaxMaterializedRows = original;
+        }
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task GraphQL_song_timings_follow_fragments_aliases_and_conditional_selection(
+        bool include
+    )
+    {
+        await using var connection = await MigratedTestDatabase.OpenAsync();
+        var original = await connection.QuerySingleAsync<double?>(
+            "SELECT duration FROM source_tracks WHERE id=925042"
+        );
+        try
+        {
+            await connection.ExecuteAsync("UPDATE source_tracks SET duration=300 WHERE id=925042");
+            var data = await Graph(
+                """
+                query($include: Boolean!) {
+                  song(id: "song_00000101") {
+                    compact: shows(first: 50) { nodes {
+                      show { id }
+                      ...TimingFields @include(if: $include)
+                      tracks(first: 1) { nodes { id } }
+                    } }
+                    detailed: shows(first: 50) { edges { node {
+                      show { id }
+                      details: timings { singleSong { median sourceCount } }
+                    } } }
+                  }
+                }
+                fragment TimingFields on SongShow {
+                  measurements: timings { singleSong { median sourceCount } }
+                }
+                """,
+                new { include }
+            );
+
+            var compact = data["song"]!["compact"]!["nodes"]!.AsArray();
+            var detailed = data["song"]!["detailed"]!["edges"]!.AsArray();
+            detailed[0]!["node"]!["details"]!["singleSong"]!["median"]!
+                .GetValue<double>()
+                .Should()
+                .Be(300);
+            for (var i = 0; i < compact.Count; i++)
+            {
+                compact[i]!["tracks"]!["nodes"]!.AsArray().Should().NotBeEmpty();
+                if (include)
+                {
+                    JsonNode
+                        .DeepEquals(compact[i]!["measurements"], detailed[i]!["node"]!["details"])
+                        .Should()
+                        .BeTrue();
+                }
+                else
+                {
+                    compact[i]!.AsObject().ContainsKey("measurements").Should().BeFalse();
+                }
+            }
+        }
+        finally
+        {
+            await connection.ExecuteAsync(
+                "UPDATE source_tracks SET duration=@original WHERE id=925042",
+                new { original }
+            );
+        }
+    }
+
     [Test]
     public async Task GraphQL_scoped_show_batches_preserve_each_owners_membership()
     {

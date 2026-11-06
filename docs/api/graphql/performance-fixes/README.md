@@ -67,8 +67,31 @@ canonical/imported venue, imported song and artist-venue collections against RES
 including a conflicting song/artist filter and a zero-count page. Search-specific
 selection/ranking remains unchanged.
 
+## Stage 3: selected timing and recording details
+
+`SongShows` now controls wrapper construction independently of the statistics flag.
+Only a selected timing field requests live statistics; the flag participates in
+loader identity and grouping. Source connections likewise load complete recordings
+only when sets or links are selected. Both nodes and edges use the same selection
+helper, honoring aliases, fragments and execution conditions.
+
+The old `IsSelected("nodes", "sets")` usage checked alternative siblings, so every
+nodes selection loaded complete recordings. Use explicit `Select` traversal and
+the single-field `IsSelected` overload. In the pinned 16.7.3 implementation, the
+multi-field selection-collection overload also fails to unwrap list types. The
+single-field overload handles them. See the upstream
+[resolver extension](https://github.com/ChilliCream/graphql-platform/blob/16.7.3/src/HotChocolate/Core/src/Types/Extensions/ResolverContextExtensions.cs)
+and [selection collection](https://github.com/ChilliCream/graphql-platform/blob/16.7.3/src/HotChocolate/Core/src/Types/Execution/Processing/SelectionCollection.cs).
+
+[statistics-selection.json](statistics-selection.json) records sequential HTTP
+requests and completed statistics SQL observed in the development API log:
+omitted/selected timings change from 1/1 commands to **0/1**, with 25 shows in both
+responses. The full V4 fixture passes 197 tests. New cases cover selected/omitted
+timings through aliases, fragments and directives, and ensure a header-only source
+page fits a row budget that rejects its complete recording. Restoring the old
+sibling check makes that regression test fail; restoring the fix makes it pass.
+
 ## Remaining work
 
-Omit unselected timing statistics, then rerun the full corpus and affected REST
-routes. No migration, persistent index,
+Finish the full suite, independent validation and final corpus benchmark. No migration, persistent index,
 new caching layer, deployment or search-specific fix has been made.

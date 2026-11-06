@@ -28,7 +28,9 @@ first work is selecting files efficiently, rather than replacing hydration.
 - [x] (2026-11-06) Replace broad owner selection with explicit scoped SQL. All 20
   GraphQL payloads and 12 REST payloads match this branch's before run; Scarlet25
   playback is 144 ms, Drums25 533 ms, venue history 24 ms. 194 V4 tests pass.
-- [ ] Omit timing statistics when the operation does not select them.
+- [x] (2026-11-06) Omit unselected timing statistics and recording bundles.
+  SQL trace confirms omitted/selected timings issue 0/1 statistics commands;
+  197 V4 tests pass, including a source-header budget regression verified red/green.
 - [ ] Rerun representative full-catalog workloads and affected REST reads; commit
       the new evidence and remaining limitations.
 

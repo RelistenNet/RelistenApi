@@ -29,7 +29,8 @@ public sealed record CatalogPageLoad(
     CatalogCollection Collection,
     CatalogPageRequest Page,
     bool Recordings = false,
-    bool SongShows = false
+    bool SongShows = false,
+    bool Statistics = false
 );
 
 /// <summary>One operation's loader dependencies. Readers share the request's refresh collector;
@@ -180,7 +181,7 @@ public sealed class CatalogGraphOperation(
                 var result = new Dictionary<CatalogPageLoad, CatalogGraphPage>();
                 foreach (
                     var group in keys.Distinct()
-                        .GroupBy(k => (k.Collection.Kind, k.Recordings, k.SongShows))
+                        .GroupBy(k => (k.Collection.Kind, k.Recordings, k.SongShows, k.Statistics))
                 )
                 {
                     foreach (var page in await ReadPageGroup(session, group.ToArray(), token))
@@ -206,7 +207,7 @@ public sealed class CatalogGraphOperation(
         );
         var targets = pages.SelectMany(p => p.Targets).Distinct().ToArray();
         var resources = await Hydrate(session, targets, requests[0].Recordings, token);
-        var statistics = requests[0].SongShows
+        var statistics = requests[0].Statistics
             ? await songMatches.ReadShowStatisticsBatch(
                 session,
                 pages
@@ -269,9 +270,9 @@ public sealed class CatalogGraphOperation(
         IReadOnlyDictionary<Guid, CatalogSongShowStatistics>? statistics
     )
     {
-        if (statistics is not null)
+        if (request.SongShows)
         {
-            var stats = statistics.GetValueOrDefault(target.Uuid!.Value) ?? new();
+            var stats = statistics?.GetValueOrDefault(target.Uuid!.Value) ?? new();
             return new CatalogGraphSongShow(
                 (ShowSummaryResource)value,
                 new(
