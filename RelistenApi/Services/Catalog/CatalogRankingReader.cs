@@ -87,7 +87,7 @@ public sealed class CatalogRankingReader(
             .ToArray();
     }
 
-    public async Task<IReadOnlyList<CatalogShow>> ReadShows(
+    public async Task<IReadOnlyList<CatalogRanked<CatalogShow>>> ReadShows(
         bool trending,
         int limit,
         PopularitySortWindow window,
@@ -109,11 +109,11 @@ public sealed class CatalogRankingReader(
             cancellationToken
         );
         var map = scores.ToDictionary(row => row.uuid, row => row.ToMetrics()!);
-        await metadata.Apply(session, shows, cancellationToken, map);
+        await metadata.Apply(session, shows, cancellationToken);
         var byId = shows.ToDictionary(show => show.uuid);
         return scores
             .Where(row => byId.ContainsKey(row.uuid))
-            .Select(row => byId[row.uuid])
+            .Select(row => new CatalogRanked<CatalogShow>(byId[row.uuid], map[row.uuid]))
             .ToArray();
     }
 
@@ -200,7 +200,7 @@ public sealed class CatalogRankingReader(
             .ToArray();
     }
 
-    public async Task<IReadOnlyList<CatalogShow>> ReadMomentum(
+    public async Task<IReadOnlyList<CatalogRanked<CatalogShow>>> ReadMomentum(
         Guid[] artists,
         int limit,
         CancellationToken cancellationToken
@@ -238,13 +238,13 @@ public sealed class CatalogRankingReader(
             )
             .ToArray();
         var ordered = owned.Select(row => shows[row.uuid]).ToArray();
-        await metadata.Apply(
-            session,
-            ordered,
-            cancellationToken,
-            owned.ToDictionary(row => row.uuid, row => row.ToMetrics(organic: true)!)
-        );
-        return ordered;
+        await metadata.Apply(session, ordered, cancellationToken);
+        return owned
+            .Select(row => new CatalogRanked<CatalogShow>(
+                shows[row.uuid],
+                row.ToMetrics(organic: true)!
+            ))
+            .ToArray();
     }
 
     private async Task<StoredPopularity[]> ReadGlobalScores(

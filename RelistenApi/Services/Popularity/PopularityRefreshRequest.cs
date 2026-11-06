@@ -14,18 +14,29 @@ namespace Relisten.Services.Popularity;
 public sealed class PopularityRefreshRequest(DbService db, IBackgroundJobClient jobs)
 {
     private readonly HashSet<PopularityPopulation> required = [];
+    private readonly object gate = new();
 
-    public void Require(PopularityPopulationKind kind, System.Guid? artist = null) =>
-        required.Add(new(kind, artist));
+    public void Require(PopularityPopulationKind kind, System.Guid? artist = null)
+    {
+        lock (gate)
+        {
+            required.Add(new(kind, artist));
+        }
+    }
 
     public async Task EnqueueStale(CancellationToken cancellationToken)
     {
-        if (required.Count == 0)
+        PopularityPopulation[] populations;
+        lock (gate)
+        {
+            populations = required.ToArray();
+        }
+        if (populations.Length == 0)
         {
             return;
         }
 
-        var stale = await new PopularityStore(db).ReadStale(required.ToArray(), cancellationToken);
+        var stale = await new PopularityStore(db).ReadStale(populations, cancellationToken);
         if (stale.Length > 0)
         {
             jobs.Enqueue<PopularityJobs>(job =>
