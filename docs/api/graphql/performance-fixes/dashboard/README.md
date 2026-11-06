@@ -8,6 +8,11 @@ song histories again. REST and GraphQL still share readers and projections.
 The largest remaining cost is selecting the initial song-history pages. This
 change adds no indexes or cache. Search-specific work remains deferred.
 
+The later [show-first pagination change](../show-first/README.md) addresses initial
+page discovery for large recording populations, reducing the dashboard from
+324 to 230 ms in a fresh alternating comparison. Results below describe the
+earlier scoped-matcher change at `0cea17090`.
+
 ## Measurements
 
 The query combines artist navigation, Scarlet and Drums history,

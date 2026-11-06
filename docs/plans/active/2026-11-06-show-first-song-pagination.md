@@ -14,7 +14,7 @@ cursor ordering and read snapshots shared. Search-specific work stays deferred.
 - [x] Capture fresh dashboard, sparse-history and non-search REST baselines.
 - [x] Implement bounded candidate scans and scoped matching in shared readers.
 - [x] Verify continuation, lookahead, filters, counts, snapshots and sparse fallback.
-- [ ] Benchmark the same requests, simplify, independently review, run checks and commit.
+- [x] Benchmark the same requests, simplify, independently review, run checks and commit.
 
 ## Discoveries
 
@@ -79,4 +79,18 @@ Document residual costs, observed variation and the actual strategy chosen.
 There is no schema or data migration. Application rollback restores the original
 page strategy; existing complete reads and the scoped matcher remain compatible.
 Do not deploy or write production data. Leave the updated local API available.
-Outcome pending implementation and qualification.
+Implemented in `77d0f376f` and locally qualified. The alternating old/new benchmark
+reduces the exact dashboard from 324 to 230 ms warm median and Drums pages from
+186 to 49 ms. Every one of 14 GraphQL and 16 REST cases retains its payload and
+operation-cost hash. Sparse cases stay on the original membership path, with one
+strategy-lookup command and small overhead in some samples. Both REST comparisons
+retain all payloads; noisy short-read differences change direction across runs.
+Four command-parity checks confirm unchanged SQL texts and command counts for
+recent histories and venue reads. A separate 20-query corpus retains all earlier
+payload/cost hashes; Drums25 playback is 93 ms warm.
+
+All 1,008 tests pass (642 API, 366 normalization), with 37 existing skips. The
+solution builds, focused mutation/restore passes, and two independent reviews find
+no actionable correctness or readability issues. The simplicity pass keeps scan
+state together and adds no framework. Evidence and reproduction scripts are under
+`docs/api/graphql/performance-fixes/show-first/`. No production deployment occurred.

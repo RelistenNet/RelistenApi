@@ -12,6 +12,11 @@ selected shows into song matching for statistics and nested tracks. That follow-
 adds migration 20 and retains the existing matcher signatures. Results below
 describe the earlier qualification at `a6c302e12`.
 
+The subsequent [show-first qualification](show-first/README.md) reduces the same
+dashboard from 324 to 230 ms in an alternating old/new comparison. Bounded pages
+for large recording populations discover shows first; measured small and sparse
+populations retain the complete matcher. REST and projections remain shared.
+
 ## Verified result
 
 Application commit `a6c302e12` meets the plan's local targets using the existing
