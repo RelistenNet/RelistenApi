@@ -201,7 +201,7 @@ public sealed partial class TestV4CatalogHttp
             );
             var venue = await GetJson(CanonicalVenuePath);
             venue["id"]!.GetValue<string>().Should().Be("venue_00000001");
-            venue["names"]!.AsArray().Should().HaveCount(5);
+            venue["names"]!.AsArray().Should().HaveCount(4);
             venue["shows"]!.AsArray().Should().BeEmpty();
             var listed = (await GetJson("/api/v4/venues"))
                 .AsArray()

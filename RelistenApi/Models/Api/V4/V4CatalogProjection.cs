@@ -285,8 +285,19 @@ public static partial class V4CatalogProjection
             Names = value.Names.Select(VenueName).ToArray(),
         };
 
+    // The metadata reader excludes spelling aliases, so only public kinds reach here.
     private static VenueNameResource VenueName(CatalogVenueName value) =>
-        new(value.name, NormalizationEnums.Parse<VenueNameKind>(value.kind));
+        new(
+            value.name,
+            NormalizationEnums.Parse<VenueNameKind>(value.kind) switch
+            {
+                VenueNameKind.Official => VenueNameResourceKind.Official,
+                VenueNameKind.Short => VenueNameResourceKind.Short,
+                var kind => throw new InvalidOperationException(
+                    $"Venue name kind {kind} is not public."
+                ),
+            }
+        );
 
     public static TrackPartResource Part(CatalogPart value) =>
         new()

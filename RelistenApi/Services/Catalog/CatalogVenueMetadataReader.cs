@@ -114,6 +114,8 @@ public sealed class CatalogVenueMetadataReader(ILogger<CatalogVenueMetadataReade
 
         // Merges retain aliases on their original rows. Load the whole surviving lineage
         // once per batch; repeated periods do not create duplicate public name/kind pairs.
+        // Spelling aliases only exist so imports and search can recognize misspellings;
+        // they are not names to show, so the public resource omits them.
         var ids = venues.Select(venue => venue.id).ToArray();
         var names = await session.Connection.QueryAsync<CatalogVenueName>(
             session.Command(
@@ -128,6 +130,7 @@ public sealed class CatalogVenueMetadataReader(ILogger<CatalogVenueMetadataReade
                 )
                 SELECT DISTINCT f.canonical_venue_id,n.name,n.kind
                 FROM lineage f JOIN norm.venue_names n ON n.venue_id=f.venue_id
+                WHERE n.kind<>'spelling'
                 ORDER BY f.canonical_venue_id,n.kind,n.name
                 """,
                 new { ids },

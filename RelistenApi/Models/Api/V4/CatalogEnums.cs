@@ -24,6 +24,18 @@ public enum VenueEntryKind
     ImportedVenue,
 }
 
+// The public subset of normalization venue name kinds. Spelling aliases help imports
+// and search recognize misspellings but are never returned as venue names.
+[JsonConverter(typeof(StringEnumConverter))]
+public enum VenueNameResourceKind
+{
+    [EnumMember(Value = "official")]
+    Official,
+
+    [EnumMember(Value = "short")]
+    Short,
+}
+
 // API-owned response states and recording vocabulary. Normalization kinds,
 // precision and qualifiers come directly from Relisten.Normalization.
 // EnumMember preserves wire spelling for JSON and OpenAPI.
