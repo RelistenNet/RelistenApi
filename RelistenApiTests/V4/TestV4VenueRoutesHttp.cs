@@ -27,26 +27,43 @@ public sealed partial class TestV4CatalogHttp
         await using var connection = await MigratedTestDatabase.OpenAsync();
         try
         {
+            // Insert names out of order and tied IDs in reverse order so both sort keys matter.
             await ChangeNormalization(
                 connection,
                 """
                 INSERT INTO norm.venues(id,name,slug,author_type,author_ref,run_uuid)
-                VALUES('venue_00000992','Current Arena','review-global-venue-tie','importer','v4-review','00000000-0000-0000-0000-000000000099');
+                VALUES('venue_00000992','Zulu Venue','review-global-venue-late','importer','v4-review','00000000-0000-0000-0000-000000000099'),
+                      ('venue_00000994','Current Arena','review-global-venue-tie-high','importer','v4-review','00000000-0000-0000-0000-000000000099'),
+                      ('venue_00000993','Current Arena','review-global-venue-tie-low','importer','v4-review','00000000-0000-0000-0000-000000000099');
                 """
             );
             var venues = (await GetJson("/api/v4/venues")).AsArray();
             venues.Select(venue => venue!["id"]!.GetValue<string>()).Should().OnlyHaveUniqueItems();
-            var fixtureIds = new[] { "venue_00000001", "venue_00000003", "venue_00000992" };
+            var fixtureIds = new[]
+            {
+                "venue_00000001",
+                "venue_00000003",
+                "venue_00000992",
+                "venue_00000993",
+                "venue_00000994",
+            };
             var fixtureVenues = venues
                 .Where(venue => fixtureIds.Contains(venue!["id"]!.GetValue<string>()))
                 .ToArray();
             fixtureVenues
                 .Select(venue => venue!["id"]!.GetValue<string>())
                 .Should()
-                .Equal("venue_00000003", "venue_00000001", "venue_00000992");
-            fixtureVenues[0]!["global_show_count"]!.GetValue<int>().Should().Be(0);
-            fixtureVenues[1]!["global_show_count"]!.GetValue<int>().Should().Be(2);
-            fixtureVenues[2]!["global_show_count"]!.GetValue<int>().Should().Be(0);
+                .Equal(
+                    "venue_00000003",
+                    "venue_00000001",
+                    "venue_00000993",
+                    "venue_00000994",
+                    "venue_00000992"
+                );
+            fixtureVenues
+                .Select(venue => venue!["global_show_count"]!.GetValue<int>())
+                .Should()
+                .Equal(0, 2, 0, 0, 0);
             var detail = await GetJson(CanonicalVenuePath);
             JsonNode.DeepEquals(fixtureVenues[1], ResourceMetadata(detail)).Should().BeTrue();
 
@@ -63,7 +80,7 @@ public sealed partial class TestV4CatalogHttp
         {
             await ChangeNormalization(
                 connection,
-                "DELETE FROM norm.venues WHERE id='venue_00000992'"
+                "DELETE FROM norm.venues WHERE id IN('venue_00000992','venue_00000993','venue_00000994')"
             );
         }
     }
