@@ -1,6 +1,6 @@
 # Deliver the full V4 catalog graph with Hot Chocolate
 
-Status: agreed design and implementation plan; implementation has not started.
+Status: implementation in progress on `codex/v4-catalog-graphql-plan`.
 
 This ExecPlan is a living document. Update Progress, Surprises & Discoveries,
 Decision Log, and Outcomes & Retrospective as work proceeds. Paths below are
@@ -62,8 +62,12 @@ identities must mean the same thing through either transport.
 - Review resolution, 2026-11-06: adapt existing shared ranking results and refresh
   collection rather than adding GraphQL-only replacements. Keep selection
   look-ahead limited to a fixed source-recording bundle; do not plan arbitrary
-  descendants. Normalization failure state takes precedence over projected defaults;
-  splitting its projection is an implementation option, not a requirement.
+  descendants.
+- 2026-11-06, Alec, superseding optional-enrichment recovery above: prioritize
+  simplicity. A normalization or recording-child exception fails its reader unit.
+  Use normal GraphQL error propagation for independent fields; do not add
+  savepoints, failed-field markers, or partial-recording recovery for hypothetical
+  failures. Normal domain states still describe unavailable or inconsistent data.
 
 ## Surprises & Discoveries
 
@@ -90,9 +94,10 @@ identities must mean the same thing through either transport.
 - Show ranking/momentum readers currently put contextual metrics directly in
   `CatalogShow.Popularity`. GraphQL's ordinary nodes/contextual edges need those
   values separated in shared reader results, not just renamed GraphQL fields.
-- `V4CatalogProjection.Track` eagerly projects normalization, and the internal
-  track model defaults it to `unavailable/not_interpreted`. A failed enrichment
-  must be carried separately and checked before publishing that default.
+- Recording facts and normalization are read from the same Postgres database and
+  transaction, without independent upstream calls. Actual connection failures
+  and SQL timeouts should fail the read. Existing normalization policy already
+  represents disabled, not-interpreted, partial, and inconsistent data explicitly.
 
 ## Context and Orientation
 
@@ -271,14 +276,10 @@ resolver patch cannot seed a loader as though it contained complete children.
 Expose only explicitly bound public fields; internal keys and load state must
 never appear in introspection or JSON.
 
-The normalization field resolver must check failed/unloaded state before reading
-the projected normalization value. Failed enrichment returns null with an error
-at that field; an unloaded value must be loaded before publication. Neither may
-expose the track model's default as an observed interpretation. Keep `Track` as
-the shared mapping when its eager projection is safe. Extract a shared normalization
-projection only if needed to avoid eager work or projection exceptions; REST's
-`Track` then composes the same mappings unchanged. Do not require a parallel
-base-track DTO or copy playback-field assignments into GraphQL.
+Use `Track` directly for the whole successful track result, including normalization.
+If interpretation loading throws, fail that reader unit before projecting it.
+Do not publish model defaults after an exception. No separate base-track DTO,
+normalization projection split, or recovery state is needed.
 
 For show rankings and momentum, adapt `CatalogRankingReader` to return selected
 ranking metrics separately from ordinary show metadata, following its existing
@@ -422,10 +423,9 @@ its header and complete ordered recording children together before exposing it.
 A source page can use that bundle for its immediate nodes within the page's
 session; a show page cannot recursively plan it through descendant connections.
 Honor fragments, directives, and aliases when choosing the bundle, but do not
-plan their arbitrary descendant reads. If a recoverable child read fails after
-the header loads, retain the header and mark the recording field failed using
-the error rules below. Never substitute children from another snapshot to make
-the bundle appear complete. Do not build a general query planner or pass GraphQL
+plan their arbitrary descendant reads. If the recording read fails, the unit fails;
+do not salvage its header or substitute children from another snapshot. Do not
+build a general query planner or pass GraphQL
 selections into shared domain readers.
 
 Materialized values carry their already loaded relationships through resolution;
@@ -442,12 +442,12 @@ promise. Public activity reads retain their separate event/catalog boundary.
 
 ### Errors, cancellation, refresh, and execution budgets
 
-Make independently fallible relationships nullable at their error boundary,
-including connection fields and complete recording lists where necessary.
-Non-null propagation must not erase a valid source merely because optional
-canonical enrichment fails. Empty means a successful read with no members;
-failure means null plus a path-specific GraphQL error. Null without an error is
-valid for an absent optional link, such as no approved canonical mapping.
+Use normal GraphQL nullability and error propagation. A database or projection
+exception fails the affected reader unit; independent root fields can still
+complete through the library's ordinary execution behavior. Do not force a
+whole-response transaction or add custom code to preserve part of a failed unit.
+Empty means a successful read with no members. Null without an error is valid
+for an absent optional link, such as no approved canonical mapping.
 
 Map existing invalid-ID, retired, normalization-unavailable, and catalog-unavailable
 conditions to stable `extensions.code` values. Unknown root IDs may return null
@@ -456,13 +456,12 @@ its richer per-input availability results. Validation and over-budget operations
 must fail before catalog SQL executes; execution failures use partial-data
 semantics rather than REST ProblemDetails envelopes. Mask database details.
 
-An optional enrichment failure must not publish a partial or false normalization
-state. Load optional enrichment within a guarded savepoint if a recoverable
-database error must preserve already read base facts in the same snapshot; roll
-back to it before any further command. Return a failed-field marker, not an empty
-mapping. Connection loss, command cancellation, or a failed base read fails its
-whole unit. Never continue using an aborted transaction. Keep this mechanism
-local to the readers that need it, not a generic exception-swallowing framework.
+Connection loss, command cancellation, and failed normalization or child queries
+dispose the whole read unit. Never continue using an aborted transaction. There
+are no savepoints, exception-swallowing enrichment wrappers, or failure-state
+side channels. A schema mismatch would be a deployment defect, not a reason to
+serve a partially recovered recording. Revisit recovery only for an observed
+failure that warrants the added complexity.
 
 Link HTTP abort and the GraphQL execution deadline into every reader/loader call
 and Dapper command. Allow a per-session command timeout bounded by remaining
@@ -643,15 +642,12 @@ not prove batching, pagination, or domain parity.
   different cursors/filters remain independent. A show page does not prefetch
   its descendants. Reusing an ID from another unit's loader cache must not
   replace an already materialized coherent child collection.
-- **Failure and recovery:** inject normalization failure, a failed relationship,
-  SQL cancellation, connection failure, and refresh-enqueue failure. Unaffected
-  fields survive with correct error paths; failures never become empty results.
-  After disposal, a fresh operation succeeds using a small connection pool.
-  Savepoint recovery, where used, proves the transaction remains usable; whole
-  unit failures never publish half a recording. On recoverable normalization
-  failure, playback fields survive, normalization is null with the correct error
-  path, and the default `not_interpreted` value is never exposed. Successful
-  disabled/not-interpreted states still use their existing shared mapping.
+- **Failure and recovery:** verify SQL cancellation releases sessions and a fresh
+  operation succeeds using a small connection pool. Check ordinary GraphQL error
+  paths and known domain outcomes such as invalid/retired identities and
+  disabled/inconsistent normalization. Failed units never become empty results or
+  half-recordings. Do not introduce table-renaming fault tests or custom recovery
+  machinery solely to demonstrate a hypothetical schema failure.
 - **Refresh collection:** execute parallel branches requiring distinct populations
   through actual resolver/fetch scopes. The final freshness lookup receives their
   union and enqueues at most one refresh job. A following operation starts with
@@ -707,7 +703,7 @@ Planning completed on 2026-11-06. No packages, readers, endpoints, tests, deploy
 configuration, or production data were changed by this planning task. Numeric
 limits, measured capacity, and implementation evidence remain work for the
 milestones above. Product scope and consistency/error policies are settled.
-The validated review is incorporated: shared ranking results and safe refresh
-collection are explicit implementation tasks, look-ahead is limited to the fixed
-source bundle, and normalization error state overrides projected defaults. These
-changes preserve the shared REST reader/projection design.
+The shared ranking-result and safe refresh-collection changes are committed.
+GraphQL implementation and qualification are underway. Look-ahead is limited to
+the fixed source bundle. Alec's subsequent simplicity decision removes custom
+normalization/child recovery: shared reader units fail normally on exceptions.
