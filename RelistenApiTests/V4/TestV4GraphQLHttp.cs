@@ -499,6 +499,7 @@ public sealed partial class TestV4CatalogHttp
 
     [TestCase("/api/v4/graphql")]
     [TestCase("/api/v4/graphql/")]
+    [TestCase("/API/V4/GRAPHQL")]
     public async Task GraphQL_transport_limits_cover_both_url_forms(string path)
     {
         using var response = await http.PostAsJsonAsync(path, new { query = "{ __typename }" });
@@ -613,5 +614,44 @@ public sealed partial class TestV4CatalogHttp
             .GetValue<string>()
             .Should()
             .Be("invalid_argument");
+    }
+
+    [Test]
+    public async Task GraphQL_grouped_rankings_bound_the_combined_materialization()
+    {
+        var artists = Enumerable.Range(10000, 201).Select(i => CatalogId("artist", i)).ToArray();
+        using var response = await http.PostAsJsonAsync(
+            "/api/v4/graphql",
+            new
+            {
+                query = "query($artists:[ID!]!) { artistRankings(artistIds:$artists,limit:500) { artistId } }",
+                variables = new { artists },
+            }
+        );
+        JsonNode.Parse(await response.Content.ReadAsStringAsync())!["errors"]![0]!["extensions"]![
+            "code"
+        ]!
+            .GetValue<string>()
+            .Should()
+            .Be("catalog_row_limit");
+    }
+
+    [TestCase(0)]
+    [TestCase(-1)]
+    [TestCase(501)]
+    public async Task GraphQL_rejects_invalid_page_sizes(int first)
+    {
+        using var response = await http.PostAsJsonAsync(
+            "/api/v4/graphql",
+            new
+            {
+                query = "query($first:Int!) { artists(first:$first) { nodes { id } } }",
+                variables = new { first },
+            }
+        );
+        JsonNode.Parse(await response.Content.ReadAsStringAsync())!["errors"]!
+            .AsArray()
+            .Should()
+            .NotBeEmpty();
     }
 }

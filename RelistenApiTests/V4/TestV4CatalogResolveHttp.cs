@@ -175,9 +175,12 @@ public sealed partial class TestV4CatalogHttp
                 "/api/v4/graphql",
                 new
                 {
-                    query = "{ song(id:\"song_00000103\") { id } artist(id:\""
-                        + BrowseArtistId
-                        + "\") { id } }",
+                    query = "query($artist:ID!,$songArtist:ID!) { song(id:\"song_00000103\") { id } songBySlug(artistId:$songArtist,slug:\"resolver-cycle\") { id } artist(id:$artist) { id } }",
+                    variables = new
+                    {
+                        artist = BrowseArtistId,
+                        songArtist = CatalogId("artist", 301),
+                    },
                 }
             );
             var graph = JsonNode.Parse(await graphResponse.Content.ReadAsStringAsync())!;
@@ -186,6 +189,8 @@ public sealed partial class TestV4CatalogHttp
                 .Should()
                 .Be("normalization_unavailable");
             graph["data"]!["song"].Should().BeNull();
+            graph["data"]!["songBySlug"].Should().BeNull();
+            graph["errors"]!.AsArray().Should().HaveCount(2);
             graph["data"]!["artist"].Should().NotBeNull();
 
             foreach (

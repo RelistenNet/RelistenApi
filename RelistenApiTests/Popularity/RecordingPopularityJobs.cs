@@ -21,7 +21,10 @@ internal sealed class RecordingPopularityJobs : IBackgroundJobClient
             );
         }
 
-        Batches.Add((PopularityPopulation[])job.Args[0]);
+        lock (Batches)
+        {
+            Batches.Add((PopularityPopulation[])job.Args[0]);
+        }
         return "fixture";
     }
 

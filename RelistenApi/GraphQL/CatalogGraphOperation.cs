@@ -53,6 +53,13 @@ public sealed class CatalogGraphOperation(
         "graphql.catalog.batch.size"
     );
 
+    private static readonly UpDownCounter<int> ActiveReads = Meter.CreateUpDownCounter<int>(
+        "graphql.catalog.active_reads"
+    );
+    private static readonly Counter<long> Rows = Meter.CreateCounter<long>(
+        "graphql.catalog.materialized_rows"
+    );
+
     private readonly SemaphoreSlim connections = new(options.MaxConcurrentReads);
 
     private int materializedRows;
@@ -63,6 +70,7 @@ public sealed class CatalogGraphOperation(
         {
             throw new FormatException("The requested row bound is invalid.");
         }
+        Rows.Add(count);
         if (Interlocked.Add(ref materializedRows, count) > options.MaxMaterializedRows)
         {
             throw new GraphQLException(
@@ -91,12 +99,14 @@ public sealed class CatalogGraphOperation(
         var started = Stopwatch.GetTimestamp();
         await connections.WaitAsync(token);
         using var activity = Trace.StartActivity("catalog.read");
+        ActiveReads.Add(1);
         try
         {
             return await read();
         }
         finally
         {
+            ActiveReads.Add(-1);
             connections.Release();
             Duration.Record(Stopwatch.GetElapsedTime(started).TotalMilliseconds);
         }

@@ -1,7 +1,6 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using Hangfire;
 using HotChocolate;
 using HotChocolate.AspNetCore;
 using HotChocolate.Execution;
@@ -59,7 +58,6 @@ public static class CatalogGraphRegistration
             }
             return ActivatorUtilities.CreateInstance<CatalogGraphOperation>(provider);
         });
-        services.AddTransient<CatalogCollectionReader>();
         services.AddDataLoader<CatalogEntityLoader>();
         services.AddDataLoader<CatalogPageLoader>();
         var graph = services
@@ -197,13 +195,19 @@ public static class CatalogGraphRegistration
     public static IApplicationBuilder UseCatalogGraph(this IApplicationBuilder app)
     {
         app.UseWhen(
-            context => context.Request.Path.Value?.TrimEnd('/') == Path,
+            context =>
+                string.Equals(
+                    context.Request.Path.Value?.TrimEnd('/'),
+                    Path,
+                    StringComparison.OrdinalIgnoreCase
+                ),
             branch =>
                 branch.Use(
                     async (context, next) =>
                     {
                         var limits =
                             context.RequestServices.GetRequiredService<CatalogGraphOptions>();
+                        context.Response.Headers.CacheControl = "no-store";
                         if (context.Request.ContentLength > limits.MaxDocumentBytes)
                         {
                             context.Response.StatusCode = StatusCodes.Status413PayloadTooLarge;
@@ -226,7 +230,6 @@ public static class CatalogGraphRegistration
                                 context.RequestServices
                             )
                         );
-                        context.Response.Headers.CacheControl = "no-store";
                         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(
                             context.RequestAborted
                         );

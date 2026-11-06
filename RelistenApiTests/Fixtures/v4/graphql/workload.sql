@@ -32,6 +32,12 @@ SELECT 960000+i,('10000000-0000-0000-0004-'||lpad(i::text,12,'0'))::uuid,
        960000,960101+(i-1001)/10,960101+(i-1001)/10,1+(i-1001)%10,600,
        'Extra workload track '||i,'graphql-extra-track-'||i,'https://example.invalid/graphql/'||i||'.mp3',now()
 FROM generate_series(1001,1040) i;
+-- One long recording verifies that complete track arrays are not sliced at estimates.
+INSERT INTO source_tracks(id,uuid,artist_id,source_id,source_set_id,track_position,duration,title,slug,mp3_url,updated_at)
+SELECT 960000+i,('10000000-0000-0000-0004-'||lpad(i::text,12,'0'))::uuid,
+       960000,960001,960001,i-1030,600,
+       'Long recording track '||i,'graphql-long-track-'||i,'https://example.invalid/graphql/'||i||'.mp3',now()
+FROM generate_series(1041,1240) i;
 INSERT INTO show_source_information(show_id,artist_id,source_count,max_avg_rating_weighted,has_soundboard_source,has_flac,max_created_at,max_updated_at)
 SELECT 960000+i,960000,1,0,true,false,now(),now() FROM generate_series(1,100) i;
 UPDATE show_source_information SET source_count=5 WHERE show_id=960001;
@@ -41,6 +47,6 @@ VALUES('song_00000960','10000000-0000-0000-0000-000000000000','Workload song','g
 INSERT INTO norm.track_songs(track_uuid,part,song_id,text,resolved,basis,author_type,author_ref,run_uuid)
 SELECT ('10000000-0000-0000-0004-'||lpad(i::text,12,'0'))::uuid,1,'song_00000960','Workload song',
        true,'song_name','importer','v4-review','00000000-0000-0000-0000-000000000099'
-FROM generate_series(1,1040) i;
+FROM generate_series(1,1240) i;
 SELECT norm.refresh_song_counts('10000000-0000-0000-0000-000000000000'::uuid);
 COMMIT;
