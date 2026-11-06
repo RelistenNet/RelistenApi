@@ -34,7 +34,8 @@ public static partial class V4CatalogProjection
                             new(track.show_uuid),
                             track.title,
                             track.slug,
-                            track.duration
+                            track.duration,
+                            track.mp3_url
                         ))
                         .ToArray()
                 ))

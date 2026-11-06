@@ -64,13 +64,17 @@ One-song files with unresolved parts contribute to neither timing bucket.
 Average and median values are rounded to two decimals. An empty timing bucket is
 null; missing durations or incomplete interpretations never remove a matched show.
 
-Add `?include_tracks=true` to include a `tracks` array in each song-show entry.
-Each matching file appears once with only `id`, `source_id`, `show_id`, `title`,
-`slug` and `duration`, including files without usable timing samples. The key is
-omitted by default and with `include_tracks=false`; omission does not clear any
-files already stored by a client. This is the song's matching-file list, not the
-show's complete recording hierarchy. Use the song's `/tracks` route for full
-playable track resources, including normalization and playback URLs.
+Add `?include_tracks=top` or `?include_tracks=all` to include a `tracks` array in
+each song-show entry. `top` lists the matching files of one source per show: the first source
+containing the song in the clients' default order (soundboard, then Charlie Miller
+or Peter Costello transfers, then the higher etree ID, then the higher weighted
+rating). See [source ranking](../../RelistenApi/Services/Catalog/CatalogSourceRanking.cs).
+`all` lists every matching file, with each show's sources in that order. Each file
+appears once with only `id`, `source_id`, `show_id`, `title`, `slug`, `duration`
+and `mp3_url`, including files without usable timing samples. The key is omitted
+by default and with `include_tracks=none`; omission does not clear any files already stored
+by a client. Timings always summarize every source. Use the song's `/tracks` route
+for full track resources, including FLAC URLs, checksums and normalization.
 
 Imported song details still return plain show summaries because setlists cannot
 identify the file to time.
@@ -87,6 +91,12 @@ reuse so a saved reference cannot silently point to a different place or song.
 Saved references may therefore resolve as redirected, retired or unavailable.
 Unavailable metadata does not imply that a listener removed a favorite. The
 resolver returns entity patches, without ownership of unreturned child collections.
+
+`artists/{artistId}/songs/by-slug/{slug}` returns the same song detail as
+`songs/{songId}`, including `include_tracks`, for that artist's canonical song slug. A merged
+song's slug returns the survivor, so a client redirects when the returned `slug`
+differs from its URL. Imported song slugs are not accepted here; resolve them with
+the reference resolver.
 
 Canonical venue slugs support readable URLs through the explicit global and
 artist-scoped `venues/by-slug/{slug}` routes. They return the same resource as an

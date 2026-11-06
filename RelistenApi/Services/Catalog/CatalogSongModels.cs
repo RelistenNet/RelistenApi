@@ -39,6 +39,14 @@ public sealed record CatalogImportedSongDetail(
     IReadOnlyList<CatalogShow> Shows
 );
 
+/// <summary>Which matching files a song-show entry carries; None omits the collection.</summary>
+public enum CatalogSongShowTracks
+{
+    None,
+    Top,
+    All,
+}
+
 public sealed record CatalogSongWithShows(
     CatalogSongDetail Song,
     IReadOnlyList<CatalogSongShow> Shows
@@ -58,6 +66,7 @@ public sealed class CatalogSongShowTrack
     public string title { get; set; } = null!;
     public string slug { get; set; } = null!;
     public int? duration { get; set; }
+    public string? mp3_url { get; set; }
 }
 
 public sealed class CatalogSongShowStatistics

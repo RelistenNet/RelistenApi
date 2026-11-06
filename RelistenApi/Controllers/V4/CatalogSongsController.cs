@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -38,18 +39,56 @@ public sealed class CatalogSongsController(
                     .ToArray()
         );
 
+    /// <summary>Finds an artist's canonical song by its stored slug.</summary>
+    /// <param name="includeTracks">none omits show tracks; top lists each show's top-ranked
+    /// matching source; all lists every matching file.</param>
+    /// <remarks>
+    /// A merged song's slug returns the survivor, including its current ID and slug.
+    /// Imported song slugs are not accepted; resolve them with the reference resolver.
+    /// </remarks>
+    [HttpGet("artists/{artistId}/songs/by-slug/{slug}")]
+    [ProducesResponseType(typeof(SongWithShowsResource), 200)]
+    public Task<IActionResult> ArtistSongBySlug(
+        string artistId,
+        string slug,
+        [FromQuery(Name = "include_tracks"), AllowedValues("none", "top", "all")]
+            string includeTracks = "none",
+        CancellationToken cancellationToken = default
+    ) =>
+        Read(
+            artistId,
+            ArtistId.Prefix,
+            async artist =>
+            {
+                var song = await reader.ReadArtistSongBySlug(
+                    artist,
+                    slug,
+                    ShowTracks(includeTracks),
+                    cancellationToken
+                );
+                return song is null ? null : V4CatalogProjection.SongWithShows(song);
+            }
+        );
+
+    /// <param name="includeTracks">none omits show tracks; top lists each show's top-ranked
+    /// matching source; all lists every matching file.</param>
     [HttpGet("songs/{songId}")]
     [ProducesResponseType(typeof(SongWithShowsResource), 200)]
     public Task<IActionResult> Song(
         string songId,
-        [FromQuery(Name = "include_tracks")] bool includeTracks = false,
+        [FromQuery(Name = "include_tracks"), AllowedValues("none", "top", "all")]
+            string includeTracks = "none",
         CancellationToken cancellationToken = default
     ) =>
         ReadSong(
             songId,
             async () =>
             {
-                var song = await reader.ReadSong(songId, includeTracks, cancellationToken);
+                var song = await reader.ReadSong(
+                    songId,
+                    ShowTracks(includeTracks),
+                    cancellationToken
+                );
                 return song is null ? null : V4CatalogProjection.SongWithShows(song);
             }
         );
@@ -98,16 +137,27 @@ public sealed class CatalogSongsController(
         );
 
     private Task<IActionResult> ReadSong<T>(string songId, Func<Task<T?>> read)
-        where T : class
+        where T : class =>
+        IsSongId(songId) ? Execute(read) : Task.FromResult<IActionResult>(InvalidId(SongId.Prefix));
+
+    private static CatalogSongShowTracks ShowTracks(string includeTracks) =>
+        includeTracks switch
+        {
+            "top" => CatalogSongShowTracks.Top,
+            "all" => CatalogSongShowTracks.All,
+            _ => CatalogSongShowTracks.None,
+        };
+
+    private static bool IsSongId(string value)
     {
         try
         {
-            SongId.Parse(songId);
+            SongId.Parse(value);
+            return true;
         }
         catch (FormatException)
         {
-            return Task.FromResult<IActionResult>(InvalidId(SongId.Prefix));
+            return false;
         }
-        return Execute(read);
     }
 }

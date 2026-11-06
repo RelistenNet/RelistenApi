@@ -146,23 +146,47 @@ public sealed class CatalogSongMatchReader
         return statistics;
     }
 
-    /// <summary>One slim row per matched file, including files without usable timing samples.</summary>
+    /// <summary>
+    /// One slim row per matched file, including files without usable timing samples.
+    /// Each show's sources containing the song are ordered by <see cref="CatalogSourceRanking"/>;
+    /// Top keeps only the first, so a show's best source overall may not appear when it
+    /// lacks the song. All returns every source's files in that order.
+    /// </summary>
     public async Task<IReadOnlyList<CatalogSongShowTrack>> ReadShowTracks(
         CatalogReadSession session,
         Guid artistUuid,
         string canonicalId,
+        CatalogSongShowTracks selection,
         CancellationToken cancellationToken
     ) =>
         (
             await session.Connection.QueryAsync<CatalogSongShowTrack>(
                 session.Command(
-                    """
-                    SELECT m.track_uuid uuid,m.source_uuid,m.show_uuid,t.title,t.slug,t.duration
-                    FROM norm.song_recording_matches(@artistUuid,@canonicalIds::text[]) m
+                    $"""
+                    WITH matches AS MATERIALIZED (
+                        SELECT * FROM norm.song_recording_matches(@artistUuid,@canonicalIds::text[])
+                    ), ranked_sources AS (
+                        SELECT matched.show_uuid,matched.source_uuid,
+                               row_number() OVER (
+                                   PARTITION BY matched.show_uuid
+                                   ORDER BY {CatalogSourceRanking.OrderBy("src")}
+                               ) source_rank
+                        FROM (SELECT DISTINCT show_uuid,source_uuid FROM matches) matched
+                        JOIN sources src ON src.uuid=matched.source_uuid
+                    )
+                    SELECT m.track_uuid uuid,m.source_uuid,m.show_uuid,t.title,t.slug,t.duration,t.mp3_url
+                    FROM matches m
+                    JOIN ranked_sources r ON r.show_uuid=m.show_uuid AND r.source_uuid=m.source_uuid
                     JOIN source_tracks t ON t.uuid=m.track_uuid
-                    ORDER BY m.show_date,m.show_uuid,m.source_uuid,m.track_position,m.track_uuid
+                    WHERE @allSources OR r.source_rank=1
+                    ORDER BY m.show_date,m.show_uuid,r.source_rank,m.track_position,m.track_uuid
                     """,
-                    new { artistUuid, canonicalIds = new[] { canonicalId } },
+                    new
+                    {
+                        artistUuid,
+                        canonicalIds = new[] { canonicalId },
+                        allSources = selection == CatalogSongShowTracks.All,
+                    },
                     cancellationToken
                 )
             )

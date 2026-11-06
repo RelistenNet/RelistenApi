@@ -57,17 +57,59 @@ public sealed class CatalogSongReader(
     /// <summary>Metadata and complete recording-backed show membership share one snapshot.</summary>
     public async Task<CatalogSongWithShows?> ReadSong(
         string songId,
-        bool includeTracks = false,
+        CatalogSongShowTracks tracks = CatalogSongShowTracks.None,
         CancellationToken cancellationToken = default
     )
     {
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
         var song = await ReadApprovedSongDetail(session, songId, cancellationToken);
-        if (song is null)
+        return song is null ? null : await ReadSongShows(session, song, tracks, cancellationToken);
+    }
+
+    /// <summary>
+    /// Finds an artist's song by stored slug. Slugs are unique per artist and stay on
+    /// merged rows, so an old slug returns the survivor; callers compare the returned
+    /// slug to decide whether to redirect. Merges never cross artists.
+    /// </summary>
+    public async Task<CatalogSongWithShows?> ReadArtistSongBySlug(
+        Guid artistUuid,
+        string slug,
+        CatalogSongShowTracks tracks = CatalogSongShowTracks.None,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await using var session = await CatalogReadSession.Open(db, cancellationToken);
+        var songId = await ReadSongIdBySlug(session, artistUuid, slug, cancellationToken);
+        if (songId is null)
         {
             return null;
         }
 
+        var song = await ReadApprovedSongDetail(session, songId, cancellationToken);
+        return song is null ? null : await ReadSongShows(session, song, tracks, cancellationToken);
+    }
+
+    private static Task<string?> ReadSongIdBySlug(
+        CatalogReadSession session,
+        Guid artistUuid,
+        string slug,
+        CancellationToken cancellationToken
+    ) =>
+        session.Connection.QuerySingleOrDefaultAsync<string?>(
+            session.Command(
+                "SELECT id FROM norm.songs WHERE artist_uuid=@artistUuid AND slug=@slug",
+                new { artistUuid, slug },
+                cancellationToken
+            )
+        );
+
+    private async Task<CatalogSongWithShows> ReadSongShows(
+        CatalogReadSession session,
+        CatalogSongDetail song,
+        CatalogSongShowTracks tracks,
+        CancellationToken cancellationToken
+    )
+    {
         var statistics = await matches.ReadShowStatistics(
             session,
             song.artist_uuid,
@@ -80,18 +122,25 @@ public sealed class CatalogSongReader(
             new { uuids = statistics.Keys.ToArray() },
             cancellationToken
         );
-        var tracks = includeTracks
-            ? (
-                await matches.ReadShowTracks(session, song.artist_uuid, song.id, cancellationToken)
-            ).ToLookup(track => track.show_uuid)
-            : null;
+        var files =
+            tracks == CatalogSongShowTracks.None
+                ? null
+                : (
+                    await matches.ReadShowTracks(
+                        session,
+                        song.artist_uuid,
+                        song.id,
+                        tracks,
+                        cancellationToken
+                    )
+                ).ToLookup(track => track.show_uuid);
         return new(
             song,
             shows
                 .Select(show => new CatalogSongShow(
                     show,
                     statistics[show.uuid],
-                    tracks?[show.uuid].ToArray()
+                    files?[show.uuid].ToArray()
                 ))
                 .ToArray()
         );
