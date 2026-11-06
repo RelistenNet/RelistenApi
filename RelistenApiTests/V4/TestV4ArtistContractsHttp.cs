@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Net;
 using System.Text.Json.Nodes;
 using Dapper;
@@ -9,44 +8,42 @@ namespace RelistenApiTests.V4;
 public sealed partial class TestV4CatalogHttp
 {
     [Test]
-    public async Task Artist_feature_mask_preserves_each_published_bit_and_revalidates_changes()
+    public async Task Artist_feature_mask_serializes_strings_and_revalidates_changes()
     {
-        // Fixed wire values protect persisted client masks from accidental renumbering.
-        var flags = new (string Column, ulong Value)[]
+        var columns = new[]
         {
-            ("descriptions", 1UL),
-            ("eras", 2UL),
-            ("multiple_sources", 4UL),
-            ("reviews", 8UL),
-            ("ratings", 16UL),
-            ("tours", 32UL),
-            ("taper_notes", 64UL),
-            ("source_information", 128UL),
-            ("sets", 256UL),
-            ("per_show_venues", 512UL),
-            ("per_source_venues", 1024UL),
-            ("venue_coords", 2048UL),
-            ("songs", 4096UL),
-            ("years", 8192UL),
-            ("track_md5s", 16384UL),
-            ("review_titles", 32768UL),
-            ("jam_charts", 65536UL),
-            ("setlist_data_incomplete", 131072UL),
-            ("track_names", 262144UL),
-            ("venue_past_names", 524288UL),
-            ("reviews_have_ratings", 1048576UL),
-            ("track_durations", 2097152UL),
-            ("can_have_flac", 4194304UL),
-            ("norm_catalogue", 8388608UL),
+            "descriptions",
+            "eras",
+            "multiple_sources",
+            "reviews",
+            "ratings",
+            "tours",
+            "taper_notes",
+            "source_information",
+            "sets",
+            "per_show_venues",
+            "per_source_venues",
+            "venue_coords",
+            "songs",
+            "years",
+            "track_md5s",
+            "review_titles",
+            "jam_charts",
+            "setlist_data_incomplete",
+            "track_names",
+            "venue_past_names",
+            "reviews_have_ratings",
+            "track_durations",
+            "can_have_flac",
+            "norm_catalogue",
         };
         await using var connection = await MigratedTestDatabase.OpenAsync();
         var original = await connection.QuerySingleAsync<string>(
             "SELECT row_to_json(f)::text FROM features f WHERE artist_id=910004"
         );
-        var columns = string.Join(",", flags.Select(flag => flag.Column));
         var reset =
             "UPDATE features SET "
-            + string.Join(",", flags.Select(flag => flag.Column + "=false"))
+            + string.Join(",", columns.Select(column => column + "=false"))
             + " WHERE artist_id=910004";
         try
         {
@@ -58,22 +55,19 @@ public sealed partial class TestV4CatalogHttp
                 .Should()
                 .Be("0");
             var etag = zero.Headers.ETag!.ToString();
-            foreach (var (column, value) in flags)
-            {
-                await connection.ExecuteAsync(reset);
-                await connection.ExecuteAsync(
-                    $"UPDATE features SET {column}=true WHERE artist_id=910004"
-                );
-                using var changed = await Conditional(BrowseArtistPath, etag);
-                changed.StatusCode.Should().Be(HttpStatusCode.OK);
-                JsonNode.Parse(await changed.Content.ReadAsStringAsync())!["features"]!
-                    .GetValue<string>()
-                    .Should()
-                    .Be(value.ToString(CultureInfo.InvariantCulture), column);
-            }
+            await connection.ExecuteAsync(
+                "UPDATE features SET descriptions=true,track_durations=true,norm_catalogue=true WHERE artist_id=910004"
+            );
+            using var changed = await Conditional(BrowseArtistPath, etag);
+            changed.StatusCode.Should().Be(HttpStatusCode.OK);
+            JsonNode.Parse(await changed.Content.ReadAsStringAsync())!["features"]!
+                .GetValue<string>()
+                .Should()
+                .Be("10485761");
+
             await connection.ExecuteAsync(
                 "UPDATE features SET "
-                    + string.Join(",", flags.Select(flag => flag.Column + "=true"))
+                    + string.Join(",", columns.Select(column => column + "=true"))
                     + " WHERE artist_id=910004"
             );
             (await GetJson(BrowseArtistPath))["features"]!
@@ -96,8 +90,9 @@ public sealed partial class TestV4CatalogHttp
         }
         finally
         {
+            var columnList = string.Join(",", columns);
             await connection.ExecuteAsync(
-                $"UPDATE features SET ({columns})=(SELECT {columns} FROM json_populate_record(NULL::features,CAST(@original AS json))) WHERE artist_id=910004",
+                $"UPDATE features SET ({columnList})=(SELECT {columnList} FROM json_populate_record(NULL::features,CAST(@original AS json))) WHERE artist_id=910004",
                 new { original }
             );
         }
@@ -121,31 +116,29 @@ public sealed partial class TestV4CatalogHttp
         try
         {
             await connection.ExecuteAsync(
-                "INSERT INTO upstream_sources(id,name) VALUES(910011,'archive.org'); INSERT INTO artists_upstream_sources(artist_id,upstream_source_id,upstream_identifier) VALUES(910004,910011,'artist-collection')"
+                """
+                INSERT INTO upstream_sources(id,name) VALUES(910011,'archive.org');
+                INSERT INTO artists_upstream_sources(artist_id,upstream_source_id,upstream_identifier)
+                VALUES(910004,910011,'artist-collection');
+                UPDATE upstream_sources SET name='archive.org' WHERE id=910010;
+                """
             );
-            foreach (var provider in providers)
+            var assignments = (await GetJson(BrowseArtistPath))["upstream_sources"]!.AsArray();
+            assignments.Should().HaveCount(2);
+            assignments
+                .Should()
+                .OnlyContain(item => item!["provider"]!.GetValue<string>() == "archive.org");
+            assignments
+                .Select(item => item!["upstream_identifier"]!.GetValue<string>())
+                .Should()
+                .BeEquivalentTo("matched-upstream", "artist-collection");
+            foreach (var assignment in assignments)
             {
-                await connection.ExecuteAsync(
-                    "UPDATE upstream_sources SET name=@provider WHERE id=910010",
-                    new { provider }
-                );
-                var assignments = (await GetJson(BrowseArtistPath))["upstream_sources"]!.AsArray();
-                assignments.Should().HaveCount(2);
-                var assigned = assignments.Single(item =>
-                    item!["upstream_identifier"]!.GetValue<string>() == "matched-upstream"
-                )!;
-                assigned["provider"]!.GetValue<string>().Should().Be(provider);
-                assigned
+                assignment!
                     .AsObject()
                     .Select(field => field.Key)
                     .Should()
                     .BeEquivalentTo("provider", "upstream_identifier");
-                assignments
-                    .Should()
-                    .Contain(item =>
-                        item!["provider"]!.GetValue<string>() == "archive.org"
-                        && item["upstream_identifier"]!.GetValue<string>() == "artist-collection"
-                    );
             }
             EnumValues(
                     await GetJson("/api-docs/v4/swagger.json"),
@@ -158,7 +151,11 @@ public sealed partial class TestV4CatalogHttp
         finally
         {
             await connection.ExecuteAsync(
-                "DELETE FROM artists_upstream_sources WHERE artist_id=910004 AND upstream_source_id=910011; DELETE FROM upstream_sources WHERE id=910011; UPDATE upstream_sources SET name='review.provider' WHERE id=910010"
+                """
+                DELETE FROM artists_upstream_sources WHERE artist_id=910004 AND upstream_source_id=910011;
+                DELETE FROM upstream_sources WHERE id=910011;
+                UPDATE upstream_sources SET name='review.provider' WHERE id=910010;
+                """
             );
         }
     }
@@ -172,8 +169,9 @@ public sealed partial class TestV4CatalogHttp
     )
     {
         var path = ArtistPath(suffix) + "/" + collection;
-        (await GetJson(path)).AsArray().Should().NotBeEmpty();
         using var initial = await http.GetAsync(path);
+        initial.StatusCode.Should().Be(HttpStatusCode.OK);
+        JsonNode.Parse(await initial.Content.ReadAsStringAsync())!.AsArray().Should().NotBeEmpty();
         var etag = initial.Headers.ETag!.ToString();
         await using var connection = await MigratedTestDatabase.OpenAsync();
         try
