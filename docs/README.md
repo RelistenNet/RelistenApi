@@ -4,6 +4,7 @@ Start with the task you need to do:
 
 - [Run locally](../local-dev/README.md): databases, services, dummy/Google sign-in and tests.
 - [Integrate the catalog](api/README.md): concert/recording identity, imported versus canonical data and ranking context.
+- [Plan the catalog GraphQL API](plans/active/2026-11-06-v4-catalog-graphql.md): full V4 graph with Hot Chocolate, shared REST readers/projections, batching, pagination, and snapshot boundaries; not yet implemented.
 - [Persist catalog responses](api/mobile-sync.md): collection ownership, shared records and ETag limitations.
 - [Work on accounts](api/accounts.md): personal membership, catalog references and authentication ownership.
 - [Maintain derived counts](normalization-counts.md): writer responsibilities, concurrency and repair.
