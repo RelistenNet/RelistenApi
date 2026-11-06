@@ -86,7 +86,7 @@ internal sealed class CatalogConnectionType<TNode> : ObjectType<CatalogGraphPage
         descriptor.Field(p => p.Nodes).Type<ListType<NonNullType<TNode>>>();
         descriptor.Field(p => p.Edges).Type<ListType<NonNullType<CatalogEdgeType<TNode>>>>();
         descriptor.Field(p => p.PageInfo);
-        descriptor.Field(p => p.TotalCount);
+        descriptor.Field(p => p.TotalCount).Cost(10);
     }
 }
 
