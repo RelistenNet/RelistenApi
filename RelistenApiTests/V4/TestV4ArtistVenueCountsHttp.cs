@@ -83,6 +83,7 @@ public sealed partial class TestV4CatalogHttp
             BrowseArtistPath + "/venues",
             BrowseArtistPath + "/venues/venue_00000001",
             CanonicalVenuePath,
+            "/api/v4/venues",
             ImportedVenuePath(74),
         };
         var validators = new Dictionary<string, string>();

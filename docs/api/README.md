@@ -99,6 +99,14 @@ canonical venue when one exists; use canonical display metadata only when the
 imported observation is absent. Canonical aliases aid discovery. They are not a
 history from which a client should infer the venue's name on the concert date.
 
+`GET /api/v4/venues` lists canonical venues across all artists as a `VenueResource[]`,
+ordered by name (ordinal) and then ID. Each surviving venue appears once, including
+venues with no shows or no artists approved for normalization. Merged IDs are
+excluded; their aliases remain on the surviving venue. The list uses the same
+metadata and approved-artist `global_show_count` as global venue detail, without
+embedding `shows` or artist-specific wrappers. It is a complete, unpaginated
+canonical inventory; imported venues remain in artist-scoped inventories.
+
 A show's `artist_venue` represents the artist/place pair, with that artist's show
 count. Its nested venue's global count spans approved artists. An imported venue's
 count covers its entire imported group. During partial normalization, an imported

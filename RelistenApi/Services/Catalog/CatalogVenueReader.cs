@@ -18,6 +18,29 @@ public sealed class CatalogVenueReader(
     CatalogArtistVenueMetadataReader artistVenueMetadata
 )
 {
+    /// <summary>All surviving canonical venues, including places with no approved shows.</summary>
+    public async Task<IReadOnlyList<CatalogVenue>> ReadVenues(
+        CancellationToken cancellationToken = default
+    )
+    {
+        await using var session = await CatalogReadSession.Open(db, cancellationToken);
+        var ids = (
+            await session.Connection.QueryAsync<string>(
+                session.Command(
+                    "SELECT id FROM norm.venues WHERE merged_into IS NULL",
+                    null,
+                    cancellationToken
+                )
+            )
+        ).ToArray();
+        var venues = await venueMetadata.Read(session, ids, cancellationToken);
+
+        return venues
+            .Values.OrderBy(venue => venue.name, StringComparer.Ordinal)
+            .ThenBy(venue => venue.id, StringComparer.Ordinal)
+            .ToArray();
+    }
+
     /// <summary>Approved artists browse canonical groups; other artists browse imported groups.</summary>
     public async Task<IReadOnlyList<CatalogArtistVenueEntry>?> ReadArtistVenues(
         Guid artistUuid,

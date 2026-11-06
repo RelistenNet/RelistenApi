@@ -22,6 +22,53 @@ public sealed partial class TestV4CatalogHttp
         "/api/v4/imported-venues/" + CatalogId("imported_venue", venueSuffix);
 
     [Test]
+    public async Task Global_venue_browse_lists_shared_and_unused_venues_once_in_name_and_id_order()
+    {
+        await using var connection = await MigratedTestDatabase.OpenAsync();
+        try
+        {
+            await ChangeNormalization(
+                connection,
+                """
+                INSERT INTO norm.venues(id,name,slug,author_type,author_ref,run_uuid)
+                VALUES('venue_00000992','Current Arena','review-global-venue-tie','importer','v4-review','00000000-0000-0000-0000-000000000099');
+                """
+            );
+            var venues = (await GetJson("/api/v4/venues")).AsArray();
+            venues.Select(venue => venue!["id"]!.GetValue<string>()).Should().OnlyHaveUniqueItems();
+            var fixtureIds = new[] { "venue_00000001", "venue_00000003", "venue_00000992" };
+            var fixtureVenues = venues
+                .Where(venue => fixtureIds.Contains(venue!["id"]!.GetValue<string>()))
+                .ToArray();
+            fixtureVenues
+                .Select(venue => venue!["id"]!.GetValue<string>())
+                .Should()
+                .Equal("venue_00000003", "venue_00000001", "venue_00000992");
+            fixtureVenues[0]!["global_show_count"]!.GetValue<int>().Should().Be(0);
+            fixtureVenues[1]!["global_show_count"]!.GetValue<int>().Should().Be(2);
+            fixtureVenues[2]!["global_show_count"]!.GetValue<int>().Should().Be(0);
+            var detail = await GetJson(CanonicalVenuePath);
+            JsonNode.DeepEquals(fixtureVenues[1], ResourceMetadata(detail)).Should().BeTrue();
+
+            var document = await GetJson("/api-docs/v4/swagger.json");
+            AssertSchemaFields(document, "VenueResource", fixtureVenues[1]!);
+            document["paths"]!["/api/v4/venues"]!["get"]!["responses"]!["200"]!["content"]![
+                "application/json"
+            ]!["schema"]!["items"]!["$ref"]!
+                .GetValue<string>()
+                .Should()
+                .EndWith("/VenueResource");
+        }
+        finally
+        {
+            await ChangeNormalization(
+                connection,
+                "DELETE FROM norm.venues WHERE id='venue_00000992'"
+            );
+        }
+    }
+
+    [Test]
     public async Task Approved_venue_browse_excludes_imported_fallbacks_during_partial_normalization()
     {
         var entries = (await GetJson(BrowseArtistPath + "/venues")).AsArray();
@@ -139,6 +186,11 @@ public sealed partial class TestV4CatalogHttp
             venue["id"]!.GetValue<string>().Should().Be("venue_00000001");
             venue["names"]!.AsArray().Should().HaveCount(5);
             venue["shows"]!.AsArray().Should().BeEmpty();
+            var listed = (await GetJson("/api/v4/venues"))
+                .AsArray()
+                .Single(item => item!["id"]!.GetValue<string>() == "venue_00000001");
+            listed!["global_show_count"]!.GetValue<int>().Should().Be(0);
+            JsonNode.DeepEquals(listed, ResourceMetadata(venue)).Should().BeTrue();
             var entries = (await GetJson(BrowseArtistPath + "/venues")).AsArray();
             entries.Should().ContainSingle();
             entries[0]!["kind"]!.GetValue<string>().Should().Be("imported_venue");
@@ -291,6 +343,14 @@ public sealed partial class TestV4CatalogHttp
             venue["id"]!.GetValue<string>().Should().Be("venue_00000991");
             var direct = await GetJson("/api/v4/venues/venue_00000991");
             JsonNode.DeepEquals(venue, direct).Should().BeTrue();
+            var listed = (await GetJson("/api/v4/venues"))
+                .AsArray()
+                .Where(item =>
+                    item!["id"]!.GetValue<string>() is "venue_00000001" or "venue_00000991"
+                )
+                .ToArray();
+            listed.Should().ContainSingle();
+            JsonNode.DeepEquals(listed[0], ResourceMetadata(venue)).Should().BeTrue();
             venue["slug"]!.GetValue<string>().Should().Be("review-venue-survivor");
             JsonNode
                 .DeepEquals(venue, await GetJson("/api/v4/venues/by-slug/review-arena"))
