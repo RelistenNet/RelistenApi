@@ -1,9 +1,10 @@
 # GraphQL local qualification
 
-The measurements below use a small synthetic fixture and establish correctness
-and execution bounds only. The subsequent [actual-catalog adversarial review](review/README.md)
-reproduces multi-second song-history queries and a REST search regression. That
-review supersedes any implication that this branch is ready for web traffic.
+The measurements below retain the initial small-fixture correctness/execution
+evidence. The subsequent [actual-catalog review](review/README.md) found performance
+problems that the fixture missed. The [fixes and real-catalog qualification](performance-fixes/README.md)
+record their resolution for the measured web corpus; search-specific work remains
+deferred. Use that report for current performance and test results.
 
 The defaults allow the representative web queries with headroom. The largest
 measured field cost is 18,010 against a 200,000 limit (11.1×); the largest type

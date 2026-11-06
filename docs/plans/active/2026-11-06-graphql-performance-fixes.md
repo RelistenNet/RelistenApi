@@ -1,7 +1,7 @@
 # Make catalog pages and song-history playback fast
 
-Status: implementation in progress on `codex/v4-catalog-graphql-plan`. The review is
-complete. This ExecPlan is a living document.
+Status: implemented and locally qualified on `codex/v4-catalog-graphql-plan` through
+application commit `a6c302e12`. This ExecPlan is a living document.
 Keep Progress, Discoveries, Decision Log and Outcomes current.
 
 ## Purpose
@@ -22,17 +22,20 @@ first work is selecting files efficiently, rather than replacing hydration.
       validate the SQL causes. Evidence is under `docs/api/graphql/review/`.
 - [x] (2026-11-06) Apply Alec's priority: playback and pagination first, search last.
 - [x] (2026-11-06) Batch song matching and restrict shows before source ranking.
-  Six real-catalog comparison cases retain identical JSON; Scarlet25 falls from
-  6.1 seconds to 637 ms and Drums25 from 13 seconds to 1.05 seconds. See
-  `docs/api/graphql/performance-fixes/` for fresh before and stage measurements.
+      Six real-catalog comparison cases retain identical JSON; Scarlet25 falls from
+      6.1 seconds to 637 ms and Drums25 from 13 seconds to 1.05 seconds. See
+      `docs/api/graphql/performance-fixes/` for fresh before and stage measurements.
 - [x] (2026-11-06) Replace broad owner selection with explicit scoped SQL. All 20
-  GraphQL payloads and 12 REST payloads match this branch's before run; Scarlet25
-  playback is 144 ms, Drums25 533 ms, venue history 24 ms. 194 V4 tests pass.
+      GraphQL payloads and 12 REST payloads match this branch's before run; Scarlet25
+      playback is 144 ms, Drums25 533 ms, venue history 24 ms. 194 V4 tests pass.
 - [x] (2026-11-06) Omit unselected timing statistics and recording bundles.
-  SQL trace confirms omitted/selected timings issue 0/1 statistics commands;
-  197 V4 tests pass, including a source-header budget regression verified red/green.
-- [ ] Rerun representative full-catalog workloads and affected REST reads; commit
-      the new evidence and remaining limitations.
+      SQL trace confirms omitted/selected timings issue 0/1 statistics commands;
+      197 V4 tests pass, including a source-header budget regression verified red/green.
+- [x] (2026-11-06) Qualify 20 GraphQL cases and 12 REST cases on the existing local
+      catalog. All payloads match this branch's before run. Scarlet25 playback is
+      156 ms and Drums25 548 ms; rows-only cases are 51/196 ms. Nine SQL observations
+      confirm scoped membership and one match computation per batch. All 1,000 tests
+      pass, with 37 existing skips; both independent reviews find no actionable issues.
 
 ## Discoveries
 
@@ -59,6 +62,9 @@ first work is selecting files efficiently, rather than replacing hydration.
 - This plan fixes existing operations. Song-index filters/count ordering, global
   duration ordering, population summaries and analytics remain a later capability
   change; they are not prerequisites for fixing current playback latency.
+- Qualification result, 2026-11-06: the existing indexes and matching function meet
+  the measured targets after removing redundant work. No scoped-function migration
+  or new index is required. Keep search-specific work deferred.
 
 ## Context and interfaces
 
@@ -226,9 +232,12 @@ production schema changes are outside this local implementation plan.
 
 ## Outcomes
 
-Planning complete; implementation and before/after qualification remain open.
-Completion means the demonstrated redundant work is removed, useful playback
-queries meet the measured targets, and the affected non-search REST behavior and
-performance remain intact. A missed target keeps performance qualification open;
-record the remaining cause and next concrete change. Additional UI
-capabilities and the search replacement remain separate work.
+Implemented and verified in three performance commits: `250f49c0a` batches song
+matching/ranking, `2a9e4ef41` scopes shared membership, and `a6c302e12` loads only
+selected timing/recording details. See `docs/api/graphql/performance-fixes/README.md`
+for both final benchmark passes, the fresh before run, SQL observations and test
+results. The selected local corpus meets its targets with unchanged payloads and
+no new non-search REST regression observed relative to this branch's before run.
+The older baseline's small artist-venue browse overhead remains documented.
+Production concurrency, arbitrary global fan-outs, additional UI capabilities and
+search-specific work remain separate. No production deployment occurred.

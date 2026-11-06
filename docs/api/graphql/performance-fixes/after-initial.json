@@ -1,0 +1,1851 @@
+{
+  "currentCommit": "a6c302e12",
+  "checkoutCommit": "a6c302e1254dff88397e682d853fd0ecef19f777",
+  "baselineCommit": "5087f5a39",
+  "environment": "macOS ARM64, .NET10, existing local PostgreSQL catalog, serial HTTP, warmed host",
+  "samplePolicy": "first sample then 3 warm samples; no p95 claim",
+  "graph": [
+    {
+      "name": "artist-navigation",
+      "firstMs": 764.7339999675751,
+      "samples": [
+        {
+          "ms": 764.7339999675751,
+          "status": 200,
+          "bytes": 13568,
+          "cost": {
+            "fieldCost": 171,
+            "typeCost": 283
+          },
+          "payloadHash": "0f28fb3f966fc009f398729e560be3a1d699dc80847c2609cc26c4ec663e6dda"
+        },
+        {
+          "ms": 307.7099579386413,
+          "status": 200,
+          "bytes": 13568,
+          "cost": {
+            "fieldCost": 171,
+            "typeCost": 283
+          },
+          "payloadHash": "0f28fb3f966fc009f398729e560be3a1d699dc80847c2609cc26c4ec663e6dda"
+        },
+        {
+          "ms": 316.63145893253386,
+          "status": 200,
+          "bytes": 13568,
+          "cost": {
+            "fieldCost": 171,
+            "typeCost": 283
+          },
+          "payloadHash": "0f28fb3f966fc009f398729e560be3a1d699dc80847c2609cc26c4ec663e6dda"
+        },
+        {
+          "ms": 273.1303330510855,
+          "status": 200,
+          "bytes": 13568,
+          "cost": {
+            "fieldCost": 171,
+            "typeCost": 283
+          },
+          "payloadHash": "0f28fb3f966fc009f398729e560be3a1d699dc80847c2609cc26c4ec663e6dda"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 307.7099579386413,
+      "warmRangeMs": [273.1303330510855, 316.63145893253386],
+      "document": "artist-navigation.graphql",
+      "sameAsBeforeBranch": true
+    },
+    {
+      "name": "artist-shows",
+      "firstMs": 322.3431250080466,
+      "samples": [
+        {
+          "ms": 322.3431250080466,
+          "status": 200,
+          "bytes": 3922,
+          "cost": {
+            "fieldCost": 22,
+            "typeCost": 29
+          },
+          "payloadHash": "4a00bf473789467089f10f3ae3f199640e8ffaa7d8540cf75aac03c63516440e"
+        },
+        {
+          "ms": 102.00358415022492,
+          "status": 200,
+          "bytes": 3922,
+          "cost": {
+            "fieldCost": 22,
+            "typeCost": 29
+          },
+          "payloadHash": "4a00bf473789467089f10f3ae3f199640e8ffaa7d8540cf75aac03c63516440e"
+        },
+        {
+          "ms": 85.95099998638034,
+          "status": 200,
+          "bytes": 3922,
+          "cost": {
+            "fieldCost": 22,
+            "typeCost": 29
+          },
+          "payloadHash": "4a00bf473789467089f10f3ae3f199640e8ffaa7d8540cf75aac03c63516440e"
+        },
+        {
+          "ms": 78.98754207417369,
+          "status": 200,
+          "bytes": 3922,
+          "cost": {
+            "fieldCost": 22,
+            "typeCost": 29
+          },
+          "payloadHash": "4a00bf473789467089f10f3ae3f199640e8ffaa7d8540cf75aac03c63516440e"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 85.95099998638034,
+      "warmRangeMs": [78.98754207417369, 102.00358415022492],
+      "document": "artist-shows.graphql",
+      "sameAsBeforeBranch": true
+    },
+    {
+      "name": "artist-shows-count",
+      "firstMs": 151.78041602484882,
+      "samples": [
+        {
+          "ms": 151.78041602484882,
+          "status": 200,
+          "bytes": 3940,
+          "cost": {
+            "fieldCost": 32,
+            "typeCost": 29
+          },
+          "payloadHash": "b079d9e2d7a97fa25be22da9eaefe83ce183eaa82cea879b4512611b1d011f21"
+        },
+        {
+          "ms": 96.5228748973459,
+          "status": 200,
+          "bytes": 3940,
+          "cost": {
+            "fieldCost": 32,
+            "typeCost": 29
+          },
+          "payloadHash": "b079d9e2d7a97fa25be22da9eaefe83ce183eaa82cea879b4512611b1d011f21"
+        },
+        {
+          "ms": 110.74783303774893,
+          "status": 200,
+          "bytes": 3940,
+          "cost": {
+            "fieldCost": 32,
+            "typeCost": 29
+          },
+          "payloadHash": "b079d9e2d7a97fa25be22da9eaefe83ce183eaa82cea879b4512611b1d011f21"
+        },
+        {
+          "ms": 182.01058311387897,
+          "status": 200,
+          "bytes": 3940,
+          "cost": {
+            "fieldCost": 32,
+            "typeCost": 29
+          },
+          "payloadHash": "b079d9e2d7a97fa25be22da9eaefe83ce183eaa82cea879b4512611b1d011f21"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 110.74783303774893,
+      "warmRangeMs": [96.5228748973459, 182.01058311387897],
+      "document": "artist-shows.graphql",
+      "sameAsBeforeBranch": true
+    },
+    {
+      "name": "song-metadata",
+      "firstMs": 94.95175001211464,
+      "samples": [
+        {
+          "ms": 94.95175001211464,
+          "status": 200,
+          "bytes": 359,
+          "cost": {
+            "fieldCost": 20,
+            "typeCost": 3
+          },
+          "payloadHash": "0375eefdd3082d36a115080e633d4b0e2ce4357489727e20b9e4ad3efb426caf"
+        },
+        {
+          "ms": 84.43137514404953,
+          "status": 200,
+          "bytes": 359,
+          "cost": {
+            "fieldCost": 20,
+            "typeCost": 3
+          },
+          "payloadHash": "0375eefdd3082d36a115080e633d4b0e2ce4357489727e20b9e4ad3efb426caf"
+        },
+        {
+          "ms": 62.70299991592765,
+          "status": 200,
+          "bytes": 359,
+          "cost": {
+            "fieldCost": 20,
+            "typeCost": 3
+          },
+          "payloadHash": "0375eefdd3082d36a115080e633d4b0e2ce4357489727e20b9e4ad3efb426caf"
+        },
+        {
+          "ms": 51.38433398678899,
+          "status": 200,
+          "bytes": 359,
+          "cost": {
+            "fieldCost": 20,
+            "typeCost": 3
+          },
+          "payloadHash": "0375eefdd3082d36a115080e633d4b0e2ce4357489727e20b9e4ad3efb426caf"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 62.70299991592765,
+      "warmRangeMs": [51.38433398678899, 84.43137514404953],
+      "document": "song-metadata.graphql",
+      "sameAsBeforeBranch": true
+    },
+    {
+      "name": "scarlet-rows-25",
+      "firstMs": 126.28091685473919,
+      "samples": [
+        {
+          "ms": 126.28091685473919,
+          "status": 200,
+          "bytes": 10057,
+          "cost": {
+            "fieldCost": 197,
+            "typeCost": 204
+          },
+          "payloadHash": "0579065c30df1c8a5594c04e88c23db2904494782881bc602706651834a29b24"
+        },
+        {
+          "ms": 102.38295793533325,
+          "status": 200,
+          "bytes": 10057,
+          "cost": {
+            "fieldCost": 197,
+            "typeCost": 204
+          },
+          "payloadHash": "0579065c30df1c8a5594c04e88c23db2904494782881bc602706651834a29b24"
+        },
+        {
+          "ms": 147.94495794922113,
+          "status": 200,
+          "bytes": 10057,
+          "cost": {
+            "fieldCost": 197,
+            "typeCost": 204
+          },
+          "payloadHash": "0579065c30df1c8a5594c04e88c23db2904494782881bc602706651834a29b24"
+        },
+        {
+          "ms": 282.32970903627574,
+          "status": 200,
+          "bytes": 10057,
+          "cost": {
+            "fieldCost": 197,
+            "typeCost": 204
+          },
+          "payloadHash": "0579065c30df1c8a5594c04e88c23db2904494782881bc602706651834a29b24"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 147.94495794922113,
+      "warmRangeMs": [102.38295793533325, 282.32970903627574],
+      "document": "song-history-rows.graphql",
+      "sameAsBeforeBranch": true
+    },
+    {
+      "name": "scarlet-rows-count-25",
+      "firstMs": 160.76566698029637,
+      "samples": [
+        {
+          "ms": 160.76566698029637,
+          "status": 200,
+          "bytes": 10074,
+          "cost": {
+            "fieldCost": 207,
+            "typeCost": 204
+          },
+          "payloadHash": "0524a8e0e7d73f0b27bc716a2fd316dce5402dc0c88d707d8855c5c356c1574b"
+        },
+        {
+          "ms": 228.06754196062684,
+          "status": 200,
+          "bytes": 10074,
+          "cost": {
+            "fieldCost": 207,
+            "typeCost": 204
+          },
+          "payloadHash": "0524a8e0e7d73f0b27bc716a2fd316dce5402dc0c88d707d8855c5c356c1574b"
+        },
+        {
+          "ms": 239.58683316595852,
+          "status": 200,
+          "bytes": 10074,
+          "cost": {
+            "fieldCost": 207,
+            "typeCost": 204
+          },
+          "payloadHash": "0524a8e0e7d73f0b27bc716a2fd316dce5402dc0c88d707d8855c5c356c1574b"
+        },
+        {
+          "ms": 91.78054193034768,
+          "status": 200,
+          "bytes": 10074,
+          "cost": {
+            "fieldCost": 207,
+            "typeCost": 204
+          },
+          "payloadHash": "0524a8e0e7d73f0b27bc716a2fd316dce5402dc0c88d707d8855c5c356c1574b"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 228.06754196062684,
+      "warmRangeMs": [91.78054193034768, 239.58683316595852],
+      "document": "song-history-rows.graphql",
+      "sameAsBeforeBranch": true
+    },
+    {
+      "name": "scarlet-timings-25",
+      "firstMs": 362.44445806369185,
+      "samples": [
+        {
+          "ms": 362.44445806369185,
+          "status": 200,
+          "bytes": 5174,
+          "cost": {
+            "fieldCost": 122,
+            "typeCost": 129
+          },
+          "payloadHash": "1704d2c950549709a3cafce45b3b95daed45e81ba298d9006641f24e7b052f4c"
+        },
+        {
+          "ms": 222.55933308042586,
+          "status": 200,
+          "bytes": 5174,
+          "cost": {
+            "fieldCost": 122,
+            "typeCost": 129
+          },
+          "payloadHash": "1704d2c950549709a3cafce45b3b95daed45e81ba298d9006641f24e7b052f4c"
+        },
+        {
+          "ms": 216.7254590895027,
+          "status": 200,
+          "bytes": 5174,
+          "cost": {
+            "fieldCost": 122,
+            "typeCost": 129
+          },
+          "payloadHash": "1704d2c950549709a3cafce45b3b95daed45e81ba298d9006641f24e7b052f4c"
+        },
+        {
+          "ms": 288.3692078758031,
+          "status": 200,
+          "bytes": 5174,
+          "cost": {
+            "fieldCost": 122,
+            "typeCost": 129
+          },
+          "payloadHash": "1704d2c950549709a3cafce45b3b95daed45e81ba298d9006641f24e7b052f4c"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 222.55933308042586,
+      "warmRangeMs": [216.7254590895027, 288.3692078758031],
+      "document": "song-history-timings.graphql",
+      "sameAsBeforeBranch": true
+    },
+    {
+      "name": "scarlet-playback-1",
+      "firstMs": 497.64562491327524,
+      "samples": [
+        {
+          "ms": 497.64562491327524,
+          "status": 200,
+          "bytes": 2014,
+          "cost": {
+            "fieldCost": 374,
+            "typeCost": 238
+          },
+          "payloadHash": "7cd7b209376622f689a0bdf8f319e968372c1927e36a43f176f6b4345e898967"
+        },
+        {
+          "ms": 683.586458209902,
+          "status": 200,
+          "bytes": 2014,
+          "cost": {
+            "fieldCost": 374,
+            "typeCost": 238
+          },
+          "payloadHash": "7cd7b209376622f689a0bdf8f319e968372c1927e36a43f176f6b4345e898967"
+        },
+        {
+          "ms": 523.806249955669,
+          "status": 200,
+          "bytes": 2014,
+          "cost": {
+            "fieldCost": 374,
+            "typeCost": 238
+          },
+          "payloadHash": "7cd7b209376622f689a0bdf8f319e968372c1927e36a43f176f6b4345e898967"
+        },
+        {
+          "ms": 233.4196250885725,
+          "status": 200,
+          "bytes": 2014,
+          "cost": {
+            "fieldCost": 374,
+            "typeCost": 238
+          },
+          "payloadHash": "7cd7b209376622f689a0bdf8f319e968372c1927e36a43f176f6b4345e898967"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 523.806249955669,
+      "warmRangeMs": [233.4196250885725, 683.586458209902],
+      "document": "song-history-playback.graphql",
+      "sameAsBeforeBranch": true
+    },
+    {
+      "name": "scarlet-playback-10",
+      "firstMs": 263.0164579022676,
+      "samples": [
+        {
+          "ms": 263.0164579022676,
+          "status": 200,
+          "bytes": 14325,
+          "cost": {
+            "fieldCost": 3452,
+            "typeCost": 2335
+          },
+          "payloadHash": "86d21d19ab34667f02c786efa2054819dd3720100289bbca6c2e8b62a99de1bb"
+        },
+        {
+          "ms": 305.2107079420239,
+          "status": 200,
+          "bytes": 14325,
+          "cost": {
+            "fieldCost": 3452,
+            "typeCost": 2335
+          },
+          "payloadHash": "86d21d19ab34667f02c786efa2054819dd3720100289bbca6c2e8b62a99de1bb"
+        },
+        {
+          "ms": 408.96708401851356,
+          "status": 200,
+          "bytes": 14325,
+          "cost": {
+            "fieldCost": 3452,
+            "typeCost": 2335
+          },
+          "payloadHash": "86d21d19ab34667f02c786efa2054819dd3720100289bbca6c2e8b62a99de1bb"
+        },
+        {
+          "ms": 310.43529184535146,
+          "status": 200,
+          "bytes": 14325,
+          "cost": {
+            "fieldCost": 3452,
+            "typeCost": 2335
+          },
+          "payloadHash": "86d21d19ab34667f02c786efa2054819dd3720100289bbca6c2e8b62a99de1bb"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 310.43529184535146,
+      "warmRangeMs": [305.2107079420239, 408.96708401851356],
+      "document": "song-history-playback.graphql",
+      "sameAsBeforeBranch": true
+    },
+    {
+      "name": "scarlet-playback-25",
+      "firstMs": 389.25137487240136,
+      "samples": [
+        {
+          "ms": 389.25137487240136,
+          "status": 200,
+          "bytes": 34926,
+          "cost": {
+            "fieldCost": 8582,
+            "typeCost": 5830
+          },
+          "payloadHash": "5047cc2d0deb1edf61b4d75ec5155db2fb5cc3577076f704e63e8170f4920652"
+        },
+        {
+          "ms": 408.39274995960295,
+          "status": 200,
+          "bytes": 34926,
+          "cost": {
+            "fieldCost": 8582,
+            "typeCost": 5830
+          },
+          "payloadHash": "5047cc2d0deb1edf61b4d75ec5155db2fb5cc3577076f704e63e8170f4920652"
+        },
+        {
+          "ms": 351.1052911635488,
+          "status": 200,
+          "bytes": 34926,
+          "cost": {
+            "fieldCost": 8582,
+            "typeCost": 5830
+          },
+          "payloadHash": "5047cc2d0deb1edf61b4d75ec5155db2fb5cc3577076f704e63e8170f4920652"
+        },
+        {
+          "ms": 385.6939170509577,
+          "status": 200,
+          "bytes": 34926,
+          "cost": {
+            "fieldCost": 8582,
+            "typeCost": 5830
+          },
+          "payloadHash": "5047cc2d0deb1edf61b4d75ec5155db2fb5cc3577076f704e63e8170f4920652"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 385.6939170509577,
+      "warmRangeMs": [351.1052911635488, 408.39274995960295],
+      "document": "song-history-playback.graphql",
+      "fileCount": 25,
+      "sameAsBeforeBranch": true
+    },
+    {
+      "name": "drums-rows-25",
+      "firstMs": 3471.701208036393,
+      "samples": [
+        {
+          "ms": 3471.701208036393,
+          "status": 200,
+          "bytes": 10149,
+          "cost": {
+            "fieldCost": 197,
+            "typeCost": 204
+          },
+          "payloadHash": "e728007a9b50ed4e5f69170552574db83456d1235f6365c1274cf8be2864d0a2"
+        },
+        {
+          "ms": 429.52445801347494,
+          "status": 200,
+          "bytes": 10149,
+          "cost": {
+            "fieldCost": 197,
+            "typeCost": 204
+          },
+          "payloadHash": "e728007a9b50ed4e5f69170552574db83456d1235f6365c1274cf8be2864d0a2"
+        },
+        {
+          "ms": 451.23120793141425,
+          "status": 200,
+          "bytes": 10149,
+          "cost": {
+            "fieldCost": 197,
+            "typeCost": 204
+          },
+          "payloadHash": "e728007a9b50ed4e5f69170552574db83456d1235f6365c1274cf8be2864d0a2"
+        },
+        {
+          "ms": 353.8307501003146,
+          "status": 200,
+          "bytes": 10149,
+          "cost": {
+            "fieldCost": 197,
+            "typeCost": 204
+          },
+          "payloadHash": "e728007a9b50ed4e5f69170552574db83456d1235f6365c1274cf8be2864d0a2"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 429.52445801347494,
+      "warmRangeMs": [353.8307501003146, 451.23120793141425],
+      "document": "song-history-rows.graphql",
+      "sameAsBeforeBranch": true
+    },
+    {
+      "name": "drums-playback-25",
+      "firstMs": 683.3119578659534,
+      "samples": [
+        {
+          "ms": 683.3119578659534,
+          "status": 200,
+          "bytes": 35461,
+          "cost": {
+            "fieldCost": 8582,
+            "typeCost": 5830
+          },
+          "payloadHash": "6f4776c1ddadea603f8e7f6d511d9d6293428dd74db08dddcd19e47ef62fe52e"
+        },
+        {
+          "ms": 764.9292079731822,
+          "status": 200,
+          "bytes": 35461,
+          "cost": {
+            "fieldCost": 8582,
+            "typeCost": 5830
+          },
+          "payloadHash": "6f4776c1ddadea603f8e7f6d511d9d6293428dd74db08dddcd19e47ef62fe52e"
+        },
+        {
+          "ms": 572.704334044829,
+          "status": 200,
+          "bytes": 35461,
+          "cost": {
+            "fieldCost": 8582,
+            "typeCost": 5830
+          },
+          "payloadHash": "6f4776c1ddadea603f8e7f6d511d9d6293428dd74db08dddcd19e47ef62fe52e"
+        },
+        {
+          "ms": 553.4447079990059,
+          "status": 200,
+          "bytes": 35461,
+          "cost": {
+            "fieldCost": 8582,
+            "typeCost": 5830
+          },
+          "payloadHash": "6f4776c1ddadea603f8e7f6d511d9d6293428dd74db08dddcd19e47ef62fe52e"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 572.704334044829,
+      "warmRangeMs": [553.4447079990059, 764.9292079731822],
+      "document": "song-history-playback.graphql",
+      "fileCount": 25,
+      "sameAsBeforeBranch": true
+    },
+    {
+      "name": "tweezer-reprise-playback-25",
+      "firstMs": 202.92333280667663,
+      "samples": [
+        {
+          "ms": 202.92333280667663,
+          "status": 200,
+          "bytes": 34367,
+          "cost": {
+            "fieldCost": 8582,
+            "typeCost": 5830
+          },
+          "payloadHash": "69f74ace210cbdc3b7ccccef0a2026385880d39335e5cb0222eb800c6521ddb3"
+        },
+        {
+          "ms": 69.679084001109,
+          "status": 200,
+          "bytes": 34367,
+          "cost": {
+            "fieldCost": 8582,
+            "typeCost": 5830
+          },
+          "payloadHash": "69f74ace210cbdc3b7ccccef0a2026385880d39335e5cb0222eb800c6521ddb3"
+        },
+        {
+          "ms": 67.69045791588724,
+          "status": 200,
+          "bytes": 34367,
+          "cost": {
+            "fieldCost": 8582,
+            "typeCost": 5830
+          },
+          "payloadHash": "69f74ace210cbdc3b7ccccef0a2026385880d39335e5cb0222eb800c6521ddb3"
+        },
+        {
+          "ms": 70.73300005868077,
+          "status": 200,
+          "bytes": 34367,
+          "cost": {
+            "fieldCost": 8582,
+            "typeCost": 5830
+          },
+          "payloadHash": "69f74ace210cbdc3b7ccccef0a2026385880d39335e5cb0222eb800c6521ddb3"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 69.679084001109,
+      "warmRangeMs": [67.69045791588724, 70.73300005868077],
+      "document": "song-history-playback.graphql",
+      "sameAsBeforeBranch": true
+    },
+    {
+      "name": "song-source-comparison",
+      "firstMs": 181.73658289015293,
+      "samples": [
+        {
+          "ms": 181.73658289015293,
+          "status": 200,
+          "bytes": 9289,
+          "cost": {
+            "fieldCost": 535,
+            "typeCost": 107
+          },
+          "payloadHash": "d9c467bbc74a6645997200c396cd98037f07b0d290c8d75c5cf17e34d72c564c"
+        },
+        {
+          "ms": 220.650042174384,
+          "status": 200,
+          "bytes": 9289,
+          "cost": {
+            "fieldCost": 535,
+            "typeCost": 107
+          },
+          "payloadHash": "d9c467bbc74a6645997200c396cd98037f07b0d290c8d75c5cf17e34d72c564c"
+        },
+        {
+          "ms": 227.74729202501476,
+          "status": 200,
+          "bytes": 9289,
+          "cost": {
+            "fieldCost": 535,
+            "typeCost": 107
+          },
+          "payloadHash": "d9c467bbc74a6645997200c396cd98037f07b0d290c8d75c5cf17e34d72c564c"
+        },
+        {
+          "ms": 139.31212504394352,
+          "status": 200,
+          "bytes": 9289,
+          "cost": {
+            "fieldCost": 535,
+            "typeCost": 107
+          },
+          "payloadHash": "d9c467bbc74a6645997200c396cd98037f07b0d290c8d75c5cf17e34d72c564c"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 220.650042174384,
+      "warmRangeMs": [139.31212504394352, 227.74729202501476],
+      "document": "song-source-comparison.graphql",
+      "sameAsBeforeBranch": true
+    },
+    {
+      "name": "venue-history-25",
+      "firstMs": 46.87579208984971,
+      "samples": [
+        {
+          "ms": 46.87579208984971,
+          "status": 200,
+          "bytes": 7187,
+          "cost": {
+            "fieldCost": 348,
+            "typeCost": 130
+          },
+          "payloadHash": "583e512a35b6e275af95101c9622d8a06a44062f9cb3716fb034d48a18e3b48f"
+        },
+        {
+          "ms": 33.77066692337394,
+          "status": 200,
+          "bytes": 7187,
+          "cost": {
+            "fieldCost": 348,
+            "typeCost": 130
+          },
+          "payloadHash": "583e512a35b6e275af95101c9622d8a06a44062f9cb3716fb034d48a18e3b48f"
+        },
+        {
+          "ms": 36.62554104812443,
+          "status": 200,
+          "bytes": 7187,
+          "cost": {
+            "fieldCost": 348,
+            "typeCost": 130
+          },
+          "payloadHash": "583e512a35b6e275af95101c9622d8a06a44062f9cb3716fb034d48a18e3b48f"
+        },
+        {
+          "ms": 50.53770914673805,
+          "status": 200,
+          "bytes": 7187,
+          "cost": {
+            "fieldCost": 348,
+            "typeCost": 130
+          },
+          "payloadHash": "583e512a35b6e275af95101c9622d8a06a44062f9cb3716fb034d48a18e3b48f"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 36.62554104812443,
+      "warmRangeMs": [33.77066692337394, 50.53770914673805],
+      "document": "venue-history.graphql",
+      "sameAsBeforeBranch": true
+    },
+    {
+      "name": "venue-history-filtered",
+      "firstMs": 34.8487498704344,
+      "samples": [
+        {
+          "ms": 34.8487498704344,
+          "status": 200,
+          "bytes": 1532,
+          "cost": {
+            "fieldCost": 34,
+            "typeCost": 30
+          },
+          "payloadHash": "6bcbf0f9e21b6bb3e6b2340148cfce4040a8121ce714ee8516a83eb736428e50"
+        },
+        {
+          "ms": 36.23504191637039,
+          "status": 200,
+          "bytes": 1532,
+          "cost": {
+            "fieldCost": 34,
+            "typeCost": 30
+          },
+          "payloadHash": "6bcbf0f9e21b6bb3e6b2340148cfce4040a8121ce714ee8516a83eb736428e50"
+        },
+        {
+          "ms": 34.112083027139306,
+          "status": 200,
+          "bytes": 1532,
+          "cost": {
+            "fieldCost": 34,
+            "typeCost": 30
+          },
+          "payloadHash": "6bcbf0f9e21b6bb3e6b2340148cfce4040a8121ce714ee8516a83eb736428e50"
+        },
+        {
+          "ms": 26.323792058974504,
+          "status": 200,
+          "bytes": 1532,
+          "cost": {
+            "fieldCost": 34,
+            "typeCost": 30
+          },
+          "payloadHash": "6bcbf0f9e21b6bb3e6b2340148cfce4040a8121ce714ee8516a83eb736428e50"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 34.112083027139306,
+      "warmRangeMs": [26.323792058974504, 36.23504191637039],
+      "document": "venue-history-filtered.graphql",
+      "sameAsBeforeBranch": true
+    },
+    {
+      "name": "recording-playback",
+      "firstMs": 58.537499979138374,
+      "samples": [
+        {
+          "ms": 58.537499979138374,
+          "status": 200,
+          "bytes": 10101,
+          "cost": {
+            "fieldCost": 1281,
+            "typeCost": 2009
+          },
+          "payloadHash": "ed884f47505bef1484888713679e1f3bd44391df41bdd924cb1a2fe6995ebf44"
+        },
+        {
+          "ms": 30.08812479674816,
+          "status": 200,
+          "bytes": 10101,
+          "cost": {
+            "fieldCost": 1281,
+            "typeCost": 2009
+          },
+          "payloadHash": "ed884f47505bef1484888713679e1f3bd44391df41bdd924cb1a2fe6995ebf44"
+        },
+        {
+          "ms": 29.73133302293718,
+          "status": 200,
+          "bytes": 10101,
+          "cost": {
+            "fieldCost": 1281,
+            "typeCost": 2009
+          },
+          "payloadHash": "ed884f47505bef1484888713679e1f3bd44391df41bdd924cb1a2fe6995ebf44"
+        },
+        {
+          "ms": 29.636790975928307,
+          "status": 200,
+          "bytes": 10101,
+          "cost": {
+            "fieldCost": 1281,
+            "typeCost": 2009
+          },
+          "payloadHash": "ed884f47505bef1484888713679e1f3bd44391df41bdd924cb1a2fe6995ebf44"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 29.73133302293718,
+      "warmRangeMs": [29.636790975928307, 30.08812479674816],
+      "document": "recording-playback.graphql",
+      "sameAsBeforeBranch": true
+    },
+    {
+      "name": "playlist-250",
+      "firstMs": 86.850332794711,
+      "samples": [
+        {
+          "ms": 86.850332794711,
+          "status": 200,
+          "bytes": 222295,
+          "cost": {
+            "fieldCost": 19010,
+            "typeCost": 7501
+          },
+          "payloadHash": "2ab58d9d26852d2730f1cc2253992691829be3a7e019b9dc63854679d0d1f013"
+        },
+        {
+          "ms": 40.66704190336168,
+          "status": 200,
+          "bytes": 222295,
+          "cost": {
+            "fieldCost": 19010,
+            "typeCost": 7501
+          },
+          "payloadHash": "2ab58d9d26852d2730f1cc2253992691829be3a7e019b9dc63854679d0d1f013"
+        },
+        {
+          "ms": 42.944374959915876,
+          "status": 200,
+          "bytes": 222295,
+          "cost": {
+            "fieldCost": 19010,
+            "typeCost": 7501
+          },
+          "payloadHash": "2ab58d9d26852d2730f1cc2253992691829be3a7e019b9dc63854679d0d1f013"
+        },
+        {
+          "ms": 45.714166946709156,
+          "status": 200,
+          "bytes": 222295,
+          "cost": {
+            "fieldCost": 19010,
+            "typeCost": 7501
+          },
+          "payloadHash": "2ab58d9d26852d2730f1cc2253992691829be3a7e019b9dc63854679d0d1f013"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 42.944374959915876,
+      "warmRangeMs": [40.66704190336168, 45.714166946709156],
+      "document": "playlist-hydration.graphql",
+      "sameAsBeforeBranch": true
+    },
+    {
+      "name": "catalog-search",
+      "firstMs": 298.196375137195,
+      "samples": [
+        {
+          "ms": 298.196375137195,
+          "status": 200,
+          "bytes": 4233,
+          "cost": {
+            "fieldCost": 346,
+            "typeCost": 188
+          },
+          "payloadHash": "ec8412698a7656de2ca4cc75af59dfdcf5159e5bd85ada01ec471245ff2a5a06"
+        },
+        {
+          "ms": 366.37433315627277,
+          "status": 200,
+          "bytes": 4233,
+          "cost": {
+            "fieldCost": 346,
+            "typeCost": 188
+          },
+          "payloadHash": "ec8412698a7656de2ca4cc75af59dfdcf5159e5bd85ada01ec471245ff2a5a06"
+        },
+        {
+          "ms": 319.0690828487277,
+          "status": 200,
+          "bytes": 4233,
+          "cost": {
+            "fieldCost": 346,
+            "typeCost": 188
+          },
+          "payloadHash": "ec8412698a7656de2ca4cc75af59dfdcf5159e5bd85ada01ec471245ff2a5a06"
+        },
+        {
+          "ms": 280.8024580590427,
+          "status": 200,
+          "bytes": 4233,
+          "cost": {
+            "fieldCost": 346,
+            "typeCost": 188
+          },
+          "payloadHash": "ec8412698a7656de2ca4cc75af59dfdcf5159e5bd85ada01ec471245ff2a5a06"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 319.0690828487277,
+      "warmRangeMs": [280.8024580590427, 366.37433315627277],
+      "document": "catalog-search.graphql",
+      "sameAsBeforeBranch": true
+    },
+    {
+      "name": "scarlet-rows-next-25",
+      "firstMs": 109.51000009663403,
+      "samples": [
+        {
+          "ms": 109.51000009663403,
+          "status": 200,
+          "bytes": 9932,
+          "cost": {
+            "fieldCost": 197,
+            "typeCost": 204
+          },
+          "payloadHash": "dcad6920671e30a463a5848c8f1b270a1ed600cc16d39b9afbc9a7e933aedce3"
+        },
+        {
+          "ms": 95.04866600036621,
+          "status": 200,
+          "bytes": 9932,
+          "cost": {
+            "fieldCost": 197,
+            "typeCost": 204
+          },
+          "payloadHash": "dcad6920671e30a463a5848c8f1b270a1ed600cc16d39b9afbc9a7e933aedce3"
+        },
+        {
+          "ms": 295.9670841228217,
+          "status": 200,
+          "bytes": 9932,
+          "cost": {
+            "fieldCost": 197,
+            "typeCost": 204
+          },
+          "payloadHash": "dcad6920671e30a463a5848c8f1b270a1ed600cc16d39b9afbc9a7e933aedce3"
+        },
+        {
+          "ms": 108.46491693519056,
+          "status": 200,
+          "bytes": 9932,
+          "cost": {
+            "fieldCost": 197,
+            "typeCost": 204
+          },
+          "payloadHash": "dcad6920671e30a463a5848c8f1b270a1ed600cc16d39b9afbc9a7e933aedce3"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 108.46491693519056,
+      "warmRangeMs": [95.04866600036621, 295.9670841228217],
+      "document": "song-history-rows.graphql",
+      "sameAsBeforeBranch": true
+    }
+  ],
+  "rest": [
+    {
+      "name": "artist-shows",
+      "path": "/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/shows",
+      "baseline": {
+        "samples": [
+          {
+            "ms": 960.3559169918299,
+            "status": 200,
+            "bytes": 5606852,
+            "payloadHash": "88603bdc5652a4a87275dca101ecefbfecfb708dfd4aa81de4a22969416ac708"
+          },
+          {
+            "ms": 280.11837508529425,
+            "status": 200,
+            "bytes": 5606852,
+            "payloadHash": "88603bdc5652a4a87275dca101ecefbfecfb708dfd4aa81de4a22969416ac708"
+          },
+          {
+            "ms": 225.81520909443498,
+            "status": 200,
+            "bytes": 5606852,
+            "payloadHash": "88603bdc5652a4a87275dca101ecefbfecfb708dfd4aa81de4a22969416ac708"
+          },
+          {
+            "ms": 381.6555419471115,
+            "status": 200,
+            "bytes": 5606852,
+            "payloadHash": "88603bdc5652a4a87275dca101ecefbfecfb708dfd4aa81de4a22969416ac708"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 280.11837508529425,
+        "warmRangeMs": [225.81520909443498, 381.6555419471115]
+      },
+      "current": {
+        "samples": [
+          {
+            "ms": 173.77341608516872,
+            "status": 200,
+            "bytes": 5606852,
+            "payloadHash": "88603bdc5652a4a87275dca101ecefbfecfb708dfd4aa81de4a22969416ac708"
+          },
+          {
+            "ms": 127.26904195733368,
+            "status": 200,
+            "bytes": 5606852,
+            "payloadHash": "88603bdc5652a4a87275dca101ecefbfecfb708dfd4aa81de4a22969416ac708"
+          },
+          {
+            "ms": 134.06991702504456,
+            "status": 200,
+            "bytes": 5606852,
+            "payloadHash": "88603bdc5652a4a87275dca101ecefbfecfb708dfd4aa81de4a22969416ac708"
+          },
+          {
+            "ms": 107.14766685850918,
+            "status": 200,
+            "bytes": 5606852,
+            "payloadHash": "88603bdc5652a4a87275dca101ecefbfecfb708dfd4aa81de4a22969416ac708"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 127.26904195733368,
+        "warmRangeMs": [107.14766685850918, 134.06991702504456]
+      },
+      "samePayload": true,
+      "sameAsBeforeBranch": true
+    },
+    {
+      "name": "recent-performed",
+      "path": "/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/shows/recently-performed?shows=25",
+      "baseline": {
+        "samples": [
+          {
+            "ms": 62.87162494845688,
+            "status": 200,
+            "bytes": 68088,
+            "payloadHash": "4830baca2212186c35f1d7c7d681abe843d4730706e559320733b737fcb703c3"
+          },
+          {
+            "ms": 72.96291692182422,
+            "status": 200,
+            "bytes": 68088,
+            "payloadHash": "4830baca2212186c35f1d7c7d681abe843d4730706e559320733b737fcb703c3"
+          },
+          {
+            "ms": 58.77908295951784,
+            "status": 200,
+            "bytes": 68088,
+            "payloadHash": "4830baca2212186c35f1d7c7d681abe843d4730706e559320733b737fcb703c3"
+          },
+          {
+            "ms": 29.39054206945002,
+            "status": 200,
+            "bytes": 68088,
+            "payloadHash": "4830baca2212186c35f1d7c7d681abe843d4730706e559320733b737fcb703c3"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 58.77908295951784,
+        "warmRangeMs": [29.39054206945002, 72.96291692182422]
+      },
+      "current": {
+        "samples": [
+          {
+            "ms": 51.185250049456954,
+            "status": 200,
+            "bytes": 68088,
+            "payloadHash": "4830baca2212186c35f1d7c7d681abe843d4730706e559320733b737fcb703c3"
+          },
+          {
+            "ms": 49.35933416709304,
+            "status": 200,
+            "bytes": 68088,
+            "payloadHash": "4830baca2212186c35f1d7c7d681abe843d4730706e559320733b737fcb703c3"
+          },
+          {
+            "ms": 40.90908286161721,
+            "status": 200,
+            "bytes": 68088,
+            "payloadHash": "4830baca2212186c35f1d7c7d681abe843d4730706e559320733b737fcb703c3"
+          },
+          {
+            "ms": 33.18404103629291,
+            "status": 200,
+            "bytes": 68088,
+            "payloadHash": "4830baca2212186c35f1d7c7d681abe843d4730706e559320733b737fcb703c3"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 40.90908286161721,
+        "warmRangeMs": [33.18404103629291, 49.35933416709304]
+      },
+      "samePayload": true,
+      "sameAsBeforeBranch": true
+    },
+    {
+      "name": "recent-updated",
+      "path": "/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/shows/recently-updated?shows=25",
+      "baseline": {
+        "samples": [
+          {
+            "ms": 43.5031249653548,
+            "status": 200,
+            "bytes": 67128,
+            "payloadHash": "a1b491840274409b22e57de0308fc35074876702e3aa36ed3041c9bdca0cd648"
+          },
+          {
+            "ms": 36.178332986310124,
+            "status": 200,
+            "bytes": 67128,
+            "payloadHash": "a1b491840274409b22e57de0308fc35074876702e3aa36ed3041c9bdca0cd648"
+          },
+          {
+            "ms": 35.07724986411631,
+            "status": 200,
+            "bytes": 67128,
+            "payloadHash": "a1b491840274409b22e57de0308fc35074876702e3aa36ed3041c9bdca0cd648"
+          },
+          {
+            "ms": 29.509542044252157,
+            "status": 200,
+            "bytes": 67128,
+            "payloadHash": "a1b491840274409b22e57de0308fc35074876702e3aa36ed3041c9bdca0cd648"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 35.07724986411631,
+        "warmRangeMs": [29.509542044252157, 36.178332986310124]
+      },
+      "current": {
+        "samples": [
+          {
+            "ms": 40.16149998642504,
+            "status": 200,
+            "bytes": 67128,
+            "payloadHash": "a1b491840274409b22e57de0308fc35074876702e3aa36ed3041c9bdca0cd648"
+          },
+          {
+            "ms": 40.632958989590406,
+            "status": 200,
+            "bytes": 67128,
+            "payloadHash": "a1b491840274409b22e57de0308fc35074876702e3aa36ed3041c9bdca0cd648"
+          },
+          {
+            "ms": 47.8877080604434,
+            "status": 200,
+            "bytes": 67128,
+            "payloadHash": "a1b491840274409b22e57de0308fc35074876702e3aa36ed3041c9bdca0cd648"
+          },
+          {
+            "ms": 75.18908404745162,
+            "status": 200,
+            "bytes": 67128,
+            "payloadHash": "a1b491840274409b22e57de0308fc35074876702e3aa36ed3041c9bdca0cd648"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 47.8877080604434,
+        "warmRangeMs": [40.632958989590406, 75.18908404745162]
+      },
+      "samePayload": true,
+      "sameAsBeforeBranch": true
+    },
+    {
+      "name": "top",
+      "path": "/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/shows/top?limit=25",
+      "baseline": {
+        "samples": [
+          {
+            "ms": 28.9103330578655,
+            "status": 200,
+            "bytes": 67532,
+            "payloadHash": "076a83c1543b763c35f57cd0e210ad072d5f92afdf33e7d498c31cf3ab34a4d8"
+          },
+          {
+            "ms": 21.57495799474418,
+            "status": 200,
+            "bytes": 67532,
+            "payloadHash": "076a83c1543b763c35f57cd0e210ad072d5f92afdf33e7d498c31cf3ab34a4d8"
+          },
+          {
+            "ms": 17.935541924089193,
+            "status": 200,
+            "bytes": 67532,
+            "payloadHash": "076a83c1543b763c35f57cd0e210ad072d5f92afdf33e7d498c31cf3ab34a4d8"
+          },
+          {
+            "ms": 16.739999875426292,
+            "status": 200,
+            "bytes": 67532,
+            "payloadHash": "076a83c1543b763c35f57cd0e210ad072d5f92afdf33e7d498c31cf3ab34a4d8"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 17.935541924089193,
+        "warmRangeMs": [16.739999875426292, 21.57495799474418]
+      },
+      "current": {
+        "samples": [
+          {
+            "ms": 29.798249946907163,
+            "status": 200,
+            "bytes": 67532,
+            "payloadHash": "076a83c1543b763c35f57cd0e210ad072d5f92afdf33e7d498c31cf3ab34a4d8"
+          },
+          {
+            "ms": 27.668124996125698,
+            "status": 200,
+            "bytes": 67532,
+            "payloadHash": "076a83c1543b763c35f57cd0e210ad072d5f92afdf33e7d498c31cf3ab34a4d8"
+          },
+          {
+            "ms": 28.69716682471335,
+            "status": 200,
+            "bytes": 67532,
+            "payloadHash": "076a83c1543b763c35f57cd0e210ad072d5f92afdf33e7d498c31cf3ab34a4d8"
+          },
+          {
+            "ms": 28.063500067219138,
+            "status": 200,
+            "bytes": 67532,
+            "payloadHash": "076a83c1543b763c35f57cd0e210ad072d5f92afdf33e7d498c31cf3ab34a4d8"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 28.063500067219138,
+        "warmRangeMs": [27.668124996125698, 28.69716682471335]
+      },
+      "samePayload": true,
+      "sameAsBeforeBranch": true
+    },
+    {
+      "name": "anniversary",
+      "path": "/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/shows/on-date?month=12&day=31",
+      "baseline": {
+        "samples": [
+          {
+            "ms": 19.702333956956863,
+            "status": 200,
+            "bytes": 60982,
+            "payloadHash": "5f435b69d988f0f4034fd171604b08aceb85658df48bb8ea2fb3abcffb21b119"
+          },
+          {
+            "ms": 12.382749933749437,
+            "status": 200,
+            "bytes": 60982,
+            "payloadHash": "5f435b69d988f0f4034fd171604b08aceb85658df48bb8ea2fb3abcffb21b119"
+          },
+          {
+            "ms": 11.26491604372859,
+            "status": 200,
+            "bytes": 60982,
+            "payloadHash": "5f435b69d988f0f4034fd171604b08aceb85658df48bb8ea2fb3abcffb21b119"
+          },
+          {
+            "ms": 15.423167031258345,
+            "status": 200,
+            "bytes": 60982,
+            "payloadHash": "5f435b69d988f0f4034fd171604b08aceb85658df48bb8ea2fb3abcffb21b119"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 12.382749933749437,
+        "warmRangeMs": [11.26491604372859, 15.423167031258345]
+      },
+      "current": {
+        "samples": [
+          {
+            "ms": 22.641540970653296,
+            "status": 200,
+            "bytes": 60982,
+            "payloadHash": "5f435b69d988f0f4034fd171604b08aceb85658df48bb8ea2fb3abcffb21b119"
+          },
+          {
+            "ms": 16.092084115371108,
+            "status": 200,
+            "bytes": 60982,
+            "payloadHash": "5f435b69d988f0f4034fd171604b08aceb85658df48bb8ea2fb3abcffb21b119"
+          },
+          {
+            "ms": 16.26379112713039,
+            "status": 200,
+            "bytes": 60982,
+            "payloadHash": "5f435b69d988f0f4034fd171604b08aceb85658df48bb8ea2fb3abcffb21b119"
+          },
+          {
+            "ms": 20.854166941717267,
+            "status": 200,
+            "bytes": 60982,
+            "payloadHash": "5f435b69d988f0f4034fd171604b08aceb85658df48bb8ea2fb3abcffb21b119"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 16.26379112713039,
+        "warmRangeMs": [16.092084115371108, 20.854166941717267]
+      },
+      "samePayload": true,
+      "sameAsBeforeBranch": true
+    },
+    {
+      "name": "artist-songs",
+      "path": "/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/songs",
+      "baseline": {
+        "samples": [
+          {
+            "ms": 189.93333308026195,
+            "status": 200,
+            "bytes": 174363,
+            "payloadHash": "a62d89e89563569790c89144c174bc9fa9677f88156911c6314bc1700a167095"
+          },
+          {
+            "ms": 140.73891681618989,
+            "status": 200,
+            "bytes": 174363,
+            "payloadHash": "a62d89e89563569790c89144c174bc9fa9677f88156911c6314bc1700a167095"
+          },
+          {
+            "ms": 137.06429186277092,
+            "status": 200,
+            "bytes": 174363,
+            "payloadHash": "a62d89e89563569790c89144c174bc9fa9677f88156911c6314bc1700a167095"
+          },
+          {
+            "ms": 135.62124990858138,
+            "status": 200,
+            "bytes": 174363,
+            "payloadHash": "a62d89e89563569790c89144c174bc9fa9677f88156911c6314bc1700a167095"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 137.06429186277092,
+        "warmRangeMs": [135.62124990858138, 140.73891681618989]
+      },
+      "current": {
+        "samples": [
+          {
+            "ms": 84.7853331360966,
+            "status": 200,
+            "bytes": 174363,
+            "payloadHash": "a62d89e89563569790c89144c174bc9fa9677f88156911c6314bc1700a167095"
+          },
+          {
+            "ms": 80.2641250193119,
+            "status": 200,
+            "bytes": 174363,
+            "payloadHash": "a62d89e89563569790c89144c174bc9fa9677f88156911c6314bc1700a167095"
+          },
+          {
+            "ms": 79.28758300840855,
+            "status": 200,
+            "bytes": 174363,
+            "payloadHash": "a62d89e89563569790c89144c174bc9fa9677f88156911c6314bc1700a167095"
+          },
+          {
+            "ms": 69.37029212713242,
+            "status": 200,
+            "bytes": 174363,
+            "payloadHash": "a62d89e89563569790c89144c174bc9fa9677f88156911c6314bc1700a167095"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 79.28758300840855,
+        "warmRangeMs": [69.37029212713242, 80.2641250193119]
+      },
+      "samePayload": true,
+      "sameAsBeforeBranch": true
+    },
+    {
+      "name": "artist-venues",
+      "path": "/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/venues",
+      "baseline": {
+        "samples": [
+          {
+            "ms": 23.35558389313519,
+            "status": 200,
+            "bytes": 336849,
+            "payloadHash": "e1bfb664c625bed1d91cd82b865f029b5d571fc8baeada4d95314b77f9e98215"
+          },
+          {
+            "ms": 14.977499842643738,
+            "status": 200,
+            "bytes": 336849,
+            "payloadHash": "e1bfb664c625bed1d91cd82b865f029b5d571fc8baeada4d95314b77f9e98215"
+          },
+          {
+            "ms": 16.056417021900415,
+            "status": 200,
+            "bytes": 336849,
+            "payloadHash": "e1bfb664c625bed1d91cd82b865f029b5d571fc8baeada4d95314b77f9e98215"
+          },
+          {
+            "ms": 14.237875118851662,
+            "status": 200,
+            "bytes": 336849,
+            "payloadHash": "e1bfb664c625bed1d91cd82b865f029b5d571fc8baeada4d95314b77f9e98215"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 14.977499842643738,
+        "warmRangeMs": [14.237875118851662, 16.056417021900415]
+      },
+      "current": {
+        "samples": [
+          {
+            "ms": 50.2728340215981,
+            "status": 200,
+            "bytes": 336849,
+            "payloadHash": "e1bfb664c625bed1d91cd82b865f029b5d571fc8baeada4d95314b77f9e98215"
+          },
+          {
+            "ms": 26.590875117108226,
+            "status": 200,
+            "bytes": 336849,
+            "payloadHash": "e1bfb664c625bed1d91cd82b865f029b5d571fc8baeada4d95314b77f9e98215"
+          },
+          {
+            "ms": 25.931457988917828,
+            "status": 200,
+            "bytes": 336849,
+            "payloadHash": "e1bfb664c625bed1d91cd82b865f029b5d571fc8baeada4d95314b77f9e98215"
+          },
+          {
+            "ms": 25.757874827831984,
+            "status": 200,
+            "bytes": 336849,
+            "payloadHash": "e1bfb664c625bed1d91cd82b865f029b5d571fc8baeada4d95314b77f9e98215"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 25.931457988917828,
+        "warmRangeMs": [25.757874827831984, 26.590875117108226]
+      },
+      "samePayload": true,
+      "sameAsBeforeBranch": true
+    },
+    {
+      "name": "venue-detail",
+      "path": "/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/venues/venue_yn1268r4",
+      "baseline": {
+        "samples": [
+          {
+            "ms": 31.812375178560615,
+            "status": 200,
+            "bytes": 228453,
+            "payloadHash": "a4f2c30a8af04e7f1accd78dce4424ecad261257c21ee0fa1f671d599943d63e"
+          },
+          {
+            "ms": 23.407291155308485,
+            "status": 200,
+            "bytes": 228453,
+            "payloadHash": "a4f2c30a8af04e7f1accd78dce4424ecad261257c21ee0fa1f671d599943d63e"
+          },
+          {
+            "ms": 23.35916692391038,
+            "status": 200,
+            "bytes": 228453,
+            "payloadHash": "a4f2c30a8af04e7f1accd78dce4424ecad261257c21ee0fa1f671d599943d63e"
+          },
+          {
+            "ms": 23.491499945521355,
+            "status": 200,
+            "bytes": 228453,
+            "payloadHash": "a4f2c30a8af04e7f1accd78dce4424ecad261257c21ee0fa1f671d599943d63e"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 23.407291155308485,
+        "warmRangeMs": [23.35916692391038, 23.491499945521355]
+      },
+      "current": {
+        "samples": [
+          {
+            "ms": 23.266958072781563,
+            "status": 200,
+            "bytes": 228453,
+            "payloadHash": "a4f2c30a8af04e7f1accd78dce4424ecad261257c21ee0fa1f671d599943d63e"
+          },
+          {
+            "ms": 17.98712508752942,
+            "status": 200,
+            "bytes": 228453,
+            "payloadHash": "a4f2c30a8af04e7f1accd78dce4424ecad261257c21ee0fa1f671d599943d63e"
+          },
+          {
+            "ms": 17.290417104959488,
+            "status": 200,
+            "bytes": 228453,
+            "payloadHash": "a4f2c30a8af04e7f1accd78dce4424ecad261257c21ee0fa1f671d599943d63e"
+          },
+          {
+            "ms": 15.633458970114589,
+            "status": 200,
+            "bytes": 228453,
+            "payloadHash": "a4f2c30a8af04e7f1accd78dce4424ecad261257c21ee0fa1f671d599943d63e"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 17.290417104959488,
+        "warmRangeMs": [15.633458970114589, 17.98712508752942]
+      },
+      "samePayload": true,
+      "sameAsBeforeBranch": true
+    },
+    {
+      "name": "scarlet-song",
+      "path": "/api/v4/songs/song_62mhvjyd",
+      "baseline": {
+        "samples": [
+          {
+            "ms": 195.27224986813962,
+            "status": 200,
+            "bytes": 961442,
+            "payloadHash": "21080bf25569031545d7ce84a307f60b97c817e98124bd33fbc632d849b1334a"
+          },
+          {
+            "ms": 85.87662503123283,
+            "status": 200,
+            "bytes": 961442,
+            "payloadHash": "21080bf25569031545d7ce84a307f60b97c817e98124bd33fbc632d849b1334a"
+          },
+          {
+            "ms": 76.19062508456409,
+            "status": 200,
+            "bytes": 961442,
+            "payloadHash": "21080bf25569031545d7ce84a307f60b97c817e98124bd33fbc632d849b1334a"
+          },
+          {
+            "ms": 76.01758395321667,
+            "status": 200,
+            "bytes": 961442,
+            "payloadHash": "21080bf25569031545d7ce84a307f60b97c817e98124bd33fbc632d849b1334a"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 76.19062508456409,
+        "warmRangeMs": [76.01758395321667, 85.87662503123283]
+      },
+      "current": {
+        "samples": [
+          {
+            "ms": 100.60479189269245,
+            "status": 200,
+            "bytes": 961442,
+            "payloadHash": "21080bf25569031545d7ce84a307f60b97c817e98124bd33fbc632d849b1334a"
+          },
+          {
+            "ms": 83.39695795439184,
+            "status": 200,
+            "bytes": 961442,
+            "payloadHash": "21080bf25569031545d7ce84a307f60b97c817e98124bd33fbc632d849b1334a"
+          },
+          {
+            "ms": 80.47904190607369,
+            "status": 200,
+            "bytes": 961442,
+            "payloadHash": "21080bf25569031545d7ce84a307f60b97c817e98124bd33fbc632d849b1334a"
+          },
+          {
+            "ms": 81.91649988293648,
+            "status": 200,
+            "bytes": 961442,
+            "payloadHash": "21080bf25569031545d7ce84a307f60b97c817e98124bd33fbc632d849b1334a"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 81.91649988293648,
+        "warmRangeMs": [80.47904190607369, 83.39695795439184]
+      },
+      "samePayload": true,
+      "sameAsBeforeBranch": true
+    },
+    {
+      "name": "scarlet-song-top",
+      "path": "/api/v4/songs/song_62mhvjyd?include_tracks=top",
+      "baseline": {
+        "samples": [
+          {
+            "ms": 159.10283313132823,
+            "status": 200,
+            "bytes": 1072723,
+            "payloadHash": "a4aab5abf8d9b4ab9ca01001678a7a9eaba9bd37c44136afb3a848181cbc8522"
+          },
+          {
+            "ms": 131.93662487901747,
+            "status": 200,
+            "bytes": 1072723,
+            "payloadHash": "a4aab5abf8d9b4ab9ca01001678a7a9eaba9bd37c44136afb3a848181cbc8522"
+          },
+          {
+            "ms": 137.10045791231096,
+            "status": 200,
+            "bytes": 1072723,
+            "payloadHash": "a4aab5abf8d9b4ab9ca01001678a7a9eaba9bd37c44136afb3a848181cbc8522"
+          },
+          {
+            "ms": 132.38387508317828,
+            "status": 200,
+            "bytes": 1072723,
+            "payloadHash": "a4aab5abf8d9b4ab9ca01001678a7a9eaba9bd37c44136afb3a848181cbc8522"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 132.38387508317828,
+        "warmRangeMs": [131.93662487901747, 137.10045791231096]
+      },
+      "current": {
+        "samples": [
+          {
+            "ms": 147.40208303555846,
+            "status": 200,
+            "bytes": 1072723,
+            "payloadHash": "a4aab5abf8d9b4ab9ca01001678a7a9eaba9bd37c44136afb3a848181cbc8522"
+          },
+          {
+            "ms": 134.3364999629557,
+            "status": 200,
+            "bytes": 1072723,
+            "payloadHash": "a4aab5abf8d9b4ab9ca01001678a7a9eaba9bd37c44136afb3a848181cbc8522"
+          },
+          {
+            "ms": 133.3201660308987,
+            "status": 200,
+            "bytes": 1072723,
+            "payloadHash": "a4aab5abf8d9b4ab9ca01001678a7a9eaba9bd37c44136afb3a848181cbc8522"
+          },
+          {
+            "ms": 131.50258385576308,
+            "status": 200,
+            "bytes": 1072723,
+            "payloadHash": "a4aab5abf8d9b4ab9ca01001678a7a9eaba9bd37c44136afb3a848181cbc8522"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 133.3201660308987,
+        "warmRangeMs": [131.50258385576308, 134.3364999629557]
+      },
+      "samePayload": true,
+      "sameAsBeforeBranch": true
+    },
+    {
+      "name": "tour-search",
+      "path": "/api/v4/search?q=summer&artists=false&shows=false&songs=false&sources=false&venues=false",
+      "baseline": {
+        "samples": [
+          {
+            "ms": 112.11108299903572,
+            "status": 200,
+            "bytes": 6800,
+            "payloadHash": "ce5e188f3dd067e6d722c50f70001a011372016751b66ca5b99c9831ad3a4c23"
+          },
+          {
+            "ms": 12.42808299139142,
+            "status": 200,
+            "bytes": 6800,
+            "payloadHash": "ce5e188f3dd067e6d722c50f70001a011372016751b66ca5b99c9831ad3a4c23"
+          },
+          {
+            "ms": 13.137000147253275,
+            "status": 200,
+            "bytes": 6800,
+            "payloadHash": "ce5e188f3dd067e6d722c50f70001a011372016751b66ca5b99c9831ad3a4c23"
+          },
+          {
+            "ms": 10.93699992634356,
+            "status": 200,
+            "bytes": 6800,
+            "payloadHash": "ce5e188f3dd067e6d722c50f70001a011372016751b66ca5b99c9831ad3a4c23"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 12.42808299139142,
+        "warmRangeMs": [10.93699992634356, 13.137000147253275]
+      },
+      "current": {
+        "samples": [
+          {
+            "ms": 728.6977500189096,
+            "status": 200,
+            "bytes": 6800,
+            "payloadHash": "ce5e188f3dd067e6d722c50f70001a011372016751b66ca5b99c9831ad3a4c23"
+          },
+          {
+            "ms": 698.3756669797003,
+            "status": 200,
+            "bytes": 6800,
+            "payloadHash": "ce5e188f3dd067e6d722c50f70001a011372016751b66ca5b99c9831ad3a4c23"
+          },
+          {
+            "ms": 695.4417910892516,
+            "status": 200,
+            "bytes": 6800,
+            "payloadHash": "ce5e188f3dd067e6d722c50f70001a011372016751b66ca5b99c9831ad3a4c23"
+          },
+          {
+            "ms": 698.866083053872,
+            "status": 200,
+            "bytes": 6800,
+            "payloadHash": "ce5e188f3dd067e6d722c50f70001a011372016751b66ca5b99c9831ad3a4c23"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 698.3756669797003,
+        "warmRangeMs": [695.4417910892516, 698.866083053872]
+      },
+      "samePayload": true,
+      "sameAsBeforeBranch": true
+    },
+    {
+      "name": "song-venue-search",
+      "path": "/api/v4/search?q=Oakland&artist_id=artist_3qmp7zjbg1rpebhtyfy43096vj&artists=false&shows=false&sources=false&tours=false",
+      "baseline": {
+        "samples": [
+          {
+            "ms": 41.44962504506111,
+            "status": 200,
+            "bytes": 10715,
+            "payloadHash": "7ae65fd4d094da06e2274fd6b7c4fc2bc6f5edf568b0178817ed4b246cd012af"
+          },
+          {
+            "ms": 24.906500009819865,
+            "status": 200,
+            "bytes": 10715,
+            "payloadHash": "7ae65fd4d094da06e2274fd6b7c4fc2bc6f5edf568b0178817ed4b246cd012af"
+          },
+          {
+            "ms": 24.00562516413629,
+            "status": 200,
+            "bytes": 10715,
+            "payloadHash": "7ae65fd4d094da06e2274fd6b7c4fc2bc6f5edf568b0178817ed4b246cd012af"
+          },
+          {
+            "ms": 25.330042000859976,
+            "status": 200,
+            "bytes": 10715,
+            "payloadHash": "7ae65fd4d094da06e2274fd6b7c4fc2bc6f5edf568b0178817ed4b246cd012af"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 24.906500009819865,
+        "warmRangeMs": [24.00562516413629, 25.330042000859976]
+      },
+      "current": {
+        "samples": [
+          {
+            "ms": 228.45633304677904,
+            "status": 200,
+            "bytes": 11214,
+            "payloadHash": "5a47e70a243f3bcad7f235e15ff79641e588a485ee7f3a5cae17b696d10af211"
+          },
+          {
+            "ms": 224.9996669124812,
+            "status": 200,
+            "bytes": 11214,
+            "payloadHash": "5a47e70a243f3bcad7f235e15ff79641e588a485ee7f3a5cae17b696d10af211"
+          },
+          {
+            "ms": 230.80283286981285,
+            "status": 200,
+            "bytes": 11214,
+            "payloadHash": "5a47e70a243f3bcad7f235e15ff79641e588a485ee7f3a5cae17b696d10af211"
+          },
+          {
+            "ms": 221.83941607363522,
+            "status": 200,
+            "bytes": 11214,
+            "payloadHash": "5a47e70a243f3bcad7f235e15ff79641e588a485ee7f3a5cae17b696d10af211"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 224.9996669124812,
+        "warmRangeMs": [221.83941607363522, 230.80283286981285]
+      },
+      "samePayload": false,
+      "sameAsBeforeBranch": true
+    }
+  ],
+  "variablesFrom": "before.json, graph case with matching name",
+  "measurementNote": "Initial after pass is retained separately. The final summary uses the repeated corpus on the same already-running host; three warm samples are observations, not percentiles. Other applications share this machine."
+}

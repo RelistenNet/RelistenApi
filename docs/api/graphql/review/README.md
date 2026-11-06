@@ -1,5 +1,11 @@
 # GraphQL adversarial performance review
 
+This is the original review of `41813085b`. The subsequent
+[performance fixes and qualification](../performance-fixes/README.md) resolve the
+demonstrated playback, pagination and unselected-detail issues with shared readers.
+Search-specific work remains deferred. The findings and measurements below are
+retained as the before evidence.
+
 The graph shares REST readers and projections, but its new shared pagination SQL
 does too much work. The reported three-second song-history request is reproduced.
 The branch also regresses existing REST search. Fix those readers before exposing

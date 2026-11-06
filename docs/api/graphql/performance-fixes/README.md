@@ -6,6 +6,83 @@ Measurements use the existing local catalog, approximately 216k shows and 5.1m
 tracks, with serial HTTP requests and one first plus three warm samples per case.
 These are local medians/ranges, not production percentiles.
 
+## Verified result
+
+Application commit `a6c302e12` meets the plan's local targets using the existing
+indexes and matching function. Warm HTTP medians from the fresh before run and
+the repeated final corpus are:
+
+- Scarlet playback, 25 shows: **6,066 → 156 ms**, final warm range 144–170 ms.
+- Drums playback, 25 shows: **13,021 → 548 ms**, range 538–559 ms.
+- Scarlet history, 25 rows: **502 → 51 ms**; exact-count variant **1,033 → 61 ms**.
+- Drums history, 25 rows: **771 → 196 ms**, range 169–246 ms.
+- Venue history, 25 rows: **940 → 28 ms**, range 27–39 ms.
+- Artist shows, 25 rows: **515 → 29 ms**; artist navigation **181 → 87 ms**.
+- Source comparison: **579 → 93 ms**. Hydrating 250 known tracks remains fast at 33 ms.
+
+All four samples in each of the 20 final GraphQL cases and 12 current REST cases
+have matching JSON payload hashes against this branch's before run. Arrays retain
+their order; object keys are canonicalized for hashing. Requested operation costs
+remain unchanged, including the configured generous execution limits.
+
+REST artist songs improve from 144 to 79 ms. Other non-search REST samples remain
+near the branch's before measurements; the raw results retain ranges. The older
+pre-GraphQL baseline still has faster artist-venue browsing: about 15 ms versus
+25 ms here, compared with 30 ms on this branch before these fixes. That existing
+overhead remains visible in the evidence. Search-specific regressions remain
+deferred as requested.
+
+The full `./test-local.sh` run passes **634 API tests and 366 normalization tests**,
+with 37 existing API skips. The solution build passes. Both independent review
+passes found no actionable correctness or readability issues. A real-catalog
+recording fetched through a source connection also matches the direct source's
+complete selected sets/tracks.
+
+## Final evidence and scope
+
+[after.json](after.json) contains the repeated final corpus; [after-initial.json](after-initial.json)
+retains the first final run after restarting the API. Both use the same committed
+application and preserve the before payloads. The initial run has more variation
+on short operations, including song metadata at 63 ms versus 9 ms in the repeat,
+although its implementation is unchanged. A subsequent control check observed an
+Xcode build on the shared machine and metadata settling near 10 ms. This was not
+an isolated load test; the evidence does not attribute all variation to one cause.
+Both final passes meet the row/playback targets. The headline numbers use the
+repeat after a complete corpus warmup. Variables are unchanged and referenced
+from `before.json` to avoid duplicating the 250-ID playlist in every result entry.
+
+[sql-results.json](sql-results.json) and [executable read-only SQL](sql/) record
+nine final EXPLAIN observations, separately from the HTTP samples:
+
+- Artist membership visits its 2,081 shows, rather than all 4,387 artists and
+  approximately 216k shows. The 25-row query takes 25.7 ms and 23,701 buffer hits.
+  The review's earlier ten-row generic query took 678 ms and 2.35m hits.
+- Song membership visits its 332 matching shows. First/next/count queries take
+  79/48/51 ms in these single observations; matching executes once in each command.
+- Venue membership visits 71 shows: 2.0 ms and 1,222 buffer hits.
+- One/ten/25-parent track commands take 45/55/66 ms. Each computes the 3,355 song
+  matches once. The ten-parent command ranks an average of seven sources per show
+  and uses 70,311 buffer hits, versus the original 2,627 ms and 3.03m hits.
+
+The artifact omits unexecuted plan branches. Parent buffer counts include children
+and must not be added. Show pages use first 25; nested track pages use first 20 per
+parent. Existing read-only snapshots, matching validity and per-parent limits are
+preserved. The optional scoped matching-function migration was unnecessary.
+
+This qualifies the demonstrated owned/song/venue web corpus, complete recording
+reads and queue hydration locally. Arbitrary global track browsing, every possible
+fan-out and sustained production concurrency remain unqualified. Additional UI
+filters, aggregate summaries and duration ordering are separate capability work.
+
+To rerun, start the current API on 3823 and the pre-GraphQL baseline on 3824 as in
+the [review setup](../review/README.md#reproduce), then use:
+
+```sh
+python3 docs/api/graphql/review/benchmark.py \
+  --current-commit ACTUAL_RUNNING_COMMIT \
+  --output /tmp/relisten-graphql-performance.json
+```
+
 ## Before
 
 [before.json](before.json) is a fresh run of the review benchmark against the
@@ -91,7 +168,9 @@ timings through aliases, fragments and directives, and ensure a header-only sour
 page fits a row budget that rejects its complete recording. Restoring the old
 sibling check makes that regression test fail; restoring the fix makes it pass.
 
-## Remaining work
+## Operational outcome
 
-Finish the full suite, independent validation and final corpus benchmark. No migration, persistent index,
-new caching layer, deployment or search-specific fix has been made.
+The fixes require no migration, persistent index, backfill or new caching layer.
+No deployment occurred; search-specific changes remain deferred. The development API is left running with the
+updated application; the temporary pre-GraphQL comparison server is stopped after
+qualification. Production rollout remains separate.
