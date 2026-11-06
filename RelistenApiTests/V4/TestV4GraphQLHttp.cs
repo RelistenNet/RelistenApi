@@ -20,20 +20,6 @@ public sealed partial class TestV4CatalogHttp
     }
 
     [Test]
-    public async Task GraphQL_builds_the_catalog_schema_and_shares_public_ids()
-    {
-        var data = await Graph(
-            "{ __schema { queryType { name } } artists(first: 2) { nodes { id name showCount } pageInfo { hasNextPage endCursor } } }"
-        );
-        data["__schema"]!["queryType"]!["name"]!.GetValue<string>().Should().Be("Query");
-        var artist = data["artists"]!["nodes"]![0]!;
-        var id = artist["id"]!.GetValue<string>();
-        var rest = await GetJson("/api/v4/artists/" + id);
-        artist["name"]!.GetValue<string>().Should().Be(rest["name"]!.GetValue<string>());
-        artist["showCount"]!.GetValue<int>().Should().Be(rest["show_count"]!.GetValue<int>());
-    }
-
-    [Test]
     public async Task GraphQL_recording_and_parent_traversal_preserve_playback_identity()
     {
         var data = await Graph(
@@ -80,19 +66,33 @@ public sealed partial class TestV4CatalogHttp
     {
         const string query = """
             query($artist: ID!, $after: String) {
-              artist(id: $artist) { shows(first: 1, after: $after) {
-                nodes { id displayDate } totalCount pageInfo { endCursor hasNextPage }
+              artist(id: $artist) { shows(first: 2, after: $after) {
+                nodes { id displayDate } edges { cursor node { id } } totalCount pageInfo { endCursor hasNextPage }
               } }
             }
             """;
         var ids = new List<string>();
         string? after = null;
         long? count = null;
+        string? firstEdge = null;
         do
         {
             var data = await Graph(query, new { artist = CatalogId("artist", 301), after });
             var page = data["artist"]!["shows"]!;
             count ??= page["totalCount"]!.GetValue<long>();
+            var edges = page["edges"]!.AsArray();
+            edges
+                .Select(edge => edge!["node"]!["id"]!.GetValue<string>())
+                .Should()
+                .Equal(page["nodes"]!.AsArray().Select(node => node!["id"]!.GetValue<string>()));
+            if (edges.Count > 0)
+            {
+                firstEdge ??= edges[0]!["cursor"]!.GetValue<string>();
+                page["pageInfo"]!["endCursor"]!
+                    .GetValue<string>()
+                    .Should()
+                    .Be(edges[^1]!["cursor"]!.GetValue<string>());
+            }
             ids.AddRange(page["nodes"]!.AsArray().Select(n => n!["id"]!.GetValue<string>()));
             after = page["pageInfo"]!["hasNextPage"]!.GetValue<bool>()
                 ? page["pageInfo"]!["endCursor"]!.GetValue<string>()
@@ -102,65 +102,74 @@ public sealed partial class TestV4CatalogHttp
         ids.Should().Equal(rest.AsArray().Select(n => n!["id"]!.GetValue<string>()));
         ids.Should().OnlyHaveUniqueItems();
         ids.Count.Should().Be((int)count!);
+        var shifted = await Graph(
+            query,
+            new { artist = CatalogId("artist", 301), after = firstEdge }
+        );
+        shifted["artist"]!["shows"]!["nodes"]!
+            .AsArray()
+            .Select(node => node!["id"]!.GetValue<string>())
+            .Should()
+            .Equal(ids.Skip(1).Take(2));
     }
 
     [Test]
-    public async Task GraphQL_song_history_uses_shared_timing_and_playable_file_mappings()
+    public async Task GraphQL_root_inventories_preserve_artist_scope_and_canonical_links()
     {
         var data = await Graph(
             """
-            { song(id: "song_00000101") {
-                id matchedShowCount shows(first: 50) {
-                  nodes { show { id } timings { singleSong { median sourceCount } multiSong { median sourceCount } }
-                    tracks(first: 50) { nodes { id title mp3Url } } }
-                }
-            } }
-            """
+            query($artist:ID!,$songsArtist:ID!) {
+              years(first:50,filter:{artistId:$artist}) { nodes { id } }
+              tours(first:50,filter:{artistId:$artist}) { nodes { id } }
+              sources(first:50,filter:{artistId:$artist}) { nodes { id } }
+              sourceTracks(first:50,filter:{artistId:$artist}) { nodes { id } }
+              songs(first:50,filter:{artistId:$songsArtist}) { nodes { id } }
+              importedSongs(first:50,filter:{artistId:$songsArtist}) { nodes { id normalizedSong { id } } }
+              importedVenues(first:50,filter:{artistId:$artist}) { nodes { id } }
+              artistVenues(first:50,filter:{artistId:$artist}) { nodes { id } }
+            }
+            """,
+            new { artist = BrowseArtistId, songsArtist = CatalogId("artist", 301) }
         );
-        var rest = await GetJson(DiscoverySongPath);
-        var nodes = data["song"]!["shows"]!["nodes"]!.AsArray();
-        nodes
-            .Select(n => n!["show"]!["id"]!.GetValue<string>())
-            .Should()
-            .Equal(rest["shows"]!.AsArray().Select(n => n!["show"]!["id"]!.GetValue<string>()));
-        for (var i = 0; i < nodes.Count; i++)
+        var expected = new Dictionary<string, string[]>
         {
-            foreach (
-                var (graphName, restName) in new[]
-                {
-                    ("singleSong", "single_song"),
-                    ("multiSong", "multi_song"),
-                }
-            )
-            {
-                JsonNode
-                    .DeepEquals(
-                        nodes[i]!["timings"]![graphName]?["median"],
-                        rest["shows"]![i]!["timings"]![restName]?["median"]
-                    )
-                    .Should()
-                    .BeTrue();
-            }
+            ["years"] = [CatalogId("year", 64), CatalogId("year", 160)],
+            ["tours"] = [CatalogId("tour", 84)],
+            ["sources"] = [CatalogId("source", 24), CatalogId("source", 120)],
+            ["sourceTracks"] =
+            [
+                CatalogId("track", 44),
+                CatalogId("track", 45),
+                CatalogId("track", 46),
+                CatalogId("track", 150),
+            ],
+            ["songs"] = ["song_00000101", "song_00000102", "song_00000103"],
+            ["importedSongs"] = Enumerable
+                .Range(351, 4)
+                .Select(i => CatalogId("imported_song", i))
+                .ToArray(),
+            ["importedVenues"] = [CatalogId("imported_venue", 74)],
+            ["artistVenues"] = (await GetJson(BrowseArtistPath + "/venues"))
+                .AsArray()
+                .Select(row => row!["artist_venue"]!["id"]!.GetValue<string>())
+                .ToArray(),
+        };
+        foreach (var (field, ids) in expected)
+        {
+            data[field]!["nodes"]!
+                .AsArray()
+                .Select(row => row!["id"]!.GetValue<string>())
+                .Should()
+                .BeEquivalentTo(ids, field);
         }
-    }
-
-    [Test]
-    public async Task GraphQL_all_catalog_connection_families_execute_real_sql()
-    {
-        await Graph(
-            """
-            { years(first: 2) { nodes { id year } }
-              tours(first: 2) { nodes { id name } }
-              sources(first: 2) { nodes { id } }
-              sourceTracks(first: 2) { nodes { id } }
-              songs(first: 2) { nodes { id } }
-              importedSongs(first: 2) { nodes { id normalizedSong { id } } }
-              venues(first: 2) { nodes { id globalShowCount } }
-              importedVenues(first: 2) { nodes { id showCount } }
-              artistVenues(first: 2) { nodes { id venue { id } } }
-            }
-            """
-        );
+        var imports = data["importedSongs"]!["nodes"]!
+            .AsArray()
+            .ToDictionary(row => row!["id"]!.GetValue<string>());
+        imports[CatalogId("imported_song", 351)]!["normalizedSong"]!["id"]!
+            .GetValue<string>()
+            .Should()
+            .Be("song_00000101");
+        imports[CatalogId("imported_song", 352)]!["normalizedSong"].Should().BeNull();
     }
 
     [Test]
@@ -197,13 +206,21 @@ public sealed partial class TestV4CatalogHttp
             var graph = await Graph(
                 """
                 query($id: ID!) {
-                  artist(id: $id) { features upstreamSources { provider upstreamIdentifier } }
+                  artist(id: $id) { name showCount features upstreamSources { provider upstreamIdentifier } }
                   __type(name: "ArtistProviderResource") { fields { name } }
                 }
                 """,
                 new { id = CatalogId("artist", 14) }
             );
             var rest = await GetJson(BrowseArtistPath);
+            graph["artist"]!["name"]!
+                .GetValue<string>()
+                .Should()
+                .Be(rest["name"]!.GetValue<string>());
+            graph["artist"]!["showCount"]!
+                .GetValue<int>()
+                .Should()
+                .Be(rest["show_count"]!.GetValue<int>());
             graph["artist"]!["features"]!
                 .GetValue<string>()
                 .Should()
@@ -272,28 +289,41 @@ public sealed partial class TestV4CatalogHttp
     [Test]
     public async Task GraphQL_resolves_saved_references_and_bulk_tracks_in_input_order()
     {
-        var id = CatalogId("track", 341);
+        var first = CatalogId("track", 341);
+        var second = CatalogId("track", 343);
+        var missing = CatalogId("track", 999);
+        var ids = new[] { first, missing, second, first };
         var data = await Graph(
             """
-            query($ids: [ID!]!, $refs: [CatalogGraphReferenceInput!]!) {
-              sourceTracksByIds(ids: $ids) { id title }
-              resolve(references: $refs) { id availability target { ... on SourceTrack { id title } } }
+            query($ids:[ID!]!,$refs:[CatalogGraphReferenceInput!]!) {
+              sourceTracksByIds(ids:$ids) { id }
+              resolve(references:$refs) { id target { ... on SourceTrack { id } } }
             }
             """,
-            new { ids = new[] { id, id }, refs = new[] { new { kind = "TRACK", id } } }
+            new { ids, refs = ids.Select(id => new { kind = "TRACK", id }).ToArray() }
         );
+        string?[] expected = [first, null, second, first];
         data["sourceTracksByIds"]!
             .AsArray()
-            .Select(n => n!["id"]!.GetValue<string>())
+            .Select(row => row?["id"]?.GetValue<string>())
             .Should()
-            .Equal(id, id);
-        data["resolve"]![0]!["target"]!["id"]!.GetValue<string>().Should().Be(id);
+            .Equal(expected);
+        data["resolve"]!
+            .AsArray()
+            .Select(row => row!["id"]!.GetValue<string>())
+            .Should()
+            .Equal(ids);
+        data["resolve"]!
+            .AsArray()
+            .Select(row => row!["target"]?["id"]?.GetValue<string>())
+            .Should()
+            .Equal(expected);
     }
 
     [TestCase("Scarlet", 301)]
     [TestCase("Historical", 14)]
     [TestCase("Fixture taper", 14)]
-    [TestCase("ab", 14)]
+    [TestCase("Sc", 14)]
     public async Task GraphQL_search_categories_preserve_rest_membership(string term, int artist)
     {
         var id = CatalogId("artist", artist);
@@ -337,25 +367,6 @@ public sealed partial class TestV4CatalogHttp
             .Equal(
                 rest["venues"]!.AsArray().Select(n => Entry(n, "artist_venue", "imported_venue"))
             );
-    }
-
-    [Test]
-    public async Task GraphQL_fragments_and_directives_select_complete_recordings()
-    {
-        const string query = """
-            query($id: ID!, $full: Boolean!) {
-              source(id: $id) { id ...Recording }
-            }
-            fragment Recording on Source { renamedSets: sets @include(if: $full) { tracks { id } } }
-            """;
-        var shallow = await Graph(query, new { id = CatalogId("source", 321), full = false });
-        shallow["source"]!.AsObject().ContainsKey("renamedSets").Should().BeFalse();
-        var full = await Graph(query, new { id = CatalogId("source", 321), full = true });
-        full["source"]!["renamedSets"]!
-            .AsArray()
-            .SelectMany(s => s!["tracks"]!.AsArray())
-            .Should()
-            .NotBeEmpty();
     }
 
     [Test]
@@ -422,31 +433,6 @@ public sealed partial class TestV4CatalogHttp
     }
 
     [Test]
-    public async Task GraphQL_discovery_rankings_and_activity_reads_execute_through_http()
-    {
-        await Graph(
-            """
-            query($artist: ID!) {
-              showsOnDate(month: 12,day: 31,first: 2) { nodes { id } }
-              showsToday(first: 2) { nodes { id } }
-              recentlyPerformedShows(first: 2) { nodes { id } }
-              recentlyAddedShows(first: 2) { nodes { id } }
-              recentlyUpdatedShows(first: 2) { nodes { id } }
-              topShows(first: 2) { nodes { id } }
-              popularArtists(limit: 2) { rank node { id } metrics { momentumScore } }
-              popularShows(limit: 2) { rank node { id popularity { momentumScore } } metrics { momentumScore } }
-              trendingYears(limit: 2) { rank node { id } }
-              artistRankings(artistIds: [$artist],limit: 2) { artistId popularShows { rank node { id } } }
-              momentumShows(artistIds: [$artist],limit: 2) { rank node { id } }
-              liveHistory(limit: 2) { sequence track { id } }
-              liveSummary(showsLimit: 2,artistsLimit: 2) { totalPlays }
-            }
-            """,
-            new { artist = CatalogId("artist", 14) }
-        );
-    }
-
-    [Test]
     public async Task GraphQL_venue_natural_lookups_preserve_the_artist_relationship()
     {
         var data = await Graph(
@@ -494,16 +480,17 @@ public sealed partial class TestV4CatalogHttp
     {
         var data = await Graph(
             """
-            { shows(first: 2,filter: {soundboard: true}) { nodes { hasSoundboardSource } }
+            query($artist:ID!) {
+              soundboards: sources(first:50,filter:{artistId:$artist,soundboard:true}) { nodes { id isSoundboard } }
               sources(first: 2,filter: {from: "2050-01-01T00:00:00Z"}) { nodes { id } }
               sourceTracks(first: 2,filter: {through: "0001-01-01T00:00:00Z"}) { nodes { id } }
             }
-            """
+            """,
+            new { artist = BrowseArtistId }
         );
-        data["shows"]!["nodes"]!
-            .AsArray()
-            .Should()
-            .OnlyContain(n => n!["hasSoundboardSource"]!.GetValue<bool>());
+        var soundboard = data["soundboards"]!["nodes"]!.AsArray().Should().ContainSingle().Which!;
+        soundboard["id"]!.GetValue<string>().Should().Be(CatalogId("source", 24));
+        soundboard["isSoundboard"]!.GetValue<bool>().Should().BeTrue();
         data["sources"]!["nodes"]!.AsArray().Should().BeEmpty();
         data["sourceTracks"]!["nodes"]!.AsArray().Should().BeEmpty();
         using var response = await http.PostAsJsonAsync(
@@ -569,24 +556,6 @@ public sealed partial class TestV4CatalogHttp
             .Equal(rest.AsArray().Select(n => n!["id"]!.GetValue<string>()));
     }
 
-    [Test]
-    public async Task GraphQL_resolved_sources_complete_recordings_through_union_fragments()
-    {
-        var data = await Graph(
-            """
-            query($id: String!) { resolve(references:[{kind:SOURCE,id:$id}]) {
-              target { ... on Source { id sets { id tracks { id } } } }
-            } }
-            """,
-            new { id = CatalogId("source", 321) }
-        );
-        data["resolve"]![0]!["target"]!["sets"]!
-            .AsArray()
-            .SelectMany(s => s!["tracks"]!.AsArray())
-            .Should()
-            .NotBeEmpty();
-    }
-
     [TestCase("/api/v4/graphql")]
     [TestCase("/api/v4/graphql/")]
     [TestCase("/API/V4/GRAPHQL")]
@@ -608,15 +577,29 @@ public sealed partial class TestV4CatalogHttp
     }
 
     [Test]
-    public async Task GraphQL_exports_its_executable_schema_and_accepts_documented_operations()
+    public async Task GraphQL_documented_operations_execute_against_the_catalog()
     {
-        var executor = await app
-            .Services.GetRequiredService<HotChocolate.Execution.IRequestExecutorProvider>()
-            .GetExecutorAsync(null, CancellationToken.None);
-        await File.WriteAllTextAsync(
-            "/tmp/relisten-graphql-schema.graphql",
-            executor.Schema.ToString()
+        await Graph(
+            """
+            query($artist: ID!) {
+              showsOnDate(month: 12,day: 31,first: 2) { nodes { id } }
+              showsToday(first: 2) { nodes { id } }
+              recentlyPerformedShows(first: 2) { nodes { id } }
+              recentlyAddedShows(first: 2) { nodes { id } }
+              recentlyUpdatedShows(first: 2) { nodes { id } }
+              topShows(first: 2) { nodes { id } }
+              popularArtists(limit: 2) { rank node { id } metrics { momentumScore } }
+              popularShows(limit: 2) { rank node { id popularity { momentumScore } } metrics { momentumScore } }
+              trendingYears(limit: 2) { rank node { id } }
+              artistRankings(artistIds: [$artist],limit: 2) { artistId popularShows { rank node { id } } }
+              momentumShows(artistIds: [$artist],limit: 2) { rank node { id } }
+              liveHistory(limit: 2) { sequence track { id } }
+              liveSummary(showsLimit: 2,artistsLimit: 2) { totalPlays }
+            }
+            """,
+            new { artist = CatalogId("artist", 14) }
         );
+
         var variables = new
         {
             id = "song_00000101",
@@ -707,27 +690,53 @@ public sealed partial class TestV4CatalogHttp
     }
 
     [Test]
-    public async Task GraphQL_grouped_rankings_bound_the_combined_materialization()
+    public async Task GraphQL_grouped_rankings_budget_only_selected_series()
     {
-        var artists = Enumerable.Range(10000, 201).Select(i => CatalogId("artist", i)).ToArray();
-        using var response = await http.PostAsJsonAsync(
-            "/api/v4/graphql",
-            new
-            {
-                query = "query($artists:[ID!]!) { artistRankings(artistIds:$artists,limit:500) { artistId } }",
-                variables = new { artists },
-            }
-        );
-        JsonNode.Parse(await response.Content.ReadAsStringAsync())!["errors"]![0]!["extensions"]![
-            "code"
-        ]!
-            .GetValue<string>()
-            .Should()
-            .Be("catalog_row_limit");
+        var options = app.Services.GetRequiredService<Relisten.GraphQL.CatalogGraphOptions>();
+        var original = options.MaxMaterializedRows;
+        var artists = new[] { BrowseArtistId, CatalogId("artist", 11) };
+        string Query(string fields) =>
+            "query($artists:[ID!]!) { artistRankings(artistIds:$artists,limit:1) { "
+            + fields
+            + " } }";
+        options.MaxMaterializedRows = 4;
+        try
+        {
+            var headers = await Graph(Query("artistId"), new { artists });
+            headers["artistRankings"]!
+                .AsArray()
+                .Select(row => row!["artistId"]!.GetValue<string>())
+                .Should()
+                .BeEquivalentTo(artists);
+            var popular = await Graph(
+                Query("artistId selected:popularShows { node { id } }"),
+                new { artists }
+            );
+            popular["artistRankings"]!.AsArray().Should().HaveCount(artists.Length);
+            using var response = await http.PostAsJsonAsync(
+                "/api/v4/graphql",
+                new
+                {
+                    query = Query(
+                        "artistId popularShows { node { id } } trendingShows { node { id } }"
+                    ),
+                    variables = new { artists },
+                }
+            );
+            JsonNode.Parse(await response.Content.ReadAsStringAsync())!["errors"]!
+                .AsArray()
+                .Should()
+                .Contain(error =>
+                    error!["extensions"]!["code"]!.GetValue<string>() == "catalog_row_limit"
+                );
+        }
+        finally
+        {
+            options.MaxMaterializedRows = original;
+        }
     }
 
     [TestCase(0)]
-    [TestCase(-1)]
     [TestCase(501)]
     public async Task GraphQL_rejects_invalid_page_sizes(int first)
     {

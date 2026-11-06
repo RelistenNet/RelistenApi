@@ -10,29 +10,46 @@ namespace RelistenApiTests.V4;
 
 public sealed partial class TestV4CatalogHttp
 {
-    [Test]
-    public async Task GraphQL_source_headers_do_not_consume_the_complete_recording_budget()
+    [TestCase("source")]
+    [TestCase("connection")]
+    [TestCase("resolve")]
+    public async Task GraphQL_recording_selection_respects_budgets_fragments_and_directives(
+        string entry
+    )
     {
+        var selection = entry switch
+        {
+            "source" => "recording: source(id:$id) { id ...Recording }",
+            "connection" => "show(id:$id) { sources(first:1) { nodes { id ...Recording } } }",
+            _ =>
+                "resolve(references:[{kind:SOURCE,id:$id}]) { target { ... on Source { id ...Recording } } }",
+        };
+        var query =
+            "query($id:"
+            + (entry == "resolve" ? "String!" : "ID!")
+            + ",$full:Boolean!) { "
+            + selection
+            + " } "
+            + "fragment Recording on Source { complete: sets @include(if:$full) { tracks { id } } }";
+        var id = entry == "connection" ? CatalogId("show", 311) : CatalogId("source", 321);
+        JsonNode Recording(JsonNode data) =>
+            entry switch
+            {
+                "source" => data["recording"]!,
+                "connection" => data["show"]!["sources"]!["nodes"]![0]!,
+                _ => data["resolve"]![0]!["target"]!,
+            };
         var options = app.Services.GetRequiredService<CatalogGraphOptions>();
         var original = options.MaxMaterializedRows;
         options.MaxMaterializedRows = 2;
         try
         {
-            var shallow = await Graph(
-                "query($show: ID!) { show(id: $show) { sources(first: 1) { nodes { id } } } }",
-                new { show = CatalogId("show", 4) }
-            );
-            shallow["show"]!["sources"]!["nodes"]!.AsArray().Should().ContainSingle();
-
-            // A source, set and track already exceed this budget. Header-only reads
-            // must succeed without paying for those complete recording children.
+            var shallow = Recording(await Graph(query, new { id, full = false }));
+            shallow["id"]!.GetValue<string>().Should().Be(CatalogId("source", 321));
+            shallow.AsObject().ContainsKey("complete").Should().BeFalse();
             using var response = await http.PostAsJsonAsync(
                 "/api/v4/graphql",
-                new
-                {
-                    query = "query($show: ID!) { show(id: $show) { sources(first: 1) { nodes { id sets { id tracks { id } } } } } }",
-                    variables = new { show = CatalogId("show", 4) },
-                }
+                new { query, variables = new { id, full = true } }
             );
             var json = JsonNode.Parse(await response.Content.ReadAsStringAsync())!;
             json["errors"].Should().NotBeNull(json.ToJsonString());
@@ -47,6 +64,19 @@ public sealed partial class TestV4CatalogHttp
         {
             options.MaxMaterializedRows = original;
         }
+        var complete = Recording(await Graph(query, new { id, full = true }));
+        var rest = await GetJson("/api/v4/sources/" + CatalogId("source", 321));
+        complete["complete"]!
+            .AsArray()
+            .SelectMany(set => set!["tracks"]!.AsArray())
+            .Select(track => track!["id"]!.GetValue<string>())
+            .Should()
+            .Equal(
+                rest["sets"]!
+                    .AsArray()
+                    .SelectMany(set => set!["tracks"]!.AsArray())
+                    .Select(track => track!["id"]!.GetValue<string>())
+            );
     }
 
     [TestCase(false)]
@@ -56,12 +86,16 @@ public sealed partial class TestV4CatalogHttp
     )
     {
         await using var connection = await MigratedTestDatabase.OpenAsync();
-        var original = await connection.QuerySingleAsync<double?>(
-            "SELECT duration FROM source_tracks WHERE id=925042"
-        );
+        var original = (
+            await connection.QueryAsync<(long Id, double? Duration)>(
+                "SELECT id,duration FROM source_tracks WHERE id IN(925041,925042)"
+            )
+        ).ToArray();
         try
         {
-            await connection.ExecuteAsync("UPDATE source_tracks SET duration=300 WHERE id=925042");
+            await connection.ExecuteAsync(
+                "UPDATE source_tracks SET duration=CASE id WHEN 925041 THEN 600 ELSE 300 END WHERE id IN(925041,925042)"
+            );
             var data = await Graph(
                 """
                 query($include: Boolean!) {
@@ -73,12 +107,12 @@ public sealed partial class TestV4CatalogHttp
                     } }
                     detailed: shows(first: 50) { edges { node {
                       show { id }
-                      details: timings { singleSong { median sourceCount } }
+                      details: timings { singleSong { median sourceCount } multiSong { median sourceCount } }
                     } } }
                   }
                 }
                 fragment TimingFields on SongShow {
-                  measurements: timings { singleSong { median sourceCount } }
+                  measurements: timings { singleSong { median sourceCount } multiSong { median sourceCount } }
                 }
                 """,
                 new { include }
@@ -90,6 +124,30 @@ public sealed partial class TestV4CatalogHttp
                 .GetValue<double>()
                 .Should()
                 .Be(300);
+            detailed[0]!["node"]!["details"]!["multiSong"]!["median"]!
+                .GetValue<double>()
+                .Should()
+                .Be(600);
+            var rest = await GetJson(DiscoverySongPath);
+            for (var i = 0; i < detailed.Count; i++)
+            {
+                foreach (
+                    var (graphName, restName) in new[]
+                    {
+                        ("singleSong", "single_song"),
+                        ("multiSong", "multi_song"),
+                    }
+                )
+                {
+                    JsonNode
+                        .DeepEquals(
+                            detailed[i]!["node"]!["details"]![graphName]?["median"],
+                            rest["shows"]![i]!["timings"]![restName]?["median"]
+                        )
+                        .Should()
+                        .BeTrue();
+                }
+            }
             for (var i = 0; i < compact.Count; i++)
             {
                 compact[i]!["tracks"]!["nodes"]!.AsArray().Should().NotBeEmpty();
@@ -109,8 +167,8 @@ public sealed partial class TestV4CatalogHttp
         finally
         {
             await connection.ExecuteAsync(
-                "UPDATE source_tracks SET duration=@original WHERE id=925042",
-                new { original }
+                "UPDATE source_tracks SET duration=@duration WHERE id=@id",
+                original.Select(row => new { id = row.Id, duration = row.Duration })
             );
         }
     }

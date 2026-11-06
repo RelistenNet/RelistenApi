@@ -246,19 +246,19 @@ public sealed class CatalogGraphOperation(
         IReadOnlyDictionary<Guid, CatalogSongShowStatistics>? statistics
     )
     {
-        var edges = page
-            .Targets.Select(
-                (target, index) =>
-                    new CatalogGraphEdge(
-                        ProjectPageNode(request, target, resources[target.Id], statistics),
-                        CatalogCursor.Encode(request.Collection, page.Keys[index])
-                    )
-            )
-            .ToArray();
+        var scope = CatalogCursor.Scope(request.Collection);
+        var nodes = new object[page.Targets.Count];
+        var edges = new CatalogGraphEdge[nodes.Length];
+        for (var i = 0; i < nodes.Length; i++)
+        {
+            var target = page.Targets[i];
+            nodes[i] = ProjectPageNode(request, target, resources[target.Id], statistics);
+            edges[i] = new(nodes[i], scope, page.Keys[i]);
+        }
         return new(
-            edges.Select(e => e.Node).ToArray(),
+            nodes,
             edges,
-            new(edges.LastOrDefault()?.Cursor, page.HasNextPage),
+            new(edges.Length == 0 ? null : edges[^1].Cursor, page.HasNextPage),
             page.TotalCount
         );
     }

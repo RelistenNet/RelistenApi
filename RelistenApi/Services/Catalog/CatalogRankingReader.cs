@@ -120,11 +120,14 @@ public sealed class CatalogRankingReader(
     }
 
     /// <summary>Unknown filter artists are omitted; existing artists retain empty groups.</summary>
+    /// <summary>Reads selected ranking series in one snapshot; REST defaults to both series.</summary>
     public async Task<IReadOnlyList<CatalogArtistRankings>> ReadArtistGroups(
         Guid[] artists,
         int limit,
         PopularitySortWindow window,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        bool includePopular = true,
+        bool includeTrending = true
     )
     {
         if (artists.Length == 0)
@@ -141,6 +144,10 @@ public sealed class CatalogRankingReader(
                 )
             )
         ).ToArray();
+        if (!includePopular && !includeTrending)
+        {
+            return owners.Select(artist => new CatalogArtistRankings(artist, [], [])).ToArray();
+        }
         foreach (var artist in owners)
         {
             refresh.Require(PopularityPopulationKind.Show, artist);
@@ -156,11 +163,11 @@ public sealed class CatalogRankingReader(
                     SELECT ranked.* FROM unnest(@artists::uuid[]) owner(uuid)
                     CROSS JOIN LATERAL (
                         (SELECT uuid,artist_uuid,false trending,row_number() OVER (ORDER BY {popularOrder}) ordinal
-                         FROM show_popularity WHERE NOT is_global AND artist_uuid=owner.uuid AND momentum_score IS NOT NULL
+                         FROM show_popularity WHERE @includePopular AND NOT is_global AND artist_uuid=owner.uuid AND momentum_score IS NOT NULL
                          ORDER BY {popularOrder} LIMIT @limit)
                         UNION ALL
                         (SELECT uuid,artist_uuid,true trending,row_number() OVER (ORDER BY {trendingOrder}) ordinal
-                         FROM show_popularity WHERE NOT is_global AND artist_uuid=owner.uuid AND momentum_score IS NOT NULL
+                         FROM show_popularity WHERE @includeTrending AND NOT is_global AND artist_uuid=owner.uuid AND momentum_score IS NOT NULL
                            AND plays_48h>=@recentFloor AND plays_30d>=@monthlyFloor
                          ORDER BY {trendingOrder} LIMIT @limit)
                     ) ranked ORDER BY artist_uuid,trending,ordinal
@@ -168,6 +175,8 @@ public sealed class CatalogRankingReader(
                     new
                     {
                         artists = owners,
+                        includePopular,
+                        includeTrending,
                         limit,
                         recentFloor = PopularityService.ShowTrendingPlays48hFloor,
                         monthlyFloor = PopularityService.ShowTrendingPlays30dFloor,

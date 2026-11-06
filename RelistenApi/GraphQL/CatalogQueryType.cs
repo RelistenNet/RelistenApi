@@ -44,7 +44,8 @@ public sealed class CatalogQueryType : ObjectType
                 return await c.Service<CatalogGraphOperation>()
                     .Resolve(
                         inputs.Select(i => i.Read()).ToArray(),
-                        c.IsSelected("target", "sets") || c.IsSelected("target", "links"),
+                        c.Select("target").IsSelected("sets")
+                            || c.Select("target").IsSelected("links"),
                         c.RequestAborted
                     );
             });

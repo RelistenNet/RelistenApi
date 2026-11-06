@@ -9,7 +9,11 @@ using Relisten.Catalog;
 
 namespace Relisten.GraphQL;
 
-public sealed record CatalogGraphEdge(object Node, string Cursor);
+public sealed record CatalogGraphEdge(object Node, string Scope, CatalogPageKey Key)
+{
+    // Nodes-only pages need just the final cursor. Encode other edges only when selected.
+    public string Cursor => CatalogCursor.Encode(Scope, Key);
+}
 
 public sealed record CatalogGraphPageInfo(string? EndCursor, bool HasNextPage);
 
@@ -24,10 +28,8 @@ internal static class CatalogCursor
 {
     private sealed record Envelope(int Version, string Scope, CatalogPageKey Key);
 
-    public static string Encode(CatalogCollection collection, CatalogPageKey key) =>
-        Convert.ToBase64String(
-            JsonSerializer.SerializeToUtf8Bytes(new Envelope(1, Scope(collection), key))
-        );
+    public static string Encode(string scope, CatalogPageKey key) =>
+        Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(new Envelope(1, scope, key)));
 
     public static CatalogPageKey? Decode(CatalogCollection collection, string? cursor)
     {
@@ -70,7 +72,7 @@ internal static class CatalogCursor
         }
     }
 
-    private static string Scope(CatalogCollection collection) =>
+    internal static string Scope(CatalogCollection collection) =>
         Convert.ToHexString(
             SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(collection)))
         );

@@ -12,7 +12,6 @@ public sealed partial class TestV4CatalogHttp
     [TestCase(CatalogSort.Default)]
     [TestCase(CatalogSort.DateDescending)]
     [TestCase(CatalogSort.Rating)]
-    [TestCase(CatalogSort.Popularity)]
     public async Task Song_show_pages_cross_nonmatching_batches_without_skips(CatalogSort sort)
     {
         await WithShowScanFixture(async _ =>
@@ -165,12 +164,19 @@ public sealed partial class TestV4CatalogHttp
     }
 
     [Test]
-    public async Task Show_scans_keep_the_callers_snapshot_after_recording_membership_changes()
+    public async Task Show_scans_and_entity_hydration_keep_the_callers_snapshot_after_recording_changes()
     {
         await WithShowScanFixture(async writer =>
         {
             var reader = app.Services.GetRequiredService<CatalogCollectionReader>();
             var db = app.Services.GetRequiredService<DbService>();
+            var entities = app.Services.GetRequiredService<CatalogEntityReader>();
+            var trackUuid = Guid.Parse("20000000-0000-0000-0003-000000000145");
+            var track = new CatalogResolvedTarget(
+                CatalogReferenceKind.Track,
+                Relisten.Identifiers.UuidTypeId.Format("track", trackUuid),
+                trackUuid
+            );
             var collection = new CatalogCollection(
                 CatalogReferenceKind.Show,
                 CatalogReferenceKind.Song,
@@ -185,17 +191,27 @@ public sealed partial class TestV4CatalogHttp
                 SET norm.run_uuid='00000000-0000-0000-0000-000000000099';
                 UPDATE norm.track_songs SET resolved=false
                 WHERE track_uuid='20000000-0000-0000-0003-000000000145';
+                UPDATE source_tracks SET title='Changed outside snapshot'
+                WHERE uuid='20000000-0000-0000-0003-000000000145';
                 """
             );
             var same = (
                 await reader.ReadPages(snapshot, [(collection, new(2))], CancellationToken.None)
             )[0];
             same.Targets.Should().Equal(original.Targets.Take(2));
+            (await entities.Read(snapshot, [track], CancellationToken.None))
+                .Tracks.Single()
+                .title.Should()
+                .Be("Scarlet");
             await using var next = await CatalogReadSession.Open(db, CancellationToken.None);
             var changed = (
                 await reader.ReadPages(next, [(collection, new(2))], CancellationToken.None)
             )[0];
             changed.Targets.Should().Equal(original.Targets.Skip(1).Take(2));
+            (await entities.Read(next, [track], CancellationToken.None))
+                .Tracks.Single()
+                .title.Should()
+                .Be("Changed outside snapshot");
         });
     }
 

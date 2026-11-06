@@ -58,7 +58,9 @@ internal static class CatalogGraphRankings
                             .ToArray(),
                         Limit(c),
                         c.ArgumentValue<PopularitySortWindow>("window"),
-                        c.RequestAborted
+                        c.RequestAborted,
+                        includePopular: c.IsSelected("popularShows"),
+                        includeTrending: c.IsSelected("trendingShows")
                     );
             });
         foreach (var trending in new[] { false, true })
@@ -158,7 +160,18 @@ internal static class CatalogGraphRankings
         bool grouped = false
     ) =>
         d.UseCatalogReader(c =>
-                grouped ? checked(ArtistIds(c).Length * (1 + 2 * Limit(c))) : Limit(c)
+                grouped
+                    ? checked(
+                        ArtistIds(c).Distinct().Count()
+                        * (
+                            1
+                            + (
+                                (c.IsSelected("popularShows") ? 1 : 0)
+                                + (c.IsSelected("trendingShows") ? 1 : 0)
+                            ) * Limit(c)
+                        )
+                    )
+                    : Limit(c)
             )
             .Cost(20)
             .Argument("limit", a => a.Type<IntType>().DefaultValue(50))
