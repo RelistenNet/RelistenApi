@@ -1,7 +1,9 @@
 namespace Relisten.Catalog;
 
 /// <summary>Shared canonical/imported browse and search membership. These statements
-/// run inside the collection reader's per-request lateral scope (alias r).</summary>
+/// run inside the collection reader's per-request lateral scope (alias r).
+/// Artist browse chooses canonical or imported catalogs by approval; search keeps
+/// imported fallbacks where normalization does not provide a usable target.</summary>
 internal static class CatalogBrowseMembership
 {
     internal static string Songs(CatalogCollection collection) =>
@@ -35,10 +37,13 @@ internal static class CatalogBrowseMembership
           CASE WHEN r.search IS NULL THEN 0 ELSE COALESCE(counts.setlist_show_count,0) END::float8 score,
           raw.name label
         FROM setlist_songs raw JOIN artists a ON a.id=raw.artist_id
+        LEFT JOIN features f ON f.artist_id=a.id
         LEFT JOIN setlist_song_counts counts ON counts.setlist_song_id=raw.id
         WHERE r.include_fallback AND {{ArtistScope(collection)}}
           AND (r.search IS NULL OR raw.name ILIKE r.search)
-          AND NOT EXISTS (SELECT 1 FROM mappings m WHERE m.setlist_song_uuid=raw.uuid)
+          AND {{(collection.OwnerKind == CatalogReferenceKind.Artist
+            ? "NOT COALESCE(f.norm_catalogue,false)"
+            : "NOT EXISTS (SELECT 1 FROM mappings m WHERE m.setlist_song_uuid=raw.uuid)")}}
         """;
 
     internal static string Venues(CatalogCollection collection) =>
@@ -87,10 +92,12 @@ internal static class CatalogBrowseMembership
               CASE WHEN r.search IS NULL THEN 0 ELSE (SELECT count(*) FROM shows s WHERE s.venue_id=raw.id) END::float8 score,
               COALESCE(raw.name,'') label
             FROM venues raw JOIN artists a ON a.id=raw.artist_id
+            LEFT JOIN features f ON f.artist_id=a.id
             WHERE r.include_fallback AND {{ArtistScope(collection)}}
               AND (r.search IS NULL OR raw.name ILIKE r.search OR raw.location ILIKE r.search OR raw.past_names ILIKE r.search)
-              AND (EXISTS (SELECT 1 FROM resolved ass WHERE ass.imported_id=raw.id AND ass.artist_venue_id IS NULL)
-                OR r.search IS NOT NULL AND NOT EXISTS (SELECT 1 FROM shows s WHERE s.venue_id=raw.id))
+              AND {{(collection.OwnerKind == CatalogReferenceKind.Artist
+                ? "NOT COALESCE(f.norm_catalogue,false) AND EXISTS (SELECT 1 FROM shows s WHERE s.artist_id=raw.artist_id AND s.venue_id=raw.id)"
+                : "(EXISTS (SELECT 1 FROM resolved ass WHERE ass.imported_id=raw.id AND ass.artist_venue_id IS NULL) OR r.search IS NOT NULL AND NOT EXISTS (SELECT 1 FROM shows s WHERE s.venue_id=raw.id))")}}
             """;
 
     private static string ArtistScope(CatalogCollection collection)

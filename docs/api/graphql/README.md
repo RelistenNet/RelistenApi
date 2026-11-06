@@ -30,6 +30,12 @@ song history, venue browsing, playlist hydration, search, rankings, references,
 and public activity. These documents are validated by the HTTP integration suite;
 clients may send their own operations. There is no persisted-operation registry.
 
+Artist `features` is the same unsigned 64-bit decimal string as REST, not a nested
+object. Use the [shared feature constants and helper](../../../clients/typescript/artist-features.ts)
+to test flags. `upstreamSources` contains `provider` and `upstreamIdentifier` only;
+provider is a nullable GraphQL enum, such as `ARCHIVE_ORG` or `PHISHIN`, and is null
+for an unrecognized stored provider.
+
 ## Admin query editor
 
 Open `/relisten-admin/graphql/`, or choose **Catalog GraphQL explorer** from the
@@ -38,6 +44,13 @@ bundled Nitro IDE, serving embedded assets and sending POST operations to
 `/api/v4/graphql`; it requires no separate frontend build or package.
 
 ## Navigation and collections
+
+Artist `songs` and `venues` follow REST's approval policy: approved artists return
+only canonical entries, including an empty list while coverage is incomplete;
+other artists return imported entries. Explicit `importedSongs` and
+`importedVenues` inventories remain available. Search keeps its existing imported
+fallbacks. Root `venues` lists surviving canonical venues globally, including
+zero-show venues, using the same membership and metadata as `GET /api/v4/venues`.
 
 The [capability inventory](capabilities.md) maps the graph to the REST readers.
 Artists, years, shows, sources, playable source tracks, tours, canonical/imported

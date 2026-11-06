@@ -5,11 +5,7 @@ query ArtistNavigation($artist: ID!) {
     slug
     showCount
     sourceCount
-    features {
-      songs
-      normalization
-      multipleSources
-    }
+    features
     years(first: 100) {
       nodes {
         id

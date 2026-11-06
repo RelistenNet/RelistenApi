@@ -43,8 +43,9 @@ queries remain separate, while sharing metadata hydration and mappings.
   direct `sourceSet` and `sourceReview` supplement traversal. Source sets/tracks
   remain complete ordered recording arrays. Artist/show/source/set parents are
   navigable without embedded REST detail hierarchies.
-- **CatalogSongsController:** artist `songs` exposes mixed canonical/imported
-  entries; `songs` and `importedSongs` expose their separate inventories. `song`,
+- **CatalogSongsController:** artist `songs` chooses canonical entries when
+  normalization is approved and imported entries otherwise; `songs` and
+  `importedSongs` expose their separate inventories. `song`,
   `songBySlug`, `importedSong`, and `importedSongBySlug` support direct lookup.
   Canonical `shows` carries shared single/multi-song timing statistics and paged
   playable `tracks`, with `TOP`/`ALL` source selection. Canonical song `tracks`
@@ -52,8 +53,10 @@ queries remain separate, while sharing metadata hydration and mappings.
   `normalizedSong` follows the existing nullable approved mapping.
 - **CatalogVenuesController:** `venue`, `venueBySlug`, `venues`; `artistVenue`,
   `artistVenueFor`, `artistVenueBySlug`, and `artistVenues`; `importedVenue`,
-  `importedVenueBySlug`, and `importedVenues`. Artist `venues` retains mixed
-  canonical/imported fallback entries. Each collection has its own show membership;
+  `importedVenueBySlug`, and `importedVenues`. Artist `venues` chooses canonical
+  entries when normalization is approved and imported entries otherwise. Global
+  `venues` includes zero-show canonical venues and shares the REST list's membership
+  and counts. Each collection has its own show membership;
   canonical merges follow survivors. Global `parent` is a canonical venue edge.
 - **CatalogToursController:** `tour`, `tourBySlug`, `tours`, artist `tours`, and
   tour `shows`. Year/show/setlist metadata links retain their original identities.

@@ -476,7 +476,7 @@ type Artist {
   popularity: PopularityResource
   createdAt: DateTime!
   updatedAt: DateTime!
-  features: ArtistFeaturesResource!
+  features: String!
   upstreamSources: [ArtistProviderResource!]!
 }
 
@@ -492,39 +492,9 @@ type ArtistEdge {
   cursor: String!
 }
 
-type ArtistFeaturesResource {
-  descriptions: Boolean!
-  eras: Boolean!
-  multipleSources: Boolean!
-  reviews: Boolean!
-  ratings: Boolean!
-  tours: Boolean!
-  taperNotes: Boolean!
-  sourceInformation: Boolean!
-  sets: Boolean!
-  perShowVenues: Boolean!
-  perSourceVenues: Boolean!
-  venueCoords: Boolean!
-  songs: Boolean!
-  years: Boolean!
-  trackMd5s: Boolean!
-  reviewTitles: Boolean!
-  jamCharts: Boolean!
-  setlistDataIncomplete: Boolean!
-  trackNames: Boolean!
-  venuePastNames: Boolean!
-  reviewsHaveRatings: Boolean!
-  trackDurations: Boolean!
-  canHaveFlac: Boolean!
-  normalization: Boolean!
-}
-
 type ArtistProviderResource {
-  provider: String!
+  provider: UpstreamProvider
   upstreamIdentifier: String
-  url: String
-  description: String
-  creditLine: String
 }
 
 type ArtistRank {
@@ -1521,6 +1491,17 @@ enum TrackQualifier {
   INTRO
   OUTRO
   JAM
+}
+
+enum UpstreamProvider {
+  ARCHIVE_ORG
+  PHISHIN
+  PHISH_NET
+  SETLIST_FM
+  PHANTASY_TOUR
+  JERRY_GARCIA
+  LOCAL
+  PANIC_STREAM
 }
 
 enum VenueCoordinatePrecision {

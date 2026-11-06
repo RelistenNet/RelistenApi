@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json.Nodes;
+using Dapper;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -163,7 +164,7 @@ public sealed partial class TestV4CatalogHttp
     }
 
     [Test]
-    public async Task GraphQL_song_browse_preserves_canonical_and_imported_fallback_entries()
+    public async Task GraphQL_song_browse_shares_rest_approval_policy()
     {
         var data = await Graph(
             "query($id: ID!) { artist(id: $id) { songs(first: 500) { nodes { kind song { id } importedSong { id normalizedSongId } } } } }",
@@ -177,6 +178,95 @@ public sealed partial class TestV4CatalogHttp
             .Select(n => Identity(n, "importedSong"))
             .Should()
             .Equal(rest.AsArray().Select(n => Identity(n, "imported_song")));
+    }
+
+    [TestCase("review.provider", null)]
+    [TestCase("phish.in", "PHISHIN")]
+    public async Task GraphQL_artist_metadata_shares_compact_features_and_providers(
+        string provider,
+        string? expectedProvider
+    )
+    {
+        await using var connection = await MigratedTestDatabase.OpenAsync();
+        try
+        {
+            await connection.ExecuteAsync(
+                "UPDATE upstream_sources SET name=@provider WHERE id=910010",
+                new { provider }
+            );
+            var graph = await Graph(
+                """
+                query($id: ID!) {
+                  artist(id: $id) { features upstreamSources { provider upstreamIdentifier } }
+                  __type(name: "ArtistProviderResource") { fields { name } }
+                }
+                """,
+                new { id = CatalogId("artist", 14) }
+            );
+            var rest = await GetJson(BrowseArtistPath);
+            graph["artist"]!["features"]!
+                .GetValue<string>()
+                .Should()
+                .Be(rest["features"]!.GetValue<string>());
+            var assignment = graph["artist"]!["upstreamSources"]!.AsArray().Single()!;
+            var actualProvider = assignment["provider"]?.GetValue<string>();
+            actualProvider.Should().Be(expectedProvider);
+            assignment["upstreamIdentifier"]!
+                .GetValue<string>()
+                .Should()
+                .Be(rest["upstream_sources"]![0]!["upstream_identifier"]!.GetValue<string>());
+            graph["__type"]!["fields"]!
+                .AsArray()
+                .Select(field => field!["name"]!.GetValue<string>())
+                .Should()
+                .BeEquivalentTo("provider", "upstreamIdentifier");
+        }
+        finally
+        {
+            await connection.ExecuteAsync(
+                "UPDATE upstream_sources SET name='review.provider' WHERE id=910010"
+            );
+        }
+    }
+
+    [TestCase(910001, 11, "venues")]
+    [TestCase(925003, 303, "songs")]
+    public async Task GraphQL_artist_browse_switches_to_empty_canonical_catalog_when_approved(
+        long artistId,
+        int suffix,
+        string collection
+    )
+    {
+        var query =
+            "query($id: ID!) { artist(id: $id) { "
+            + collection
+            + "(first: 100) { nodes { kind } totalCount } } }";
+        var variables = new { id = CatalogId("artist", suffix) };
+        var original = (await Graph(query, variables))["artist"]![collection]!;
+        original["nodes"]!.AsArray().Should().NotBeEmpty();
+        await using var connection = await MigratedTestDatabase.OpenAsync();
+        try
+        {
+            await connection.ExecuteAsync(
+                "UPDATE features SET norm_catalogue=true WHERE artist_id=@artistId",
+                new { artistId }
+            );
+            var approved = (await Graph(query, variables))["artist"]![collection]!;
+            approved["nodes"]!.AsArray().Should().BeEmpty();
+            approved["totalCount"]!.GetValue<int>().Should().Be(0);
+            (await GetJson(ArtistPath(suffix) + "/" + collection)).AsArray().Should().BeEmpty();
+        }
+        finally
+        {
+            await connection.ExecuteAsync(
+                "UPDATE features SET norm_catalogue=false WHERE artist_id=@artistId",
+                new { artistId }
+            );
+        }
+        JsonNode
+            .DeepEquals((await Graph(query, variables))["artist"]![collection], original)
+            .Should()
+            .BeTrue();
     }
 
     [Test]
