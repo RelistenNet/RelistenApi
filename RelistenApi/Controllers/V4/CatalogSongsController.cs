@@ -40,7 +40,7 @@ public sealed class CatalogSongsController(
         );
 
     /// <summary>Finds an artist's canonical song by its stored slug.</summary>
-    /// <param name="tracks">none omits show tracks; top lists each show's top-ranked
+    /// <param name="includeTracks">none omits show tracks; top lists each show's top-ranked
     /// matching source; all lists every matching file.</param>
     /// <remarks>
     /// A merged song's slug returns the survivor, including its current ID and slug.
@@ -51,7 +51,8 @@ public sealed class CatalogSongsController(
     public Task<IActionResult> ArtistSongBySlug(
         string artistId,
         string slug,
-        [FromQuery, AllowedValues("none", "top", "all")] string tracks = "none",
+        [FromQuery(Name = "include_tracks"), AllowedValues("none", "top", "all")]
+            string includeTracks = "none",
         CancellationToken cancellationToken = default
     ) =>
         Read(
@@ -62,27 +63,32 @@ public sealed class CatalogSongsController(
                 var song = await reader.ReadArtistSongBySlug(
                     artist,
                     slug,
-                    ShowTracks(tracks),
+                    ShowTracks(includeTracks),
                     cancellationToken
                 );
                 return song is null ? null : V4CatalogProjection.SongWithShows(song);
             }
         );
 
-    /// <param name="tracks">none omits show tracks; top lists each show's top-ranked
+    /// <param name="includeTracks">none omits show tracks; top lists each show's top-ranked
     /// matching source; all lists every matching file.</param>
     [HttpGet("songs/{songId}")]
     [ProducesResponseType(typeof(SongWithShowsResource), 200)]
     public Task<IActionResult> Song(
         string songId,
-        [FromQuery, AllowedValues("none", "top", "all")] string tracks = "none",
+        [FromQuery(Name = "include_tracks"), AllowedValues("none", "top", "all")]
+            string includeTracks = "none",
         CancellationToken cancellationToken = default
     ) =>
         ReadSong(
             songId,
             async () =>
             {
-                var song = await reader.ReadSong(songId, ShowTracks(tracks), cancellationToken);
+                var song = await reader.ReadSong(
+                    songId,
+                    ShowTracks(includeTracks),
+                    cancellationToken
+                );
                 return song is null ? null : V4CatalogProjection.SongWithShows(song);
             }
         );
@@ -134,8 +140,8 @@ public sealed class CatalogSongsController(
         where T : class =>
         IsSongId(songId) ? Execute(read) : Task.FromResult<IActionResult>(InvalidId(SongId.Prefix));
 
-    private static CatalogSongShowTracks ShowTracks(string tracks) =>
-        tracks switch
+    private static CatalogSongShowTracks ShowTracks(string includeTracks) =>
+        includeTracks switch
         {
             "top" => CatalogSongShowTracks.Top,
             "all" => CatalogSongShowTracks.All,

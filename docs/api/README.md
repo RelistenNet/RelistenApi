@@ -64,15 +64,15 @@ One-song files with unresolved parts contribute to neither timing bucket.
 Average and median values are rounded to two decimals. An empty timing bucket is
 null; missing durations or incomplete interpretations never remove a matched show.
 
-Add `?tracks=top` or `?tracks=all` to include a `tracks` array in each song-show
-entry. `top` lists the matching files of one source per show: the first source
+Add `?include_tracks=top` or `?include_tracks=all` to include a `tracks` array in
+each song-show entry. `top` lists the matching files of one source per show: the first source
 containing the song in the clients' default order (soundboard, then Charlie Miller
 or Peter Costello transfers, then the higher etree ID, then the higher weighted
 rating). See [source ranking](../../RelistenApi/Services/Catalog/CatalogSourceRanking.cs).
 `all` lists every matching file, with each show's sources in that order. Each file
 appears once with only `id`, `source_id`, `show_id`, `title`, `slug`, `duration`
 and `mp3_url`, including files without usable timing samples. The key is omitted
-by default and with `tracks=none`; omission does not clear any files already stored
+by default and with `include_tracks=none`; omission does not clear any files already stored
 by a client. Timings always summarize every source. Use the song's `/tracks` route
 for full track resources, including FLAC URLs, checksums and normalization.
 
@@ -93,7 +93,7 @@ Unavailable metadata does not imply that a listener removed a favorite. The
 resolver returns entity patches, without ownership of unreturned child collections.
 
 `artists/{artistId}/songs/by-slug/{slug}` returns the same song detail as
-`songs/{songId}`, including `tracks`, for that artist's canonical song slug. A merged
+`songs/{songId}`, including `include_tracks`, for that artist's canonical song slug. A merged
 song's slug returns the survivor, so a client redirects when the returned `slug`
 differs from its URL. Imported song slugs are not accepted here; resolve them with
 the reference resolver.

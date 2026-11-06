@@ -27,11 +27,11 @@ public sealed partial class TestV4CatalogHttp
             entry.AsObject().ContainsKey("occurrences").Should().BeFalse();
         }
         JsonNode
-            .DeepEquals(ordinary, await GetJson(DiscoverySongPath + "?tracks=none"))
+            .DeepEquals(ordinary, await GetJson(DiscoverySongPath + "?include_tracks=none"))
             .Should()
             .BeTrue();
 
-        var includedPath = DiscoverySongPath + "?tracks=top";
+        var includedPath = DiscoverySongPath + "?include_tracks=top";
         using var includedResponse = await http.GetAsync(includedPath);
         var included = JsonNode.Parse(await includedResponse.Content.ReadAsStringAsync())!;
         var slimSample = included["shows"]![0]!["tracks"]![0]!;
@@ -80,7 +80,7 @@ public sealed partial class TestV4CatalogHttp
         JsonNode.DeepEquals(ordinary, included).Should().BeTrue();
 
         // All keeps every matching file, with each show's sources in rank order.
-        (await GetJson(DiscoverySongPath + "?tracks=all"))["shows"]!
+        (await GetJson(DiscoverySongPath + "?include_tracks=all"))["shows"]!
             .AsArray()
             .SelectMany(entry => entry!["tracks"]!.AsArray())
             .Select(track => track!["id"]!.GetValue<string>())
@@ -90,9 +90,9 @@ public sealed partial class TestV4CatalogHttp
         var document = await GetJson("/api-docs/v4/swagger.json");
         document["paths"]!["/api/v4/songs/{songId}"]!["get"]!["parameters"]!
             .AsArray()
-            .Single(parameter => parameter!["name"]!.GetValue<string>() == "tracks")!["schema"]![
-            "enum"
-        ]!
+            .Single(parameter => parameter!["name"]!.GetValue<string>() == "include_tracks")![
+            "schema"
+        ]!["enum"]!
             .AsArray()
             .Select(value => value!.GetValue<string>())
             .Should()
@@ -191,7 +191,7 @@ public sealed partial class TestV4CatalogHttp
             );
 
         async Task<string[]> ShowTrackIds() =>
-            (await GetJson(DiscoverySongPath + "?tracks=top"))["shows"]!
+            (await GetJson(DiscoverySongPath + "?include_tracks=top"))["shows"]!
                 .AsArray()
                 .SelectMany(entry => entry!["tracks"]!.AsArray())
                 .Select(track => track!["id"]!.GetValue<string>())
@@ -202,13 +202,13 @@ public sealed partial class TestV4CatalogHttp
     public async Task Artist_song_slug_lookup_returns_merge_survivors()
     {
         var detail = await GetJson(DiscoverySongPath);
-        var withTracks = await GetJson(DiscoverySongPath + "?tracks=all");
+        var withTracks = await GetJson(DiscoverySongPath + "?include_tracks=all");
         foreach (var slug in new[] { "scarlet-begonias", "old-scarlet-name" })
         {
             var path = SongArtistPath + "/songs/by-slug/" + slug;
             JsonNode.DeepEquals(await GetJson(path), detail).Should().BeTrue(slug);
             JsonNode
-                .DeepEquals(await GetJson(path + "?tracks=all"), withTracks)
+                .DeepEquals(await GetJson(path + "?include_tracks=all"), withTracks)
                 .Should()
                 .BeTrue(slug);
         }
@@ -229,7 +229,7 @@ public sealed partial class TestV4CatalogHttp
                     HttpStatusCode.UnprocessableEntity
                 ),
                 (
-                    SongArtistPath + "/songs/by-slug/scarlet-begonias?tracks=bad",
+                    SongArtistPath + "/songs/by-slug/scarlet-begonias?include_tracks=bad",
                     HttpStatusCode.UnprocessableEntity
                 ),
             }
@@ -629,8 +629,15 @@ public sealed partial class TestV4CatalogHttp
     [TestCase("/api/v4/songs/song_zzzzzzzz", HttpStatusCode.NotFound)]
     [TestCase("/api/v4/songs/venue_00000101", HttpStatusCode.UnprocessableEntity)]
     [TestCase("/api/v4/songs/song_bad/tracks", HttpStatusCode.UnprocessableEntity)]
-    [TestCase("/api/v4/songs/song_00000101?tracks=bad", HttpStatusCode.UnprocessableEntity)]
-    [TestCase("/api/v4/songs/song_00000101?tracks=longest", HttpStatusCode.UnprocessableEntity)]
+    [TestCase("/api/v4/songs/song_00000101?include_tracks=bad", HttpStatusCode.UnprocessableEntity)]
+    [TestCase(
+        "/api/v4/songs/song_00000101?include_tracks=longest",
+        HttpStatusCode.UnprocessableEntity
+    )]
+    [TestCase(
+        "/api/v4/songs/song_00000101?include_tracks=true",
+        HttpStatusCode.UnprocessableEntity
+    )]
     public async Task Song_routes_distinguish_unavailable_unknown_and_invalid_targets(
         string path,
         HttpStatusCode expected

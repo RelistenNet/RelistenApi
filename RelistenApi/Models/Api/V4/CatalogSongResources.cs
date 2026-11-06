@@ -39,8 +39,8 @@ public sealed record SongShowResource(
 );
 
 /// <summary>
-/// A matching file, included in its show entry only with tracks=top (the show's
-/// top-ranked matching source) or tracks=all (every matching source, in rank order).
+/// A matching file, included in its show entry only with include_tracks=top (the show's
+/// top-ranked matching source) or include_tracks=all (every matching source, in rank order).
 /// </summary>
 [JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
 public sealed record SongShowTrackResource(
