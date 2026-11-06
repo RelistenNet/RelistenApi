@@ -83,6 +83,7 @@ public sealed partial class TestV4CatalogHttp
             BrowseArtistPath + "/venues",
             BrowseArtistPath + "/venues/venue_00000001",
             CanonicalVenuePath,
+            "/api/v4/venues",
             ImportedVenuePath(74),
         };
         var validators = new Dictionary<string, string>();
@@ -180,7 +181,7 @@ public sealed partial class TestV4CatalogHttp
     }
 
     [Test]
-    public async Task Missing_materialized_pair_preserves_imported_fallback_without_refreshing_on_read()
+    public async Task Missing_materialized_pair_leaves_browse_empty_without_refreshing_on_read()
     {
         await using var connection = await MigratedTestDatabase.OpenAsync();
         try
@@ -198,9 +199,8 @@ public sealed partial class TestV4CatalogHttp
                 .Should()
                 .Be("Imported Civic Center");
             var entries = (await GetJson(BrowseArtistPath + "/venues")).AsArray();
-            entries.Should().ContainSingle();
-            entries[0]!["kind"]!.GetValue<string>().Should().Be("imported_venue");
-            entries[0]!["imported_venue"]!["show_count"]!.GetValue<int>().Should().Be(2);
+            entries.Should().BeEmpty();
+            (await GetJson(ImportedVenuePath(74)))["show_count"]!.GetValue<int>().Should().Be(2);
             using var missing = await http.GetAsync(BrowseArtistPath + "/venues/venue_00000001");
             missing.StatusCode.Should().Be(HttpStatusCode.NotFound);
             (await GetJson(CanonicalVenuePath))["global_show_count"]!

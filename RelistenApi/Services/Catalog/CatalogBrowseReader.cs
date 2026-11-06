@@ -236,7 +236,7 @@ public sealed class CatalogBrowseReader(
             await session.Connection.QueryAsync<CatalogProviderAssignment>(
                 session.Command(
                     """
-                    SELECT aus.artist_id,aus.upstream_identifier,up.name provider,up.url,up.description,up.credit_line
+                    SELECT aus.artist_id,aus.upstream_identifier,up.name provider
                     FROM artists_upstream_sources aus JOIN upstream_sources up ON up.id=aus.upstream_source_id
                     WHERE aus.artist_id=ANY(@ids) ORDER BY up.name,aus.upstream_identifier,up.id
                     """,

@@ -107,6 +107,15 @@ public sealed class CatalogVenuesController(
         });
     }
 
+    /// <summary>Lists canonical venues once across all artists, ordered by name and then ID.</summary>
+    /// <remarks>Includes zero-show venues. Counts include only artists with normalization enabled; shows are not embedded.</remarks>
+    [HttpGet("venues")]
+    [ProducesResponseType(typeof(VenueResource[]), 200)]
+    public Task<IActionResult> Venues(CancellationToken cancellationToken) =>
+        Execute(async () =>
+            (await reader.ReadVenues(cancellationToken)).Select(V4CatalogProjection.Venue).ToArray()
+        );
+
     [HttpGet("venues/{venueId}")]
     [ProducesResponseType(typeof(VenueWithShowsResource), 200)]
     public Task<IActionResult> Venue(string venueId, CancellationToken cancellationToken) =>

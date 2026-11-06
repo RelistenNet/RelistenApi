@@ -31,7 +31,7 @@ public sealed class CatalogSearchResults
 
 /// <summary>
 /// Six bounded search categories in one snapshot. Song/venue matches use the
-/// existing browse overlay and fallback policy, including aliases and imported labels.
+/// canonical mappings with imported fallbacks, including aliases and imported labels.
 /// Song counts use stored facts; recording hierarchies remain lazy.
 /// </summary>
 public sealed class CatalogSearchReader(
