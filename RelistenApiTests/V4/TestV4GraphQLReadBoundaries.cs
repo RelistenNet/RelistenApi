@@ -1,5 +1,4 @@
 using System.Diagnostics.Metrics;
-using System.Text.Json.Nodes;
 using Dapper;
 using FluentAssertions;
 using Relisten.Identifiers;
@@ -126,6 +125,7 @@ public sealed partial class TestV4CatalogHttp
                 actual.AddRange(
                     page["nodes"]!.AsArray().Select(source => source!["id"]!.GetValue<string>())
                 );
+                actual.Count.Should().BeLessThanOrEqualTo(expected.Length);
                 after = page["pageInfo"]!["hasNextPage"]!.GetValue<bool>()
                     ? page["pageInfo"]!["endCursor"]!.GetValue<string>()
                     : null;

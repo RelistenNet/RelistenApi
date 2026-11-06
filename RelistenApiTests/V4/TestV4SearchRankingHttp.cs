@@ -328,11 +328,18 @@ public sealed partial class TestV4CatalogHttp
                   popularShows(limit: 2) { node { id popularity { momentumScore } } metrics { momentumScore } }
                   momentumShows(artistIds: [$artist], limit: 2) { node { id popularity { momentumScore } } metrics { momentumScore } }
                   artistRankings(artistIds: [$artist],limit:1) { popularShows { node { id } } }
+                  trendingOnly: artistRankings(artistIds: [$artist],limit:1) { trendingShows { node { id } } }
                 }
                 """,
                 new { show = ShowId(4), artist = BrowseArtistId }
             );
             graph["artistRankings"]![0]!["popularShows"]!.AsArray().Should().ContainSingle().Which![
+                "node"
+            ]!["id"]!
+                .GetValue<string>()
+                .Should()
+                .Be(ShowId(4));
+            graph["trendingOnly"]![0]!["trendingShows"]!.AsArray().Should().ContainSingle().Which![
                 "node"
             ]!["id"]!
                 .GetValue<string>()

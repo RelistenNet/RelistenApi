@@ -119,8 +119,10 @@ public sealed class CatalogRankingReader(
             .ToArray();
     }
 
-    /// <summary>Unknown filter artists are omitted; existing artists retain empty groups.</summary>
-    /// <summary>Reads selected ranking series in one snapshot; REST defaults to both series.</summary>
+    /// <summary>
+    /// Reads selected ranking series in one snapshot; REST defaults to both series.
+    /// Unknown filter artists are omitted; existing artists retain empty groups.
+    /// </summary>
     public async Task<IReadOnlyList<CatalogArtistRankings>> ReadArtistGroups(
         Guid[] artists,
         int limit,

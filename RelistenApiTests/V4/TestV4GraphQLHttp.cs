@@ -603,6 +603,9 @@ public sealed partial class TestV4CatalogHttp
         var variables = new
         {
             id = "song_00000101",
+            scarlet = "song_00000101",
+            drums = "song_00000102",
+            recording = CatalogId("source", 321),
             artist = CatalogId("artist", 301),
             show = CatalogId("show", 311),
             venue = "venue_00000001",
