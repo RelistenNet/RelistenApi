@@ -645,6 +645,56 @@ public sealed partial class TestV4CatalogHttp
         summary.AsObject().ContainsKey("venue_display").Should().BeFalse();
         year["shows"]![0]!.AsObject().ContainsKey("venue_display").Should().BeFalse();
 
+        var graph = await Graph(
+            """
+            query($venue: ID!, $show: ID!) {
+              venue(id: $venue) { ...PublicNames }
+              show(id: $show) { artistVenue { venue { ...PublicNames } } }
+              search(q: "Historical Areena") {
+                venues(first: 10) { nodes { artistVenue { venue { id ...PublicNames } } } }
+              }
+              __type(name: "VenueNameResourceKind") { enumValues { name } }
+            }
+            fragment PublicNames on Venue { names { name kind } }
+            """,
+            new { venue = "venue_00000001", show = ShowId(4) }
+        );
+        var searchVenues = graph["search"]!["venues"]!["nodes"]!
+            .AsArray()
+            .Select(entry => entry?["artistVenue"]?["venue"])
+            .OfType<JsonNode>()
+            .Where(value => value["id"]!.GetValue<string>() == "venue_00000001")
+            .ToArray();
+        searchVenues.Should().NotBeEmpty();
+        var graphVenues = new[]
+        {
+            graph["venue"]!,
+            graph["show"]!["artistVenue"]!["venue"]!,
+        }.Concat(searchVenues);
+        var expectedNames = names
+            .Select(item =>
+                (
+                    item!["name"]!.GetValue<string>(),
+                    item["kind"]!.GetValue<string>().ToUpperInvariant()
+                )
+            )
+            .ToArray();
+        foreach (var graphVenue in graphVenues)
+        {
+            graphVenue["names"]!
+                .AsArray()
+                .Select(item =>
+                    (item!["name"]!.GetValue<string>(), item["kind"]!.GetValue<string>())
+                )
+                .Should()
+                .Equal(expectedNames);
+        }
+        graph["__type"]!["enumValues"]!
+            .AsArray()
+            .Select(value => value!["name"]!.GetValue<string>())
+            .Should()
+            .BeEquivalentTo("OFFICIAL", "SHORT");
+
         var document = await GetJson("/api-docs/v4/swagger.json");
         AssertSchemaFields(document, "VenueResource", venue);
         AssertSchemaFields(document, "VenueNameResource", names[0]!);

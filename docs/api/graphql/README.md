@@ -54,6 +54,8 @@ other artists return imported entries. Explicit `importedSongs` and
 `importedVenues` inventories remain available. Search keeps its existing imported
 fallbacks. Root `venues` lists surviving canonical venues globally, including
 zero-show venues, using the same membership and metadata as `GET /api/v4/venues`.
+The `Venue.names` field includes official and short names. Spelling aliases remain
+searchable.
 
 The [capability inventory](capabilities.md) maps the graph to the REST readers.
 Artists, years, shows, sources, playable source tracks, tours, canonical/imported
