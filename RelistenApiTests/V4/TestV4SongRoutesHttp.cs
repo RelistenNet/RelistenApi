@@ -43,7 +43,16 @@ public sealed partial class TestV4CatalogHttp
         {
             foreach (var track in entry!["tracks"]!.AsArray())
             {
-                var fields = new[] { "id", "source_id", "show_id", "title", "slug", "duration" };
+                var fields = new[]
+                {
+                    "id",
+                    "source_id",
+                    "show_id",
+                    "title",
+                    "slug",
+                    "duration",
+                    "mp3_url",
+                };
                 track!.AsObject().Select(field => field.Key).Should().BeEquivalentTo(fields);
                 var id = track["id"]!.GetValue<string>();
                 includedIds.Add(id);

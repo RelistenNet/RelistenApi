@@ -70,11 +70,11 @@ containing the song in the clients' default order (soundboard, then Charlie Mill
 or Peter Costello transfers, then the higher etree ID, then the higher weighted
 rating). See [source ranking](../../RelistenApi/Services/Catalog/CatalogSourceRanking.cs).
 `all` lists every matching file, with each show's sources in that order. Each file
-appears once with only `id`, `source_id`, `show_id`, `title`, `slug` and `duration`,
-including files without usable timing samples. The key is omitted by default and
-with `tracks=none`; omission does not clear any files already stored by a client.
-Timings always summarize every source. Use the song's `/tracks` route for full
-playable track resources, including normalization and playback URLs.
+appears once with only `id`, `source_id`, `show_id`, `title`, `slug`, `duration`
+and `mp3_url`, including files without usable timing samples. The key is omitted
+by default and with `tracks=none`; omission does not clear any files already stored
+by a client. Timings always summarize every source. Use the song's `/tracks` route
+for full track resources, including FLAC URLs, checksums and normalization.
 
 Imported song details still return plain show summaries because setlists cannot
 identify the file to time.

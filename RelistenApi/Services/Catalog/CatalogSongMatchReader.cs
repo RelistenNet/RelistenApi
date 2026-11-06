@@ -174,7 +174,7 @@ public sealed class CatalogSongMatchReader
                         FROM (SELECT DISTINCT show_uuid,source_uuid FROM matches) matched
                         JOIN sources src ON src.uuid=matched.source_uuid
                     )
-                    SELECT m.track_uuid uuid,m.source_uuid,m.show_uuid,t.title,t.slug,t.duration
+                    SELECT m.track_uuid uuid,m.source_uuid,m.show_uuid,t.title,t.slug,t.duration,t.mp3_url
                     FROM matches m
                     JOIN ranked_sources r ON r.show_uuid=m.show_uuid AND r.source_uuid=m.source_uuid
                     JOIN source_tracks t ON t.uuid=m.track_uuid

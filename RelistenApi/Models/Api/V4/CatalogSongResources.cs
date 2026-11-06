@@ -49,7 +49,8 @@ public sealed record SongShowTrackResource(
     ShowId ShowId,
     string Title,
     string Slug,
-    int? Duration
+    int? Duration,
+    string? Mp3Url
 );
 
 /// <summary>
