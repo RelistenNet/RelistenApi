@@ -7,6 +7,7 @@ Start with the task you need to do:
 - [Use the catalog graph](api/graphql/README.md): full V4 GraphQL reads, shared REST mappings, pagination, consistency, and execution budgets.
 - [Persist catalog responses](api/mobile-sync.md): collection ownership, shared records and ETag limitations.
 - [Work on accounts](api/accounts.md): personal membership, catalog references and authentication ownership.
+- [Plan playlists](plans/active/2026-11-06-v4-playlists.md): v4-only typed contracts, staged delivery and open product decisions; not yet implemented.
 - [Maintain derived counts](normalization-counts.md): writer responsibilities, concurrency and repair.
 - [Maintain popularity](popularity/README.md): score publication, demand refresh and recovery.
 - [Work on ingestion](ingestion/README.md): provider contracts and operator procedures.

@@ -1,0 +1,451 @@
+# Deliver playlists using v4 catalog identities
+
+Status: reviewed design; playlist implementation has not started. This plan owns
+the playlist contract and delivery work. It supersedes the playlist portions of
+the July 18 server architecture, server implementation, mobile architecture,
+mobile implementation, and mobile-first delivery documents. Those documents
+remain background for other features; their raw UUID examples, availability
+clock, and Queue V2 requirements are not playlist implementation instructions.
+
+## Purpose / Big Picture
+
+A listener can create a private playlist, add the same playable track more than
+once, arrange tracks into ordered segments, edit offline, and use the same
+playlist on another signed-in device. Later deliveries add public links,
+following and cloning, then collaboration. Private playlists must work before
+the later features are implemented.
+
+Playlists are a new typed-ID contract for v4 clients. Alec confirmed on November
+6 that no older-client support or backwards compatibility is required. They
+remain owned by the User Service at `accounts.relisten.net/v1`; `/v1` versions
+account resources independently of the catalog's `/api/v4`. No playlist endpoint,
+UUID wire alias, dual reader, or migration for an older playlist client is needed.
+Existing unrelated catalog and account endpoints retain their own contracts.
+
+## Progress
+
+- [x] (2026-11-06) Compare the July plans with current account IDs, catalog
+  resources, queue persistence, and the November 5 mobile simplification decisions.
+- [x] (2026-11-06) Confirm v4-only clients and User Service route ownership with Alec.
+- [ ] Resolve the product choices below and freeze the private-playlist examples.
+- [ ] Implement and locally verify private playlists through the real mobile/API path.
+- [ ] Qualify and release private playlists; record the build and environment.
+- [ ] Implement publication, following and cloning with their public web consumer.
+- [ ] Implement collaboration after private editing has been exercised.
+
+## Context and Orientation
+
+`RelistenUserService/` already owns authentication and favorite/library sync.
+`Relisten.Accounts.Contracts/Identifiers/AccountIds.cs` stores application IDs as
+complete canonical typed strings backed by UUIDv7. `CommandId` already exists.
+`Relisten.Identifiers/` owns typed catalog IDs. `track_` identifies a playable
+file; a canonical `song_` identifies music, and an `imported_song_` identifies
+upstream setlist evidence. Neither song identity substitutes for a track.
+
+`RelistenApi/Models/Api/V4/` and `RelistenApi/Services/Catalog/` define current
+catalog representations and reads. Normalization enriches a recording without
+replacing its imported title, playable file identity, or original ordering.
+Imported venues, artist venues and canonical venues are distinct relationships.
+
+The sibling `relisten-mobile` checkout already persists and restores distinct
+queue entries. Its November 5 relationship simplification keeps ordinary Realm
+catalog records, live reference wrappers, and existing repositories. Playlist
+segments and occurrences are new authored data; copied catalog presentation
+models and duplicate HTTP membership lists are not needed.
+
+This plan describes intended behavior, not deployed capability. History, Timescale,
+Sonos, a generic sync engine, and a player replacement are not technical
+prerequisites. The existing delivery order puts history first; changing that
+release priority requires Alec's decision, not an invented code dependency.
+
+## Interfaces and Dependencies
+
+### Typed identities and ownership
+
+Use `playlist_id`, `segment_id`, `occurrence_id`, `operation_id`, `command_id`,
+and `track_id` in playlist payloads and routes. Before implementation, add the
+playlist domain types alongside existing account identifiers, and freeze their
+prefixes in one place. Proposed prefixes are `playlist`, `playlist_segment`,
+`playlist_occurrence`, and `playlist_operation`; reuse `command` and `user`.
+Client-created domain IDs use UUIDv7 through those types. Validate canonical
+strings and prefixes; never infer that every catalog ID is a UUIDv7.
+
+New playlist domain keys and references to users are stored as complete typed
+strings, matching AccountsDbContext conventions. A typed `TrackId` losslessly
+encodes the existing catalog UUID. Decode it only in the catalog adapter; database
+joins may use the existing internal UUID and integer keys. No numeric catalog
+key or raw catalog UUID appears in the playlist wire contract. Do not change a
+prefix to turn an imported entity into a canonical entity.
+
+An occurrence is one authored position, including duplicates. A segment is an
+ordered group of occurrences. A segment is an authored block that may contain tracks from different
+recordings; selecting a source run is one way to create it. Keep an empty playlist valid. Authored empty
+segments are not valid; deleting or moving the last
+occurrence tombstones its segment in the same operation. Temporary catalog
+unavailability does not tombstone an authored occurrence or segment.
+
+### Private API
+
+Keep the account contract version independent of the catalog route version. Use
+one playlist `contract_version` starting at 1; do not reuse a favorites version.
+The private delivery exposes:
+
+- `GET /v1/playlists?view=active|archived`: summaries for the current account;
+  archived listings are owner-only.
+- `POST /v1/playlists`: `{contract_version, command_id, playlist_id, metadata,
+  initial_segments}`. Metadata contains name and optional description; initial
+  segments contain IDs, kind and ordered `{occurrence_id, track_id}` entries.
+- `GET /v1/playlists/{playlist_id}/snapshot`: complete authorized authored
+  structure, permissions, content revision and current catalog sidecar.
+- `GET /v1/playlists/{playlist_id}/changes?after_revision=...`: complete ordered
+  revision envelopes, bounded pages and a continuation revision.
+- `POST /v1/playlists/{playlist_id}/operations:batch`: one contract version and
+  ordered `{operation_id, base_revision, operation_type, payload}` entries.
+- `PUT /v1/playlists/{playlist_id}/archive-state`: acknowledged
+  `{contract_version, command_id, archived}`.
+
+Content operations are metadata update, segment insert/move/delete, and occurrence
+insert/move/delete. Define their typed payloads and examples in
+`Relisten.Accounts.Contracts/Playlists/` before writing persistence. Do not expose
+an untyped arbitrary JSON operation bag. Metadata fields use absent = unchanged,
+description null = clear, and non-null name. IDs survive moves. Catalog identity
+cannot change through a move; replacing a track means deleting and inserting.
+
+Inserts and moves name a live parent and optional before/after anchors. Temporarily
+remove the moving object when calculating its new position. Both surviving anchors
+must form a valid interval in that parent; one surviving anchor is sufficient;
+no surviving anchors means append. Wrong-parent or inverted anchors return
+`anchor_conflict`. A deleted target returns accepted no-op `target_deleted`;
+a missing/deleted destination returns terminal `parent_missing`. Never resurrect
+a tombstoned ID through an insert. Freeze same-ID insertion conflict/replay cases.
+
+The server assigns fractional ranks under the playlist lock. Ranks are opaque
+ordering strings with the same restricted alphabet and bytewise comparison in
+PostgreSQL and mobile. Select an existing implementation or a small domain helper
+using adversarial insert fixtures; record its maximum length and rebalance trigger
+before shipping. Rebalance is a system revision carrying every changed rank; it
+changes no identity and a delta page never splits that revision.
+
+### Transactions, batches and receipts
+
+Use one documented lock order for owner quota, playlist, affected account-library
+states, and command receipts. Cardinality changes serialize on the owner boundary
+before the playlist; affected account states lock in stable ID order. Apply this
+same order to creation, archive, cloning, and later deletion/member operations.
+Read lifecycle state under the relevant lock so a deleting account cannot create
+or mutate an aggregate after its deletion fence.
+
+Authorize the entire request before mutation. Preflight malformed envelopes,
+unsupported versions, reused IDs with different payloads, and aggregate quota
+failure before applying new operations. Exact receipt replays consume no quota;
+preflight the proposed new effects in submitted order without persisting them.
+Process a valid batch in submitted order
+under one playlist lock. Each state change advances content revision once; no-ops
+do not. Store per-operation semantic rejections and continue independent siblings.
+Commit materialized state, revision envelopes, library changes and receipts in one
+transaction. An infrastructure failure rolls back the entire batch. Return one
+result per operation in request order, including exact replayed results.
+
+Store a server-computed semantic hash with each command/operation receipt. The
+receipt is scoped to its actor and aggregate; a different actor cannot replay
+another actor's result. Hash material includes contract version, command/operation
+type, canonical playlist ID and typed payload; exclude its receipt ID and the
+diagnostic base revision. Clients persist payloads and never compute hashes. Freeze
+one deterministic typed serialization and test field absence, nulls, text and
+array order; do not require a general JSON canonicalization framework by default.
+Reject ambiguous/unknown fields at deserialization. Exact same-ID/payload retries
+return the stored outcome; changed reuse conflicts, and a fresh insert reusing a
+tombstoned domain ID conflicts. Authorization still applies to receipt reads.
+
+Retain compact receipt identity, hash and outcome for the aggregate's lifetime
+initially. Delta compaction must never delete retry knowledge. Full revision
+history and restore checkpoints are separate storage/product choices; no restore
+UI or permanent full event history is required for the first delivery. Do not add
+compaction until needed; before enabling it, define the retained revision boundary
+and prove `409 snapshot_required` falls back without losing pending work.
+
+### Pull state and optimistic edits
+
+Persist the last completely applied contiguous revision separately from individual
+operation acknowledgements and any observed server head. Suppose a device has
+revision 41, another device commits 42, and its own push returns receipt 43. It
+still pulls after 41. Receipt 43 acknowledges that operation; it cannot skip 42.
+
+Apply each complete delta page's structure, catalog patches and cursor in one
+Realm transaction. Snapshot replacement similarly establishes a complete revision,
+then reapplies unresolved local intent in order. A push result must not apply a
+structural change twice when the matching delta arrives. Keep acknowledged intent
+visible until canonical pull state incorporates its revision. Use existing account
+generation and request ownership to reject stale completions after scope change
+or a newer snapshot; switching away cannot acknowledge another scope's outbox.
+
+The existing detailed plan permits offline creation, while the mobile architecture
+calls it online-only. Accepted resolution: persist creation as a separate immutable
+command and permit a provisional local playlist. Initial command payload/IDs remain
+fixed for retry; later local edits are dependent operations. Send those only after
+create acknowledgement at revision 1. A lost response retries creation exactly.
+A terminal create failure leaves a visible local draft with an actionable error;
+pause children and offer explicit discard or correction under a new command,
+not silent data loss or an endless retry. Alec accepted offline creation.
+Archive, publication, membership and invitation commands remain online acknowledged.
+
+### Catalog hydration and unavailable tracks
+
+Return one compressed response with authored structure and de-duplicated shallow
+catalog resources for the selected tracks and their required parents. Reuse v4
+field meanings, typed IDs, imported labels and optional normalization. Include
+source-set identity and imported/canonical venue relationships where required by
+existing rendering/playback; choose the actual arrays with the consuming adapter,
+rather than freezing the old five-array UUID shape. Do not expand every recording
+of each show. Delta pages carry catalog patches needed for introduced tracks.
+
+Catalog patches update ordinary Realm objects and relationships. They do not own
+the full children of a show/source or soft-prune artist browse membership. Never
+clear richer cached children because a playlist sidecar omits them. Playlist
+ordering lives only in authored segments/occurrences, not a second catalog cache.
+
+A snapshot must read playlist structure and catalog projection in one primary
+repeatable-read database snapshot. Current `CatalogReadSession.Open` starts its
+own connection/transaction; calling an ordinary catalog HTTP route does not meet
+this guarantee. Add a catalog-owned selected-track reader that can enlist in the
+caller's connection/transaction, with the required grants. Reuse catalog mapping
+and availability rules rather than copying SQL into User Service controllers.
+Prove the transaction boundary with a catalog change between reads.
+
+Keep authored track references when the catalog cannot currently resolve them;
+member snapshots report unresolved availability, public projections omit those
+occurrences and empty rendered segments. Do not infer licensing removal from
+missing metadata or mobile browse soft-pruning. The current orphan filter is not
+a comprehensive licensing/stream-authorization system. Label precise reasons only
+when an authoritative catalog state supports them.
+
+The July global `availability_revision` does not exist. Before implementing it,
+choose the freshness/removal contract below. A content revision alone never
+validates catalog metadata or availability. The recommended first delivery,
+subject to decision 3 below, uses fresh complete snapshot reads with `no-store`;
+no ETag or projection token may claim more freshness than
+its inputs establish. Pull on open, foreground, reconnect and explicit refresh;
+a content delta with no changes does not prove availability is unchanged. Server
+clone/public reads always resolve current catalog state. A clock requires a
+catalog-writer audit and atomic increments on every relevant transition; metadata
+changes also matter to a full-representation validator.
+
+Do not add restrictive catalog foreign keys until importer cleanup/removal paths
+and retention have been tested. New authored references must survive later catalog
+absence. Whether inserts accept currently unresolved tracks, and whether that uses
+a stored typed reference or a restrictive FK plus catalog retention, is an explicit
+decision below. Neither missing data nor a failed hydration deletes user intent.
+
+### Playback and downloads
+
+Extend `relisten/player/relisten_player_queue.tsx` and existing checkpoint storage.
+Every enqueue creates a fresh queue-entry identity, even when the same playlist
+occurrence is queued twice. Store playlist/segment/occurrence IDs only as context.
+Restore and reorder preserve queue-entry identity. A queued snapshot is independent
+of later playlist edits; playlist sync does not rewrite an active queue.
+
+Add a distinct queue segment instance per enqueue group. Segment shuffle shuffles
+those instances while retaining their internal order; queueing a playlist twice
+does not merge its repeated segment IDs. Preserve existing native/Cast ownership,
+download lookup and playback-instance semantics. No new server queue or Sonos work
+is needed to play a private playlist. Keep internal catalog storage adaptation at
+the existing boundary; it is not support for an older playlist client.
+
+Retain downloaded files and existing device-global offline metadata. Account switch
+clears scoped playlist/queue access without deleting media. Before private bulk
+download, disclose that track titles appear in the shared Offline Library, while
+playlist name/order/segments remain account-scoped. Strictly blocking future media
+URLs after licensing removal requires enforcement outside playlist rendering; it
+must not be claimed solely from snapshot filtering.
+
+## Plan of Work
+
+### 1. Private playlists
+
+Resolve the decisions below, freeze typed examples and limits, then add only the
+private domain types, migrations and `RelistenUserService/Playlists/` services.
+Controllers translate HTTP; the domain service owns authorization, operation
+semantics and transactions; catalog-owned readers supply shallow metadata. Extend
+the existing library snapshot/change protocol for playlist heads and the mobile
+coordinator that consumes it; favorites and playlist revisions remain distinct.
+Any library payload change must name its consuming mobile change.
+
+Use domain phases at orchestration entrypoints: authorize/lock, claim receipts,
+apply intent, publish revisions, commit. Explain retry ownership and locks beside
+the implementing code. Introduce no interface merely to make a test mockable.
+
+Then add scoped Realm playlist/segment/occurrence/outbox state, a small sync
+coordinator, editor and player integration. Reuse existing catalog repositories
+and live wrappers. Deliver the real API-to-mobile path before adding publication
+or dormant collaboration schema.
+
+### 2. Publish, follow and clone
+
+Add stable public codes and publication, anonymous snapshot, follow/unfollow and
+idempotent clone routes. A private playlist is the default. Public reads return
+the same 404 for missing, private and archived playlists. A public URL is not a
+secret. Follow state binds to playlist ID and survives unpublish/republish; no
+per-edit follower fan-out. Clone copies the current available order into a private
+aggregate with fresh segment/occurrence IDs, never permissions or history.
+
+Build the minimal public web page using the same hydrated projection. Keep public
+responses free of private structure, receipts and actor data. Archive hides all
+normal reads but preserves publication/follows; unarchive restores them. Account
+deletion purges owned playlists and leaves an unavailable follow entry without a
+foreign key to the deleted aggregate. Add no credentialed web editing facade
+without a consuming screen and explicit browser policy.
+
+### 3. Collaboration
+
+Add viewer/editor/manager roles and separate one-time collaborator invitations.
+Owner alone archives; editors change content; managers also publish and manage
+members. Invitations contain a random fragment secret, stored only as a hash;
+anonymous exchange grants a bounded preview, explicit authenticated acceptance
+creates membership. Preserve exact acceptance retries without logging secrets.
+
+Enforce access at receipt time, serialize role/revocation changes with edits, and
+emit affected users' library changes. Retain former-member evidence so exact
+`collaborator_access_revoked` is returned only to a known revoked collaborator;
+unrelated callers receive 404. Record a membership generation and bind persisted
+pending operations and their batch to the grant under which they were authored.
+Compare that grant with the current membership on the server, so removal then
+re-invitation cannot silently upload intent from the prior grant. Freeze how a
+client acknowledges/discards that old branch before resuming under the new grant.
+Archive is temporary unavailability, not revocation: preserve pending edits and
+resume after unarchive. Demotion refreshes permissions without pretending all
+access was revoked. Only explicit acknowledgement of permanent revocation discards
+unsynced work. Deleting a collaborator does not delete another owner's playlist.
+
+## Product decisions and remaining freshness question
+
+1. **Offline creation: accepted.** Persist a provisional-create command and permit
+   local creation/editing while disconnected. Dependent operations wait for its
+   receipt. Archive and access changes remain online acknowledged commands.
+2. **Availability and insertion: accepted.** Accept syntactically valid track
+   references and retain unresolved occurrences. Playlist writes remain independent
+   of catalog outages; no restrictive catalog FK or importer-retention work is
+   required by this playlist contract. Hydration determines current display data.
+3. **Removal freshness: open.** Recommend fresh snapshots without a global clock for
+   the first delivery. On open, foreground, reconnect or refresh, resolve the
+   playlist's tracks against the current catalog, even when its authored revision
+   has not changed. Cached devices learn removals at their next successful refresh.
+   The alternative adds a catalog-owned availability counter, advanced atomically
+   by every relevant catalog writer. A client polls that counter alongside content
+   revisions to learn whether its rendered playlist needs refreshing. This can
+   avoid unchanged snapshot transfers, but requires writer coverage and does not
+   itself push updates to devices or revoke previously issued media URLs. Strict
+   prevention of new playback requires separate enforcement at media access.
+4. **Quotas: accepted.** Keep the July defaults: 250 playlists, 5,000 occurrences per
+   playlist, 25,000 owned occurrences, and 500 operations/2 MiB per batch. Count
+   non-user-deleted authored occurrences, including unresolved ones and archived
+   playlists. Catalog recovery and unarchive therefore cannot cross the limit.
+   Begin with serialized indexed counts, without a cross-domain usage ledger.
+5. **Segment edits: accepted.** A segment is an authored ordered block. Selecting
+   adjacent tracks from one recording initially creates that block; moving a track
+   from another recording into it is allowed. Segment shuffle preserves the order
+   inside each block. Freeze the payload vocabulary before implementation.
+
+Alec accepted decisions 1, 2, 4 and 5 after the review. Decision 3 remains open;
+its recommendation is not approval. Collaboration-specific invitation expiry,
+revocation retention and role examples can be frozen with that later delivery.
+
+## Validation and Acceptance
+
+Keep a small behavioral suite at real boundaries. Parameterize cases when they
+protect the same invariant; do not prescribe a test count or private call order.
+
+- PostgreSQL: exact retry after response loss has one effect; changed reuse
+  conflicts; mixed semantic failure preserves successful siblings; infrastructure
+  failure leaves no partial commit. Race quota changes and deletion fencing.
+- Ordering: duplicates, cross-segment move, last-item deletion, surviving/missing
+  anchors and rebalance preserve authored identity and deterministic order.
+- HTTP/catalog boundary: deserialize real typed payloads; reject wrong prefixes;
+  hydrate selected tracks from the same database snapshot without full-show
+  expansion or clearing richer cached children.
+- Realm sync: receipt 43 before delta 42 still pulls after 41; a lost-create
+  response retries before children; snapshot fallback retains pending edits;
+  late completions after scope change cannot apply or acknowledge them.
+- Player: enqueue the same playlist twice, remove one duplicate, shuffle segments,
+  restart and restore the exact selected queue entry/checkpoint. Later playlist
+  edits leave that queue unchanged. Downloaded playback still works offline.
+
+Publication adds privacy projection, follow restoration and clone replay proofs.
+Collaboration adds role/revocation/re-invitation transaction proofs and a manual
+two-device offline edit/reconnect exercise. Test success, semantic partial failure,
+and recovery from the entrypoints, including the resulting caller-visible state.
+
+Measure a 5,000-occurrence response with repeated tracks on representative iOS
+and Android devices: compressed bytes, query/parse/apply time, peak memory and
+first useful render. Compare a normal playlist too. Record hardware/build and
+name a budget before claiming a result requires pagination or another cache.
+
+In the API checkout use `dotnet build RelistenApi.sln` and
+`dotnet test RelistenUserServiceTests/RelistenUserServiceTests.csproj`; read that
+suite's PostgreSQL setup before running integration cases. Start the shared local
+services with `./start-local-databases.sh` and verify the integration cases ran;
+the suite can skip them when PostgreSQL is unavailable. `./test-local.sh`
+runs the catalog suite, not User Service tests. Use it for changed catalog readers.
+In mobile run affected Vitest tests, `yarn ts:check` and `yarn lint`, then the
+relevant simulator/device checklist. No production catalogs, schedules or mutations
+are needed for verification. Before commits/pushes run `dotnet csharpier check .`.
+
+After implementation and focused checks, run the code-simplifier and deslop
+passes, then use a fresh reviewer to trace success, partial failure and recovery.
+Review readability separately from correctness; formatters do not establish it.
+
+## Idempotence and Recovery
+
+Migrations are additive and add only delivered tables. Rolling back an application
+image preserves playlist rows, pending operations and receipts. Do not repair an
+operation protocol by replacing whole playlists or discarding outboxes. Stop the
+affected writer if necessary, diagnose retained intent/outcomes, and deploy a
+compatible fix. A failed pull leaves the prior complete state and cursor intact.
+Transient transport/authentication failures retain pending work; domain rejection
+requires an actionable correction/discard state rather than silent loss.
+
+No Temporal workflow sits on a playlist request path. As each domain ships, extend
+the account deletion implementation and restored-backup handling to cover its new
+rows. Record local implementation, local proof, published review and deployed
+qualification separately. No deployment or publication is authorized by this plan.
+
+## Surprises & Discoveries
+
+- The July mobile architecture calls creation online-only, while its implementation
+  plan permits provisional offline creation. This plan makes that choice explicit.
+- The queue already has durable occurrence/checkpoint behavior; reusing playlist
+  occurrence IDs would break its duplicate guarantees rather than provide them.
+- Neither a global availability clock nor comprehensive licensing enforcement is
+  implemented by the current v4 catalog reader. They require separate writer work.
+- Current catalog reads open their own repeatable-read session; playlist hydration
+  needs actual transaction enlistment to promise one consistent snapshot.
+
+## Decision Log
+
+- 2026-11-06, Alec: support only v4 clients and typed IDs; no older-client or
+  backwards-compatibility requirement for playlists.
+- 2026-11-06, Alec: retain User Service routes rather than moving playlists into
+  the anonymous catalog API.
+- 2026-11-06, review: preserve staged private/public/collaboration delivery,
+  explicit segments, distinct authored and queue occurrences, server ordering,
+  durable receipts, ordinary Realm catalog records and device-global downloads.
+  The review initially left product choices open for Alec.
+- 2026-11-06, Alec: accept offline creation, unresolved track references, authored
+  occurrence quota counting and mixed-recording ordered segments (decisions 1, 2,
+  4 and 5). Removal freshness (decision 3) remains open for explanation/discussion.
+
+## Outcomes & Retrospective
+
+The review produced a replacement implementation plan. No playlist code, migration,
+runtime configuration or deployment was changed. Record implementation results,
+accepted product decisions and measurements here as each delivery completes.
+
+## Review evidence
+
+The November 6 review read server checkout `4dbda9461` and mobile checkout
+`16f099e`, the current account/catalog contracts and queue/checkpoint code, and
+the later corrections in [Simplify v4 catalog plan](codex://threads/01a1ae23-aa4b-72a1-90d7-bf1441129995).
+The initial review was independently validated, then a fresh reader traced this
+replacement's success, mixed-result batch and offline recovery paths. That pass
+corrected segment-policy assumptions, quota replay wording and membership-grant
+binding. The old sync diagram was already correct; its ambiguous cursor prose
+was a documentation gap, not evidence of an implemented data-loss bug.

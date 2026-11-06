@@ -41,5 +41,6 @@ catalog remains anonymous, so account outages do not prevent browsing or playbac
 
 Use [local setup](../../local-dev/README.md#run-the-net-services) for dummy or real
 Google sign-in and the existing [smoke commands](../../RelistenUserService/SmokeTests/)
-for session checks. Broader playlist/history/Sonos proposals are future designs;
-they do not describe implemented account features.
+for session checks. The [playlist implementation plan](../plans/active/2026-11-06-v4-playlists.md)
+defines future playlists for v4 clients using typed IDs. Playlist/history/Sonos
+proposals do not describe implemented account features.
