@@ -1,0 +1,759 @@
+{
+  "beforeApplicationCommit": "a956703b9",
+  "afterApplicationCommit": "0cea17090",
+  "beforeSchemaMigration": 19,
+  "afterSchemaMigration": 20,
+  "policy": "Same existing local catalog; four serial requests per path/process, first sample separate. All before paths ran before restart/migration, all after paths afterwards; short timings are noisy and this is not a concurrent load test. Search excluded.",
+  "results": [
+    {
+      "name": "artist-shows",
+      "path": "/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/shows",
+      "samePayload": true,
+      "before": {
+        "firstMs": 660.3984169196337,
+        "samples": [
+          {
+            "ms": 660.3984169196337,
+            "status": 200,
+            "bytes": 5606852,
+            "payloadHash": "88603bdc5652a4a87275dca101ecefbfecfb708dfd4aa81de4a22969416ac708"
+          },
+          {
+            "ms": 401.8562079872936,
+            "status": 200,
+            "bytes": 5606852,
+            "payloadHash": "88603bdc5652a4a87275dca101ecefbfecfb708dfd4aa81de4a22969416ac708"
+          },
+          {
+            "ms": 335.9585830476135,
+            "status": 200,
+            "bytes": 5606852,
+            "payloadHash": "88603bdc5652a4a87275dca101ecefbfecfb708dfd4aa81de4a22969416ac708"
+          },
+          {
+            "ms": 292.8546671755612,
+            "status": 200,
+            "bytes": 5606852,
+            "payloadHash": "88603bdc5652a4a87275dca101ecefbfecfb708dfd4aa81de4a22969416ac708"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 335.9585830476135,
+        "warmRangeMs": [
+          292.8546671755612,
+          401.8562079872936
+        ]
+      },
+      "after": {
+        "firstMs": 303.929417161271,
+        "samples": [
+          {
+            "ms": 303.929417161271,
+            "status": 200,
+            "bytes": 5606852,
+            "payloadHash": "88603bdc5652a4a87275dca101ecefbfecfb708dfd4aa81de4a22969416ac708"
+          },
+          {
+            "ms": 214.15833407081664,
+            "status": 200,
+            "bytes": 5606852,
+            "payloadHash": "88603bdc5652a4a87275dca101ecefbfecfb708dfd4aa81de4a22969416ac708"
+          },
+          {
+            "ms": 217.88350003771484,
+            "status": 200,
+            "bytes": 5606852,
+            "payloadHash": "88603bdc5652a4a87275dca101ecefbfecfb708dfd4aa81de4a22969416ac708"
+          },
+          {
+            "ms": 179.48541697114706,
+            "status": 200,
+            "bytes": 5606852,
+            "payloadHash": "88603bdc5652a4a87275dca101ecefbfecfb708dfd4aa81de4a22969416ac708"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 214.15833407081664,
+        "warmRangeMs": [
+          179.48541697114706,
+          217.88350003771484
+        ]
+      }
+    },
+    {
+      "name": "recent-performed",
+      "path": "/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/shows/recently-performed?shows=25",
+      "samePayload": true,
+      "before": {
+        "firstMs": 69.64316708035767,
+        "samples": [
+          {
+            "ms": 69.64316708035767,
+            "status": 200,
+            "bytes": 68088,
+            "payloadHash": "4830baca2212186c35f1d7c7d681abe843d4730706e559320733b737fcb703c3"
+          },
+          {
+            "ms": 39.00062502361834,
+            "status": 200,
+            "bytes": 68088,
+            "payloadHash": "4830baca2212186c35f1d7c7d681abe843d4730706e559320733b737fcb703c3"
+          },
+          {
+            "ms": 37.51012496650219,
+            "status": 200,
+            "bytes": 68088,
+            "payloadHash": "4830baca2212186c35f1d7c7d681abe843d4730706e559320733b737fcb703c3"
+          },
+          {
+            "ms": 37.117334082722664,
+            "status": 200,
+            "bytes": 68088,
+            "payloadHash": "4830baca2212186c35f1d7c7d681abe843d4730706e559320733b737fcb703c3"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 37.51012496650219,
+        "warmRangeMs": [
+          37.117334082722664,
+          39.00062502361834
+        ]
+      },
+      "after": {
+        "firstMs": 57.59108392521739,
+        "samples": [
+          {
+            "ms": 57.59108392521739,
+            "status": 200,
+            "bytes": 68088,
+            "payloadHash": "4830baca2212186c35f1d7c7d681abe843d4730706e559320733b737fcb703c3"
+          },
+          {
+            "ms": 34.76841584779322,
+            "status": 200,
+            "bytes": 68088,
+            "payloadHash": "4830baca2212186c35f1d7c7d681abe843d4730706e559320733b737fcb703c3"
+          },
+          {
+            "ms": 32.08620799705386,
+            "status": 200,
+            "bytes": 68088,
+            "payloadHash": "4830baca2212186c35f1d7c7d681abe843d4730706e559320733b737fcb703c3"
+          },
+          {
+            "ms": 27.933540986850858,
+            "status": 200,
+            "bytes": 68088,
+            "payloadHash": "4830baca2212186c35f1d7c7d681abe843d4730706e559320733b737fcb703c3"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 32.08620799705386,
+        "warmRangeMs": [
+          27.933540986850858,
+          34.76841584779322
+        ]
+      }
+    },
+    {
+      "name": "recent-updated",
+      "path": "/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/shows/recently-updated?shows=25",
+      "samePayload": true,
+      "before": {
+        "firstMs": 35.23904108442366,
+        "samples": [
+          {
+            "ms": 35.23904108442366,
+            "status": 200,
+            "bytes": 67128,
+            "payloadHash": "a1b491840274409b22e57de0308fc35074876702e3aa36ed3041c9bdca0cd648"
+          },
+          {
+            "ms": 29.472124995663762,
+            "status": 200,
+            "bytes": 67128,
+            "payloadHash": "a1b491840274409b22e57de0308fc35074876702e3aa36ed3041c9bdca0cd648"
+          },
+          {
+            "ms": 29.64145806618035,
+            "status": 200,
+            "bytes": 67128,
+            "payloadHash": "a1b491840274409b22e57de0308fc35074876702e3aa36ed3041c9bdca0cd648"
+          },
+          {
+            "ms": 35.819208016619086,
+            "status": 200,
+            "bytes": 67128,
+            "payloadHash": "a1b491840274409b22e57de0308fc35074876702e3aa36ed3041c9bdca0cd648"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 29.64145806618035,
+        "warmRangeMs": [
+          29.472124995663762,
+          35.819208016619086
+        ]
+      },
+      "after": {
+        "firstMs": 31.291916966438293,
+        "samples": [
+          {
+            "ms": 31.291916966438293,
+            "status": 200,
+            "bytes": 67128,
+            "payloadHash": "a1b491840274409b22e57de0308fc35074876702e3aa36ed3041c9bdca0cd648"
+          },
+          {
+            "ms": 28.213833924382925,
+            "status": 200,
+            "bytes": 67128,
+            "payloadHash": "a1b491840274409b22e57de0308fc35074876702e3aa36ed3041c9bdca0cd648"
+          },
+          {
+            "ms": 35.275832982733846,
+            "status": 200,
+            "bytes": 67128,
+            "payloadHash": "a1b491840274409b22e57de0308fc35074876702e3aa36ed3041c9bdca0cd648"
+          },
+          {
+            "ms": 27.194542111828923,
+            "status": 200,
+            "bytes": 67128,
+            "payloadHash": "a1b491840274409b22e57de0308fc35074876702e3aa36ed3041c9bdca0cd648"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 28.213833924382925,
+        "warmRangeMs": [
+          27.194542111828923,
+          35.275832982733846
+        ]
+      }
+    },
+    {
+      "name": "top",
+      "path": "/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/shows/top?limit=25",
+      "samePayload": true,
+      "before": {
+        "firstMs": 30.086791142821312,
+        "samples": [
+          {
+            "ms": 30.086791142821312,
+            "status": 200,
+            "bytes": 67532,
+            "payloadHash": "076a83c1543b763c35f57cd0e210ad072d5f92afdf33e7d498c31cf3ab34a4d8"
+          },
+          {
+            "ms": 37.22245804965496,
+            "status": 200,
+            "bytes": 67532,
+            "payloadHash": "076a83c1543b763c35f57cd0e210ad072d5f92afdf33e7d498c31cf3ab34a4d8"
+          },
+          {
+            "ms": 24.310291977599263,
+            "status": 200,
+            "bytes": 67532,
+            "payloadHash": "076a83c1543b763c35f57cd0e210ad072d5f92afdf33e7d498c31cf3ab34a4d8"
+          },
+          {
+            "ms": 61.56200007535517,
+            "status": 200,
+            "bytes": 67532,
+            "payloadHash": "076a83c1543b763c35f57cd0e210ad072d5f92afdf33e7d498c31cf3ab34a4d8"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 37.22245804965496,
+        "warmRangeMs": [
+          24.310291977599263,
+          61.56200007535517
+        ]
+      },
+      "after": {
+        "firstMs": 30.239999992772937,
+        "samples": [
+          {
+            "ms": 30.239999992772937,
+            "status": 200,
+            "bytes": 67532,
+            "payloadHash": "076a83c1543b763c35f57cd0e210ad072d5f92afdf33e7d498c31cf3ab34a4d8"
+          },
+          {
+            "ms": 24.415332823991776,
+            "status": 200,
+            "bytes": 67532,
+            "payloadHash": "076a83c1543b763c35f57cd0e210ad072d5f92afdf33e7d498c31cf3ab34a4d8"
+          },
+          {
+            "ms": 25.13016597367823,
+            "status": 200,
+            "bytes": 67532,
+            "payloadHash": "076a83c1543b763c35f57cd0e210ad072d5f92afdf33e7d498c31cf3ab34a4d8"
+          },
+          {
+            "ms": 27.168750064447522,
+            "status": 200,
+            "bytes": 67532,
+            "payloadHash": "076a83c1543b763c35f57cd0e210ad072d5f92afdf33e7d498c31cf3ab34a4d8"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 25.13016597367823,
+        "warmRangeMs": [
+          24.415332823991776,
+          27.168750064447522
+        ]
+      }
+    },
+    {
+      "name": "anniversary",
+      "path": "/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/shows/on-date?month=12&day=31",
+      "samePayload": true,
+      "before": {
+        "firstMs": 13.67495791055262,
+        "samples": [
+          {
+            "ms": 13.67495791055262,
+            "status": 200,
+            "bytes": 60982,
+            "payloadHash": "5f435b69d988f0f4034fd171604b08aceb85658df48bb8ea2fb3abcffb21b119"
+          },
+          {
+            "ms": 11.911042034626007,
+            "status": 200,
+            "bytes": 60982,
+            "payloadHash": "5f435b69d988f0f4034fd171604b08aceb85658df48bb8ea2fb3abcffb21b119"
+          },
+          {
+            "ms": 11.690333019942045,
+            "status": 200,
+            "bytes": 60982,
+            "payloadHash": "5f435b69d988f0f4034fd171604b08aceb85658df48bb8ea2fb3abcffb21b119"
+          },
+          {
+            "ms": 12.478583957999945,
+            "status": 200,
+            "bytes": 60982,
+            "payloadHash": "5f435b69d988f0f4034fd171604b08aceb85658df48bb8ea2fb3abcffb21b119"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 11.911042034626007,
+        "warmRangeMs": [
+          11.690333019942045,
+          12.478583957999945
+        ]
+      },
+      "after": {
+        "firstMs": 23.101708153262734,
+        "samples": [
+          {
+            "ms": 23.101708153262734,
+            "status": 200,
+            "bytes": 60982,
+            "payloadHash": "5f435b69d988f0f4034fd171604b08aceb85658df48bb8ea2fb3abcffb21b119"
+          },
+          {
+            "ms": 16.46041590720415,
+            "status": 200,
+            "bytes": 60982,
+            "payloadHash": "5f435b69d988f0f4034fd171604b08aceb85658df48bb8ea2fb3abcffb21b119"
+          },
+          {
+            "ms": 18.260000040754676,
+            "status": 200,
+            "bytes": 60982,
+            "payloadHash": "5f435b69d988f0f4034fd171604b08aceb85658df48bb8ea2fb3abcffb21b119"
+          },
+          {
+            "ms": 14.744041953235865,
+            "status": 200,
+            "bytes": 60982,
+            "payloadHash": "5f435b69d988f0f4034fd171604b08aceb85658df48bb8ea2fb3abcffb21b119"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 16.46041590720415,
+        "warmRangeMs": [
+          14.744041953235865,
+          18.260000040754676
+        ]
+      }
+    },
+    {
+      "name": "artist-songs",
+      "path": "/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/songs",
+      "samePayload": true,
+      "before": {
+        "firstMs": 85.64012520946562,
+        "samples": [
+          {
+            "ms": 85.64012520946562,
+            "status": 200,
+            "bytes": 174363,
+            "payloadHash": "a62d89e89563569790c89144c174bc9fa9677f88156911c6314bc1700a167095"
+          },
+          {
+            "ms": 73.98233306594193,
+            "status": 200,
+            "bytes": 174363,
+            "payloadHash": "a62d89e89563569790c89144c174bc9fa9677f88156911c6314bc1700a167095"
+          },
+          {
+            "ms": 69.6496251039207,
+            "status": 200,
+            "bytes": 174363,
+            "payloadHash": "a62d89e89563569790c89144c174bc9fa9677f88156911c6314bc1700a167095"
+          },
+          {
+            "ms": 73.24899989180267,
+            "status": 200,
+            "bytes": 174363,
+            "payloadHash": "a62d89e89563569790c89144c174bc9fa9677f88156911c6314bc1700a167095"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 73.24899989180267,
+        "warmRangeMs": [
+          69.6496251039207,
+          73.98233306594193
+        ]
+      },
+      "after": {
+        "firstMs": 99.69254094175994,
+        "samples": [
+          {
+            "ms": 99.69254094175994,
+            "status": 200,
+            "bytes": 174363,
+            "payloadHash": "a62d89e89563569790c89144c174bc9fa9677f88156911c6314bc1700a167095"
+          },
+          {
+            "ms": 78.71354091912508,
+            "status": 200,
+            "bytes": 174363,
+            "payloadHash": "a62d89e89563569790c89144c174bc9fa9677f88156911c6314bc1700a167095"
+          },
+          {
+            "ms": 67.49558378942311,
+            "status": 200,
+            "bytes": 174363,
+            "payloadHash": "a62d89e89563569790c89144c174bc9fa9677f88156911c6314bc1700a167095"
+          },
+          {
+            "ms": 66.3050829898566,
+            "status": 200,
+            "bytes": 174363,
+            "payloadHash": "a62d89e89563569790c89144c174bc9fa9677f88156911c6314bc1700a167095"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 67.49558378942311,
+        "warmRangeMs": [
+          66.3050829898566,
+          78.71354091912508
+        ]
+      }
+    },
+    {
+      "name": "artist-venues",
+      "path": "/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/venues",
+      "samePayload": true,
+      "before": {
+        "firstMs": 76.12241618335247,
+        "samples": [
+          {
+            "ms": 76.12241618335247,
+            "status": 200,
+            "bytes": 336849,
+            "payloadHash": "e1bfb664c625bed1d91cd82b865f029b5d571fc8baeada4d95314b77f9e98215"
+          },
+          {
+            "ms": 36.58095886930823,
+            "status": 200,
+            "bytes": 336849,
+            "payloadHash": "e1bfb664c625bed1d91cd82b865f029b5d571fc8baeada4d95314b77f9e98215"
+          },
+          {
+            "ms": 35.33537499606609,
+            "status": 200,
+            "bytes": 336849,
+            "payloadHash": "e1bfb664c625bed1d91cd82b865f029b5d571fc8baeada4d95314b77f9e98215"
+          },
+          {
+            "ms": 35.147499991580844,
+            "status": 200,
+            "bytes": 336849,
+            "payloadHash": "e1bfb664c625bed1d91cd82b865f029b5d571fc8baeada4d95314b77f9e98215"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 35.33537499606609,
+        "warmRangeMs": [
+          35.147499991580844,
+          36.58095886930823
+        ]
+      },
+      "after": {
+        "firstMs": 33.82358397357166,
+        "samples": [
+          {
+            "ms": 33.82358397357166,
+            "status": 200,
+            "bytes": 336849,
+            "payloadHash": "e1bfb664c625bed1d91cd82b865f029b5d571fc8baeada4d95314b77f9e98215"
+          },
+          {
+            "ms": 25.4165418446064,
+            "status": 200,
+            "bytes": 336849,
+            "payloadHash": "e1bfb664c625bed1d91cd82b865f029b5d571fc8baeada4d95314b77f9e98215"
+          },
+          {
+            "ms": 24.49808386154473,
+            "status": 200,
+            "bytes": 336849,
+            "payloadHash": "e1bfb664c625bed1d91cd82b865f029b5d571fc8baeada4d95314b77f9e98215"
+          },
+          {
+            "ms": 24.4592500384897,
+            "status": 200,
+            "bytes": 336849,
+            "payloadHash": "e1bfb664c625bed1d91cd82b865f029b5d571fc8baeada4d95314b77f9e98215"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 24.49808386154473,
+        "warmRangeMs": [
+          24.4592500384897,
+          25.4165418446064
+        ]
+      }
+    },
+    {
+      "name": "venue-detail",
+      "path": "/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/venues/venue_yn1268r4",
+      "samePayload": true,
+      "before": {
+        "firstMs": 20.028874976560473,
+        "samples": [
+          {
+            "ms": 20.028874976560473,
+            "status": 200,
+            "bytes": 228453,
+            "payloadHash": "a4f2c30a8af04e7f1accd78dce4424ecad261257c21ee0fa1f671d599943d63e"
+          },
+          {
+            "ms": 24.997707922011614,
+            "status": 200,
+            "bytes": 228453,
+            "payloadHash": "a4f2c30a8af04e7f1accd78dce4424ecad261257c21ee0fa1f671d599943d63e"
+          },
+          {
+            "ms": 20.310624968260527,
+            "status": 200,
+            "bytes": 228453,
+            "payloadHash": "a4f2c30a8af04e7f1accd78dce4424ecad261257c21ee0fa1f671d599943d63e"
+          },
+          {
+            "ms": 22.141624940559268,
+            "status": 200,
+            "bytes": 228453,
+            "payloadHash": "a4f2c30a8af04e7f1accd78dce4424ecad261257c21ee0fa1f671d599943d63e"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 22.141624940559268,
+        "warmRangeMs": [
+          20.310624968260527,
+          24.997707922011614
+        ]
+      },
+      "after": {
+        "firstMs": 21.406499901786447,
+        "samples": [
+          {
+            "ms": 21.406499901786447,
+            "status": 200,
+            "bytes": 228453,
+            "payloadHash": "a4f2c30a8af04e7f1accd78dce4424ecad261257c21ee0fa1f671d599943d63e"
+          },
+          {
+            "ms": 15.644459053874016,
+            "status": 200,
+            "bytes": 228453,
+            "payloadHash": "a4f2c30a8af04e7f1accd78dce4424ecad261257c21ee0fa1f671d599943d63e"
+          },
+          {
+            "ms": 14.869750011712313,
+            "status": 200,
+            "bytes": 228453,
+            "payloadHash": "a4f2c30a8af04e7f1accd78dce4424ecad261257c21ee0fa1f671d599943d63e"
+          },
+          {
+            "ms": 15.021333936601877,
+            "status": 200,
+            "bytes": 228453,
+            "payloadHash": "a4f2c30a8af04e7f1accd78dce4424ecad261257c21ee0fa1f671d599943d63e"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 15.021333936601877,
+        "warmRangeMs": [
+          14.869750011712313,
+          15.644459053874016
+        ]
+      }
+    },
+    {
+      "name": "scarlet-song",
+      "path": "/api/v4/songs/song_62mhvjyd",
+      "samePayload": true,
+      "before": {
+        "firstMs": 216.7285420000553,
+        "samples": [
+          {
+            "ms": 216.7285420000553,
+            "status": 200,
+            "bytes": 961442,
+            "payloadHash": "21080bf25569031545d7ce84a307f60b97c817e98124bd33fbc632d849b1334a"
+          },
+          {
+            "ms": 111.07341619208455,
+            "status": 200,
+            "bytes": 961442,
+            "payloadHash": "21080bf25569031545d7ce84a307f60b97c817e98124bd33fbc632d849b1334a"
+          },
+          {
+            "ms": 96.3117079809308,
+            "status": 200,
+            "bytes": 961442,
+            "payloadHash": "21080bf25569031545d7ce84a307f60b97c817e98124bd33fbc632d849b1334a"
+          },
+          {
+            "ms": 92.67912502400577,
+            "status": 200,
+            "bytes": 961442,
+            "payloadHash": "21080bf25569031545d7ce84a307f60b97c817e98124bd33fbc632d849b1334a"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 96.3117079809308,
+        "warmRangeMs": [
+          92.67912502400577,
+          111.07341619208455
+        ]
+      },
+      "after": {
+        "firstMs": 103.58383320271969,
+        "samples": [
+          {
+            "ms": 103.58383320271969,
+            "status": 200,
+            "bytes": 961442,
+            "payloadHash": "21080bf25569031545d7ce84a307f60b97c817e98124bd33fbc632d849b1334a"
+          },
+          {
+            "ms": 140.44541609473526,
+            "status": 200,
+            "bytes": 961442,
+            "payloadHash": "21080bf25569031545d7ce84a307f60b97c817e98124bd33fbc632d849b1334a"
+          },
+          {
+            "ms": 99.24262505955994,
+            "status": 200,
+            "bytes": 961442,
+            "payloadHash": "21080bf25569031545d7ce84a307f60b97c817e98124bd33fbc632d849b1334a"
+          },
+          {
+            "ms": 82.88299990817904,
+            "status": 200,
+            "bytes": 961442,
+            "payloadHash": "21080bf25569031545d7ce84a307f60b97c817e98124bd33fbc632d849b1334a"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 99.24262505955994,
+        "warmRangeMs": [
+          82.88299990817904,
+          140.44541609473526
+        ]
+      }
+    },
+    {
+      "name": "scarlet-song-top",
+      "path": "/api/v4/songs/song_62mhvjyd?include_tracks=top",
+      "samePayload": true,
+      "before": {
+        "firstMs": 272.6110420189798,
+        "samples": [
+          {
+            "ms": 272.6110420189798,
+            "status": 200,
+            "bytes": 1072723,
+            "payloadHash": "a4aab5abf8d9b4ab9ca01001678a7a9eaba9bd37c44136afb3a848181cbc8522"
+          },
+          {
+            "ms": 187.71845800802112,
+            "status": 200,
+            "bytes": 1072723,
+            "payloadHash": "a4aab5abf8d9b4ab9ca01001678a7a9eaba9bd37c44136afb3a848181cbc8522"
+          },
+          {
+            "ms": 152.02595805749297,
+            "status": 200,
+            "bytes": 1072723,
+            "payloadHash": "a4aab5abf8d9b4ab9ca01001678a7a9eaba9bd37c44136afb3a848181cbc8522"
+          },
+          {
+            "ms": 141.46379195153713,
+            "status": 200,
+            "bytes": 1072723,
+            "payloadHash": "a4aab5abf8d9b4ab9ca01001678a7a9eaba9bd37c44136afb3a848181cbc8522"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 152.02595805749297,
+        "warmRangeMs": [
+          141.46379195153713,
+          187.71845800802112
+        ]
+      },
+      "after": {
+        "firstMs": 159.6050001680851,
+        "samples": [
+          {
+            "ms": 159.6050001680851,
+            "status": 200,
+            "bytes": 1072723,
+            "payloadHash": "a4aab5abf8d9b4ab9ca01001678a7a9eaba9bd37c44136afb3a848181cbc8522"
+          },
+          {
+            "ms": 145.1964578591287,
+            "status": 200,
+            "bytes": 1072723,
+            "payloadHash": "a4aab5abf8d9b4ab9ca01001678a7a9eaba9bd37c44136afb3a848181cbc8522"
+          },
+          {
+            "ms": 153.60166691243649,
+            "status": 200,
+            "bytes": 1072723,
+            "payloadHash": "a4aab5abf8d9b4ab9ca01001678a7a9eaba9bd37c44136afb3a848181cbc8522"
+          },
+          {
+            "ms": 148.78979208879173,
+            "status": 200,
+            "bytes": 1072723,
+            "payloadHash": "a4aab5abf8d9b4ab9ca01001678a7a9eaba9bd37c44136afb3a848181cbc8522"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 148.78979208879173,
+        "warmRangeMs": [
+          145.1964578591287,
+          153.60166691243649
+        ]
+      }
+    }
+  ]
+}

@@ -6,6 +6,12 @@ Measurements use the existing local catalog, approximately 216k shows and 5.1m
 tracks, with serial HTTP requests and one first plus three warm samples per case.
 These are local medians/ranges, not production percentiles.
 
+The later [exact dashboard profile](dashboard/README.md) finds another shared-reader
+improvement: the combined web query drops from 799 to 345 ms warm median by passing
+selected shows into song matching for statistics and nested tracks. That follow-up
+adds migration 20 and retains the existing matcher signatures. Results below
+describe the earlier qualification at `a6c302e12`.
+
 ## Verified result
 
 Application commit `a6c302e12` meets the plan's local targets using the existing
@@ -67,7 +73,8 @@ nine final EXPLAIN observations, separately from the HTTP samples:
 The artifact omits unexecuted plan branches. Parent buffer counts include children
 and must not be added. Show pages use first 25; nested track pages use first 20 per
 parent. Existing read-only snapshots, matching validity and per-parent limits are
-preserved. The optional scoped matching-function migration was unnecessary.
+preserved. This corpus did not require the optional scoped matching-function
+migration; the later dashboard profile above demonstrated where it helps.
 
 This qualifies the demonstrated owned/song/venue web corpus, complete recording
 reads and queue hydration locally. Arbitrary global track browsing, every possible

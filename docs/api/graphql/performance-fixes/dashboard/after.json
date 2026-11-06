@@ -1,0 +1,300 @@
+{
+  "applicationCommit": "0cea17090",
+  "schemaMigration": 20,
+  "query": "query.graphql",
+  "policy": "Five serial HTTP requests per pass; first sample separate. Initial pass follows process restart and local migration; repeat follows REST checks. SQL command timings can overlap and must not be added as wall time. Same real local catalog as before.",
+  "initial": [
+    {
+      "run": 0,
+      "elapsedMs": 2433.7220839224756,
+      "bytes": 44982,
+      "hash": "8ee7ddb90192b005c384456daa152cbc4330ba8d48aa36d4d1fdec12240feed8",
+      "commandCount": 91,
+      "commands": [
+        {
+          "milliseconds": 24,
+          "kind": "show membership"
+        },
+        {
+          "milliseconds": 61,
+          "kind": "song browse"
+        },
+        {
+          "milliseconds": 927,
+          "kind": "show membership"
+        },
+        {
+          "milliseconds": 248,
+          "kind": "timing statistics"
+        },
+        {
+          "milliseconds": 43,
+          "kind": "track membership"
+        }
+      ]
+    },
+    {
+      "run": 1,
+      "elapsedMs": 570.4172078985721,
+      "bytes": 44982,
+      "hash": "8ee7ddb90192b005c384456daa152cbc4330ba8d48aa36d4d1fdec12240feed8",
+      "commandCount": 73,
+      "commands": [
+        {
+          "milliseconds": 20,
+          "kind": "show membership"
+        },
+        {
+          "milliseconds": 370,
+          "kind": "show membership"
+        },
+        {
+          "milliseconds": 13,
+          "kind": "timing statistics"
+        },
+        {
+          "milliseconds": 54,
+          "kind": "song browse"
+        },
+        {
+          "milliseconds": 32,
+          "kind": "track membership"
+        }
+      ]
+    },
+    {
+      "run": 2,
+      "elapsedMs": 442.80245807021856,
+      "bytes": 44982,
+      "hash": "8ee7ddb90192b005c384456daa152cbc4330ba8d48aa36d4d1fdec12240feed8",
+      "commandCount": 73,
+      "commands": [
+        {
+          "milliseconds": 12,
+          "kind": "show membership"
+        },
+        {
+          "milliseconds": 57,
+          "kind": "song browse"
+        },
+        {
+          "milliseconds": 291,
+          "kind": "show membership"
+        },
+        {
+          "milliseconds": 11,
+          "kind": "timing statistics"
+        },
+        {
+          "milliseconds": 22,
+          "kind": "track membership"
+        }
+      ]
+    },
+    {
+      "run": 3,
+      "elapsedMs": 349.5854998473078,
+      "bytes": 44982,
+      "hash": "8ee7ddb90192b005c384456daa152cbc4330ba8d48aa36d4d1fdec12240feed8",
+      "commandCount": 73,
+      "commands": [
+        {
+          "milliseconds": 14,
+          "kind": "show membership"
+        },
+        {
+          "milliseconds": 215,
+          "kind": "show membership"
+        },
+        {
+          "milliseconds": 12,
+          "kind": "timing statistics"
+        },
+        {
+          "milliseconds": 53,
+          "kind": "song browse"
+        },
+        {
+          "milliseconds": 23,
+          "kind": "track membership"
+        }
+      ]
+    },
+    {
+      "run": 4,
+      "elapsedMs": 326.87804219312966,
+      "bytes": 44982,
+      "hash": "8ee7ddb90192b005c384456daa152cbc4330ba8d48aa36d4d1fdec12240feed8",
+      "commandCount": 73,
+      "commands": [
+        {
+          "milliseconds": 10,
+          "kind": "show membership"
+        },
+        {
+          "milliseconds": 54,
+          "kind": "song browse"
+        },
+        {
+          "milliseconds": 188,
+          "kind": "show membership"
+        },
+        {
+          "milliseconds": 12,
+          "kind": "timing statistics"
+        },
+        {
+          "milliseconds": 21,
+          "kind": "track membership"
+        }
+      ]
+    }
+  ],
+  "repeat": [
+    {
+      "run": 0,
+      "elapsedMs": 680.3735839203,
+      "bytes": 44982,
+      "hash": "8ee7ddb90192b005c384456daa152cbc4330ba8d48aa36d4d1fdec12240feed8",
+      "commandCount": 73,
+      "commands": [
+        {
+          "milliseconds": 30,
+          "kind": "show membership"
+        },
+        {
+          "milliseconds": 466,
+          "kind": "show membership"
+        },
+        {
+          "milliseconds": 24,
+          "kind": "timing statistics"
+        },
+        {
+          "milliseconds": 53,
+          "kind": "song browse"
+        },
+        {
+          "milliseconds": 28,
+          "kind": "track membership"
+        }
+      ]
+    },
+    {
+      "run": 1,
+      "elapsedMs": 452.1137080155313,
+      "bytes": 44982,
+      "hash": "8ee7ddb90192b005c384456daa152cbc4330ba8d48aa36d4d1fdec12240feed8",
+      "commandCount": 73,
+      "commands": [
+        {
+          "milliseconds": 13,
+          "kind": "show membership"
+        },
+        {
+          "milliseconds": 311,
+          "kind": "show membership"
+        },
+        {
+          "milliseconds": 10,
+          "kind": "timing statistics"
+        },
+        {
+          "milliseconds": 52,
+          "kind": "song browse"
+        },
+        {
+          "milliseconds": 26,
+          "kind": "track membership"
+        }
+      ]
+    },
+    {
+      "run": 2,
+      "elapsedMs": 324.1256671026349,
+      "bytes": 44982,
+      "hash": "8ee7ddb90192b005c384456daa152cbc4330ba8d48aa36d4d1fdec12240feed8",
+      "commandCount": 73,
+      "commands": [
+        {
+          "milliseconds": 12,
+          "kind": "show membership"
+        },
+        {
+          "milliseconds": 53,
+          "kind": "song browse"
+        },
+        {
+          "milliseconds": 187,
+          "kind": "show membership"
+        },
+        {
+          "milliseconds": 11,
+          "kind": "timing statistics"
+        },
+        {
+          "milliseconds": 23,
+          "kind": "track membership"
+        }
+      ]
+    },
+    {
+      "run": 3,
+      "elapsedMs": 356.00445908494294,
+      "bytes": 44982,
+      "hash": "8ee7ddb90192b005c384456daa152cbc4330ba8d48aa36d4d1fdec12240feed8",
+      "commandCount": 73,
+      "commands": [
+        {
+          "milliseconds": 9,
+          "kind": "show membership"
+        },
+        {
+          "milliseconds": 54,
+          "kind": "song browse"
+        },
+        {
+          "milliseconds": 210,
+          "kind": "show membership"
+        },
+        {
+          "milliseconds": 12,
+          "kind": "timing statistics"
+        },
+        {
+          "milliseconds": 20,
+          "kind": "track membership"
+        }
+      ]
+    },
+    {
+      "run": 4,
+      "elapsedMs": 334.8968750797212,
+      "bytes": 44982,
+      "hash": "8ee7ddb90192b005c384456daa152cbc4330ba8d48aa36d4d1fdec12240feed8",
+      "commandCount": 73,
+      "commands": [
+        {
+          "milliseconds": 10,
+          "kind": "show membership"
+        },
+        {
+          "milliseconds": 55,
+          "kind": "song browse"
+        },
+        {
+          "milliseconds": 195,
+          "kind": "show membership"
+        },
+        {
+          "milliseconds": 11,
+          "kind": "timing statistics"
+        },
+        {
+          "milliseconds": 21,
+          "kind": "track membership"
+        }
+      ]
+    }
+  ]
+}

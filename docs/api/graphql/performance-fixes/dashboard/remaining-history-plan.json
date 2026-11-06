@@ -1,0 +1,385 @@
+{
+  "applicationCommit": "0cea17090",
+  "schemaMigration": 20,
+  "query": "SELECT count(*) FROM norm.song_recording_matches('77a58ff9-2e01-c59c-b8eb-cff106049b72',ARRAY['song_pxnavq74']);",
+  "method": "Local read-only transaction; auto_explain with nested statements, analyze/buffers on, timing off. Captured the inner shared matcher plan. Only executed nodes retained; parent buffer counts include children and must not be added. This explains remaining work; use HTTP timings for latency.",
+  "matcherSql": "\n\n    -- Keep the complete artist map even for a single song: an invalid link in another\n    -- resolved part makes the whole file interpretation unavailable. Reverse traversal\n    -- from survivors excludes cycles and paths longer than the public 32-node limit.\n    WITH RECURSIVE song_map AS (\n        SELECT s.id,s.id canonical_id,ARRAY[s.id] path\n        FROM norm.songs s\n        WHERE s.artist_uuid=$1 AND s.merged_into IS NULL\n        UNION ALL\n        SELECT s.id,m.canonical_id,m.path || s.id\n        FROM song_map m JOIN norm.songs s ON s.merged_into=m.id\n        WHERE s.artist_uuid=$1 AND cardinality(m.path)<32\n          AND NOT s.id=ANY(m.path)\n    ), matched_parts AS (\n        SELECT m.canonical_id,t.uuid track_uuid,t.source_id,t.source_set_id,t.artist_id,t.track_position,ts.part\n        FROM song_map m JOIN norm.track_songs ts ON ts.song_id=m.id AND ts.resolved\n        JOIN public.source_tracks t ON t.uuid=ts.track_uuid AND NOT t.is_orphaned\n        WHERE $3 IS NULL AND ($2 IS NULL OR m.canonical_id=ANY($2))\n        UNION ALL\n        SELECT m.canonical_id,t.uuid track_uuid,t.source_id,t.source_set_id,t.artist_id,t.track_position,ts.part\n        FROM public.shows scope_show JOIN public.sources scope_source ON scope_source.show_id=scope_show.id\n        JOIN public.source_tracks t ON t.source_id=scope_source.id AND NOT t.is_orphaned\n        JOIN norm.track_songs ts ON ts.track_uuid=t.uuid AND ts.resolved\n        JOIN song_map m ON m.id=ts.song_id\n        WHERE $3 IS NOT NULL AND scope_show.uuid=ANY($3) AND ($2 IS NULL OR m.canonical_id=ANY($2))\n    ), candidate_files AS MATERIALIZED (\n        SELECT canonical_id,track_uuid,source_id,source_set_id,artist_id,track_position,\n               array_agg(part ORDER BY part) matching_part_ordinals\n        FROM matched_parts GROUP BY canonical_id,track_uuid,source_id,source_set_id,artist_id,track_position\n    ), invalid_files AS MATERIALIZED (\n        SELECT DISTINCT part.track_uuid\n        FROM norm.track_songs part\n        JOIN (SELECT DISTINCT track_uuid FROM candidate_files) c ON c.track_uuid=part.track_uuid\n        LEFT JOIN song_map m ON m.id=part.song_id\n        WHERE part.resolved AND part.song_id IS NOT NULL AND m.id IS NULL\n    )\n    SELECT c.canonical_id,c.track_uuid,sh.uuid,c.matching_part_ordinals,\n           sh.date,src.uuid,c.track_position\n    FROM candidate_files c\n    JOIN public.artists a ON a.id=c.artist_id AND a.uuid=$1\n    JOIN public.sources src ON src.id=c.source_id AND src.artist_id=c.artist_id\n    JOIN public.source_sets sets ON sets.id=c.source_set_id AND sets.source_id=src.id\n    JOIN public.shows sh ON sh.id=src.show_id AND sh.artist_id=c.artist_id\n    LEFT JOIN invalid_files invalid ON invalid.track_uuid=c.track_uuid\n    WHERE invalid.track_uuid IS NULL\n",
+  "executedNodes": [
+    {
+      "Node Type": "Nested Loop",
+      "Actual Rows": 16198,
+      "Actual Loops": 1,
+      "Shared Hit Blocks": 326652,
+      "Shared Read Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0
+    },
+    {
+      "Node Type": "Recursive Union",
+      "Actual Rows": 402,
+      "Actual Loops": 1,
+      "Shared Hit Blocks": 40,
+      "Shared Read Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0
+    },
+    {
+      "Node Type": "Bitmap Heap Scan",
+      "Relation Name": "songs",
+      "Actual Rows": 402,
+      "Actual Loops": 1,
+      "Shared Hit Blocks": 20,
+      "Shared Read Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0
+    },
+    {
+      "Node Type": "Bitmap Index Scan",
+      "Index Name": "songs_artist_uuid_idx",
+      "Actual Rows": 402,
+      "Actual Loops": 1,
+      "Shared Hit Blocks": 2,
+      "Shared Read Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0
+    },
+    {
+      "Node Type": "Hash Join",
+      "Actual Rows": 0,
+      "Actual Loops": 1,
+      "Shared Hit Blocks": 20,
+      "Shared Read Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0
+    },
+    {
+      "Node Type": "WorkTable Scan",
+      "CTE Name": "song_map",
+      "Actual Rows": 1,
+      "Actual Loops": 1,
+      "Shared Hit Blocks": 0,
+      "Shared Read Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0
+    },
+    {
+      "Node Type": "Hash",
+      "Actual Rows": 0,
+      "Actual Loops": 1,
+      "Shared Hit Blocks": 20,
+      "Shared Read Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0
+    },
+    {
+      "Node Type": "Bitmap Heap Scan",
+      "Relation Name": "songs",
+      "Actual Rows": 402,
+      "Actual Loops": 1,
+      "Shared Hit Blocks": 20,
+      "Shared Read Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0
+    },
+    {
+      "Node Type": "Bitmap Index Scan",
+      "Index Name": "songs_artist_uuid_idx",
+      "Actual Rows": 402,
+      "Actual Loops": 1,
+      "Shared Hit Blocks": 2,
+      "Shared Read Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0
+    },
+    {
+      "Node Type": "Aggregate",
+      "Actual Rows": 16198,
+      "Actual Loops": 1,
+      "Shared Hit Blocks": 66958,
+      "Shared Read Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0
+    },
+    {
+      "Node Type": "Sort",
+      "Actual Rows": 16213,
+      "Actual Loops": 1,
+      "Shared Hit Blocks": 66958,
+      "Shared Read Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0,
+      "Sort Method": "quicksort"
+    },
+    {
+      "Node Type": "Append",
+      "Actual Rows": 16213,
+      "Actual Loops": 1,
+      "Shared Hit Blocks": 66946,
+      "Shared Read Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0
+    },
+    {
+      "Node Type": "Result",
+      "Actual Rows": 16213,
+      "Actual Loops": 1,
+      "Shared Hit Blocks": 66946,
+      "Shared Read Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0
+    },
+    {
+      "Node Type": "Nested Loop",
+      "Actual Rows": 16213,
+      "Actual Loops": 1,
+      "Shared Hit Blocks": 66946,
+      "Shared Read Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0
+    },
+    {
+      "Node Type": "Nested Loop",
+      "Actual Rows": 16213,
+      "Actual Loops": 1,
+      "Shared Hit Blocks": 2094,
+      "Shared Read Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0
+    },
+    {
+      "Node Type": "CTE Scan",
+      "CTE Name": "song_map",
+      "Actual Rows": 1,
+      "Actual Loops": 1,
+      "Shared Hit Blocks": 40,
+      "Shared Read Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0
+    },
+    {
+      "Node Type": "Index Scan",
+      "Relation Name": "track_songs",
+      "Index Name": "track_songs_song_id_idx",
+      "Actual Rows": 16213,
+      "Actual Loops": 1,
+      "Shared Hit Blocks": 2054,
+      "Shared Read Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0
+    },
+    {
+      "Node Type": "Index Scan",
+      "Relation Name": "source_tracks",
+      "Index Name": "source_tracks_uuid_key",
+      "Actual Rows": 1,
+      "Actual Loops": 16213,
+      "Shared Hit Blocks": 64852,
+      "Shared Read Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0
+    },
+    {
+      "Node Type": "Result",
+      "Actual Rows": 0,
+      "Actual Loops": 1,
+      "Shared Hit Blocks": 0,
+      "Shared Read Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0
+    },
+    {
+      "Node Type": "Aggregate",
+      "Actual Rows": 0,
+      "Actual Loops": 1,
+      "Shared Hit Blocks": 65315,
+      "Shared Read Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0
+    },
+    {
+      "Node Type": "Hash Join",
+      "Actual Rows": 0,
+      "Actual Loops": 1,
+      "Shared Hit Blocks": 65315,
+      "Shared Read Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0
+    },
+    {
+      "Node Type": "Nested Loop",
+      "Actual Rows": 16820,
+      "Actual Loops": 1,
+      "Shared Hit Blocks": 65315,
+      "Shared Read Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0
+    },
+    {
+      "Node Type": "Aggregate",
+      "Actual Rows": 16198,
+      "Actual Loops": 1,
+      "Shared Hit Blocks": 0,
+      "Shared Read Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0
+    },
+    {
+      "Node Type": "CTE Scan",
+      "CTE Name": "candidate_files",
+      "Actual Rows": 16198,
+      "Actual Loops": 1,
+      "Shared Hit Blocks": 0,
+      "Shared Read Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0
+    },
+    {
+      "Node Type": "Index Scan",
+      "Relation Name": "track_songs",
+      "Index Name": "track_songs_pkey",
+      "Actual Rows": 1,
+      "Actual Loops": 16198,
+      "Shared Hit Blocks": 65315,
+      "Shared Read Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0
+    },
+    {
+      "Node Type": "Hash",
+      "Actual Rows": 402,
+      "Actual Loops": 1,
+      "Shared Hit Blocks": 0,
+      "Shared Read Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0
+    },
+    {
+      "Node Type": "CTE Scan",
+      "CTE Name": "song_map",
+      "Actual Rows": 402,
+      "Actual Loops": 1,
+      "Shared Hit Blocks": 0,
+      "Shared Read Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0
+    },
+    {
+      "Node Type": "Nested Loop",
+      "Actual Rows": 16198,
+      "Actual Loops": 1,
+      "Shared Hit Blocks": 261860,
+      "Shared Read Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0
+    },
+    {
+      "Node Type": "Nested Loop",
+      "Actual Rows": 16198,
+      "Actual Loops": 1,
+      "Shared Hit Blocks": 197068,
+      "Shared Read Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0
+    },
+    {
+      "Node Type": "Hash Join",
+      "Actual Rows": 16198,
+      "Actual Loops": 1,
+      "Shared Hit Blocks": 132276,
+      "Shared Read Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0
+    },
+    {
+      "Node Type": "CTE Scan",
+      "CTE Name": "invalid_files",
+      "Actual Rows": 0,
+      "Actual Loops": 1,
+      "Shared Hit Blocks": 65315,
+      "Shared Read Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0
+    },
+    {
+      "Node Type": "Hash",
+      "Actual Rows": 16198,
+      "Actual Loops": 1,
+      "Shared Hit Blocks": 66961,
+      "Shared Read Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0
+    },
+    {
+      "Node Type": "Hash Join",
+      "Actual Rows": 16198,
+      "Actual Loops": 1,
+      "Shared Hit Blocks": 66961,
+      "Shared Read Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0
+    },
+    {
+      "Node Type": "CTE Scan",
+      "CTE Name": "candidate_files",
+      "Actual Rows": 16198,
+      "Actual Loops": 1,
+      "Shared Hit Blocks": 66958,
+      "Shared Read Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0
+    },
+    {
+      "Node Type": "Hash",
+      "Actual Rows": 1,
+      "Actual Loops": 1,
+      "Shared Hit Blocks": 3,
+      "Shared Read Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0
+    },
+    {
+      "Node Type": "Index Scan",
+      "Relation Name": "artists",
+      "Index Name": "artists_uuid_key",
+      "Actual Rows": 1,
+      "Actual Loops": 1,
+      "Shared Hit Blocks": 3,
+      "Shared Read Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0
+    },
+    {
+      "Node Type": "Index Scan",
+      "Relation Name": "sources",
+      "Index Name": "sources_pkey",
+      "Actual Rows": 1,
+      "Actual Loops": 16198,
+      "Shared Hit Blocks": 64792,
+      "Shared Read Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0
+    },
+    {
+      "Node Type": "Index Scan",
+      "Relation Name": "source_sets",
+      "Index Name": "idx_source_sets_source_id",
+      "Actual Rows": 1,
+      "Actual Loops": 16198,
+      "Shared Hit Blocks": 64792,
+      "Shared Read Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0
+    },
+    {
+      "Node Type": "Index Scan",
+      "Relation Name": "shows",
+      "Index Name": "shows_pkey",
+      "Actual Rows": 1,
+      "Actual Loops": 16198,
+      "Shared Hit Blocks": 64792,
+      "Shared Read Blocks": 0,
+      "Temp Read Blocks": 0,
+      "Temp Written Blocks": 0
+    }
+  ]
+}

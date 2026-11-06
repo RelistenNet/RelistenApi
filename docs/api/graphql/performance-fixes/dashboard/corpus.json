@@ -1,0 +1,1280 @@
+{
+  "applicationCommit": "0cea17090",
+  "schemaMigration": 20,
+  "comparisonApplicationCommit": "a6c302e12",
+  "policy": "Existing real local catalog; four serial requests per case, first separate. Same variables and operation-cost reporting as original corpus; search measured for response compatibility only.",
+  "graph": [
+    {
+      "name": "artist-navigation",
+      "firstMs": 200.95995906740427,
+      "samples": [
+        {
+          "ms": 200.95995906740427,
+          "status": 200,
+          "bytes": 13568,
+          "cost": {
+            "fieldCost": 171,
+            "typeCost": 283
+          },
+          "payloadHash": "0f28fb3f966fc009f398729e560be3a1d699dc80847c2609cc26c4ec663e6dda"
+        },
+        {
+          "ms": 84.05766682699323,
+          "status": 200,
+          "bytes": 13568,
+          "cost": {
+            "fieldCost": 171,
+            "typeCost": 283
+          },
+          "payloadHash": "0f28fb3f966fc009f398729e560be3a1d699dc80847c2609cc26c4ec663e6dda"
+        },
+        {
+          "ms": 84.93529190309346,
+          "status": 200,
+          "bytes": 13568,
+          "cost": {
+            "fieldCost": 171,
+            "typeCost": 283
+          },
+          "payloadHash": "0f28fb3f966fc009f398729e560be3a1d699dc80847c2609cc26c4ec663e6dda"
+        },
+        {
+          "ms": 85.18000016920269,
+          "status": 200,
+          "bytes": 13568,
+          "cost": {
+            "fieldCost": 171,
+            "typeCost": 283
+          },
+          "payloadHash": "0f28fb3f966fc009f398729e560be3a1d699dc80847c2609cc26c4ec663e6dda"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 84.93529190309346,
+      "warmRangeMs": [
+        84.05766682699323,
+        85.18000016920269
+      ],
+      "samePayload": true,
+      "document": "artist-navigation.graphql",
+      "variablesFrom": "../before.json graph entry with this name"
+    },
+    {
+      "name": "artist-shows",
+      "firstMs": 51.242166897282004,
+      "samples": [
+        {
+          "ms": 51.242166897282004,
+          "status": 200,
+          "bytes": 3922,
+          "cost": {
+            "fieldCost": 22,
+            "typeCost": 29
+          },
+          "payloadHash": "4a00bf473789467089f10f3ae3f199640e8ffaa7d8540cf75aac03c63516440e"
+        },
+        {
+          "ms": 31.172666000202298,
+          "status": 200,
+          "bytes": 3922,
+          "cost": {
+            "fieldCost": 22,
+            "typeCost": 29
+          },
+          "payloadHash": "4a00bf473789467089f10f3ae3f199640e8ffaa7d8540cf75aac03c63516440e"
+        },
+        {
+          "ms": 33.192459028214216,
+          "status": 200,
+          "bytes": 3922,
+          "cost": {
+            "fieldCost": 22,
+            "typeCost": 29
+          },
+          "payloadHash": "4a00bf473789467089f10f3ae3f199640e8ffaa7d8540cf75aac03c63516440e"
+        },
+        {
+          "ms": 31.81691700592637,
+          "status": 200,
+          "bytes": 3922,
+          "cost": {
+            "fieldCost": 22,
+            "typeCost": 29
+          },
+          "payloadHash": "4a00bf473789467089f10f3ae3f199640e8ffaa7d8540cf75aac03c63516440e"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 31.81691700592637,
+      "warmRangeMs": [
+        31.172666000202298,
+        33.192459028214216
+      ],
+      "samePayload": true,
+      "document": "artist-shows.graphql",
+      "variablesFrom": "../before.json graph entry with this name"
+    },
+    {
+      "name": "artist-shows-count",
+      "firstMs": 36.06775007210672,
+      "samples": [
+        {
+          "ms": 36.06775007210672,
+          "status": 200,
+          "bytes": 3940,
+          "cost": {
+            "fieldCost": 32,
+            "typeCost": 29
+          },
+          "payloadHash": "b079d9e2d7a97fa25be22da9eaefe83ce183eaa82cea879b4512611b1d011f21"
+        },
+        {
+          "ms": 33.46354211680591,
+          "status": 200,
+          "bytes": 3940,
+          "cost": {
+            "fieldCost": 32,
+            "typeCost": 29
+          },
+          "payloadHash": "b079d9e2d7a97fa25be22da9eaefe83ce183eaa82cea879b4512611b1d011f21"
+        },
+        {
+          "ms": 35.64650006592274,
+          "status": 200,
+          "bytes": 3940,
+          "cost": {
+            "fieldCost": 32,
+            "typeCost": 29
+          },
+          "payloadHash": "b079d9e2d7a97fa25be22da9eaefe83ce183eaa82cea879b4512611b1d011f21"
+        },
+        {
+          "ms": 33.03954214788973,
+          "status": 200,
+          "bytes": 3940,
+          "cost": {
+            "fieldCost": 32,
+            "typeCost": 29
+          },
+          "payloadHash": "b079d9e2d7a97fa25be22da9eaefe83ce183eaa82cea879b4512611b1d011f21"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 33.46354211680591,
+      "warmRangeMs": [
+        33.03954214788973,
+        35.64650006592274
+      ],
+      "samePayload": true,
+      "document": "artist-shows.graphql",
+      "variablesFrom": "../before.json graph entry with this name"
+    },
+    {
+      "name": "song-metadata",
+      "firstMs": 9.454165818169713,
+      "samples": [
+        {
+          "ms": 9.454165818169713,
+          "status": 200,
+          "bytes": 359,
+          "cost": {
+            "fieldCost": 20,
+            "typeCost": 3
+          },
+          "payloadHash": "0375eefdd3082d36a115080e633d4b0e2ce4357489727e20b9e4ad3efb426caf"
+        },
+        {
+          "ms": 8.040790911763906,
+          "status": 200,
+          "bytes": 359,
+          "cost": {
+            "fieldCost": 20,
+            "typeCost": 3
+          },
+          "payloadHash": "0375eefdd3082d36a115080e633d4b0e2ce4357489727e20b9e4ad3efb426caf"
+        },
+        {
+          "ms": 8.67820787243545,
+          "status": 200,
+          "bytes": 359,
+          "cost": {
+            "fieldCost": 20,
+            "typeCost": 3
+          },
+          "payloadHash": "0375eefdd3082d36a115080e633d4b0e2ce4357489727e20b9e4ad3efb426caf"
+        },
+        {
+          "ms": 9.495083009824157,
+          "status": 200,
+          "bytes": 359,
+          "cost": {
+            "fieldCost": 20,
+            "typeCost": 3
+          },
+          "payloadHash": "0375eefdd3082d36a115080e633d4b0e2ce4357489727e20b9e4ad3efb426caf"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 8.67820787243545,
+      "warmRangeMs": [
+        8.040790911763906,
+        9.495083009824157
+      ],
+      "samePayload": true,
+      "document": "song-metadata.graphql",
+      "variablesFrom": "../before.json graph entry with this name"
+    },
+    {
+      "name": "scarlet-rows-25",
+      "firstMs": 145.97095805220306,
+      "samples": [
+        {
+          "ms": 145.97095805220306,
+          "status": 200,
+          "bytes": 10057,
+          "cost": {
+            "fieldCost": 197,
+            "typeCost": 204
+          },
+          "payloadHash": "0579065c30df1c8a5594c04e88c23db2904494782881bc602706651834a29b24"
+        },
+        {
+          "ms": 88.89649994671345,
+          "status": 200,
+          "bytes": 10057,
+          "cost": {
+            "fieldCost": 197,
+            "typeCost": 204
+          },
+          "payloadHash": "0579065c30df1c8a5594c04e88c23db2904494782881bc602706651834a29b24"
+        },
+        {
+          "ms": 67.25687487050891,
+          "status": 200,
+          "bytes": 10057,
+          "cost": {
+            "fieldCost": 197,
+            "typeCost": 204
+          },
+          "payloadHash": "0579065c30df1c8a5594c04e88c23db2904494782881bc602706651834a29b24"
+        },
+        {
+          "ms": 118.14616690389812,
+          "status": 200,
+          "bytes": 10057,
+          "cost": {
+            "fieldCost": 197,
+            "typeCost": 204
+          },
+          "payloadHash": "0579065c30df1c8a5594c04e88c23db2904494782881bc602706651834a29b24"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 88.89649994671345,
+      "warmRangeMs": [
+        67.25687487050891,
+        118.14616690389812
+      ],
+      "samePayload": true,
+      "document": "song-history-rows.graphql",
+      "variablesFrom": "../before.json graph entry with this name"
+    },
+    {
+      "name": "scarlet-rows-count-25",
+      "firstMs": 127.58537498302758,
+      "samples": [
+        {
+          "ms": 127.58537498302758,
+          "status": 200,
+          "bytes": 10074,
+          "cost": {
+            "fieldCost": 207,
+            "typeCost": 204
+          },
+          "payloadHash": "0524a8e0e7d73f0b27bc716a2fd316dce5402dc0c88d707d8855c5c356c1574b"
+        },
+        {
+          "ms": 131.61020795814693,
+          "status": 200,
+          "bytes": 10074,
+          "cost": {
+            "fieldCost": 207,
+            "typeCost": 204
+          },
+          "payloadHash": "0524a8e0e7d73f0b27bc716a2fd316dce5402dc0c88d707d8855c5c356c1574b"
+        },
+        {
+          "ms": 140.08341589942575,
+          "status": 200,
+          "bytes": 10074,
+          "cost": {
+            "fieldCost": 207,
+            "typeCost": 204
+          },
+          "payloadHash": "0524a8e0e7d73f0b27bc716a2fd316dce5402dc0c88d707d8855c5c356c1574b"
+        },
+        {
+          "ms": 143.1859170552343,
+          "status": 200,
+          "bytes": 10074,
+          "cost": {
+            "fieldCost": 207,
+            "typeCost": 204
+          },
+          "payloadHash": "0524a8e0e7d73f0b27bc716a2fd316dce5402dc0c88d707d8855c5c356c1574b"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 140.08341589942575,
+      "warmRangeMs": [
+        131.61020795814693,
+        143.1859170552343
+      ],
+      "samePayload": true,
+      "document": "song-history-rows.graphql",
+      "variablesFrom": "../before.json graph entry with this name"
+    },
+    {
+      "name": "scarlet-timings-25",
+      "firstMs": 396.70733409002423,
+      "samples": [
+        {
+          "ms": 396.70733409002423,
+          "status": 200,
+          "bytes": 5174,
+          "cost": {
+            "fieldCost": 122,
+            "typeCost": 129
+          },
+          "payloadHash": "1704d2c950549709a3cafce45b3b95daed45e81ba298d9006641f24e7b052f4c"
+        },
+        {
+          "ms": 186.62816612049937,
+          "status": 200,
+          "bytes": 5174,
+          "cost": {
+            "fieldCost": 122,
+            "typeCost": 129
+          },
+          "payloadHash": "1704d2c950549709a3cafce45b3b95daed45e81ba298d9006641f24e7b052f4c"
+        },
+        {
+          "ms": 135.76437486335635,
+          "status": 200,
+          "bytes": 5174,
+          "cost": {
+            "fieldCost": 122,
+            "typeCost": 129
+          },
+          "payloadHash": "1704d2c950549709a3cafce45b3b95daed45e81ba298d9006641f24e7b052f4c"
+        },
+        {
+          "ms": 127.14120792225003,
+          "status": 200,
+          "bytes": 5174,
+          "cost": {
+            "fieldCost": 122,
+            "typeCost": 129
+          },
+          "payloadHash": "1704d2c950549709a3cafce45b3b95daed45e81ba298d9006641f24e7b052f4c"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 135.76437486335635,
+      "warmRangeMs": [
+        127.14120792225003,
+        186.62816612049937
+      ],
+      "samePayload": true,
+      "document": "song-history-timings.graphql",
+      "variablesFrom": "../before.json graph entry with this name"
+    },
+    {
+      "name": "scarlet-playback-1",
+      "firstMs": 188.22058383375406,
+      "samples": [
+        {
+          "ms": 188.22058383375406,
+          "status": 200,
+          "bytes": 2014,
+          "cost": {
+            "fieldCost": 374,
+            "typeCost": 238
+          },
+          "payloadHash": "7cd7b209376622f689a0bdf8f319e968372c1927e36a43f176f6b4345e898967"
+        },
+        {
+          "ms": 164.37254194170237,
+          "status": 200,
+          "bytes": 2014,
+          "cost": {
+            "fieldCost": 374,
+            "typeCost": 238
+          },
+          "payloadHash": "7cd7b209376622f689a0bdf8f319e968372c1927e36a43f176f6b4345e898967"
+        },
+        {
+          "ms": 153.99691578932106,
+          "status": 200,
+          "bytes": 2014,
+          "cost": {
+            "fieldCost": 374,
+            "typeCost": 238
+          },
+          "payloadHash": "7cd7b209376622f689a0bdf8f319e968372c1927e36a43f176f6b4345e898967"
+        },
+        {
+          "ms": 107.0116669870913,
+          "status": 200,
+          "bytes": 2014,
+          "cost": {
+            "fieldCost": 374,
+            "typeCost": 238
+          },
+          "payloadHash": "7cd7b209376622f689a0bdf8f319e968372c1927e36a43f176f6b4345e898967"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 153.99691578932106,
+      "warmRangeMs": [
+        107.0116669870913,
+        164.37254194170237
+      ],
+      "samePayload": true,
+      "document": "song-history-playback.graphql",
+      "variablesFrom": "../before.json graph entry with this name"
+    },
+    {
+      "name": "scarlet-playback-10",
+      "firstMs": 144.10641696304083,
+      "samples": [
+        {
+          "ms": 144.10641696304083,
+          "status": 200,
+          "bytes": 14325,
+          "cost": {
+            "fieldCost": 3452,
+            "typeCost": 2335
+          },
+          "payloadHash": "86d21d19ab34667f02c786efa2054819dd3720100289bbca6c2e8b62a99de1bb"
+        },
+        {
+          "ms": 163.34412503056228,
+          "status": 200,
+          "bytes": 14325,
+          "cost": {
+            "fieldCost": 3452,
+            "typeCost": 2335
+          },
+          "payloadHash": "86d21d19ab34667f02c786efa2054819dd3720100289bbca6c2e8b62a99de1bb"
+        },
+        {
+          "ms": 238.83762513287365,
+          "status": 200,
+          "bytes": 14325,
+          "cost": {
+            "fieldCost": 3452,
+            "typeCost": 2335
+          },
+          "payloadHash": "86d21d19ab34667f02c786efa2054819dd3720100289bbca6c2e8b62a99de1bb"
+        },
+        {
+          "ms": 127.28445907123387,
+          "status": 200,
+          "bytes": 14325,
+          "cost": {
+            "fieldCost": 3452,
+            "typeCost": 2335
+          },
+          "payloadHash": "86d21d19ab34667f02c786efa2054819dd3720100289bbca6c2e8b62a99de1bb"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 163.34412503056228,
+      "warmRangeMs": [
+        127.28445907123387,
+        238.83762513287365
+      ],
+      "samePayload": true,
+      "document": "song-history-playback.graphql",
+      "variablesFrom": "../before.json graph entry with this name"
+    },
+    {
+      "name": "scarlet-playback-25",
+      "firstMs": 135.84829191677272,
+      "samples": [
+        {
+          "ms": 135.84829191677272,
+          "status": 200,
+          "bytes": 34926,
+          "cost": {
+            "fieldCost": 8582,
+            "typeCost": 5830
+          },
+          "payloadHash": "5047cc2d0deb1edf61b4d75ec5155db2fb5cc3577076f704e63e8170f4920652"
+        },
+        {
+          "ms": 140.54983295500278,
+          "status": 200,
+          "bytes": 34926,
+          "cost": {
+            "fieldCost": 8582,
+            "typeCost": 5830
+          },
+          "payloadHash": "5047cc2d0deb1edf61b4d75ec5155db2fb5cc3577076f704e63e8170f4920652"
+        },
+        {
+          "ms": 116.63491697981954,
+          "status": 200,
+          "bytes": 34926,
+          "cost": {
+            "fieldCost": 8582,
+            "typeCost": 5830
+          },
+          "payloadHash": "5047cc2d0deb1edf61b4d75ec5155db2fb5cc3577076f704e63e8170f4920652"
+        },
+        {
+          "ms": 126.47391599602997,
+          "status": 200,
+          "bytes": 34926,
+          "cost": {
+            "fieldCost": 8582,
+            "typeCost": 5830
+          },
+          "payloadHash": "5047cc2d0deb1edf61b4d75ec5155db2fb5cc3577076f704e63e8170f4920652"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 126.47391599602997,
+      "warmRangeMs": [
+        116.63491697981954,
+        140.54983295500278
+      ],
+      "samePayload": true,
+      "document": "song-history-playback.graphql",
+      "variablesFrom": "../before.json graph entry with this name"
+    },
+    {
+      "name": "drums-rows-25",
+      "firstMs": 232.7687090728432,
+      "samples": [
+        {
+          "ms": 232.7687090728432,
+          "status": 200,
+          "bytes": 10149,
+          "cost": {
+            "fieldCost": 197,
+            "typeCost": 204
+          },
+          "payloadHash": "e728007a9b50ed4e5f69170552574db83456d1235f6365c1274cf8be2864d0a2"
+        },
+        {
+          "ms": 195.74241689406335,
+          "status": 200,
+          "bytes": 10149,
+          "cost": {
+            "fieldCost": 197,
+            "typeCost": 204
+          },
+          "payloadHash": "e728007a9b50ed4e5f69170552574db83456d1235f6365c1274cf8be2864d0a2"
+        },
+        {
+          "ms": 182.74191697128117,
+          "status": 200,
+          "bytes": 10149,
+          "cost": {
+            "fieldCost": 197,
+            "typeCost": 204
+          },
+          "payloadHash": "e728007a9b50ed4e5f69170552574db83456d1235f6365c1274cf8be2864d0a2"
+        },
+        {
+          "ms": 198.5435001552105,
+          "status": 200,
+          "bytes": 10149,
+          "cost": {
+            "fieldCost": 197,
+            "typeCost": 204
+          },
+          "payloadHash": "e728007a9b50ed4e5f69170552574db83456d1235f6365c1274cf8be2864d0a2"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 195.74241689406335,
+      "warmRangeMs": [
+        182.74191697128117,
+        198.5435001552105
+      ],
+      "samePayload": true,
+      "document": "song-history-rows.graphql",
+      "variablesFrom": "../before.json graph entry with this name"
+    },
+    {
+      "name": "drums-playback-25",
+      "firstMs": 545.9374999627471,
+      "samples": [
+        {
+          "ms": 545.9374999627471,
+          "status": 200,
+          "bytes": 35461,
+          "cost": {
+            "fieldCost": 8582,
+            "typeCost": 5830
+          },
+          "payloadHash": "6f4776c1ddadea603f8e7f6d511d9d6293428dd74db08dddcd19e47ef62fe52e"
+        },
+        {
+          "ms": 324.4838749524206,
+          "status": 200,
+          "bytes": 35461,
+          "cost": {
+            "fieldCost": 8582,
+            "typeCost": 5830
+          },
+          "payloadHash": "6f4776c1ddadea603f8e7f6d511d9d6293428dd74db08dddcd19e47ef62fe52e"
+        },
+        {
+          "ms": 305.08141592144966,
+          "status": 200,
+          "bytes": 35461,
+          "cost": {
+            "fieldCost": 8582,
+            "typeCost": 5830
+          },
+          "payloadHash": "6f4776c1ddadea603f8e7f6d511d9d6293428dd74db08dddcd19e47ef62fe52e"
+        },
+        {
+          "ms": 263.4014158975333,
+          "status": 200,
+          "bytes": 35461,
+          "cost": {
+            "fieldCost": 8582,
+            "typeCost": 5830
+          },
+          "payloadHash": "6f4776c1ddadea603f8e7f6d511d9d6293428dd74db08dddcd19e47ef62fe52e"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 305.08141592144966,
+      "warmRangeMs": [
+        263.4014158975333,
+        324.4838749524206
+      ],
+      "samePayload": true,
+      "document": "song-history-playback.graphql",
+      "variablesFrom": "../before.json graph entry with this name"
+    },
+    {
+      "name": "tweezer-reprise-playback-25",
+      "firstMs": 455.47762513160706,
+      "samples": [
+        {
+          "ms": 455.47762513160706,
+          "status": 200,
+          "bytes": 34367,
+          "cost": {
+            "fieldCost": 8582,
+            "typeCost": 5830
+          },
+          "payloadHash": "69f74ace210cbdc3b7ccccef0a2026385880d39335e5cb0222eb800c6521ddb3"
+        },
+        {
+          "ms": 70.37804089486599,
+          "status": 200,
+          "bytes": 34367,
+          "cost": {
+            "fieldCost": 8582,
+            "typeCost": 5830
+          },
+          "payloadHash": "69f74ace210cbdc3b7ccccef0a2026385880d39335e5cb0222eb800c6521ddb3"
+        },
+        {
+          "ms": 54.36258390545845,
+          "status": 200,
+          "bytes": 34367,
+          "cost": {
+            "fieldCost": 8582,
+            "typeCost": 5830
+          },
+          "payloadHash": "69f74ace210cbdc3b7ccccef0a2026385880d39335e5cb0222eb800c6521ddb3"
+        },
+        {
+          "ms": 52.92687495239079,
+          "status": 200,
+          "bytes": 34367,
+          "cost": {
+            "fieldCost": 8582,
+            "typeCost": 5830
+          },
+          "payloadHash": "69f74ace210cbdc3b7ccccef0a2026385880d39335e5cb0222eb800c6521ddb3"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 54.36258390545845,
+      "warmRangeMs": [
+        52.92687495239079,
+        70.37804089486599
+      ],
+      "samePayload": true,
+      "document": "song-history-playback.graphql",
+      "variablesFrom": "../before.json graph entry with this name"
+    },
+    {
+      "name": "song-source-comparison",
+      "firstMs": 118.6717078089714,
+      "samples": [
+        {
+          "ms": 118.6717078089714,
+          "status": 200,
+          "bytes": 9289,
+          "cost": {
+            "fieldCost": 535,
+            "typeCost": 107
+          },
+          "payloadHash": "d9c467bbc74a6645997200c396cd98037f07b0d290c8d75c5cf17e34d72c564c"
+        },
+        {
+          "ms": 71.8007090035826,
+          "status": 200,
+          "bytes": 9289,
+          "cost": {
+            "fieldCost": 535,
+            "typeCost": 107
+          },
+          "payloadHash": "d9c467bbc74a6645997200c396cd98037f07b0d290c8d75c5cf17e34d72c564c"
+        },
+        {
+          "ms": 81.18679211474955,
+          "status": 200,
+          "bytes": 9289,
+          "cost": {
+            "fieldCost": 535,
+            "typeCost": 107
+          },
+          "payloadHash": "d9c467bbc74a6645997200c396cd98037f07b0d290c8d75c5cf17e34d72c564c"
+        },
+        {
+          "ms": 62.81283404678106,
+          "status": 200,
+          "bytes": 9289,
+          "cost": {
+            "fieldCost": 535,
+            "typeCost": 107
+          },
+          "payloadHash": "d9c467bbc74a6645997200c396cd98037f07b0d290c8d75c5cf17e34d72c564c"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 71.8007090035826,
+      "warmRangeMs": [
+        62.81283404678106,
+        81.18679211474955
+      ],
+      "samePayload": true,
+      "document": "song-source-comparison.graphql",
+      "variablesFrom": "../before.json graph entry with this name"
+    },
+    {
+      "name": "venue-history-25",
+      "firstMs": 30.54129215888679,
+      "samples": [
+        {
+          "ms": 30.54129215888679,
+          "status": 200,
+          "bytes": 7187,
+          "cost": {
+            "fieldCost": 348,
+            "typeCost": 130
+          },
+          "payloadHash": "583e512a35b6e275af95101c9622d8a06a44062f9cb3716fb034d48a18e3b48f"
+        },
+        {
+          "ms": 28.105041943490505,
+          "status": 200,
+          "bytes": 7187,
+          "cost": {
+            "fieldCost": 348,
+            "typeCost": 130
+          },
+          "payloadHash": "583e512a35b6e275af95101c9622d8a06a44062f9cb3716fb034d48a18e3b48f"
+        },
+        {
+          "ms": 26.462458074092865,
+          "status": 200,
+          "bytes": 7187,
+          "cost": {
+            "fieldCost": 348,
+            "typeCost": 130
+          },
+          "payloadHash": "583e512a35b6e275af95101c9622d8a06a44062f9cb3716fb034d48a18e3b48f"
+        },
+        {
+          "ms": 26.603416772559285,
+          "status": 200,
+          "bytes": 7187,
+          "cost": {
+            "fieldCost": 348,
+            "typeCost": 130
+          },
+          "payloadHash": "583e512a35b6e275af95101c9622d8a06a44062f9cb3716fb034d48a18e3b48f"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 26.603416772559285,
+      "warmRangeMs": [
+        26.462458074092865,
+        28.105041943490505
+      ],
+      "samePayload": true,
+      "document": "venue-history.graphql",
+      "variablesFrom": "../before.json graph entry with this name"
+    },
+    {
+      "name": "venue-history-filtered",
+      "firstMs": 25.54624993354082,
+      "samples": [
+        {
+          "ms": 25.54624993354082,
+          "status": 200,
+          "bytes": 1532,
+          "cost": {
+            "fieldCost": 34,
+            "typeCost": 30
+          },
+          "payloadHash": "6bcbf0f9e21b6bb3e6b2340148cfce4040a8121ce714ee8516a83eb736428e50"
+        },
+        {
+          "ms": 21.93370903842151,
+          "status": 200,
+          "bytes": 1532,
+          "cost": {
+            "fieldCost": 34,
+            "typeCost": 30
+          },
+          "payloadHash": "6bcbf0f9e21b6bb3e6b2340148cfce4040a8121ce714ee8516a83eb736428e50"
+        },
+        {
+          "ms": 24.785208981484175,
+          "status": 200,
+          "bytes": 1532,
+          "cost": {
+            "fieldCost": 34,
+            "typeCost": 30
+          },
+          "payloadHash": "6bcbf0f9e21b6bb3e6b2340148cfce4040a8121ce714ee8516a83eb736428e50"
+        },
+        {
+          "ms": 23.414749884977937,
+          "status": 200,
+          "bytes": 1532,
+          "cost": {
+            "fieldCost": 34,
+            "typeCost": 30
+          },
+          "payloadHash": "6bcbf0f9e21b6bb3e6b2340148cfce4040a8121ce714ee8516a83eb736428e50"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 23.414749884977937,
+      "warmRangeMs": [
+        21.93370903842151,
+        24.785208981484175
+      ],
+      "samePayload": true,
+      "document": "venue-history-filtered.graphql",
+      "variablesFrom": "../before.json graph entry with this name"
+    },
+    {
+      "name": "recording-playback",
+      "firstMs": 41.7655841447413,
+      "samples": [
+        {
+          "ms": 41.7655841447413,
+          "status": 200,
+          "bytes": 10101,
+          "cost": {
+            "fieldCost": 1281,
+            "typeCost": 2009
+          },
+          "payloadHash": "ed884f47505bef1484888713679e1f3bd44391df41bdd924cb1a2fe6995ebf44"
+        },
+        {
+          "ms": 23.61920801922679,
+          "status": 200,
+          "bytes": 10101,
+          "cost": {
+            "fieldCost": 1281,
+            "typeCost": 2009
+          },
+          "payloadHash": "ed884f47505bef1484888713679e1f3bd44391df41bdd924cb1a2fe6995ebf44"
+        },
+        {
+          "ms": 26.330499909818172,
+          "status": 200,
+          "bytes": 10101,
+          "cost": {
+            "fieldCost": 1281,
+            "typeCost": 2009
+          },
+          "payloadHash": "ed884f47505bef1484888713679e1f3bd44391df41bdd924cb1a2fe6995ebf44"
+        },
+        {
+          "ms": 28.088416205719113,
+          "status": 200,
+          "bytes": 10101,
+          "cost": {
+            "fieldCost": 1281,
+            "typeCost": 2009
+          },
+          "payloadHash": "ed884f47505bef1484888713679e1f3bd44391df41bdd924cb1a2fe6995ebf44"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 26.330499909818172,
+      "warmRangeMs": [
+        23.61920801922679,
+        28.088416205719113
+      ],
+      "samePayload": true,
+      "document": "recording-playback.graphql",
+      "variablesFrom": "../before.json graph entry with this name"
+    },
+    {
+      "name": "playlist-250",
+      "firstMs": 79.70212493091822,
+      "samples": [
+        {
+          "ms": 79.70212493091822,
+          "status": 200,
+          "bytes": 222295,
+          "cost": {
+            "fieldCost": 19010,
+            "typeCost": 7501
+          },
+          "payloadHash": "2ab58d9d26852d2730f1cc2253992691829be3a7e019b9dc63854679d0d1f013"
+        },
+        {
+          "ms": 43.51525008678436,
+          "status": 200,
+          "bytes": 222295,
+          "cost": {
+            "fieldCost": 19010,
+            "typeCost": 7501
+          },
+          "payloadHash": "2ab58d9d26852d2730f1cc2253992691829be3a7e019b9dc63854679d0d1f013"
+        },
+        {
+          "ms": 43.8894999679178,
+          "status": 200,
+          "bytes": 222295,
+          "cost": {
+            "fieldCost": 19010,
+            "typeCost": 7501
+          },
+          "payloadHash": "2ab58d9d26852d2730f1cc2253992691829be3a7e019b9dc63854679d0d1f013"
+        },
+        {
+          "ms": 42.8225421346724,
+          "status": 200,
+          "bytes": 222295,
+          "cost": {
+            "fieldCost": 19010,
+            "typeCost": 7501
+          },
+          "payloadHash": "2ab58d9d26852d2730f1cc2253992691829be3a7e019b9dc63854679d0d1f013"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 43.51525008678436,
+      "warmRangeMs": [
+        42.8225421346724,
+        43.8894999679178
+      ],
+      "samePayload": true,
+      "document": "playlist-hydration.graphql",
+      "variablesFrom": "../before.json graph entry with this name"
+    },
+    {
+      "name": "catalog-search",
+      "firstMs": 331.5931670367718,
+      "samples": [
+        {
+          "ms": 331.5931670367718,
+          "status": 200,
+          "bytes": 4233,
+          "cost": {
+            "fieldCost": 346,
+            "typeCost": 188
+          },
+          "payloadHash": "ec8412698a7656de2ca4cc75af59dfdcf5159e5bd85ada01ec471245ff2a5a06"
+        },
+        {
+          "ms": 249.64729114435613,
+          "status": 200,
+          "bytes": 4233,
+          "cost": {
+            "fieldCost": 346,
+            "typeCost": 188
+          },
+          "payloadHash": "ec8412698a7656de2ca4cc75af59dfdcf5159e5bd85ada01ec471245ff2a5a06"
+        },
+        {
+          "ms": 254.3475409038365,
+          "status": 200,
+          "bytes": 4233,
+          "cost": {
+            "fieldCost": 346,
+            "typeCost": 188
+          },
+          "payloadHash": "ec8412698a7656de2ca4cc75af59dfdcf5159e5bd85ada01ec471245ff2a5a06"
+        },
+        {
+          "ms": 242.63554089702666,
+          "status": 200,
+          "bytes": 4233,
+          "cost": {
+            "fieldCost": 346,
+            "typeCost": 188
+          },
+          "payloadHash": "ec8412698a7656de2ca4cc75af59dfdcf5159e5bd85ada01ec471245ff2a5a06"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 249.64729114435613,
+      "warmRangeMs": [
+        242.63554089702666,
+        254.3475409038365
+      ],
+      "samePayload": true,
+      "document": "catalog-search.graphql",
+      "variablesFrom": "../before.json graph entry with this name"
+    },
+    {
+      "name": "scarlet-rows-next-25",
+      "firstMs": 89.4937498960644,
+      "samples": [
+        {
+          "ms": 89.4937498960644,
+          "status": 200,
+          "bytes": 9932,
+          "cost": {
+            "fieldCost": 197,
+            "typeCost": 204
+          },
+          "payloadHash": "dcad6920671e30a463a5848c8f1b270a1ed600cc16d39b9afbc9a7e933aedce3"
+        },
+        {
+          "ms": 65.12179202400148,
+          "status": 200,
+          "bytes": 9932,
+          "cost": {
+            "fieldCost": 197,
+            "typeCost": 204
+          },
+          "payloadHash": "dcad6920671e30a463a5848c8f1b270a1ed600cc16d39b9afbc9a7e933aedce3"
+        },
+        {
+          "ms": 59.71050006337464,
+          "status": 200,
+          "bytes": 9932,
+          "cost": {
+            "fieldCost": 197,
+            "typeCost": 204
+          },
+          "payloadHash": "dcad6920671e30a463a5848c8f1b270a1ed600cc16d39b9afbc9a7e933aedce3"
+        },
+        {
+          "ms": 56.2885410618037,
+          "status": 200,
+          "bytes": 9932,
+          "cost": {
+            "fieldCost": 197,
+            "typeCost": 204
+          },
+          "payloadHash": "dcad6920671e30a463a5848c8f1b270a1ed600cc16d39b9afbc9a7e933aedce3"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 59.71050006337464,
+      "warmRangeMs": [
+        56.2885410618037,
+        65.12179202400148
+      ],
+      "samePayload": true,
+      "document": "song-history-rows.graphql",
+      "variablesFrom": "../before.json graph entry with this name"
+    }
+  ],
+  "scarletControl": {
+    "reason": "First corpus row/count samples were slower than earlier qualification; repeat after corpus to check persistence. No code, schema, config or data changes between runs.",
+    "policy": "One first plus six warm requests per case; same cost-reporting request as corpus.",
+    "graph": [
+      {
+        "name": "scarlet-rows-25",
+        "firstMs": 99.30166602134705,
+        "samples": [
+          {
+            "ms": 99.30166602134705,
+            "status": 200,
+            "bytes": 10057,
+            "cost": {
+              "fieldCost": 197,
+              "typeCost": 204
+            },
+            "payloadHash": "0579065c30df1c8a5594c04e88c23db2904494782881bc602706651834a29b24"
+          },
+          {
+            "ms": 53.30345896072686,
+            "status": 200,
+            "bytes": 10057,
+            "cost": {
+              "fieldCost": 197,
+              "typeCost": 204
+            },
+            "payloadHash": "0579065c30df1c8a5594c04e88c23db2904494782881bc602706651834a29b24"
+          },
+          {
+            "ms": 51.11650004982948,
+            "status": 200,
+            "bytes": 10057,
+            "cost": {
+              "fieldCost": 197,
+              "typeCost": 204
+            },
+            "payloadHash": "0579065c30df1c8a5594c04e88c23db2904494782881bc602706651834a29b24"
+          },
+          {
+            "ms": 48.64045791327953,
+            "status": 200,
+            "bytes": 10057,
+            "cost": {
+              "fieldCost": 197,
+              "typeCost": 204
+            },
+            "payloadHash": "0579065c30df1c8a5594c04e88c23db2904494782881bc602706651834a29b24"
+          },
+          {
+            "ms": 52.407290786504745,
+            "status": 200,
+            "bytes": 10057,
+            "cost": {
+              "fieldCost": 197,
+              "typeCost": 204
+            },
+            "payloadHash": "0579065c30df1c8a5594c04e88c23db2904494782881bc602706651834a29b24"
+          },
+          {
+            "ms": 54.07716706395149,
+            "status": 200,
+            "bytes": 10057,
+            "cost": {
+              "fieldCost": 197,
+              "typeCost": 204
+            },
+            "payloadHash": "0579065c30df1c8a5594c04e88c23db2904494782881bc602706651834a29b24"
+          },
+          {
+            "ms": 48.47524990327656,
+            "status": 200,
+            "bytes": 10057,
+            "cost": {
+              "fieldCost": 197,
+              "typeCost": 204
+            },
+            "payloadHash": "0579065c30df1c8a5594c04e88c23db2904494782881bc602706651834a29b24"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 51.761895418167114,
+        "warmRangeMs": [
+          48.47524990327656,
+          54.07716706395149
+        ],
+        "samePayload": true
+      },
+      {
+        "name": "scarlet-rows-count-25",
+        "firstMs": 52.67579201608896,
+        "samples": [
+          {
+            "ms": 52.67579201608896,
+            "status": 200,
+            "bytes": 10074,
+            "cost": {
+              "fieldCost": 207,
+              "typeCost": 204
+            },
+            "payloadHash": "0524a8e0e7d73f0b27bc716a2fd316dce5402dc0c88d707d8855c5c356c1574b"
+          },
+          {
+            "ms": 55.76883303001523,
+            "status": 200,
+            "bytes": 10074,
+            "cost": {
+              "fieldCost": 207,
+              "typeCost": 204
+            },
+            "payloadHash": "0524a8e0e7d73f0b27bc716a2fd316dce5402dc0c88d707d8855c5c356c1574b"
+          },
+          {
+            "ms": 50.13154214248061,
+            "status": 200,
+            "bytes": 10074,
+            "cost": {
+              "fieldCost": 207,
+              "typeCost": 204
+            },
+            "payloadHash": "0524a8e0e7d73f0b27bc716a2fd316dce5402dc0c88d707d8855c5c356c1574b"
+          },
+          {
+            "ms": 48.31858305260539,
+            "status": 200,
+            "bytes": 10074,
+            "cost": {
+              "fieldCost": 207,
+              "typeCost": 204
+            },
+            "payloadHash": "0524a8e0e7d73f0b27bc716a2fd316dce5402dc0c88d707d8855c5c356c1574b"
+          },
+          {
+            "ms": 58.2799999974668,
+            "status": 200,
+            "bytes": 10074,
+            "cost": {
+              "fieldCost": 207,
+              "typeCost": 204
+            },
+            "payloadHash": "0524a8e0e7d73f0b27bc716a2fd316dce5402dc0c88d707d8855c5c356c1574b"
+          },
+          {
+            "ms": 56.8955831695348,
+            "status": 200,
+            "bytes": 10074,
+            "cost": {
+              "fieldCost": 207,
+              "typeCost": 204
+            },
+            "payloadHash": "0524a8e0e7d73f0b27bc716a2fd316dce5402dc0c88d707d8855c5c356c1574b"
+          },
+          {
+            "ms": 51.8924999050796,
+            "status": 200,
+            "bytes": 10074,
+            "cost": {
+              "fieldCost": 207,
+              "typeCost": 204
+            },
+            "payloadHash": "0524a8e0e7d73f0b27bc716a2fd316dce5402dc0c88d707d8855c5c356c1574b"
+          }
+        ],
+        "successful": true,
+        "warmMedianMs": 53.83066646754742,
+        "warmRangeMs": [
+          48.31858305260539,
+          58.2799999974668
+        ],
+        "samePayload": true
+      }
+    ]
+  }
+}
