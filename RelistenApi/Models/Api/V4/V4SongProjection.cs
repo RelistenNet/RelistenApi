@@ -42,7 +42,7 @@ public static partial class V4CatalogProjection
                 .ToArray(),
         };
 
-    private static SourceStatisticsResource SourceStatistics(CatalogSourceStatistics statistics) =>
+    internal static SourceStatisticsResource SourceStatistics(CatalogSourceStatistics statistics) =>
         new(
             statistics.SourceCount,
             statistics.Min,

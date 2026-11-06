@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
@@ -75,50 +76,90 @@ public sealed class CatalogSongMatchReader
         Guid artistUuid,
         string canonicalId,
         CancellationToken cancellationToken
+    ) =>
+        (
+            await ReadShowStatisticsBatch(
+                session,
+                [new CatalogSongStatisticsRequest(artistUuid, canonicalId, null)],
+                cancellationToken
+            )
+        )[0];
+
+    /// <summary>Page-scoped statistics for multiple song relationships in one command.</summary>
+    public async Task<
+        IReadOnlyList<IReadOnlyDictionary<Guid, CatalogSongShowStatistics>>
+    > ReadShowStatisticsBatch(
+        CatalogReadSession session,
+        IReadOnlyList<CatalogSongStatisticsRequest> requests,
+        CancellationToken cancellationToken
     )
     {
+        if (requests.Count == 0)
+        {
+            return [];
+        }
         // Matching ordinals include this song's merged aliases. Classify each file
         // once before choosing per-source maxima, even when its parts repeat the song.
         var rows = await session.Connection.QueryAsync<ShowStatisticsRow>(
             session.Command(
                 """
-                WITH files AS (
-                    SELECT m.track_uuid,m.show_uuid,m.source_uuid,
+                WITH inputs AS (
+                    SELECT * FROM jsonb_to_recordset(@inputs::jsonb)
+                    AS i(ordinal int,artist_uuid uuid,song_id text,show_uuids uuid[])
+                ), files AS (
+                    SELECT i.ordinal,m.track_uuid,m.show_uuid,m.source_uuid,
                            CASE WHEN bool_or(p.resolved AND p.song_id IS NOT NULL
                                              AND NOT p.part=ANY(m.matching_part_ordinals)) THEN true
                                 WHEN bool_and(p.resolved) THEN false END is_multi_song,
                            CASE WHEN t.duration>0 THEN t.duration END duration
-                    FROM norm.song_recording_matches(@artistUuid,@canonicalIds::text[]) m
+                    FROM inputs i CROSS JOIN LATERAL norm.song_recording_matches(i.artist_uuid,ARRAY[i.song_id]) m
                     JOIN source_tracks t ON t.uuid=m.track_uuid
                     JOIN norm.track_songs p ON p.track_uuid=m.track_uuid
-                    GROUP BY m.track_uuid,m.show_uuid,m.source_uuid,t.duration
+                    WHERE i.show_uuids IS NULL OR m.show_uuid=ANY(i.show_uuids)
+                    GROUP BY i.ordinal,m.track_uuid,m.show_uuid,m.source_uuid,t.duration
                 ), sources AS (
-                    SELECT show_uuid,source_uuid,
+                    SELECT ordinal,show_uuid,source_uuid,
                            max(duration) FILTER (WHERE NOT is_multi_song) single_song_duration,
                            max(duration) FILTER (WHERE is_multi_song) multi_song_duration
-                    FROM files GROUP BY show_uuid,source_uuid
+                    FROM files GROUP BY ordinal,show_uuid,source_uuid
                 )
-                SELECT show_uuid,sample.kind,count(sample.value)::integer source_count,
+                SELECT ordinal,show_uuid,sample.kind,count(sample.value)::integer source_count,
                        min(sample.value) min,max(sample.value) max,avg(sample.value)::double precision avg,
                        percentile_cont(0.5) WITHIN GROUP (ORDER BY sample.value) median
                 FROM sources CROSS JOIN LATERAL (
                     VALUES ('single_song',single_song_duration),
                            ('multi_song',multi_song_duration)
                 ) sample(kind,value)
-                GROUP BY show_uuid,sample.kind
+                GROUP BY ordinal,show_uuid,sample.kind
                 """,
-                new { artistUuid, canonicalIds = new[] { canonicalId } },
+                new
+                {
+                    inputs = JsonSerializer.Serialize(
+                        requests.Select(
+                            (r, index) =>
+                                new
+                                {
+                                    ordinal = index,
+                                    artist_uuid = r.Artist,
+                                    song_id = r.Song,
+                                    show_uuids = r.Shows,
+                                }
+                        )
+                    ),
+                },
                 cancellationToken
             )
         );
 
-        var statistics = new Dictionary<Guid, CatalogSongShowStatistics>();
+        var statistics = requests
+            .Select(_ => new Dictionary<Guid, CatalogSongShowStatistics>())
+            .ToArray();
         foreach (var row in rows)
         {
-            if (!statistics.TryGetValue(row.show_uuid, out var show))
+            if (!statistics[row.ordinal].TryGetValue(row.show_uuid, out var show))
             {
                 show = new();
-                statistics.Add(row.show_uuid, show);
+                statistics[row.ordinal].Add(row.show_uuid, show);
             }
 
             if (row.source_count == 0)
@@ -194,6 +235,7 @@ public sealed class CatalogSongMatchReader
 
     private sealed class ShowStatisticsRow
     {
+        public int ordinal { get; set; }
         public Guid show_uuid { get; set; }
         public string kind { get; set; } = null!;
         public int source_count { get; set; }
@@ -215,3 +257,5 @@ public sealed class CatalogSongMatchRow
     public Guid track_uuid { get; set; }
     public Guid show_uuid { get; set; }
 }
+
+public sealed record CatalogSongStatisticsRequest(Guid Artist, string Song, Guid[]? Shows);

@@ -26,6 +26,12 @@ public sealed class CatalogRecordingReader
         CancellationToken cancellationToken
     ) => (await Read(session, "src.uuid=@uuid", new { uuid }, cancellationToken)).SingleOrDefault();
 
+    internal Task<IReadOnlyList<CatalogSource>> ReadSources(
+        CatalogReadSession session,
+        Guid[] uuids,
+        CancellationToken cancellationToken
+    ) => Read(session, "src.uuid=ANY(@uuids)", new { uuids }, cancellationToken);
+
     private static async Task<IReadOnlyList<CatalogSource>> Read(
         CatalogReadSession session,
         string predicate,
