@@ -1,0 +1,20 @@
+{
+  "stage": "song match batching",
+  "parents": 10,
+  "executionMs": 64.171,
+  "sharedHits": 70655,
+  "matching": [
+    {
+      "Actual Rows": 3355,
+      "Actual Loops": 1,
+      "Shared Hit Blocks": 68606
+    }
+  ],
+  "ranking": [
+    {
+      "Actual Rows": 7,
+      "Actual Loops": 10,
+      "Shared Hit Blocks": 307
+    }
+  ]
+}

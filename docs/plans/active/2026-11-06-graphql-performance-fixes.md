@@ -1,7 +1,7 @@
 # Make catalog pages and song-history playback fast
 
-Status: ready to implement on `codex/v4-catalog-graphql-plan`. The review is
-complete; these fixes are not implemented yet. This ExecPlan is a living document.
+Status: implementation in progress on `codex/v4-catalog-graphql-plan`. The review is
+complete. This ExecPlan is a living document.
 Keep Progress, Discoveries, Decision Log and Outcomes current.
 
 ## Purpose
@@ -21,7 +21,10 @@ first work is selecting files efficiently, rather than replacing hydration.
 - [x] (2026-11-06) Reproduce latency on the full local catalog and independently
       validate the SQL causes. Evidence is under `docs/api/graphql/review/`.
 - [x] (2026-11-06) Apply Alec's priority: playback and pagination first, search last.
-- [ ] Batch song matching and restrict shows before source ranking.
+- [x] (2026-11-06) Batch song matching and restrict shows before source ranking.
+  Six real-catalog comparison cases retain identical JSON; Scarlet25 falls from
+  6.1 seconds to 637 ms and Drums25 from 13 seconds to 1.05 seconds. See
+  `docs/api/graphql/performance-fixes/` for fresh before and stage measurements.
 - [ ] Replace broad owner selection with explicit scoped SQL.
 - [ ] Omit timing statistics when the operation does not select them.
 - [ ] Rerun representative full-catalog workloads and affected REST reads; commit

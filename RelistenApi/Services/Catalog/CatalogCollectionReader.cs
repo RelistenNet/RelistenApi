@@ -36,8 +36,44 @@ public sealed class CatalogCollectionReader
             throw new ArgumentException("A collection batch must contain one entity kind.");
         }
 
+        var results = new CatalogPageSelection[requests.Count];
+        // Song-backed tracks start from matching files; other collections retain their
+        // normal membership. Original ordinals preserve order across both SQL batches.
+        var groups = requests
+            .Select((request, index) => (request.Collection, request.Page, Index: index))
+            .GroupBy(r =>
+                r.Collection.Kind == CatalogReferenceKind.Track
+                && (
+                    r.Collection.OwnerKind == CatalogReferenceKind.Song
+                    || r.Collection.Filters?.Song is not null
+                )
+            );
+        foreach (var group in groups)
+        {
+            var batch = group.ToArray();
+            var pages = await ReadPageBatch(
+                session,
+                batch.Select(r => (r.Collection, r.Page)).ToArray(),
+                cancellationToken
+            );
+            for (var i = 0; i < batch.Length; i++)
+            {
+                results[batch[i].Index] = pages[i];
+            }
+        }
+        return results;
+    }
+
+    private static async Task<IReadOnlyList<CatalogPageSelection>> ReadPageBatch(
+        CatalogReadSession session,
+        IReadOnlyList<(CatalogCollection Collection, CatalogPageRequest Page)> requests,
+        CancellationToken cancellationToken
+    )
+    {
+        var collection = requests[0].Collection;
         var inputs = requests.Select((r, index) => Input(r.Collection, r.Page, index)).ToArray();
-        var candidates = Candidates(kind);
+        var candidates = Candidates(collection);
+        var matches = SongMatches(collection.Kind);
         // The lateral subquery applies cursor and limit independently for each input.
         // Both SQL fragments are server-owned; all caller data is in the JSON parameter.
         var sql = $$"""
@@ -49,6 +85,7 @@ public sealed class CatalogCollectionReader
                 after_score float8, after_label text, after_id text, after_secondary float8, after_descending_label text, need_count boolean,
                 month int,day int,recency text,recent_days int,require_sources boolean,show_uuid uuid,top_source_only boolean)
             )
+            {{matches}}
             SELECT r.ordinal,p.* FROM requests r CROSS JOIN LATERAL (
               WITH candidates AS NOT MATERIALIZED ({{candidates}}),
               page AS (
@@ -175,9 +212,10 @@ public sealed class CatalogCollectionReader
         return new(kind, UuidTypeId.Format(CatalogReferenceLookup.Prefix(kind), uuid), uuid);
     }
 
-    private static string Candidates(CatalogReferenceKind kind)
+    private static string Candidates(CatalogCollection collection)
     {
-        var sql = BaseCandidates(kind);
+        var sql = BaseCandidates(collection);
+        var kind = collection.Kind;
         // Search keeps its published tie-breaks; the same complete tuple is carried
         // in the keyset cursor. UUID remains the final stable identity tie-break.
         return kind switch
@@ -209,8 +247,8 @@ public sealed class CatalogCollectionReader
         };
     }
 
-    private static string BaseCandidates(CatalogReferenceKind kind) =>
-        kind switch
+    private static string BaseCandidates(CatalogCollection collection) =>
+        collection.Kind switch
         {
             CatalogReferenceKind.Artist => """
                 SELECT a.uuid::text key,'Artist' kind,
@@ -227,12 +265,6 @@ public sealed class CatalogCollectionReader
             CatalogReferenceKind.Show => ShowCandidates,
             CatalogReferenceKind.Source =>
                 $$"""
-                WITH song_matches AS MATERIALIZED (
-                  SELECT m.* FROM norm.songs song JOIN artists owner_artist ON owner_artist.uuid=song.artist_uuid
-                  JOIN features owner_feature ON owner_feature.artist_id=owner_artist.id AND owner_feature.norm_catalogue
-                  CROSS JOIN LATERAL norm.song_recording_matches(song.artist_uuid,ARRAY[song.id]) m
-                  WHERE song.id=r.song
-                )
                 SELECT src.uuid::text key,'Source' kind,
                   COALESCE(src.avg_rating_weighted,0)::float8 score,src.uuid::text label
                 FROM sources src JOIN artists a ON a.id=src.artist_id JOIN shows sh ON sh.id=src.show_id
@@ -242,7 +274,7 @@ public sealed class CatalogCollectionReader
                        OR r.owner_kind='Show' AND sh.uuid=r.owner_uuid)
                   AND (r.date_from IS NULL OR sh.date>=r.date_from)
                   AND (r.date_through IS NULL OR sh.date<=r.date_through)
-                  AND (r.song IS NULL OR EXISTS(SELECT 1 FROM song_matches m WHERE m.source_uuid=src.uuid))
+                  AND (r.song IS NULL OR EXISTS(SELECT 1 FROM song_matches m WHERE m.requested_song=r.song AND m.source_uuid=src.uuid))
                   AND (r.venue IS NULL OR COALESCE(f.norm_catalogue,false) AND {{CatalogVenueReader.ShowMembershipSql(
                     "r.venue",
                     "sh.uuid"
@@ -255,21 +287,18 @@ public sealed class CatalogCollectionReader
                 """,
             CatalogReferenceKind.Track =>
                 $$"""
-                WITH song_matches AS MATERIALIZED (
-                  SELECT song.id requested_song,m.* FROM norm.songs song JOIN artists owner_artist ON owner_artist.uuid=song.artist_uuid
-                  JOIN features owner_feature ON owner_feature.artist_id=owner_artist.id AND owner_feature.norm_catalogue
-                  CROSS JOIN LATERAL norm.song_recording_matches(song.artist_uuid,ARRAY[song.id]) m
-                  WHERE song.id=ANY(ARRAY[r.song,CASE WHEN r.owner_kind='Song' THEN r.owner END])
-                ), ranked_sources AS MATERIALIZED (
+                WITH ranked_sources AS MATERIALIZED (
                   SELECT candidate.uuid,row_number() OVER (
-                    PARTITION BY candidate.show_id ORDER BY {{CatalogSourceRanking.OrderBy(
-                    "candidate"
-                )}}
+                    PARTITION BY candidate.show_id ORDER BY {{CatalogSourceRanking.OrderBy("candidate")}}
                   ) source_rank
-                  FROM sources candidate
+                  FROM (
+                    SELECT DISTINCT m.source_uuid FROM song_matches m
+                    WHERE m.requested_song=COALESCE(CASE WHEN r.owner_kind='Song' THEN r.owner END,r.song)
+                      AND (r.show_uuid IS NULL OR m.show_uuid=r.show_uuid)
+                  ) matched
+                  JOIN sources candidate ON candidate.uuid=matched.source_uuid
                   WHERE (r.owner_kind IS DISTINCT FROM 'Song' OR EXISTS(SELECT 1 FROM song_matches m WHERE m.requested_song=r.owner AND m.source_uuid=candidate.uuid))
                     AND (r.song IS NULL OR EXISTS(SELECT 1 FROM song_matches m WHERE m.requested_song=r.song AND m.source_uuid=candidate.uuid))
-                    AND EXISTS(SELECT 1 FROM song_matches m WHERE m.source_uuid=candidate.uuid)
                     AND (r.soundboard IS NULL OR candidate.is_soundboard=r.soundboard)
                     AND (r.flac IS NULL OR (candidate.flac_type IN (1,2))=r.flac)
                 )
@@ -277,7 +306,8 @@ public sealed class CatalogCollectionReader
                   sh.display_date || ':' || sh.uuid || ':' ||
                   CASE WHEN r.show_uuid IS NOT NULL THEN COALESCE(lpad(ranked.source_rank::text,12,'0'),src.uuid::text) ELSE src.uuid::text END
                   || ':' || lpad(t.track_position::text,8,'0') label
-                FROM source_tracks t JOIN sources src ON src.id=t.source_id
+                FROM {{TrackMembership(collection)}}
+                JOIN sources src ON src.id=t.source_id
                 JOIN source_sets ss ON ss.id=t.source_set_id AND ss.source_id=src.id
                 JOIN artists a ON a.id=src.artist_id JOIN shows sh ON sh.id=src.show_id
                 LEFT JOIN features f ON f.artist_id=a.id
@@ -345,17 +375,14 @@ public sealed class CatalogCollectionReader
                       WHERE av.venue_id=v.id AND av.artist_uuid=r.artist))
                 """,
             CatalogReferenceKind.ArtistVenue => CatalogBrowseMembership.Venues,
-            _ => throw new ArgumentException("This entity has no browse connection.", nameof(kind)),
+            _ => throw new ArgumentException(
+                "This entity has no browse connection.",
+                nameof(collection)
+            ),
         };
 
     private static string ShowCandidates =>
         $$"""
-            WITH song_matches AS MATERIALIZED (
-            SELECT song.id requested_song,m.* FROM norm.songs song JOIN artists owner_artist ON owner_artist.uuid=song.artist_uuid
-            JOIN features owner_feature ON owner_feature.artist_id=owner_artist.id AND owner_feature.norm_catalogue
-            CROSS JOIN LATERAL norm.song_recording_matches(song.artist_uuid,ARRAY[song.id]) m
-            WHERE song.id=ANY(ARRAY[r.song,CASE WHEN r.owner_kind='Song' THEN r.owner END])
-            )
             SELECT s.uuid::text key,'Show' kind,
               CASE r.sort WHEN 'DateDescending' THEN 0
                  WHEN 'Updated' THEN COALESCE(extract(epoch FROM CASE WHEN r.recency='Added' THEN cnt.max_updated_at ELSE s.updated_at END),-1e30)
@@ -410,6 +437,36 @@ public sealed class CatalogCollectionReader
                   JOIN setlist_shows ss ON ss.id=sp.played_setlist_show_id
                   WHERE song.uuid=r.owner_uuid AND ss.artist_id=s.artist_id AND ss.date=s.date))
             """;
+
+    private static string TrackMembership(CatalogCollection collection) =>
+        collection.OwnerKind == CatalogReferenceKind.Song || collection.Filters?.Song is not null
+            ? """
+                (SELECT DISTINCT m.track_uuid FROM song_matches m
+                 WHERE m.requested_song=COALESCE(CASE WHEN r.owner_kind='Song' THEN r.owner END,r.song)
+                   AND (r.show_uuid IS NULL OR m.show_uuid=r.show_uuid)) matched
+                JOIN source_tracks t ON t.uuid=matched.track_uuid
+                """
+            : "source_tracks t";
+
+    private static string SongMatches(CatalogReferenceKind kind) =>
+        kind
+            is CatalogReferenceKind.Show
+                or CatalogReferenceKind.Source
+                or CatalogReferenceKind.Track
+            ? """
+                , requested_songs AS MATERIALIZED (
+                  SELECT DISTINCT song.id,song.artist_uuid
+                  FROM requests r
+                  CROSS JOIN LATERAL unnest(ARRAY[r.song,CASE WHEN r.owner_kind='Song' THEN r.owner END]) requested(id)
+                  JOIN norm.songs song ON song.id=requested.id
+                  JOIN artists a ON a.uuid=song.artist_uuid
+                  JOIN features f ON f.artist_id=a.id AND f.norm_catalogue
+                ), song_matches AS MATERIALIZED (
+                  SELECT song.id requested_song,m.* FROM requested_songs song
+                  CROSS JOIN LATERAL norm.song_recording_matches(song.artist_uuid,ARRAY[song.id]) m
+                )
+                """
+            : "";
 
     private sealed class PageRow
     {
