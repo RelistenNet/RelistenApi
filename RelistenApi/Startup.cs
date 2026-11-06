@@ -385,6 +385,7 @@ namespace Relisten
             );
 
             app.UseAuthentication();
+            app.UseAuthorization();
             app.UseStaticFiles();
 
             Relisten.GraphQL.CatalogGraphRegistration.UseCatalogGraph(app);

@@ -68,7 +68,8 @@ this artifact does not benchmark equivalent REST request sequences for those two
 
 - The full `./test-local.sh` run passed 627 API-project tests and 366 normalization
   tests; 37 API cases were skipped by their existing fixtures. The final focused
-  V4 run passed 191 tests after the last endpoint/doc changes.
+  V4 implementation run passed 191 tests. The subsequent admin-editor addition
+  passed all 192 V4 tests, including cookie login and embedded-asset checks.
 - `dotnet build RelistenApi.sln` passed. Existing package-advisory and unrelated
   nullable warnings remain; the new GraphQL code produces no nullable warnings.
 - HTTP fixtures compare shared projections, identity/order, partial filters,

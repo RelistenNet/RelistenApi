@@ -1,13 +1,17 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Security.Claims;
 using System.Text.Json.Nodes;
 using Dapper;
 using FluentAssertions;
 using Hangfire;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -64,6 +68,10 @@ public sealed partial class TestV4CatalogHttp
         // Reads use stored scores; only queue submission is replaced in this host.
         builder.Services.AddSingleton<IBackgroundJobClient>(refreshJobs);
         builder.Services.AddV4Catalog();
+        builder
+            .Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+            .AddCookie(options => options.LoginPath = "/relisten-admin/login");
+        builder.Services.AddAuthorization();
         Relisten
             .GraphQL.CatalogGraphRegistration.AddCatalogGraph(builder.Services)
             .ModifyRequestOptions(o => o.IncludeExceptionDetails = true);
@@ -81,6 +89,23 @@ public sealed partial class TestV4CatalogHttp
         app.UseV4CatalogCors();
         app.UseCors(policy =>
             policy.WithMethods("GET", "POST", "OPTIONS", "HEAD").WithOrigins("*").AllowAnyMethod()
+        );
+        app.UseAuthentication();
+        app.UseAuthorization();
+        // Issue a real test-host cookie without requiring production Identity users.
+        app.MapPost(
+            "/test-admin-login",
+            async (HttpContext context) =>
+            {
+                await context.SignInAsync(
+                    new ClaimsPrincipal(
+                        new ClaimsIdentity(
+                            [new Claim(ClaimTypes.Name, "catalog-test-admin")],
+                            CookieAuthenticationDefaults.AuthenticationScheme
+                        )
+                    )
+                );
+            }
         );
         Relisten.GraphQL.CatalogGraphRegistration.UseCatalogGraph(app);
         app.UseMvc();

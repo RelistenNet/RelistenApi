@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using ChilliCream.Nitro.App;
 using HotChocolate;
 using HotChocolate.AspNetCore;
 using HotChocolate.Execution;
@@ -23,6 +24,7 @@ namespace Relisten.GraphQL;
 public static class CatalogGraphRegistration
 {
     public const string Path = "/api/v4/graphql";
+    public const string AdminPath = "/relisten-admin/graphql";
     private static readonly object RefreshKey = new();
     private static readonly object OperationKey = new();
 
@@ -192,6 +194,8 @@ public static class CatalogGraphRegistration
         return graph;
     }
 
+    /// <summary>Maps public catalog execution and the authenticated admin editor.
+    /// The host must run ASP.NET authentication and authorization middleware first.</summary>
     public static IApplicationBuilder UseCatalogGraph(this IApplicationBuilder app)
     {
         app.UseWhen(
@@ -248,6 +252,18 @@ public static class CatalogGraphRegistration
                 )
         );
         app.UseEndpoints(endpoints =>
+        {
+            endpoints
+                .MapNitroApp(AdminPath)
+                .WithOptions(options =>
+                {
+                    options.ServeMode = ServeMode.Embedded;
+                    options.GraphQLEndpoint = Path;
+                    options.UseBrowserUrlAsGraphQLEndpoint = true;
+                    options.Title = "Relisten catalog";
+                    options.UseGet = false;
+                })
+                .RequireAuthorization();
             endpoints
                 .MapGraphQL(Path)
                 .WithOptions(options =>
@@ -256,8 +272,8 @@ public static class CatalogGraphRegistration
                     options.Batching = AllowedBatching.None;
                     options.EnableMultipartRequests = false;
                     options.Tool.Enable = false;
-                })
-        );
+                });
+        });
         return app;
     }
 }

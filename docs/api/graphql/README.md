@@ -24,6 +24,13 @@ song history, venue browsing, playlist hydration, search, rankings, references,
 and public activity. These documents are validated by the HTTP integration suite;
 clients may send their own operations. There is no persisted-operation registry.
 
+## Admin query editor
+
+Open `/relisten-admin/graphql/`, or choose **Catalog GraphQL explorer** from the
+admin home page. It uses the existing admin login. The editor is Hot Chocolate's
+bundled Nitro IDE, serving embedded assets and sending POST operations to
+`/api/v4/graphql`; it requires no separate frontend build or package.
+
 ## Navigation and collections
 
 The [capability inventory](capabilities.md) maps the graph to the REST readers.

@@ -26,6 +26,14 @@ approval-gated overlays, imported facts, and ordinary popularity in both paths.
 uses `V4CatalogProjection`, `CatalogBrowseProjection`, and `V4SongProjection`
 for public representations; it does not call controllers or issue loopback HTTP.
 
+For a concrete call path, REST `CatalogSearchReader` asks `CatalogCollectionReader`
+for 20 members, then `CatalogEntityReader` hydrates them. GraphQL
+`CatalogGraphOperation.ReadPageGroup` calls those same two readers with the
+requested cursor and per-parent limit. Both then use the public projections.
+The collection reader's keyset and per-parent lateral SQL is new: the old readers
+returned complete lists or fixed top-N results. Some older REST list selection
+queries remain separate, while sharing metadata hydration and mappings.
+
 ## Read capability mapping
 
 - **CatalogBrowseController:** `artists`, `artist`, `artistBySlug`; artist

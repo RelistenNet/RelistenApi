@@ -654,4 +654,38 @@ public sealed partial class TestV4CatalogHttp
             .Should()
             .NotBeEmpty();
     }
+
+    [Test]
+    public async Task GraphQL_admin_explorer_uses_the_admin_login_and_embedded_assets()
+    {
+        using var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false })
+        {
+            BaseAddress = http.BaseAddress,
+        };
+        client.DefaultRequestHeaders.Accept.ParseAdd("text/html");
+        using var anonymous = await client.GetAsync("/relisten-admin/graphql/");
+        anonymous.StatusCode.Should().Be(System.Net.HttpStatusCode.Redirect);
+        anonymous.Headers.Location!.OriginalString.Should().Contain("/relisten-admin/login");
+        using var login = await client.PostAsync("/test-admin-login", null);
+        login.EnsureSuccessStatusCode();
+        using var editor = await client.GetAsync("/relisten-admin/graphql/");
+        editor.EnsureSuccessStatusCode();
+        editor.Content.Headers.ContentType!.MediaType.Should().Be("text/html");
+        var html = await editor.Content.ReadAsStringAsync();
+        var script = System
+            .Text.RegularExpressions.Regex.Match(html, "<script[^>]*src=\"([^\"]+)\"")
+            .Groups[1]
+            .Value;
+        script.Should().StartWith("./assets/");
+        using var asset = await client.GetAsync(
+            new Uri(new Uri(client.BaseAddress!, "/relisten-admin/graphql/"), script)
+        );
+        asset.EnsureSuccessStatusCode();
+        asset.Content.Headers.ContentType!.MediaType.Should().Contain("javascript");
+        using var config = await client.GetAsync("/relisten-admin/graphql/nitro-config.json");
+        config.EnsureSuccessStatusCode();
+        var settings = JsonNode.Parse(await config.Content.ReadAsStringAsync())!;
+        settings["endpoint"]!.GetValue<string>().Should().Be("/api/v4/graphql");
+        settings["useGet"]!.GetValue<bool>().Should().BeFalse();
+    }
 }
