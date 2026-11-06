@@ -12,8 +12,8 @@ cursor ordering and read snapshots shared. Search-specific work stays deferred.
 
 - [x] Prototype ordered candidate shows against the existing real local catalog.
 - [x] Capture fresh dashboard, sparse-history and non-search REST baselines.
-- [ ] Implement bounded candidate scans and scoped matching in shared readers.
-- [ ] Verify continuation, lookahead, filters, counts, snapshots and sparse fallback.
+- [x] Implement bounded candidate scans and scoped matching in shared readers.
+- [x] Verify continuation, lookahead, filters, counts, snapshots and sparse fallback.
 - [ ] Benchmark the same requests, simplify, independently review, run checks and commit.
 
 ## Discoveries
@@ -25,6 +25,15 @@ A read-only prototype found the original first 11 Drums shows among 32 candidate
 in 14 ms warm, and Scarlet's first 11 among 128 candidates in 34 ms. These are SQL
 observations, not HTTP results. Sparse and old-only histories can make a show scan
 more expensive than the original song-first query; measure and bound that work.
+
+The first implementation used a 1,024-file threshold. An alternating old/new
+comparison found Drums pages at 158/34 ms but Scarlet at 52/93 ms. Raising the
+threshold to 4,096 retains the cheaper song-first path for Scarlet and sparse
+histories. The threshold only selects a strategy; it is not a membership limit.
+Candidate scans use batches of 32 and fall back after 128 shows or a batch without
+matches. Complete reads restart from the original public cursor in the same snapshot.
+All 203 V4 tests pass, including six new cases. A premature-completion mutation
+fails all four pagination/order cases; restoring continuation passes.
 
 ## Decisions and interfaces
 

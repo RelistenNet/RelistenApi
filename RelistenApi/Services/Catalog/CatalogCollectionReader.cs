@@ -11,8 +11,15 @@ namespace Relisten.Catalog;
 
 /// <summary>Selects bounded membership pages before hydration. Every input gets its own
 /// SQL limit in the caller's snapshot, including nested lists for multiple parents.</summary>
-public sealed class CatalogCollectionReader
+public sealed class CatalogCollectionReader(CatalogSongMatchReader songMatches)
 {
+    private const int CandidateBatchSize = 32;
+    private const int MaxCandidateShows = 128;
+
+    // Real-catalog comparison: matching Scarlet's ~3,400 files is cheaper than
+    // scanning its intermittent shows; Drums' ~16,000 files benefit from show-first.
+    private const int SmallSongMatchLimit = 4096;
+
     /// <summary>REST keeps complete collections using the same membership query, without a page loop.</summary>
     public async Task<CatalogPageSelection> ReadAll(
         CatalogReadSession session,
@@ -48,15 +55,21 @@ public sealed class CatalogCollectionReader
                 Song = r.Collection.Filters?.Song is not null,
                 Show = r.Collection.Filters?.ShowUuid is not null,
                 Venue = r.Collection.Filters?.Venue is not null,
+                ScanShows = r.Collection.Kind == CatalogReferenceKind.Show
+                    && (
+                        r.Collection.OwnerKind == CatalogReferenceKind.Song
+                        || r.Collection.Filters?.Song is not null
+                    )
+                    && !r.Page.Count
+                    && r.Page.First < MaxCandidateShows,
             });
         foreach (var group in groups)
         {
             var batch = group.ToArray();
-            var pages = await ReadPageBatch(
-                session,
-                batch.Select(r => (r.Collection, r.Page)).ToArray(),
-                cancellationToken
-            );
+            var inputs = batch.Select(r => (r.Collection, r.Page)).ToArray();
+            var pages = group.Key.ScanShows
+                ? await ReadSongShowPages(session, inputs, cancellationToken)
+                : await ReadPageBatch(session, inputs, cancellationToken);
             for (var i = 0; i < batch.Length; i++)
             {
                 results[batch[i].Index] = pages[i];
@@ -65,16 +78,109 @@ public sealed class CatalogCollectionReader
         return results;
     }
 
+    private async Task<IReadOnlyList<CatalogPageSelection>> ReadSongShowPages(
+        CatalogReadSession session,
+        IReadOnlyList<(CatalogCollection Collection, CatalogPageRequest Page)> requests,
+        CancellationToken token
+    )
+    {
+        var results = new CatalogPageSelection[requests.Count];
+        var scans = requests.Select((r, i) => new SongShowScan(i, r.Collection, r.Page)).ToList();
+        var counts = await songMatches.ReadCounts(
+            session,
+            null,
+            scans.SelectMany(scan => scan.Songs).Distinct().ToArray(),
+            token
+        );
+
+        // Small recording populations are cheaper to match directly than scanning shows.
+        // Counts only choose the access path; missing/stale counts never establish membership.
+        var completeReads = scans
+            .Where(scan =>
+                scan.Songs.Any(song =>
+                    !counts.TryGetValue(song, out var count)
+                    || count.matched_track_count <= SmallSongMatchLimit
+                )
+            )
+            .ToList();
+        scans = scans.Except(completeReads).ToList();
+        while (scans.Count > 0)
+        {
+            token.ThrowIfCancellationRequested();
+            var candidates = await ReadPageBatch(
+                session,
+                scans
+                    .Select(scan =>
+                        (scan.Collection, new CatalogPageRequest(CandidateBatchSize, scan.After))
+                    )
+                    .ToArray(),
+                token,
+                matchSongs: false
+            );
+            var scopes = scans
+                .SelectMany(
+                    (scan, i) =>
+                        scan.Songs.Select(song =>
+                            (
+                                Song: song,
+                                Shows: candidates[i]
+                                    .Targets.Select(target => target.Uuid!.Value)
+                                    .ToArray()
+                            )
+                        )
+                )
+                .ToArray();
+            var membership = await songMatches.ReadShowMembershipBatch(session, scopes, token);
+            var next = new List<SongShowScan>();
+            for (var i = 0; i < scans.Count; i++)
+            {
+                var scan = scans[i];
+                var page = candidates[i];
+                var foundMatches = scan.AddMatches(page, membership);
+                if (scan.Matches.Count > scan.Page.First || !page.HasNextPage)
+                {
+                    results[scan.Index] = scan.Complete();
+                }
+                else if (scan.Scanned >= MaxCandidateShows || !foundMatches)
+                {
+                    // Old-only/sparse histories can make a show scan more expensive.
+                    // Retry the complete read from the original public cursor in this snapshot.
+                    completeReads.Add(scan);
+                }
+                else
+                {
+                    next.Add(scan);
+                }
+            }
+            scans = next;
+        }
+
+        if (completeReads.Count > 0)
+        {
+            var pages = await ReadPageBatch(
+                session,
+                completeReads.Select(scan => (scan.Collection, scan.Page)).ToArray(),
+                token
+            );
+            for (var i = 0; i < completeReads.Count; i++)
+            {
+                results[completeReads[i].Index] = pages[i];
+            }
+        }
+        return results;
+    }
+
     private static async Task<IReadOnlyList<CatalogPageSelection>> ReadPageBatch(
         CatalogReadSession session,
         IReadOnlyList<(CatalogCollection Collection, CatalogPageRequest Page)> requests,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        bool matchSongs = true
     )
     {
         var collection = requests[0].Collection;
         var inputs = requests.Select((r, index) => Input(r.Collection, r.Page, index)).ToArray();
-        var candidates = Candidates(collection);
-        var matches = SongMatches(collection.Kind);
+        var candidates = Candidates(collection, matchSongs);
+        var matches = matchSongs ? SongMatches(collection.Kind) : "";
         // The lateral subquery applies cursor and limit independently for each input.
         // Both SQL fragments are server-owned; all caller data is in the JSON parameter.
         var sql = $$"""
@@ -213,9 +319,9 @@ public sealed class CatalogCollectionReader
         return new(kind, UuidTypeId.Format(CatalogReferenceLookup.Prefix(kind), uuid), uuid);
     }
 
-    private static string Candidates(CatalogCollection collection)
+    private static string Candidates(CatalogCollection collection, bool matchSongs)
     {
-        var sql = BaseCandidates(collection);
+        var sql = BaseCandidates(collection, matchSongs);
         var kind = collection.Kind;
         // Search keeps its published tie-breaks; the same complete tuple is carried
         // in the keyset cursor. UUID remains the final stable identity tie-break.
@@ -248,7 +354,7 @@ public sealed class CatalogCollectionReader
         };
     }
 
-    private static string BaseCandidates(CatalogCollection collection) =>
+    private static string BaseCandidates(CatalogCollection collection, bool matchSongs) =>
         collection.Kind switch
         {
             CatalogReferenceKind.Artist => """
@@ -263,7 +369,7 @@ public sealed class CatalogCollectionReader
                   AND (r.artist IS NULL OR a.uuid=r.artist)
                   AND (r.search IS NULL OR a.name ILIKE r.search)
                 """,
-            CatalogReferenceKind.Show => ShowCandidates(collection),
+            CatalogReferenceKind.Show => ShowCandidates(collection, matchSongs),
             CatalogReferenceKind.Source =>
                 $$"""
                 SELECT src.uuid::text key,'Source' kind,
@@ -379,7 +485,7 @@ public sealed class CatalogCollectionReader
             ),
         };
 
-    private static string ShowCandidates(CatalogCollection collection)
+    private static string ShowCandidates(CatalogCollection collection, bool matchSongs)
     {
         var ownerApproval = collection.OwnerKind
             is CatalogReferenceKind.Song
@@ -396,7 +502,7 @@ public sealed class CatalogCollectionReader
                  WHEN 'Popularity' THEN COALESCE(p.hot_score_30d,0)
                  ELSE CASE WHEN r.search IS NULL THEN 0 ELSE COALESCE(cnt.source_count,0) END END::float8 score,
               s.display_date label
-            FROM {{ShowMembership(collection)}}
+            FROM {{ShowMembership(collection, matchSongs)}}
             JOIN artists a ON a.id=s.artist_id
             LEFT JOIN features f ON f.artist_id=a.id
             LEFT JOIN show_source_information cnt ON cnt.show_id=s.id
@@ -416,8 +522,9 @@ public sealed class CatalogCollectionReader
               AND (r.soundboard IS NULL OR COALESCE(cnt.has_soundboard_source,false)=r.soundboard)
               AND (r.flac IS NULL OR COALESCE(cnt.has_flac,false)=r.flac)
               AND (r.search IS NULL OR s.display_date ILIKE r.search)
-              AND (r.song IS NULL OR COALESCE(f.norm_catalogue,false) AND EXISTS (
-                  SELECT 1 FROM song_matches m WHERE m.requested_song=r.song AND m.show_uuid=s.uuid))
+              AND (r.song IS NULL OR COALESCE(f.norm_catalogue,false) AND {{(matchSongs
+                  ? "EXISTS (SELECT 1 FROM song_matches m WHERE m.requested_song=r.song AND m.show_uuid=s.uuid)"
+                  : "TRUE")}})
               AND (r.venue IS NULL OR COALESCE(f.norm_catalogue,false) AND {{CatalogVenueReader.ShowMembershipSql(
                 "r.venue"
             )}})
@@ -458,7 +565,7 @@ public sealed class CatalogCollectionReader
 
     // Ownership enters through a small membership set, before metadata and ordering.
     // Approval gates stay in ShowCandidates; the venue row definition is also used by REST.
-    private static string ShowMembership(CatalogCollection collection) =>
+    private static string ShowMembership(CatalogCollection collection, bool matchSongs) =>
         collection.OwnerKind switch
         {
             CatalogReferenceKind.Artist => """
@@ -470,7 +577,9 @@ public sealed class CatalogCollectionReader
             CatalogReferenceKind.Tour => """
                 tours owner_tour JOIN shows s ON s.tour_id=owner_tour.id AND owner_tour.uuid=r.owner_uuid
                 """,
-            CatalogReferenceKind.Song => SongShowMembership("r.owner"),
+            CatalogReferenceKind.Song => matchSongs
+                ? SongShowMembership("r.owner")
+                : SongArtistShows("r.owner"),
             CatalogReferenceKind.Venue => VenueShowMembership("r.owner"),
             CatalogReferenceKind.ArtistVenue =>
                 $$"""
@@ -494,13 +603,22 @@ public sealed class CatalogCollectionReader
                 """,
             _ => collection.Filters switch
             {
-                { Song: not null } => SongShowMembership("r.song"),
+                { Song: not null } => matchSongs
+                    ? SongShowMembership("r.song")
+                    : SongArtistShows("r.song"),
                 { Venue: not null } => VenueShowMembership("r.venue"),
                 { Artist: not null } =>
                     "artists owner_artist JOIN shows s ON s.artist_id=owner_artist.id AND owner_artist.uuid=r.artist",
                 _ => "shows s",
             },
         };
+
+    private static string SongArtistShows(string song) =>
+        $$"""
+            norm.songs owner_song JOIN artists owner_artist
+              ON owner_artist.uuid=owner_song.artist_uuid AND owner_song.id={{song}}
+            JOIN shows s ON s.artist_id=owner_artist.id
+            """;
 
     private static string SongShowMembership(string song) =>
         $$"""
@@ -560,6 +678,68 @@ public sealed class CatalogCollectionReader
               CROSS JOIN LATERAL norm.song_recording_matches(song.artist_uuid,ARRAY[song.id],song.show_uuids) m
             )
             """;
+    }
+
+    private sealed class SongShowScan(
+        int index,
+        CatalogCollection collection,
+        CatalogPageRequest page
+    )
+    {
+        public int Index { get; } = index;
+        public CatalogCollection Collection { get; } = collection;
+        public CatalogPageRequest Page { get; } = page;
+        public string[] Songs { get; } =
+            new[]
+            {
+                collection.OwnerKind == CatalogReferenceKind.Song ? collection.Owner : null,
+                collection.Filters?.Song,
+            }
+                .OfType<string>()
+                .Distinct()
+                .ToArray();
+        public CatalogPageKey? After { get; set; } = page.After;
+        public int Scanned { get; set; }
+        public List<(CatalogResolvedTarget Target, CatalogPageKey Key)> Matches { get; } = [];
+
+        public bool AddMatches(
+            CatalogPageSelection candidates,
+            IReadOnlyDictionary<string, IReadOnlySet<Guid>> membership
+        )
+        {
+            var previous = Matches.Count;
+            for (var i = 0; i < candidates.Targets.Count; i++)
+            {
+                var target = candidates.Targets[i];
+                if (
+                    Songs.All(song =>
+                        membership.TryGetValue(song, out var shows)
+                        && shows.Contains(target.Uuid!.Value)
+                    )
+                )
+                {
+                    Matches.Add((target, candidates.Keys[i]));
+                    if (Matches.Count > Page.First)
+                    {
+                        break;
+                    }
+                }
+            }
+
+            Scanned += candidates.Targets.Count;
+            After = candidates.Keys.LastOrDefault();
+            return Matches.Count > previous;
+        }
+
+        // Only returned matches define the public cursor. The private candidate cursor
+        // can run past lookahead and is discarded when this read unit finishes.
+        public CatalogPageSelection Complete() =>
+            new(
+                Matches.Take(Page.First).Select(match => match.Target).ToArray(),
+                Matches.Take(Page.First).Select(match => match.Key).ToArray(),
+                Matches.Count > Page.First,
+                null
+            );
     }
 
     private sealed class PageRow

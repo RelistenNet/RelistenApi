@@ -68,6 +68,53 @@ public sealed class CatalogSongMatchReader
         ).ToArray();
 
     /// <summary>
+    /// Tests candidate shows using the same recording validity as complete REST reads.
+    /// A song shared by several page requests is matched once against their union of shows.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<string, IReadOnlySet<Guid>>> ReadShowMembershipBatch(
+        CatalogReadSession session,
+        IReadOnlyList<(string Song, Guid[] Shows)> requests,
+        CancellationToken token
+    )
+    {
+        if (requests.Count == 0 || requests.All(request => request.Shows.Length == 0))
+        {
+            return new Dictionary<string, IReadOnlySet<Guid>>();
+        }
+
+        var rows = await session.Connection.QueryAsync<SongShowMembershipRow>(
+            session.Command(
+                """
+                WITH requested_songs AS MATERIALIZED (
+                    SELECT s.id,s.artist_uuid,array_agg(DISTINCT sh.show_uuid) show_uuids
+                    FROM jsonb_to_recordset(@inputs::jsonb) AS i(song text,shows uuid[])
+                    JOIN norm.songs s ON s.id=i.song
+                    JOIN artists a ON a.uuid=s.artist_uuid
+                    JOIN features f ON f.artist_id=a.id AND f.norm_catalogue
+                    CROSS JOIN LATERAL unnest(i.shows) sh(show_uuid)
+                    GROUP BY s.id,s.artist_uuid
+                )
+                SELECT DISTINCT s.id song_id,m.show_uuid
+                FROM requested_songs s
+                CROSS JOIN LATERAL norm.song_recording_matches(s.artist_uuid,ARRAY[s.id],s.show_uuids) m
+                """,
+                new
+                {
+                    inputs = JsonSerializer.Serialize(
+                        requests.Select(r => new { song = r.Song, shows = r.Shows })
+                    ),
+                },
+                token
+            )
+        );
+        return rows.GroupBy(row => row.song_id)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlySet<Guid>)group.Select(row => row.show_uuid).ToHashSet()
+            );
+    }
+
+    /// <summary>
     /// Aggregates source maxima without transferring the full recording match list.
     /// Shows remain members even when no file has a classifiable, positive duration.
     /// </summary>
@@ -232,6 +279,12 @@ public sealed class CatalogSongMatchReader
                 )
             )
         ).ToArray();
+
+    private sealed class SongShowMembershipRow
+    {
+        public string song_id { get; set; } = null!;
+        public Guid show_uuid { get; set; }
+    }
 
     private sealed class ShowStatisticsRow
     {
