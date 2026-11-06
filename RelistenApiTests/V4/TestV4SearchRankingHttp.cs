@@ -102,6 +102,18 @@ public sealed partial class TestV4CatalogHttp
             .AsArray()
             .Should()
             .OnlyContain(entry => entry!["kind"]!.GetValue<string>() == "imported_song");
+        foreach (var entry in raw["songs"]!.AsArray())
+        {
+            entry!["imported_song"]!.AsObject().ContainsKey("normalized_song_id").Should().BeTrue();
+            entry["imported_song"]!["normalized_song_id"].Should().BeNull();
+        }
+        // Only the imported title matches; its evidence points through a merged song.
+        var mapped = await GetJson(
+            $"/api/v4/search?q=Imported%20Scarlet&artist_id={CatalogId("artist", 301)}"
+        );
+        mapped["songs"]!.AsArray().Should().ContainSingle();
+        mapped["songs"]![0]!["song"]!["id"]!.GetValue<string>().Should().Be("song_00000101");
+        mapped["songs"]![0]!["imported_song"].Should().BeNull();
         var venues = await GetJson($"/api/v4/search?q=Historical&artist_id={BrowseArtistId}");
         venues["venues"]!.AsArray().Should().Contain(entry => entry!["artist_venue"] != null);
         var show = await GetJson($"/api/v4/search?q=1995-12-31&artist_id={BrowseArtistId}");

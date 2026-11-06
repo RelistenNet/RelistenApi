@@ -87,6 +87,7 @@ public static partial class V4CatalogProjection
         new()
         {
             Id = new(song.uuid),
+            NormalizedSongId = song.normalized_song_id is { } id ? SongId.Parse(id) : null,
             ArtistId = new(song.artist_uuid),
             Name = song.name,
             Slug = song.slug,

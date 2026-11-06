@@ -14,6 +14,7 @@ namespace Relisten.Catalog;
 public sealed class CatalogSongReader(
     DbService db,
     CatalogSongMetadataReader songMetadata,
+    CatalogImportedSongMappingReader importedSongMappings,
     CatalogSongMatchReader matches,
     CatalogTrackNormalizationReader trackNormalization,
     CatalogShowMetadataReader showMetadata
@@ -38,17 +39,11 @@ public sealed class CatalogSongReader(
         }
 
         var songs = await ReadSongDetails(session, artistUuid, null, cancellationToken);
-        var mapped = await ReadMappedImportedSongs(
-            session,
-            artistUuid,
-            artist.id,
-            cancellationToken
-        );
         return songs
             .Select(song => new CatalogArtistSongEntry(song, null))
             .Concat(
                 imported
-                    .Where(song => !mapped.Contains(song.uuid))
+                    .Where(song => song.normalized_song_id is null)
                     .Select(song => new CatalogArtistSongEntry(null, song))
             )
             .OrderBy(entry => entry.Song?.name ?? entry.ImportedSong!.name, StringComparer.Ordinal)
@@ -165,6 +160,7 @@ public sealed class CatalogSongReader(
         {
             return null;
         }
+        await importedSongMappings.Apply(session, [song], cancellationToken);
         var shows = await ReadShows(
             session,
             CatalogShowMetadataReader.ShowSelect
@@ -195,41 +191,6 @@ public sealed class CatalogSongReader(
         return (
             await ReadSongDetails(session, song.artist_uuid, [song.id], cancellationToken)
         ).Single();
-    }
-
-    private async Task<HashSet<Guid>> ReadMappedImportedSongs(
-        CatalogReadSession session,
-        Guid artistUuid,
-        long artistId,
-        CancellationToken cancellationToken
-    )
-    {
-        var evidence = (
-            await session.Connection.QueryAsync<ImportedSongEvidence>(
-                session.Command(
-                    """
-                    SELECT e.setlist_song_uuid,e.song_id FROM norm.song_evidence e
-                    JOIN setlist_songs s ON s.uuid=e.setlist_song_uuid
-                    WHERE s.artist_id=@artistId
-                    """,
-                    new { artistId },
-                    cancellationToken
-                )
-            )
-        ).ToArray();
-        var resolved = await songMetadata.Read(
-            session,
-            evidence.Select(row => row.song_id).ToArray(),
-            cancellationToken
-        );
-        // A title is not a mapping. Preserve raw access when evidence is missing,
-        // broken, or points outside the artist's canonical catalog.
-        return evidence
-            .Where(row =>
-                resolved.TryGetValue(row.song_id, out var song) && song.artist_uuid == artistUuid
-            )
-            .Select(row => row.setlist_song_uuid)
-            .ToHashSet();
     }
 
     private static Task<SongArtist?> ReadArtist(
@@ -358,12 +319,13 @@ public sealed class CatalogSongReader(
         ).ToLookup(alias => alias.canonical_id);
     }
 
-    private static async Task<IReadOnlyList<CatalogImportedSong>> ReadImportedSongs(
+    private async Task<IReadOnlyList<CatalogImportedSong>> ReadImportedSongs(
         CatalogReadSession session,
         long artistId,
         CancellationToken cancellationToken
-    ) =>
-        (
+    )
+    {
+        var imported = (
             await session.Connection.QueryAsync<CatalogImportedSong>(
                 session.Command(
                     ImportedSongSelect
@@ -373,6 +335,9 @@ public sealed class CatalogSongReader(
                 )
             )
         ).ToArray();
+        await importedSongMappings.Apply(session, imported, cancellationToken);
+        return imported;
+    }
 
     private async Task<IReadOnlyList<CatalogShow>> ReadShows(
         CatalogReadSession session,
@@ -402,12 +367,6 @@ public sealed class CatalogSongReader(
     {
         public long id { get; set; }
         public bool approved { get; set; }
-    }
-
-    private sealed class ImportedSongEvidence
-    {
-        public Guid setlist_song_uuid { get; set; }
-        public string song_id { get; set; } = null!;
     }
 
     private sealed class SongAlias

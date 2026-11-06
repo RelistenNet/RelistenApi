@@ -378,6 +378,11 @@ public sealed partial class TestV4CatalogHttp
             song!["id"]!.GetValue<string>() == CatalogId("imported_song", 351)
         )!;
         imported["setlist_show_count"]!.GetValue<int>().Should().Be(2);
+        var unmapped = inventory.Single(song =>
+            song!["id"]!.GetValue<string>() == CatalogId("imported_song", 352)
+        )!;
+        unmapped.AsObject().ContainsKey("normalized_song_id").Should().BeTrue();
+        unmapped["normalized_song_id"].Should().BeNull("a matching title is not evidence");
         var detail = await GetJson(ImportedSongPath(351));
         detail["setlist_show_count"]!.GetValue<int>().Should().Be(2);
         detail["shows"]!
@@ -395,6 +400,75 @@ public sealed partial class TestV4CatalogHttp
         var document = await GetJson("/api-docs/v4/swagger.json");
         AssertSchemaFields(document, "ImportedSongResource", imported);
         AssertSchemaFields(document, "ImportedSongWithShowsResource", detail);
+        var mappingSchema = document["components"]!["schemas"]!["ImportedSongResource"]![
+            "properties"
+        ]!["normalized_song_id"]!;
+        mappingSchema["type"]!.GetValue<string>().Should().Be("string");
+        mappingSchema["nullable"]!.GetValue<bool>().Should().BeTrue();
+    }
+
+    [Test]
+    public async Task Imported_song_mapping_resolves_merges_and_clears_without_changing_setlist_scope()
+    {
+        var path = ImportedSongPath(351);
+        using var initial = await http.GetAsync(path);
+        var detail = JsonNode.Parse(await initial.Content.ReadAsStringAsync())!;
+        detail["normalized_song_id"]!.GetValue<string>().Should().Be("song_00000101");
+        var inventory = (await GetJson(SongArtistPath + "/imported-songs")).AsArray();
+        JsonNode
+            .DeepEquals(
+                inventory.Single(song =>
+                    song!["id"]!.GetValue<string>() == CatalogId("imported_song", 351)
+                ),
+                ResourceMetadata(detail)
+            )
+            .Should()
+            .BeTrue();
+        var resolved = await Resolve(
+            Reference("imported_song", "v4", CatalogId("imported_song", 351))
+        );
+        JsonNode
+            .DeepEquals(resolved["entities"]!["imported_songs"]![0], ResourceMetadata(detail))
+            .Should()
+            .BeTrue();
+
+        await using var connection = await MigratedTestDatabase.OpenAsync();
+        try
+        {
+            await ChangeNormalization(
+                connection,
+                "DELETE FROM norm.song_evidence WHERE setlist_song_uuid='00000000-0000-0000-0000-000000000351'"
+            );
+            using var changed = await Conditional(path, initial.Headers.ETag!.ToString());
+            changed.StatusCode.Should().Be(HttpStatusCode.OK);
+            var current = JsonNode.Parse(await changed.Content.ReadAsStringAsync())!;
+            current.AsObject().ContainsKey("normalized_song_id").Should().BeTrue();
+            current["normalized_song_id"].Should().BeNull();
+            detail["normalized_song_id"] = null;
+            JsonNode.DeepEquals(current, detail).Should().BeTrue();
+            var entries = (await GetJson(SongArtistPath + "/songs")).AsArray();
+            JsonNode
+                .DeepEquals(
+                    entries.Single(entry =>
+                        entry!["imported_song"]?["id"]?.GetValue<string>()
+                        == CatalogId("imported_song", 351)
+                    )!["imported_song"],
+                    ResourceMetadata(current)
+                )
+                .Should()
+                .BeTrue();
+        }
+        finally
+        {
+            await ChangeNormalization(
+                connection,
+                """
+                INSERT INTO norm.song_evidence(setlist_song_uuid,song_id,author_type,author_ref,run_uuid)
+                VALUES('00000000-0000-0000-0000-000000000351','song_00000104','importer','v4-review',
+                       '00000000-0000-0000-0000-000000000099')
+                """
+            );
+        }
     }
 
     [TestCase(302, 355)]
@@ -413,6 +487,12 @@ public sealed partial class TestV4CatalogHttp
             .Should()
             .Be(CatalogId("imported_song", importedSuffix));
         var detail = await GetJson(ImportedSongPath(importedSuffix));
+        detail.AsObject().ContainsKey("normalized_song_id").Should().BeTrue();
+        detail["normalized_song_id"].Should().BeNull();
+        JsonNode
+            .DeepEquals(entries[0]!["imported_song"], ResourceMetadata(detail))
+            .Should()
+            .BeTrue();
         detail["setlist_show_count"]!.GetValue<int>().Should().Be(0);
         detail["shows"]!.AsArray().Should().BeEmpty();
     }
@@ -763,7 +843,9 @@ public sealed partial class TestV4CatalogHttp
                 .GetValue<int>()
                 .Should()
                 .Be(0);
-            (await GetJson(ImportedSongPath(351)))["shows"]!.AsArray().Should().HaveCount(2);
+            var imported = await GetJson(ImportedSongPath(351));
+            imported["normalized_song_id"].Should().BeNull();
+            imported["shows"]!.AsArray().Should().HaveCount(2);
         }
         finally
         {

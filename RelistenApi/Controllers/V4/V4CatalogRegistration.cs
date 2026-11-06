@@ -37,6 +37,7 @@ public static class V4CatalogRegistration
         services.AddTransient<CatalogTourReader>();
         services.AddTransient<CatalogTourMetadataReader>();
         services.AddTransient<CatalogSongMetadataReader>();
+        services.AddTransient<CatalogImportedSongMappingReader>();
         services.AddTransient<CatalogTrackNormalizationReader>();
         services.AddTransient<CatalogSongMatchReader>();
         services.AddTransient<CatalogSongReader>();

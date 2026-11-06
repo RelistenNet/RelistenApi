@@ -18,7 +18,8 @@ public sealed class CatalogResolverHydrator(
     CatalogTrackNormalizationReader trackNormalization,
     CatalogTourMetadataReader tourMetadata,
     CatalogVenueMetadataReader venueMetadata,
-    CatalogSongReader songMetadata
+    CatalogSongReader songMetadata,
+    CatalogImportedSongMappingReader importedSongMappings
 )
 {
     public async Task<CatalogResolvedEntities> Read(
@@ -374,12 +375,13 @@ public sealed class CatalogResolverHydrator(
             )
         ).ToArray();
 
-    private static async Task<CatalogImportedSong[]> ReadImportedSongs(
+    private async Task<CatalogImportedSong[]> ReadImportedSongs(
         CatalogReadSession session,
         Guid[] uuids,
         CancellationToken cancellationToken
-    ) =>
-        (
+    )
+    {
+        var imported = (
             await session.Connection.QueryAsync<CatalogImportedSong>(
                 session.Command(
                     CatalogSongReader.ImportedSongSelect
@@ -389,6 +391,9 @@ public sealed class CatalogResolverHydrator(
                 )
             )
         ).ToArray();
+        await importedSongMappings.Apply(session, imported, cancellationToken);
+        return imported;
+    }
 
     private static Guid[] Uuids(
         IReadOnlyList<CatalogResolvedTarget> targets,
