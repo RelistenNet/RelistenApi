@@ -1,0 +1,1679 @@
+{
+  "applicationCommit": "0cea17090",
+  "checkoutCommit": "bc50e244fbefe08f77968b58a6bad24f2d52c48c",
+  "schemaMigration": 20,
+  "policy": "Existing real local catalog; 5 serial requests per case, first separate. GraphQL-Cost reporting enabled. No concurrent tests or SQL profiling. Search excluded.",
+  "graph": [
+    {
+      "name": "exact-dashboard",
+      "firstMs": 732.9568339046091,
+      "samples": [
+        {
+          "ms": 732.9568339046091,
+          "status": 200,
+          "bytes": 45048,
+          "cost": {
+            "fieldCost": 2834,
+            "typeCost": 3025
+          },
+          "payloadHash": "c74a3fe7b9de89b2b9ec4dc47ee680633aa05090dc3c7b9738b087b097b48d3f"
+        },
+        {
+          "ms": 422.78729216195643,
+          "status": 200,
+          "bytes": 45048,
+          "cost": {
+            "fieldCost": 2834,
+            "typeCost": 3025
+          },
+          "payloadHash": "c74a3fe7b9de89b2b9ec4dc47ee680633aa05090dc3c7b9738b087b097b48d3f"
+        },
+        {
+          "ms": 322.69716705195606,
+          "status": 200,
+          "bytes": 45048,
+          "cost": {
+            "fieldCost": 2834,
+            "typeCost": 3025
+          },
+          "payloadHash": "c74a3fe7b9de89b2b9ec4dc47ee680633aa05090dc3c7b9738b087b097b48d3f"
+        },
+        {
+          "ms": 324.9544578138739,
+          "status": 200,
+          "bytes": 45048,
+          "cost": {
+            "fieldCost": 2834,
+            "typeCost": 3025
+          },
+          "payloadHash": "c74a3fe7b9de89b2b9ec4dc47ee680633aa05090dc3c7b9738b087b097b48d3f"
+        },
+        {
+          "ms": 305.79441599547863,
+          "status": 200,
+          "bytes": 45048,
+          "cost": {
+            "fieldCost": 2834,
+            "typeCost": 3025
+          },
+          "payloadHash": "c74a3fe7b9de89b2b9ec4dc47ee680633aa05090dc3c7b9738b087b097b48d3f"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 323.825812432915,
+      "warmRangeMs": [
+        305.79441599547863,
+        422.78729216195643
+      ],
+      "path": "/api/v4/graphql",
+      "request": {
+        "query": "query WebDashboard($historySize: Int! = 10) {\n  artist(id: \"artist_3qmp7zjbg1rpebhtyfy43096vj\") {\n    id name showCount sourceCount\n    years(first: 5, orderBy: RATING) {\n      nodes { id year showCount sourceCount }\n    }\n    songs(first: 8) {\n      nodes {\n        kind\n        song { id name matchedShowCount matchedTrackCount }\n        importedSong { id name setlistShowCount }\n      }\n      pageInfo { endCursor hasNextPage }\n    }\n  }\n\n  scarlet: song(id: \"song_62mhvjyd\") { ...SongHistory }\n  drums: song(id: \"song_pxnavq74\") { ...SongHistory }\n\n  oakland: artistVenueFor(\n    artistId: \"artist_3qmp7zjbg1rpebhtyfy43096vj\"\n    venueId: \"venue_yn1268r4\"\n  ) {\n    artistShowCount\n    venue { id name city region latitude longitude }\n    shows(first: 8, orderBy: DATE_DESCENDING) {\n      nodes { ...ShowCard }\n      totalCount\n      pageInfo { endCursor hasNextPage }\n    }\n  }\n\n  recording: source(id: \"source_0d6jj9kcqwayrky1qpbwb2m6a1\") {\n    id displayDate isSoundboard taper lineage\n    sets {\n      id index isEncore\n      tracks { ...PlayableFile }\n    }\n  }\n}\n\nfragment SongHistory on Song {\n  id name matchedShowCount matchedTrackCount\n  shows(first: $historySize, orderBy: DATE_DESCENDING) {\n    nodes {\n      show { ...ShowCard }\n      timings {\n        singleSong { median min max sourceCount }\n        multiSong { median sourceCount }\n      }\n      tracks(first: 3, selection: TOP) {\n        nodes {\n          ...PlayableFile\n          source { id isSoundboard taper avgRating }\n        }\n        pageInfo { endCursor hasNextPage }\n      }\n    }\n    pageInfo { endCursor hasNextPage }\n  }\n}\n\nfragment ShowCard on Show {\n  id displayDate sourceCount avgRating hasSoundboardSource\n  artistVenue { venue { id name city region } }\n  importedVenue { name location }\n  popularity { windows { days30 { plays } } }\n}\n\nfragment PlayableFile on SourceTrack {\n  id title duration mp3Url flacUrl\n  normalization {\n    state\n    parts { ordinal segueAfter song { id name } }\n  }\n}\n"
+      }
+    },
+    {
+      "name": "scarlet",
+      "firstMs": 52.31845797970891,
+      "samples": [
+        {
+          "ms": 52.31845797970891,
+          "status": 200,
+          "bytes": 4334,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "ebb638d1d946f4df96502a8bf1c0403e178054bf5adddb9dbcdb3f700544bfc2"
+        },
+        {
+          "ms": 55.19254202954471,
+          "status": 200,
+          "bytes": 4334,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "ebb638d1d946f4df96502a8bf1c0403e178054bf5adddb9dbcdb3f700544bfc2"
+        },
+        {
+          "ms": 59.891999932006,
+          "status": 200,
+          "bytes": 4334,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "ebb638d1d946f4df96502a8bf1c0403e178054bf5adddb9dbcdb3f700544bfc2"
+        },
+        {
+          "ms": 61.198333045467734,
+          "status": 200,
+          "bytes": 4334,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "ebb638d1d946f4df96502a8bf1c0403e178054bf5adddb9dbcdb3f700544bfc2"
+        },
+        {
+          "ms": 62.74370802566409,
+          "status": 200,
+          "bytes": 4334,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "ebb638d1d946f4df96502a8bf1c0403e178054bf5adddb9dbcdb3f700544bfc2"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 60.54516648873687,
+      "warmRangeMs": [
+        55.19254202954471,
+        62.74370802566409
+      ],
+      "path": "/api/v4/graphql",
+      "request": {
+        "query": "query SongHistoryRows(\n  $song: ID!\n  $first: Int! = 25\n  $after: String\n  $count: Boolean! = false\n) {\n  song(id: $song) {\n    id\n    name\n    matchedShowCount\n    shows(first: $first, after: $after, orderBy: DATE_DESCENDING) {\n      nodes {\n        show {\n          id\n          displayDate\n          sourceCount\n          popularity {\n            windows {\n              days30 {\n                plays\n              }\n            }\n          }\n          avgRating\n          hasSoundboardSource\n          artistVenue {\n            venue {\n              id\n              name\n              city\n              region\n            }\n          }\n          importedVenue {\n            name\n            location\n          }\n        }\n      }\n      totalCount @include(if: $count)\n      pageInfo {\n        endCursor\n        hasNextPage\n      }\n    }\n  }\n}\n",
+        "variables": {
+          "song": "song_62mhvjyd",
+          "first": 10
+        }
+      }
+    },
+    {
+      "name": "scarlet-next",
+      "firstMs": 56.432124925777316,
+      "samples": [
+        {
+          "ms": 56.432124925777316,
+          "status": 200,
+          "bytes": 4291,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "dca9602597f813f565c00533338fb2c80069aa8233877bcb77a23d72d2e5724c"
+        },
+        {
+          "ms": 57.105334009975195,
+          "status": 200,
+          "bytes": 4291,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "dca9602597f813f565c00533338fb2c80069aa8233877bcb77a23d72d2e5724c"
+        },
+        {
+          "ms": 55.37029099650681,
+          "status": 200,
+          "bytes": 4291,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "dca9602597f813f565c00533338fb2c80069aa8233877bcb77a23d72d2e5724c"
+        },
+        {
+          "ms": 54.3737499974668,
+          "status": 200,
+          "bytes": 4291,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "dca9602597f813f565c00533338fb2c80069aa8233877bcb77a23d72d2e5724c"
+        },
+        {
+          "ms": 54.53216703608632,
+          "status": 200,
+          "bytes": 4291,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "dca9602597f813f565c00533338fb2c80069aa8233877bcb77a23d72d2e5724c"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 54.951229016296566,
+      "warmRangeMs": [
+        54.3737499974668,
+        57.105334009975195
+      ],
+      "path": "/api/v4/graphql",
+      "request": {
+        "query": "query SongHistoryRows(\n  $song: ID!\n  $first: Int! = 25\n  $after: String\n  $count: Boolean! = false\n) {\n  song(id: $song) {\n    id\n    name\n    matchedShowCount\n    shows(first: $first, after: $after, orderBy: DATE_DESCENDING) {\n      nodes {\n        show {\n          id\n          displayDate\n          sourceCount\n          popularity {\n            windows {\n              days30 {\n                plays\n              }\n            }\n          }\n          avgRating\n          hasSoundboardSource\n          artistVenue {\n            venue {\n              id\n              name\n              city\n              region\n            }\n          }\n          importedVenue {\n            name\n            location\n          }\n        }\n      }\n      totalCount @include(if: $count)\n      pageInfo {\n        endCursor\n        hasNextPage\n      }\n    }\n  }\n}\n",
+        "variables": {
+          "song": "song_62mhvjyd",
+          "first": 10,
+          "after": "eyJWZXJzaW9uIjoxLCJTY29wZSI6IjlENjhERTMxREZGQTczRkMwMjE0QkYwNjAwRDA0REU5QjU3RDIxMDJENzQzREMwODQ0MzI2NEMwODAzOTY5MzIiLCJLZXkiOnsiU2NvcmUiOjAsIkxhYmVsIjoiIiwiSWQiOiIzZmI4NTIwOC02MWY3LWMyZTYtM2Y3My1mNTUyMmVhNDE0MjUiLCJTZWNvbmRhcnkiOjAsIkRlc2NlbmRpbmdMYWJlbCI6IjE5OTQtMDYtMTkifX0="
+        }
+      }
+    },
+    {
+      "name": "drums",
+      "firstMs": 184.51300007291138,
+      "samples": [
+        {
+          "ms": 184.51300007291138,
+          "status": 200,
+          "bytes": 4434,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "5f49bfee099a370fc6f1ec08e84a4552d1381f45c29aa3253b7a4685793aad2e"
+        },
+        {
+          "ms": 155.70166613906622,
+          "status": 200,
+          "bytes": 4434,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "5f49bfee099a370fc6f1ec08e84a4552d1381f45c29aa3253b7a4685793aad2e"
+        },
+        {
+          "ms": 162.2352919075638,
+          "status": 200,
+          "bytes": 4434,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "5f49bfee099a370fc6f1ec08e84a4552d1381f45c29aa3253b7a4685793aad2e"
+        },
+        {
+          "ms": 190.70004113018513,
+          "status": 200,
+          "bytes": 4434,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "5f49bfee099a370fc6f1ec08e84a4552d1381f45c29aa3253b7a4685793aad2e"
+        },
+        {
+          "ms": 192.21570808440447,
+          "status": 200,
+          "bytes": 4434,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "5f49bfee099a370fc6f1ec08e84a4552d1381f45c29aa3253b7a4685793aad2e"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 176.46766651887447,
+      "warmRangeMs": [
+        155.70166613906622,
+        192.21570808440447
+      ],
+      "path": "/api/v4/graphql",
+      "request": {
+        "query": "query SongHistoryRows(\n  $song: ID!\n  $first: Int! = 25\n  $after: String\n  $count: Boolean! = false\n) {\n  song(id: $song) {\n    id\n    name\n    matchedShowCount\n    shows(first: $first, after: $after, orderBy: DATE_DESCENDING) {\n      nodes {\n        show {\n          id\n          displayDate\n          sourceCount\n          popularity {\n            windows {\n              days30 {\n                plays\n              }\n            }\n          }\n          avgRating\n          hasSoundboardSource\n          artistVenue {\n            venue {\n              id\n              name\n              city\n              region\n            }\n          }\n          importedVenue {\n            name\n            location\n          }\n        }\n      }\n      totalCount @include(if: $count)\n      pageInfo {\n        endCursor\n        hasNextPage\n      }\n    }\n  }\n}\n",
+        "variables": {
+          "song": "song_pxnavq74",
+          "first": 10
+        }
+      }
+    },
+    {
+      "name": "drums-next",
+      "firstMs": 156.09141695313156,
+      "samples": [
+        {
+          "ms": 156.09141695313156,
+          "status": 200,
+          "bytes": 4330,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "6860219e98d706127f5c6de55fd9b4ec55113ed0a761c43c5f05dec10859a147"
+        },
+        {
+          "ms": 162.22287504933774,
+          "status": 200,
+          "bytes": 4330,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "6860219e98d706127f5c6de55fd9b4ec55113ed0a761c43c5f05dec10859a147"
+        },
+        {
+          "ms": 165.1969167869538,
+          "status": 200,
+          "bytes": 4330,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "6860219e98d706127f5c6de55fd9b4ec55113ed0a761c43c5f05dec10859a147"
+        },
+        {
+          "ms": 160.03083297982812,
+          "status": 200,
+          "bytes": 4330,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "6860219e98d706127f5c6de55fd9b4ec55113ed0a761c43c5f05dec10859a147"
+        },
+        {
+          "ms": 157.3130830656737,
+          "status": 200,
+          "bytes": 4330,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "6860219e98d706127f5c6de55fd9b4ec55113ed0a761c43c5f05dec10859a147"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 161.12685401458293,
+      "warmRangeMs": [
+        157.3130830656737,
+        165.1969167869538
+      ],
+      "path": "/api/v4/graphql",
+      "request": {
+        "query": "query SongHistoryRows(\n  $song: ID!\n  $first: Int! = 25\n  $after: String\n  $count: Boolean! = false\n) {\n  song(id: $song) {\n    id\n    name\n    matchedShowCount\n    shows(first: $first, after: $after, orderBy: DATE_DESCENDING) {\n      nodes {\n        show {\n          id\n          displayDate\n          sourceCount\n          popularity {\n            windows {\n              days30 {\n                plays\n              }\n            }\n          }\n          avgRating\n          hasSoundboardSource\n          artistVenue {\n            venue {\n              id\n              name\n              city\n              region\n            }\n          }\n          importedVenue {\n            name\n            location\n          }\n        }\n      }\n      totalCount @include(if: $count)\n      pageInfo {\n        endCursor\n        hasNextPage\n      }\n    }\n  }\n}\n",
+        "variables": {
+          "song": "song_pxnavq74",
+          "first": 10,
+          "after": "eyJWZXJzaW9uIjoxLCJTY29wZSI6IjIxMjNCMkY1REFBMTc0QzA0MjAyRDFCMTdGRTQxNEFFMEM2NTlDODhCREYwODYxQzRGNTdCQUU1OTYxNjA4RjYiLCJLZXkiOnsiU2NvcmUiOjAsIkxhYmVsIjoiIiwiSWQiOiJiNWY0YjljZi05MDA2LTU4YzgtYzc4MC1jNDIxN2FhNjhmMmUiLCJTZWNvbmRhcnkiOjAsIkRlc2NlbmRpbmdMYWJlbCI6IjE5OTUtMDYtMjQifX0="
+        }
+      }
+    },
+    {
+      "name": "rare-darling-corey",
+      "firstMs": 19.536582985892892,
+      "samples": [
+        {
+          "ms": 19.536582985892892,
+          "status": 200,
+          "bytes": 900,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "fc677d0128bd1c0efefa2645fbfe4e89100635bd1407b2f388b22c8260a7f3f9"
+        },
+        {
+          "ms": 13.779417145997286,
+          "status": 200,
+          "bytes": 900,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "fc677d0128bd1c0efefa2645fbfe4e89100635bd1407b2f388b22c8260a7f3f9"
+        },
+        {
+          "ms": 12.492958921939135,
+          "status": 200,
+          "bytes": 900,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "fc677d0128bd1c0efefa2645fbfe4e89100635bd1407b2f388b22c8260a7f3f9"
+        },
+        {
+          "ms": 14.4295000936836,
+          "status": 200,
+          "bytes": 900,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "fc677d0128bd1c0efefa2645fbfe4e89100635bd1407b2f388b22c8260a7f3f9"
+        },
+        {
+          "ms": 12.46420806273818,
+          "status": 200,
+          "bytes": 900,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "fc677d0128bd1c0efefa2645fbfe4e89100635bd1407b2f388b22c8260a7f3f9"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 13.13618803396821,
+      "warmRangeMs": [
+        12.46420806273818,
+        14.4295000936836
+      ],
+      "path": "/api/v4/graphql",
+      "request": {
+        "query": "query SongHistoryRows(\n  $song: ID!\n  $first: Int! = 25\n  $after: String\n  $count: Boolean! = false\n) {\n  song(id: $song) {\n    id\n    name\n    matchedShowCount\n    shows(first: $first, after: $after, orderBy: DATE_DESCENDING) {\n      nodes {\n        show {\n          id\n          displayDate\n          sourceCount\n          popularity {\n            windows {\n              days30 {\n                plays\n              }\n            }\n          }\n          avgRating\n          hasSoundboardSource\n          artistVenue {\n            venue {\n              id\n              name\n              city\n              region\n            }\n          }\n          importedVenue {\n            name\n            location\n          }\n        }\n      }\n      totalCount @include(if: $count)\n      pageInfo {\n        endCursor\n        hasNextPage\n      }\n    }\n  }\n}\n",
+        "variables": {
+          "song": "song_j5y7dtxx",
+          "first": 10
+        }
+      }
+    },
+    {
+      "name": "rare-darling-corey-next",
+      "firstMs": 5.921624833717942,
+      "samples": [
+        {
+          "ms": 5.921624833717942,
+          "status": 200,
+          "bytes": 217,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "41afd16207eb661c49bc318d59e85f5663f5e154daf50657daae7716431f2d4d"
+        },
+        {
+          "ms": 6.3338750042021275,
+          "status": 200,
+          "bytes": 217,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "41afd16207eb661c49bc318d59e85f5663f5e154daf50657daae7716431f2d4d"
+        },
+        {
+          "ms": 7.594209164381027,
+          "status": 200,
+          "bytes": 217,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "41afd16207eb661c49bc318d59e85f5663f5e154daf50657daae7716431f2d4d"
+        },
+        {
+          "ms": 6.573874969035387,
+          "status": 200,
+          "bytes": 217,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "41afd16207eb661c49bc318d59e85f5663f5e154daf50657daae7716431f2d4d"
+        },
+        {
+          "ms": 6.289750104770064,
+          "status": 200,
+          "bytes": 217,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "41afd16207eb661c49bc318d59e85f5663f5e154daf50657daae7716431f2d4d"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 6.453874986618757,
+      "warmRangeMs": [
+        6.289750104770064,
+        7.594209164381027
+      ],
+      "path": "/api/v4/graphql",
+      "request": {
+        "query": "query SongHistoryRows(\n  $song: ID!\n  $first: Int! = 25\n  $after: String\n  $count: Boolean! = false\n) {\n  song(id: $song) {\n    id\n    name\n    matchedShowCount\n    shows(first: $first, after: $after, orderBy: DATE_DESCENDING) {\n      nodes {\n        show {\n          id\n          displayDate\n          sourceCount\n          popularity {\n            windows {\n              days30 {\n                plays\n              }\n            }\n          }\n          avgRating\n          hasSoundboardSource\n          artistVenue {\n            venue {\n              id\n              name\n              city\n              region\n            }\n          }\n          importedVenue {\n            name\n            location\n          }\n        }\n      }\n      totalCount @include(if: $count)\n      pageInfo {\n        endCursor\n        hasNextPage\n      }\n    }\n  }\n}\n",
+        "variables": {
+          "song": "song_j5y7dtxx",
+          "first": 10,
+          "after": "eyJWZXJzaW9uIjoxLCJTY29wZSI6IjA4Njg0MzEyNzdDREMzMTFEMTczQzIzOURBQTVGRTgxRTgwNTczNkEyODhCREIyOUNBMDFGMTkzOTNDNjk1NzEiLCJLZXkiOnsiU2NvcmUiOjAsIkxhYmVsIjoiIiwiSWQiOiJhODVlMzE0ZS04ZDZiLTc2N2EtZDEyMC1kYmQ4NzQ3NDAxOGYiLCJTZWNvbmRhcnkiOjAsIkRlc2NlbmRpbmdMYWJlbCI6IjE5NzAtMTEtMjAifX0="
+        }
+      }
+    },
+    {
+      "name": "rare-golden-road",
+      "firstMs": 16.365416813641787,
+      "samples": [
+        {
+          "ms": 16.365416813641787,
+          "status": 200,
+          "bytes": 1298,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "a6b8950427d40cc2ed38b27dd1e1d3d3e83fe8d6e4f337fa1c445d682b45f6fa"
+        },
+        {
+          "ms": 12.570250080898404,
+          "status": 200,
+          "bytes": 1298,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "a6b8950427d40cc2ed38b27dd1e1d3d3e83fe8d6e4f337fa1c445d682b45f6fa"
+        },
+        {
+          "ms": 14.036375097930431,
+          "status": 200,
+          "bytes": 1298,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "a6b8950427d40cc2ed38b27dd1e1d3d3e83fe8d6e4f337fa1c445d682b45f6fa"
+        },
+        {
+          "ms": 13.246792135760188,
+          "status": 200,
+          "bytes": 1298,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "a6b8950427d40cc2ed38b27dd1e1d3d3e83fe8d6e4f337fa1c445d682b45f6fa"
+        },
+        {
+          "ms": 12.37075007520616,
+          "status": 200,
+          "bytes": 1298,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "a6b8950427d40cc2ed38b27dd1e1d3d3e83fe8d6e4f337fa1c445d682b45f6fa"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 12.908521108329296,
+      "warmRangeMs": [
+        12.37075007520616,
+        14.036375097930431
+      ],
+      "path": "/api/v4/graphql",
+      "request": {
+        "query": "query SongHistoryRows(\n  $song: ID!\n  $first: Int! = 25\n  $after: String\n  $count: Boolean! = false\n) {\n  song(id: $song) {\n    id\n    name\n    matchedShowCount\n    shows(first: $first, after: $after, orderBy: DATE_DESCENDING) {\n      nodes {\n        show {\n          id\n          displayDate\n          sourceCount\n          popularity {\n            windows {\n              days30 {\n                plays\n              }\n            }\n          }\n          avgRating\n          hasSoundboardSource\n          artistVenue {\n            venue {\n              id\n              name\n              city\n              region\n            }\n          }\n          importedVenue {\n            name\n            location\n          }\n        }\n      }\n      totalCount @include(if: $count)\n      pageInfo {\n        endCursor\n        hasNextPage\n      }\n    }\n  }\n}\n",
+        "variables": {
+          "song": "song_6k6e90sr",
+          "first": 10
+        }
+      }
+    },
+    {
+      "name": "rare-phish-big-pimpin",
+      "firstMs": 16.06941595673561,
+      "samples": [
+        {
+          "ms": 16.06941595673561,
+          "status": 200,
+          "bytes": 856,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "303856b0a55c6c9014e1372849fc035b0745838dd5cf9db269611bacbca18ded"
+        },
+        {
+          "ms": 11.867834022268653,
+          "status": 200,
+          "bytes": 856,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "303856b0a55c6c9014e1372849fc035b0745838dd5cf9db269611bacbca18ded"
+        },
+        {
+          "ms": 12.095334008336067,
+          "status": 200,
+          "bytes": 856,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "303856b0a55c6c9014e1372849fc035b0745838dd5cf9db269611bacbca18ded"
+        },
+        {
+          "ms": 13.215792132541537,
+          "status": 200,
+          "bytes": 856,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "303856b0a55c6c9014e1372849fc035b0745838dd5cf9db269611bacbca18ded"
+        },
+        {
+          "ms": 12.533540837466717,
+          "status": 200,
+          "bytes": 856,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "303856b0a55c6c9014e1372849fc035b0745838dd5cf9db269611bacbca18ded"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 12.314437422901392,
+      "warmRangeMs": [
+        11.867834022268653,
+        13.215792132541537
+      ],
+      "path": "/api/v4/graphql",
+      "request": {
+        "query": "query SongHistoryRows(\n  $song: ID!\n  $first: Int! = 25\n  $after: String\n  $count: Boolean! = false\n) {\n  song(id: $song) {\n    id\n    name\n    matchedShowCount\n    shows(first: $first, after: $after, orderBy: DATE_DESCENDING) {\n      nodes {\n        show {\n          id\n          displayDate\n          sourceCount\n          popularity {\n            windows {\n              days30 {\n                plays\n              }\n            }\n          }\n          avgRating\n          hasSoundboardSource\n          artistVenue {\n            venue {\n              id\n              name\n              city\n              region\n            }\n          }\n          importedVenue {\n            name\n            location\n          }\n        }\n      }\n      totalCount @include(if: $count)\n      pageInfo {\n        endCursor\n        hasNextPage\n      }\n    }\n  }\n}\n",
+        "variables": {
+          "song": "song_095gm0b5",
+          "first": 10
+        }
+      }
+    },
+    {
+      "name": "sparse-viola",
+      "firstMs": 59.69029199331999,
+      "samples": [
+        {
+          "ms": 59.69029199331999,
+          "status": 200,
+          "bytes": 4241,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "9dbf1fef6963123834aef2ef8f5680d3b56e1205a00a4c8ab6868ec26a553951"
+        },
+        {
+          "ms": 16.36454090476036,
+          "status": 200,
+          "bytes": 4241,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "9dbf1fef6963123834aef2ef8f5680d3b56e1205a00a4c8ab6868ec26a553951"
+        },
+        {
+          "ms": 15.243625035509467,
+          "status": 200,
+          "bytes": 4241,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "9dbf1fef6963123834aef2ef8f5680d3b56e1205a00a4c8ab6868ec26a553951"
+        },
+        {
+          "ms": 15.306416898965836,
+          "status": 200,
+          "bytes": 4241,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "9dbf1fef6963123834aef2ef8f5680d3b56e1205a00a4c8ab6868ec26a553951"
+        },
+        {
+          "ms": 15.72087500244379,
+          "status": 200,
+          "bytes": 4241,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "9dbf1fef6963123834aef2ef8f5680d3b56e1205a00a4c8ab6868ec26a553951"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 15.513645950704813,
+      "warmRangeMs": [
+        15.243625035509467,
+        16.36454090476036
+      ],
+      "path": "/api/v4/graphql",
+      "request": {
+        "query": "query SongHistoryRows(\n  $song: ID!\n  $first: Int! = 25\n  $after: String\n  $count: Boolean! = false\n) {\n  song(id: $song) {\n    id\n    name\n    matchedShowCount\n    shows(first: $first, after: $after, orderBy: DATE_DESCENDING) {\n      nodes {\n        show {\n          id\n          displayDate\n          sourceCount\n          popularity {\n            windows {\n              days30 {\n                plays\n              }\n            }\n          }\n          avgRating\n          hasSoundboardSource\n          artistVenue {\n            venue {\n              id\n              name\n              city\n              region\n            }\n          }\n          importedVenue {\n            name\n            location\n          }\n        }\n      }\n      totalCount @include(if: $count)\n      pageInfo {\n        endCursor\n        hasNextPage\n      }\n    }\n  }\n}\n",
+        "variables": {
+          "song": "song_j6736ex2",
+          "first": 10
+        }
+      }
+    },
+    {
+      "name": "old-cryptical",
+      "firstMs": 152.03162492252886,
+      "samples": [
+        {
+          "ms": 152.03162492252886,
+          "status": 200,
+          "bytes": 4371,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "f933e573ad7803f6235f308af93ba24c4b55b3b118e52f7fc068e8dbb8330b20"
+        },
+        {
+          "ms": 24.19170900247991,
+          "status": 200,
+          "bytes": 4371,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "f933e573ad7803f6235f308af93ba24c4b55b3b118e52f7fc068e8dbb8330b20"
+        },
+        {
+          "ms": 22.456834092736244,
+          "status": 200,
+          "bytes": 4371,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "f933e573ad7803f6235f308af93ba24c4b55b3b118e52f7fc068e8dbb8330b20"
+        },
+        {
+          "ms": 25.485833175480366,
+          "status": 200,
+          "bytes": 4371,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "f933e573ad7803f6235f308af93ba24c4b55b3b118e52f7fc068e8dbb8330b20"
+        },
+        {
+          "ms": 24.549292167648673,
+          "status": 200,
+          "bytes": 4371,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "f933e573ad7803f6235f308af93ba24c4b55b3b118e52f7fc068e8dbb8330b20"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 24.370500585064292,
+      "warmRangeMs": [
+        22.456834092736244,
+        25.485833175480366
+      ],
+      "path": "/api/v4/graphql",
+      "request": {
+        "query": "query SongHistoryRows(\n  $song: ID!\n  $first: Int! = 25\n  $after: String\n  $count: Boolean! = false\n) {\n  song(id: $song) {\n    id\n    name\n    matchedShowCount\n    shows(first: $first, after: $after, orderBy: DATE_DESCENDING) {\n      nodes {\n        show {\n          id\n          displayDate\n          sourceCount\n          popularity {\n            windows {\n              days30 {\n                plays\n              }\n            }\n          }\n          avgRating\n          hasSoundboardSource\n          artistVenue {\n            venue {\n              id\n              name\n              city\n              region\n            }\n          }\n          importedVenue {\n            name\n            location\n          }\n        }\n      }\n      totalCount @include(if: $count)\n      pageInfo {\n        endCursor\n        hasNextPage\n      }\n    }\n  }\n}\n",
+        "variables": {
+          "song": "song_arn8bnn9",
+          "first": 10
+        }
+      }
+    },
+    {
+      "name": "old-cryptical-next",
+      "firstMs": 22.583584068343043,
+      "samples": [
+        {
+          "ms": 22.583584068343043,
+          "status": 200,
+          "bytes": 4376,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "1731299616dbe252eac6be0278a29784e80b7b88e5fe90e0c3a10e28ab07a4a7"
+        },
+        {
+          "ms": 24.11770890466869,
+          "status": 200,
+          "bytes": 4376,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "1731299616dbe252eac6be0278a29784e80b7b88e5fe90e0c3a10e28ab07a4a7"
+        },
+        {
+          "ms": 24.25895887427032,
+          "status": 200,
+          "bytes": 4376,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "1731299616dbe252eac6be0278a29784e80b7b88e5fe90e0c3a10e28ab07a4a7"
+        },
+        {
+          "ms": 23.79283308982849,
+          "status": 200,
+          "bytes": 4376,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "1731299616dbe252eac6be0278a29784e80b7b88e5fe90e0c3a10e28ab07a4a7"
+        },
+        {
+          "ms": 22.87050010636449,
+          "status": 200,
+          "bytes": 4376,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "1731299616dbe252eac6be0278a29784e80b7b88e5fe90e0c3a10e28ab07a4a7"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 23.95527099724859,
+      "warmRangeMs": [
+        22.87050010636449,
+        24.25895887427032
+      ],
+      "path": "/api/v4/graphql",
+      "request": {
+        "query": "query SongHistoryRows(\n  $song: ID!\n  $first: Int! = 25\n  $after: String\n  $count: Boolean! = false\n) {\n  song(id: $song) {\n    id\n    name\n    matchedShowCount\n    shows(first: $first, after: $after, orderBy: DATE_DESCENDING) {\n      nodes {\n        show {\n          id\n          displayDate\n          sourceCount\n          popularity {\n            windows {\n              days30 {\n                plays\n              }\n            }\n          }\n          avgRating\n          hasSoundboardSource\n          artistVenue {\n            venue {\n              id\n              name\n              city\n              region\n            }\n          }\n          importedVenue {\n            name\n            location\n          }\n        }\n      }\n      totalCount @include(if: $count)\n      pageInfo {\n        endCursor\n        hasNextPage\n      }\n    }\n  }\n}\n",
+        "variables": {
+          "song": "song_arn8bnn9",
+          "first": 10,
+          "after": "eyJWZXJzaW9uIjoxLCJTY29wZSI6IjdDREIzREMzNDk4NjJCQTMyNUYxOUExRjVGMkQ0N0MzMUUyMzVGM0FDMTQ5NTUwNEI2Q0RFOURFNTYzOTg0MzMiLCJLZXkiOnsiU2NvcmUiOjAsIkxhYmVsIjoiIiwiSWQiOiI0ZTA2NWZhMy1lZDBiLTgxZWUtMDg0Ny1hMTEzNWM5YTFhZDUiLCJTZWNvbmRhcnkiOjAsIkRlc2NlbmRpbmdMYWJlbCI6IjE5NzEtMTEtMTcifX0="
+        }
+      }
+    },
+    {
+      "name": "old-day-job",
+      "firstMs": 223.10066712088883,
+      "samples": [
+        {
+          "ms": 223.10066712088883,
+          "status": 200,
+          "bytes": 4336,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "7aa18c384a1eaa0fb28cce265461d2c723ae0deea03ce3e6f91b6d8c8034a924"
+        },
+        {
+          "ms": 26.247041067108512,
+          "status": 200,
+          "bytes": 4336,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "7aa18c384a1eaa0fb28cce265461d2c723ae0deea03ce3e6f91b6d8c8034a924"
+        },
+        {
+          "ms": 22.939541842788458,
+          "status": 200,
+          "bytes": 4336,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "7aa18c384a1eaa0fb28cce265461d2c723ae0deea03ce3e6f91b6d8c8034a924"
+        },
+        {
+          "ms": 25.42854193598032,
+          "status": 200,
+          "bytes": 4336,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "7aa18c384a1eaa0fb28cce265461d2c723ae0deea03ce3e6f91b6d8c8034a924"
+        },
+        {
+          "ms": 25.029833195731044,
+          "status": 200,
+          "bytes": 4336,
+          "cost": {
+            "fieldCost": 92,
+            "typeCost": 84
+          },
+          "payloadHash": "7aa18c384a1eaa0fb28cce265461d2c723ae0deea03ce3e6f91b6d8c8034a924"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 25.229187565855682,
+      "warmRangeMs": [
+        22.939541842788458,
+        26.247041067108512
+      ],
+      "path": "/api/v4/graphql",
+      "request": {
+        "query": "query SongHistoryRows(\n  $song: ID!\n  $first: Int! = 25\n  $after: String\n  $count: Boolean! = false\n) {\n  song(id: $song) {\n    id\n    name\n    matchedShowCount\n    shows(first: $first, after: $after, orderBy: DATE_DESCENDING) {\n      nodes {\n        show {\n          id\n          displayDate\n          sourceCount\n          popularity {\n            windows {\n              days30 {\n                plays\n              }\n            }\n          }\n          avgRating\n          hasSoundboardSource\n          artistVenue {\n            venue {\n              id\n              name\n              city\n              region\n            }\n          }\n          importedVenue {\n            name\n            location\n          }\n        }\n      }\n      totalCount @include(if: $count)\n      pageInfo {\n        endCursor\n        hasNextPage\n      }\n    }\n  }\n}\n",
+        "variables": {
+          "song": "song_90fbxy8a",
+          "first": 10
+        }
+      }
+    },
+    {
+      "name": "scarlet-count",
+      "firstMs": 57.80670908279717,
+      "samples": [
+        {
+          "ms": 57.80670908279717,
+          "status": 200,
+          "bytes": 4352,
+          "cost": {
+            "fieldCost": 102,
+            "typeCost": 84
+          },
+          "payloadHash": "7805e0c083586e028477991f3be3afd7aa79891fa1a9d9e9f062af3b0e58362a"
+        },
+        {
+          "ms": 51.170708844438195,
+          "status": 200,
+          "bytes": 4352,
+          "cost": {
+            "fieldCost": 102,
+            "typeCost": 84
+          },
+          "payloadHash": "7805e0c083586e028477991f3be3afd7aa79891fa1a9d9e9f062af3b0e58362a"
+        },
+        {
+          "ms": 51.24262487515807,
+          "status": 200,
+          "bytes": 4352,
+          "cost": {
+            "fieldCost": 102,
+            "typeCost": 84
+          },
+          "payloadHash": "7805e0c083586e028477991f3be3afd7aa79891fa1a9d9e9f062af3b0e58362a"
+        },
+        {
+          "ms": 49.42208295688033,
+          "status": 200,
+          "bytes": 4352,
+          "cost": {
+            "fieldCost": 102,
+            "typeCost": 84
+          },
+          "payloadHash": "7805e0c083586e028477991f3be3afd7aa79891fa1a9d9e9f062af3b0e58362a"
+        },
+        {
+          "ms": 51.54204182326794,
+          "status": 200,
+          "bytes": 4352,
+          "cost": {
+            "fieldCost": 102,
+            "typeCost": 84
+          },
+          "payloadHash": "7805e0c083586e028477991f3be3afd7aa79891fa1a9d9e9f062af3b0e58362a"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 51.20666685979813,
+      "warmRangeMs": [
+        49.42208295688033,
+        51.54204182326794
+      ],
+      "path": "/api/v4/graphql",
+      "request": {
+        "query": "query SongHistoryRows(\n  $song: ID!\n  $first: Int! = 25\n  $after: String\n  $count: Boolean! = false\n) {\n  song(id: $song) {\n    id\n    name\n    matchedShowCount\n    shows(first: $first, after: $after, orderBy: DATE_DESCENDING) {\n      nodes {\n        show {\n          id\n          displayDate\n          sourceCount\n          popularity {\n            windows {\n              days30 {\n                plays\n              }\n            }\n          }\n          avgRating\n          hasSoundboardSource\n          artistVenue {\n            venue {\n              id\n              name\n              city\n              region\n            }\n          }\n          importedVenue {\n            name\n            location\n          }\n        }\n      }\n      totalCount @include(if: $count)\n      pageInfo {\n        endCursor\n        hasNextPage\n      }\n    }\n  }\n}\n",
+        "variables": {
+          "song": "song_62mhvjyd",
+          "first": 10,
+          "count": true
+        }
+      }
+    }
+  ],
+  "rest": [
+    {
+      "name": "artist-shows",
+      "firstMs": 102.78929094783962,
+      "samples": [
+        {
+          "ms": 102.78929094783962,
+          "status": 200,
+          "bytes": 5606852,
+          "payloadHash": "88603bdc5652a4a87275dca101ecefbfecfb708dfd4aa81de4a22969416ac708"
+        },
+        {
+          "ms": 85.27083415538073,
+          "status": 200,
+          "bytes": 5606852,
+          "payloadHash": "88603bdc5652a4a87275dca101ecefbfecfb708dfd4aa81de4a22969416ac708"
+        },
+        {
+          "ms": 89.92741699330509,
+          "status": 200,
+          "bytes": 5606852,
+          "payloadHash": "88603bdc5652a4a87275dca101ecefbfecfb708dfd4aa81de4a22969416ac708"
+        },
+        {
+          "ms": 102.93316701427102,
+          "status": 200,
+          "bytes": 5606852,
+          "payloadHash": "88603bdc5652a4a87275dca101ecefbfecfb708dfd4aa81de4a22969416ac708"
+        },
+        {
+          "ms": 114.05470804311335,
+          "status": 200,
+          "bytes": 5606852,
+          "payloadHash": "88603bdc5652a4a87275dca101ecefbfecfb708dfd4aa81de4a22969416ac708"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 96.43029200378805,
+      "warmRangeMs": [
+        85.27083415538073,
+        114.05470804311335
+      ],
+      "path": "/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/shows"
+    },
+    {
+      "name": "recent-performed",
+      "firstMs": 53.97462495602667,
+      "samples": [
+        {
+          "ms": 53.97462495602667,
+          "status": 200,
+          "bytes": 68088,
+          "payloadHash": "4830baca2212186c35f1d7c7d681abe843d4730706e559320733b737fcb703c3"
+        },
+        {
+          "ms": 29.22045812010765,
+          "status": 200,
+          "bytes": 68088,
+          "payloadHash": "4830baca2212186c35f1d7c7d681abe843d4730706e559320733b737fcb703c3"
+        },
+        {
+          "ms": 26.109166909009218,
+          "status": 200,
+          "bytes": 68088,
+          "payloadHash": "4830baca2212186c35f1d7c7d681abe843d4730706e559320733b737fcb703c3"
+        },
+        {
+          "ms": 24.63670796714723,
+          "status": 200,
+          "bytes": 68088,
+          "payloadHash": "4830baca2212186c35f1d7c7d681abe843d4730706e559320733b737fcb703c3"
+        },
+        {
+          "ms": 24.34199978597462,
+          "status": 200,
+          "bytes": 68088,
+          "payloadHash": "4830baca2212186c35f1d7c7d681abe843d4730706e559320733b737fcb703c3"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 25.372937438078225,
+      "warmRangeMs": [
+        24.34199978597462,
+        29.22045812010765
+      ],
+      "path": "/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/shows/recently-performed?shows=25"
+    },
+    {
+      "name": "recent-updated",
+      "firstMs": 26.194832986220717,
+      "samples": [
+        {
+          "ms": 26.194832986220717,
+          "status": 200,
+          "bytes": 67128,
+          "payloadHash": "a1b491840274409b22e57de0308fc35074876702e3aa36ed3041c9bdca0cd648"
+        },
+        {
+          "ms": 23.587083909660578,
+          "status": 200,
+          "bytes": 67128,
+          "payloadHash": "a1b491840274409b22e57de0308fc35074876702e3aa36ed3041c9bdca0cd648"
+        },
+        {
+          "ms": 22.958582965657115,
+          "status": 200,
+          "bytes": 67128,
+          "payloadHash": "a1b491840274409b22e57de0308fc35074876702e3aa36ed3041c9bdca0cd648"
+        },
+        {
+          "ms": 22.611417109146714,
+          "status": 200,
+          "bytes": 67128,
+          "payloadHash": "a1b491840274409b22e57de0308fc35074876702e3aa36ed3041c9bdca0cd648"
+        },
+        {
+          "ms": 22.84870808944106,
+          "status": 200,
+          "bytes": 67128,
+          "payloadHash": "a1b491840274409b22e57de0308fc35074876702e3aa36ed3041c9bdca0cd648"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 22.903645527549088,
+      "warmRangeMs": [
+        22.611417109146714,
+        23.587083909660578
+      ],
+      "path": "/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/shows/recently-updated?shows=25"
+    },
+    {
+      "name": "top",
+      "firstMs": 18.91333400271833,
+      "samples": [
+        {
+          "ms": 18.91333400271833,
+          "status": 200,
+          "bytes": 67532,
+          "payloadHash": "076a83c1543b763c35f57cd0e210ad072d5f92afdf33e7d498c31cf3ab34a4d8"
+        },
+        {
+          "ms": 17.56375003606081,
+          "status": 200,
+          "bytes": 67532,
+          "payloadHash": "076a83c1543b763c35f57cd0e210ad072d5f92afdf33e7d498c31cf3ab34a4d8"
+        },
+        {
+          "ms": 19.476332934573293,
+          "status": 200,
+          "bytes": 67532,
+          "payloadHash": "076a83c1543b763c35f57cd0e210ad072d5f92afdf33e7d498c31cf3ab34a4d8"
+        },
+        {
+          "ms": 18.47854210063815,
+          "status": 200,
+          "bytes": 67532,
+          "payloadHash": "076a83c1543b763c35f57cd0e210ad072d5f92afdf33e7d498c31cf3ab34a4d8"
+        },
+        {
+          "ms": 17.955500166863203,
+          "status": 200,
+          "bytes": 67532,
+          "payloadHash": "076a83c1543b763c35f57cd0e210ad072d5f92afdf33e7d498c31cf3ab34a4d8"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 18.217021133750677,
+      "warmRangeMs": [
+        17.56375003606081,
+        19.476332934573293
+      ],
+      "path": "/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/shows/top?limit=25"
+    },
+    {
+      "name": "anniversary",
+      "firstMs": 9.385750163346529,
+      "samples": [
+        {
+          "ms": 9.385750163346529,
+          "status": 200,
+          "bytes": 60982,
+          "payloadHash": "5f435b69d988f0f4034fd171604b08aceb85658df48bb8ea2fb3abcffb21b119"
+        },
+        {
+          "ms": 11.395041132345796,
+          "status": 200,
+          "bytes": 60982,
+          "payloadHash": "5f435b69d988f0f4034fd171604b08aceb85658df48bb8ea2fb3abcffb21b119"
+        },
+        {
+          "ms": 9.790540905669332,
+          "status": 200,
+          "bytes": 60982,
+          "payloadHash": "5f435b69d988f0f4034fd171604b08aceb85658df48bb8ea2fb3abcffb21b119"
+        },
+        {
+          "ms": 9.444292169064283,
+          "status": 200,
+          "bytes": 60982,
+          "payloadHash": "5f435b69d988f0f4034fd171604b08aceb85658df48bb8ea2fb3abcffb21b119"
+        },
+        {
+          "ms": 10.844457894563675,
+          "status": 200,
+          "bytes": 60982,
+          "payloadHash": "5f435b69d988f0f4034fd171604b08aceb85658df48bb8ea2fb3abcffb21b119"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 10.317499400116503,
+      "warmRangeMs": [
+        9.444292169064283,
+        11.395041132345796
+      ],
+      "path": "/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/shows/on-date?month=12&day=31"
+    },
+    {
+      "name": "artist-songs",
+      "firstMs": 73.31716595217586,
+      "samples": [
+        {
+          "ms": 73.31716595217586,
+          "status": 200,
+          "bytes": 174363,
+          "payloadHash": "a62d89e89563569790c89144c174bc9fa9677f88156911c6314bc1700a167095"
+        },
+        {
+          "ms": 73.18237517029047,
+          "status": 200,
+          "bytes": 174363,
+          "payloadHash": "a62d89e89563569790c89144c174bc9fa9677f88156911c6314bc1700a167095"
+        },
+        {
+          "ms": 72.22204189747572,
+          "status": 200,
+          "bytes": 174363,
+          "payloadHash": "a62d89e89563569790c89144c174bc9fa9677f88156911c6314bc1700a167095"
+        },
+        {
+          "ms": 72.29900010861456,
+          "status": 200,
+          "bytes": 174363,
+          "payloadHash": "a62d89e89563569790c89144c174bc9fa9677f88156911c6314bc1700a167095"
+        },
+        {
+          "ms": 72.58645794354379,
+          "status": 200,
+          "bytes": 174363,
+          "payloadHash": "a62d89e89563569790c89144c174bc9fa9677f88156911c6314bc1700a167095"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 72.44272902607918,
+      "warmRangeMs": [
+        72.22204189747572,
+        73.18237517029047
+      ],
+      "path": "/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/songs"
+    },
+    {
+      "name": "artist-venues",
+      "firstMs": 25.915292091667652,
+      "samples": [
+        {
+          "ms": 25.915292091667652,
+          "status": 200,
+          "bytes": 336849,
+          "payloadHash": "e1bfb664c625bed1d91cd82b865f029b5d571fc8baeada4d95314b77f9e98215"
+        },
+        {
+          "ms": 23.266958072781563,
+          "status": 200,
+          "bytes": 336849,
+          "payloadHash": "e1bfb664c625bed1d91cd82b865f029b5d571fc8baeada4d95314b77f9e98215"
+        },
+        {
+          "ms": 22.748250048607588,
+          "status": 200,
+          "bytes": 336849,
+          "payloadHash": "e1bfb664c625bed1d91cd82b865f029b5d571fc8baeada4d95314b77f9e98215"
+        },
+        {
+          "ms": 25.664916029199958,
+          "status": 200,
+          "bytes": 336849,
+          "payloadHash": "e1bfb664c625bed1d91cd82b865f029b5d571fc8baeada4d95314b77f9e98215"
+        },
+        {
+          "ms": 24.3171660695225,
+          "status": 200,
+          "bytes": 336849,
+          "payloadHash": "e1bfb664c625bed1d91cd82b865f029b5d571fc8baeada4d95314b77f9e98215"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 23.79206207115203,
+      "warmRangeMs": [
+        22.748250048607588,
+        25.664916029199958
+      ],
+      "path": "/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/venues"
+    },
+    {
+      "name": "venue-detail",
+      "firstMs": 14.970999909564853,
+      "samples": [
+        {
+          "ms": 14.970999909564853,
+          "status": 200,
+          "bytes": 228453,
+          "payloadHash": "a4f2c30a8af04e7f1accd78dce4424ecad261257c21ee0fa1f671d599943d63e"
+        },
+        {
+          "ms": 13.250249903649092,
+          "status": 200,
+          "bytes": 228453,
+          "payloadHash": "a4f2c30a8af04e7f1accd78dce4424ecad261257c21ee0fa1f671d599943d63e"
+        },
+        {
+          "ms": 13.919457793235779,
+          "status": 200,
+          "bytes": 228453,
+          "payloadHash": "a4f2c30a8af04e7f1accd78dce4424ecad261257c21ee0fa1f671d599943d63e"
+        },
+        {
+          "ms": 13.707667123526335,
+          "status": 200,
+          "bytes": 228453,
+          "payloadHash": "a4f2c30a8af04e7f1accd78dce4424ecad261257c21ee0fa1f671d599943d63e"
+        },
+        {
+          "ms": 14.390625059604645,
+          "status": 200,
+          "bytes": 228453,
+          "payloadHash": "a4f2c30a8af04e7f1accd78dce4424ecad261257c21ee0fa1f671d599943d63e"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 13.813562458381057,
+      "warmRangeMs": [
+        13.250249903649092,
+        14.390625059604645
+      ],
+      "path": "/api/v4/artists/artist_3qmp7zjbg1rpebhtyfy43096vj/venues/venue_yn1268r4"
+    },
+    {
+      "name": "scarlet-song",
+      "firstMs": 77.46524992398918,
+      "samples": [
+        {
+          "ms": 77.46524992398918,
+          "status": 200,
+          "bytes": 961442,
+          "payloadHash": "21080bf25569031545d7ce84a307f60b97c817e98124bd33fbc632d849b1334a"
+        },
+        {
+          "ms": 76.81341585703194,
+          "status": 200,
+          "bytes": 961442,
+          "payloadHash": "21080bf25569031545d7ce84a307f60b97c817e98124bd33fbc632d849b1334a"
+        },
+        {
+          "ms": 80.67979221232235,
+          "status": 200,
+          "bytes": 961442,
+          "payloadHash": "21080bf25569031545d7ce84a307f60b97c817e98124bd33fbc632d849b1334a"
+        },
+        {
+          "ms": 76.39208296313882,
+          "status": 200,
+          "bytes": 961442,
+          "payloadHash": "21080bf25569031545d7ce84a307f60b97c817e98124bd33fbc632d849b1334a"
+        },
+        {
+          "ms": 76.1552918702364,
+          "status": 200,
+          "bytes": 961442,
+          "payloadHash": "21080bf25569031545d7ce84a307f60b97c817e98124bd33fbc632d849b1334a"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 76.60274941008538,
+      "warmRangeMs": [
+        76.1552918702364,
+        80.67979221232235
+      ],
+      "path": "/api/v4/songs/song_62mhvjyd"
+    },
+    {
+      "name": "scarlet-song-top",
+      "firstMs": 132.64800002798438,
+      "samples": [
+        {
+          "ms": 132.64800002798438,
+          "status": 200,
+          "bytes": 1072723,
+          "payloadHash": "a4aab5abf8d9b4ab9ca01001678a7a9eaba9bd37c44136afb3a848181cbc8522"
+        },
+        {
+          "ms": 136.09362510032952,
+          "status": 200,
+          "bytes": 1072723,
+          "payloadHash": "a4aab5abf8d9b4ab9ca01001678a7a9eaba9bd37c44136afb3a848181cbc8522"
+        },
+        {
+          "ms": 137.4541250988841,
+          "status": 200,
+          "bytes": 1072723,
+          "payloadHash": "a4aab5abf8d9b4ab9ca01001678a7a9eaba9bd37c44136afb3a848181cbc8522"
+        },
+        {
+          "ms": 141.6998750064522,
+          "status": 200,
+          "bytes": 1072723,
+          "payloadHash": "a4aab5abf8d9b4ab9ca01001678a7a9eaba9bd37c44136afb3a848181cbc8522"
+        },
+        {
+          "ms": 168.53720787912607,
+          "status": 200,
+          "bytes": 1072723,
+          "payloadHash": "a4aab5abf8d9b4ab9ca01001678a7a9eaba9bd37c44136afb3a848181cbc8522"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 139.57700005266815,
+      "warmRangeMs": [
+        136.09362510032952,
+        168.53720787912607
+      ],
+      "path": "/api/v4/songs/song_62mhvjyd?include_tracks=top"
+    },
+    {
+      "name": "rare-darling-corey",
+      "firstMs": 13.704583048820496,
+      "samples": [
+        {
+          "ms": 13.704583048820496,
+          "status": 200,
+          "bytes": 3023,
+          "payloadHash": "619d6ff61c6e9a67df24451ffda260ae821963e02f4a630a68b6e37c3e00e258"
+        },
+        {
+          "ms": 13.368207961320877,
+          "status": 200,
+          "bytes": 3023,
+          "payloadHash": "619d6ff61c6e9a67df24451ffda260ae821963e02f4a630a68b6e37c3e00e258"
+        },
+        {
+          "ms": 12.094540987163782,
+          "status": 200,
+          "bytes": 3023,
+          "payloadHash": "619d6ff61c6e9a67df24451ffda260ae821963e02f4a630a68b6e37c3e00e258"
+        },
+        {
+          "ms": 12.166667031124234,
+          "status": 200,
+          "bytes": 3023,
+          "payloadHash": "619d6ff61c6e9a67df24451ffda260ae821963e02f4a630a68b6e37c3e00e258"
+        },
+        {
+          "ms": 12.018125038594007,
+          "status": 200,
+          "bytes": 3023,
+          "payloadHash": "619d6ff61c6e9a67df24451ffda260ae821963e02f4a630a68b6e37c3e00e258"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 12.130604009144008,
+      "warmRangeMs": [
+        12.018125038594007,
+        13.368207961320877
+      ],
+      "path": "/api/v4/songs/song_j5y7dtxx"
+    },
+    {
+      "name": "rare-golden-road",
+      "firstMs": 12.452624971047044,
+      "samples": [
+        {
+          "ms": 12.452624971047044,
+          "status": 200,
+          "bytes": 5974,
+          "payloadHash": "002ab16f4802730dd58a2b2781b41428600ad9bc6755943c63ecf6958417d29d"
+        },
+        {
+          "ms": 12.767374981194735,
+          "status": 200,
+          "bytes": 5974,
+          "payloadHash": "002ab16f4802730dd58a2b2781b41428600ad9bc6755943c63ecf6958417d29d"
+        },
+        {
+          "ms": 11.783916037529707,
+          "status": 200,
+          "bytes": 5974,
+          "payloadHash": "002ab16f4802730dd58a2b2781b41428600ad9bc6755943c63ecf6958417d29d"
+        },
+        {
+          "ms": 11.882290942594409,
+          "status": 200,
+          "bytes": 5974,
+          "payloadHash": "002ab16f4802730dd58a2b2781b41428600ad9bc6755943c63ecf6958417d29d"
+        },
+        {
+          "ms": 12.567707803100348,
+          "status": 200,
+          "bytes": 5974,
+          "payloadHash": "002ab16f4802730dd58a2b2781b41428600ad9bc6755943c63ecf6958417d29d"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 12.224999372847378,
+      "warmRangeMs": [
+        11.783916037529707,
+        12.767374981194735
+      ],
+      "path": "/api/v4/songs/song_6k6e90sr"
+    },
+    {
+      "name": "rare-phish-big-pimpin",
+      "firstMs": 12.436707969754934,
+      "samples": [
+        {
+          "ms": 12.436707969754934,
+          "status": 200,
+          "bytes": 2848,
+          "payloadHash": "67ab26cb028d0d2311ef6c337d687ded963e1b1747fb842cc717cf24a23f86cc"
+        },
+        {
+          "ms": 11.452625039964914,
+          "status": 200,
+          "bytes": 2848,
+          "payloadHash": "67ab26cb028d0d2311ef6c337d687ded963e1b1747fb842cc717cf24a23f86cc"
+        },
+        {
+          "ms": 12.190249981358647,
+          "status": 200,
+          "bytes": 2848,
+          "payloadHash": "67ab26cb028d0d2311ef6c337d687ded963e1b1747fb842cc717cf24a23f86cc"
+        },
+        {
+          "ms": 12.699709041044116,
+          "status": 200,
+          "bytes": 2848,
+          "payloadHash": "67ab26cb028d0d2311ef6c337d687ded963e1b1747fb842cc717cf24a23f86cc"
+        },
+        {
+          "ms": 11.806333903223276,
+          "status": 200,
+          "bytes": 2848,
+          "payloadHash": "67ab26cb028d0d2311ef6c337d687ded963e1b1747fb842cc717cf24a23f86cc"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 11.998291942290962,
+      "warmRangeMs": [
+        11.452625039964914,
+        12.699709041044116
+      ],
+      "path": "/api/v4/songs/song_095gm0b5"
+    },
+    {
+      "name": "sparse-viola",
+      "firstMs": 16.58066688105464,
+      "samples": [
+        {
+          "ms": 16.58066688105464,
+          "status": 200,
+          "bytes": 95724,
+          "payloadHash": "f171c9cb0655cb75399f68d6af285053c2ec5234566fcfb988d3cf30cc618824"
+        },
+        {
+          "ms": 15.980292111635208,
+          "status": 200,
+          "bytes": 95724,
+          "payloadHash": "f171c9cb0655cb75399f68d6af285053c2ec5234566fcfb988d3cf30cc618824"
+        },
+        {
+          "ms": 15.908790985122323,
+          "status": 200,
+          "bytes": 95724,
+          "payloadHash": "f171c9cb0655cb75399f68d6af285053c2ec5234566fcfb988d3cf30cc618824"
+        },
+        {
+          "ms": 16.293250024318695,
+          "status": 200,
+          "bytes": 95724,
+          "payloadHash": "f171c9cb0655cb75399f68d6af285053c2ec5234566fcfb988d3cf30cc618824"
+        },
+        {
+          "ms": 15.349749941378832,
+          "status": 200,
+          "bytes": 95724,
+          "payloadHash": "f171c9cb0655cb75399f68d6af285053c2ec5234566fcfb988d3cf30cc618824"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 15.944541548378766,
+      "warmRangeMs": [
+        15.349749941378832,
+        16.293250024318695
+      ],
+      "path": "/api/v4/songs/song_j6736ex2"
+    },
+    {
+      "name": "old-cryptical",
+      "firstMs": 29.13987496867776,
+      "samples": [
+        {
+          "ms": 29.13987496867776,
+          "status": 200,
+          "bytes": 362853,
+          "payloadHash": "b7fd32997afdf94d3d76684327ec623512b2a5cac47aeee245d7f6df6e27d6cc"
+        },
+        {
+          "ms": 32.87187498062849,
+          "status": 200,
+          "bytes": 362853,
+          "payloadHash": "b7fd32997afdf94d3d76684327ec623512b2a5cac47aeee245d7f6df6e27d6cc"
+        },
+        {
+          "ms": 34.35345785692334,
+          "status": 200,
+          "bytes": 362853,
+          "payloadHash": "b7fd32997afdf94d3d76684327ec623512b2a5cac47aeee245d7f6df6e27d6cc"
+        },
+        {
+          "ms": 30.494792154058814,
+          "status": 200,
+          "bytes": 362853,
+          "payloadHash": "b7fd32997afdf94d3d76684327ec623512b2a5cac47aeee245d7f6df6e27d6cc"
+        },
+        {
+          "ms": 28.619416058063507,
+          "status": 200,
+          "bytes": 362853,
+          "payloadHash": "b7fd32997afdf94d3d76684327ec623512b2a5cac47aeee245d7f6df6e27d6cc"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 31.683333567343652,
+      "warmRangeMs": [
+        28.619416058063507,
+        34.35345785692334
+      ],
+      "path": "/api/v4/songs/song_arn8bnn9"
+    },
+    {
+      "name": "old-day-job",
+      "firstMs": 30.2782088983804,
+      "samples": [
+        {
+          "ms": 30.2782088983804,
+          "status": 200,
+          "bytes": 168419,
+          "payloadHash": "bb106e74f8d1d809044b4d4eb8537ef2ef9744134ecdf942a0e5be8c864a8944"
+        },
+        {
+          "ms": 29.301124857738614,
+          "status": 200,
+          "bytes": 168419,
+          "payloadHash": "bb106e74f8d1d809044b4d4eb8537ef2ef9744134ecdf942a0e5be8c864a8944"
+        },
+        {
+          "ms": 29.11379188299179,
+          "status": 200,
+          "bytes": 168419,
+          "payloadHash": "bb106e74f8d1d809044b4d4eb8537ef2ef9744134ecdf942a0e5be8c864a8944"
+        },
+        {
+          "ms": 28.971875086426735,
+          "status": 200,
+          "bytes": 168419,
+          "payloadHash": "bb106e74f8d1d809044b4d4eb8537ef2ef9744134ecdf942a0e5be8c864a8944"
+        },
+        {
+          "ms": 29.776915907859802,
+          "status": 200,
+          "bytes": 168419,
+          "payloadHash": "bb106e74f8d1d809044b4d4eb8537ef2ef9744134ecdf942a0e5be8c864a8944"
+        }
+      ],
+      "successful": true,
+      "warmMedianMs": 29.207458370365202,
+      "warmRangeMs": [
+        28.971875086426735,
+        29.776915907859802
+      ],
+      "path": "/api/v4/songs/song_90fbxy8a"
+    }
+  ]
+}
