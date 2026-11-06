@@ -524,25 +524,43 @@ public sealed class CatalogCollectionReader
                 """
             : "source_tracks t";
 
-    private static string SongMatches(CatalogReferenceKind kind) =>
-        kind
-            is CatalogReferenceKind.Show
+    private static string SongMatches(CatalogReferenceKind kind)
+    {
+        if (
+            kind
+            is not (
+                CatalogReferenceKind.Show
                 or CatalogReferenceKind.Source
                 or CatalogReferenceKind.Track
-            ? """
-                , requested_songs AS MATERIALIZED (
-                  SELECT DISTINCT song.id,song.artist_uuid
-                  FROM requests r
-                  CROSS JOIN LATERAL unnest(ARRAY[r.song,CASE WHEN r.owner_kind='Song' THEN r.owner END]) requested(id)
-                  JOIN norm.songs song ON song.id=requested.id
-                  JOIN artists a ON a.uuid=song.artist_uuid
-                  JOIN features f ON f.artist_id=a.id AND f.norm_catalogue
-                ), song_matches AS MATERIALIZED (
-                  SELECT song.id requested_song,m.* FROM requested_songs song
-                  CROSS JOIN LATERAL norm.song_recording_matches(song.artist_uuid,ARRAY[song.id]) m
-                )
-                """
-            : "";
+            )
+        )
+        {
+            return "";
+        }
+
+        // A mixed scoped/unscoped population must stay unscoped. Each parent's
+        // membership predicates below still enforce its own show and song intersection.
+        var show =
+            kind == CatalogReferenceKind.Source
+                ? "COALESCE(r.show_uuid,CASE WHEN r.owner_kind='Show' THEN r.owner_uuid END)"
+                : "r.show_uuid";
+        return $$"""
+            , requested_songs AS MATERIALIZED (
+              SELECT song.id,song.artist_uuid,
+                     CASE WHEN bool_or({{show}} IS NULL) THEN NULL
+                          ELSE array_agg(DISTINCT {{show}}) END show_uuids
+              FROM requests r
+              CROSS JOIN LATERAL unnest(ARRAY[r.song,CASE WHEN r.owner_kind='Song' THEN r.owner END]) requested(id)
+              JOIN norm.songs song ON song.id=requested.id
+              JOIN artists a ON a.uuid=song.artist_uuid
+              JOIN features f ON f.artist_id=a.id AND f.norm_catalogue
+              GROUP BY song.id,song.artist_uuid
+            ), song_matches AS MATERIALIZED (
+              SELECT song.id requested_song,m.* FROM requested_songs song
+              CROSS JOIN LATERAL norm.song_recording_matches(song.artist_uuid,ARRAY[song.id],song.show_uuids) m
+            )
+            """;
+    }
 
     private sealed class PageRow
     {

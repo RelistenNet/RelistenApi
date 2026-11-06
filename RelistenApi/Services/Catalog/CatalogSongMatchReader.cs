@@ -112,7 +112,7 @@ public sealed class CatalogSongMatchReader
                                              AND NOT p.part=ANY(m.matching_part_ordinals)) THEN true
                                 WHEN bool_and(p.resolved) THEN false END is_multi_song,
                            CASE WHEN t.duration>0 THEN t.duration END duration
-                    FROM inputs i CROSS JOIN LATERAL norm.song_recording_matches(i.artist_uuid,ARRAY[i.song_id]) m
+                    FROM inputs i CROSS JOIN LATERAL norm.song_recording_matches(i.artist_uuid,ARRAY[i.song_id],i.show_uuids) m
                     JOIN source_tracks t ON t.uuid=m.track_uuid
                     JOIN norm.track_songs p ON p.track_uuid=m.track_uuid
                     WHERE i.show_uuids IS NULL OR m.show_uuid=ANY(i.show_uuids)
