@@ -233,7 +233,8 @@ public sealed partial class TestV4CatalogHttp
                 .Should()
                 .Be("Imported Civic Center");
             var aliases = show["artist_venue"]!["venue"]!["names"]!.AsArray();
-            aliases.Should().HaveCount(7);
+            aliases.Should().HaveCount(5);
+            aliases.Should().NotContain(item => item!["kind"]!.GetValue<string>() == "spelling");
             aliases
                 .Should()
                 .Contain(item => item!["name"]!.GetValue<string>() == "Survivor Official");
@@ -241,7 +242,7 @@ public sealed partial class TestV4CatalogHttp
                 .Where(item => item!["name"]!.GetValue<string>() == "Historical Arena")
                 .Select(item => item!["kind"]!.GetValue<string>())
                 .Should()
-                .BeEquivalentTo("official", "spelling");
+                .BeEquivalentTo("official");
             var track = await GetJson(TrackPath(4));
             track["title"]!
                 .GetValue<string>()
@@ -590,8 +591,7 @@ public sealed partial class TestV4CatalogHttp
                 ("Current Arena", "official"),
                 ("Historical Arena", "official"),
                 ("Original Arena", "official"),
-                ("Arena", "short"),
-                ("Historical Areena", "spelling")
+                ("Arena", "short")
             );
         foreach (var name in names)
         {
@@ -617,7 +617,7 @@ public sealed partial class TestV4CatalogHttp
         AssertSchemaFields(document, "VenueNameResource", names[0]!);
         EnumValues(document, "VenueNameResource", "kind")
             .Should()
-            .BeEquivalentTo("official", "short", "spelling");
+            .BeEquivalentTo("official", "short");
     }
 
     [Test]
@@ -675,7 +675,7 @@ public sealed partial class TestV4CatalogHttp
             await ChangeNormalization(
                 connection,
                 rename
-                    ? "UPDATE norm.venue_names SET name='Reviewed Areena' WHERE venue_id='venue_00000001' AND normalized='historical-areena'"
+                    ? "UPDATE norm.venue_names SET name='Reviewed Arena' WHERE venue_id='venue_00000001' AND name='Arena'"
                     : "UPDATE norm.venue_names SET kind='short' WHERE venue_id='venue_00000001' AND normalized='historical-areena'"
             );
             using var response = await Conditional(ShowPath(4), etag);
@@ -696,15 +696,17 @@ public sealed partial class TestV4CatalogHttp
                 .Should()
                 .Contain(item =>
                     item!["name"]!.GetValue<string>()
-                        == (rename ? "Reviewed Areena" : "Historical Areena")
-                    && item["kind"]!.GetValue<string>() == (rename ? "spelling" : "short")
+                        == (rename ? "Reviewed Arena" : "Historical Areena")
+                    && item["kind"]!.GetValue<string>() == "short"
                 );
         }
         finally
         {
             await ChangeNormalization(
                 connection,
-                "UPDATE norm.venue_names SET name='Historical Areena',kind='spelling' WHERE venue_id='venue_00000001' AND normalized='historical-areena'"
+                rename
+                    ? "UPDATE norm.venue_names SET name='Arena' WHERE venue_id='venue_00000001' AND name='Reviewed Arena'"
+                    : "UPDATE norm.venue_names SET kind='spelling' WHERE venue_id='venue_00000001' AND normalized='historical-areena'"
             );
         }
     }

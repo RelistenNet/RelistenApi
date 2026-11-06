@@ -248,4 +248,4 @@ public record TourResource
 
 /// <summary>A venue name or alias, independent of its stored historical periods.</summary>
 [JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
-public sealed record VenueNameResource(string Name, VenueNameKind Kind);
+public sealed record VenueNameResource(string Name, VenueNameResourceKind Kind);
