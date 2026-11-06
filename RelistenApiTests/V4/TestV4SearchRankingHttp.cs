@@ -321,6 +321,34 @@ public sealed partial class TestV4CatalogHttp
                 .GetValue<string>()
                 .Should()
                 .StartWith("year_");
+            var graph = await Graph(
+                """
+                query($show: ID!, $artist: ID!) {
+                  show(id: $show) { popularity { momentumScore } }
+                  popularShows(limit: 2) { node { id popularity { momentumScore } } metrics { momentumScore } }
+                  momentumShows(artistIds: [$artist], limit: 2) { node { id popularity { momentumScore } } metrics { momentumScore } }
+                }
+                """,
+                new { show = ShowId(4), artist = BrowseArtistId }
+            );
+            var globalEdge = graph["popularShows"]!
+                .AsArray()
+                .Single(e => e!["node"]!["id"]!.GetValue<string>() == ShowId(4))!;
+            var organicEdge = graph["momentumShows"]!
+                .AsArray()
+                .Single(e => e!["node"]!["id"]!.GetValue<string>() == ShowId(4))!;
+            graph["show"]!["popularity"]!["momentumScore"]!.GetValue<double>().Should().Be(0.9);
+            globalEdge["node"]!["popularity"]!["momentumScore"]!
+                .GetValue<double>()
+                .Should()
+                .Be(0.9);
+            organicEdge["node"]!["popularity"]!["momentumScore"]!
+                .GetValue<double>()
+                .Should()
+                .Be(0.9);
+            globalEdge["metrics"]!["momentumScore"]!.GetValue<double>().Should().Be(0.4);
+            organicEdge["metrics"]!["momentumScore"]!.GetValue<double>().Should().Be(0.1);
+
             var expectedPopularity = (await GetJson(ShowPath(4)))["popularity"]!;
             expectedPopularity["momentum_score"]!.GetValue<double>().Should().Be(0.9);
             var document = await GetJson("/api-docs/v4/swagger.json");

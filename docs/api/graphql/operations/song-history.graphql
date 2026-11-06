@@ -1,0 +1,19 @@
+query SongHistory($id: ID!, $after: String) {
+  song(id: $id) {
+    id name matchedShowCount matchedTrackCount
+    shows(first: 50, after: $after) {
+      nodes {
+        show { id displayDate sourceCount artist { id name } }
+        timings {
+          singleSong { sourceCount median }
+          multiSong { sourceCount median }
+        }
+        tracks(first: 20) {
+          nodes { id title duration mp3Url source { id isSoundboard avgRating } }
+          pageInfo { endCursor hasNextPage }
+        }
+      }
+      pageInfo { endCursor hasNextPage }
+    }
+  }
+}

@@ -60,7 +60,7 @@ public static class V4CatalogRegistration
                     policy
                         .AllowAnyOrigin()
                         .WithMethods("GET", "POST")
-                        .WithHeaders("If-None-Match", "Content-Type")
+                        .WithHeaders("If-None-Match", "Content-Type", "GraphQL-Cost")
                         .WithExposedHeaders("ETag")
             )
         );

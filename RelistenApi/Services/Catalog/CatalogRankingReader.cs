@@ -26,6 +26,7 @@ public sealed class CatalogRankingReader(
     DbService db,
     CatalogBrowseReader browse,
     CatalogShowMetadataReader metadata,
+    CatalogPopularityMetadataReader popularity,
     PopularityRefreshRequest refresh
 )
 {
@@ -81,6 +82,7 @@ public sealed class CatalogRankingReader(
                 )
             )
         ).ToDictionary(year => year.uuid);
+        await popularity.ApplyYears(session, years.Values.ToArray(), cancellationToken);
         return scores
             .Where(row => years.ContainsKey(row.uuid))
             .Select(row => new CatalogRanked<CatalogYear>(years[row.uuid], row.ToMetrics()!))

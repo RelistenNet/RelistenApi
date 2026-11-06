@@ -1,5 +1,6 @@
 using System;
 using System.Data;
+using System.Diagnostics.Metrics;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
@@ -13,6 +14,11 @@ namespace Relisten.Catalog;
 /// </summary>
 public sealed class CatalogReadSession : IAsyncDisposable
 {
+    private static readonly Meter Meter = new("Relisten.Catalog");
+    private static readonly Counter<long> Commands = Meter.CreateCounter<long>(
+        "catalog.read.commands"
+    );
+
     private CatalogReadSession(NpgsqlConnection connection, NpgsqlTransaction transaction)
     {
         Connection = connection;
@@ -56,8 +62,17 @@ public sealed class CatalogReadSession : IAsyncDisposable
         string sql,
         object? parameters,
         CancellationToken cancellationToken
-    ) =>
-        new(sql, parameters, Transaction, commandTimeout: 30, cancellationToken: cancellationToken);
+    )
+    {
+        Commands.Add(1);
+        return new(
+            sql,
+            parameters,
+            Transaction,
+            commandTimeout: 30,
+            cancellationToken: cancellationToken
+        );
+    }
 
     public async ValueTask DisposeAsync()
     {

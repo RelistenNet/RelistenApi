@@ -1,0 +1,11 @@
+query VenuePage($venue: ID!, $after: String) {
+  venue(id: $venue) {
+    id name globalShowCount city region country
+    parent { id name }
+    shows(first: 100, after: $after) {
+      nodes { id displayDate artist { id name } }
+      totalCount
+      pageInfo { endCursor hasNextPage }
+    }
+  }
+}

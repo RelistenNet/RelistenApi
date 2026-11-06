@@ -14,7 +14,6 @@ namespace Relisten.Catalog;
 public sealed class CatalogVenueReader(
     DbService db,
     CatalogShowMetadataReader showMetadata,
-    CatalogImportedVenueMetadataReader importedVenueMetadata,
     CatalogVenueMetadataReader venueMetadata,
     CatalogArtistVenueMetadataReader artistVenueMetadata,
     CatalogCollectionReader collections
@@ -138,32 +137,35 @@ public sealed class CatalogVenueReader(
     public async Task<CatalogArtistVenueDetail?> ReadArtistVenue(
         Guid artistUuid,
         string venueId,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        bool includeShows = true
     )
     {
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
-        return await ReadArtistVenue(session, artistUuid, venueId, cancellationToken);
+        return await ReadArtistVenue(session, artistUuid, venueId, cancellationToken, includeShows);
     }
 
     /// <summary>Looks up a canonical slug within the artist's approved venue collections.</summary>
     public async Task<CatalogArtistVenueDetail?> ReadArtistVenueBySlug(
         Guid artistUuid,
         string slug,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        bool includeShows = true
     )
     {
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
         var venueId = await ReadVenueIdBySlug(session, slug, cancellationToken);
         return venueId is null
             ? null
-            : await ReadArtistVenue(session, artistUuid, venueId, cancellationToken);
+            : await ReadArtistVenue(session, artistUuid, venueId, cancellationToken, includeShows);
     }
 
     private async Task<CatalogArtistVenueDetail?> ReadArtistVenue(
         CatalogReadSession session,
         Guid artistUuid,
         string venueId,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        bool includeShows = true
     )
     {
         var venue = await ReadVenue(session, venueId, cancellationToken);
@@ -187,7 +189,9 @@ public sealed class CatalogVenueReader(
         }
 
         relationship.Venue = venue;
-        var shows = await ReadVenueShows(session, venue.id, artistUuid, cancellationToken);
+        var shows = includeShows
+            ? await ReadVenueShows(session, venue.id, artistUuid, cancellationToken)
+            : [];
         return new(relationship, shows);
     }
 
@@ -328,7 +332,7 @@ public sealed class CatalogVenueReader(
 
     // The venue expression is server-owned SQL. Follow the survivor before including
     // all merged predecessors, so old assignments and old filter IDs keep working.
-    internal static string ShowMembershipSql(string venue) =>
+    internal static string ShowMembershipSql(string venue, string show = "s.uuid") =>
         $$"""
             EXISTS (
               WITH RECURSIVE forward AS (
@@ -341,7 +345,7 @@ public sealed class CatalogVenueReader(
                 UNION ALL
                 SELECT v.id,o.path || v.id FROM owners o JOIN norm.venues v ON v.merged_into=o.id
                 WHERE cardinality(o.path)<32 AND NOT v.id=ANY(o.path)
-              ) SELECT 1 FROM norm.show_venues sv JOIN owners o ON o.id=sv.venue_id WHERE sv.show_uuid=s.uuid
+              ) SELECT 1 FROM norm.show_venues sv JOIN owners o ON o.id=sv.venue_id WHERE sv.show_uuid={{show}}
             )
             """;
 

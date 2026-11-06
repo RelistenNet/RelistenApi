@@ -31,6 +31,11 @@
       Link="Fixtures/catalog-schema.sql"
       CopyToOutputDirectory="PreserveNewest"
     />
+    <Content
+      Include="../docs/api/graphql/operations/*.graphql"
+      Link="Fixtures/graphql-operations/%(Filename)%(Extension)"
+      CopyToOutputDirectory="PreserveNewest"
+    />
     <Content Include="Fixtures\**\*.*">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>

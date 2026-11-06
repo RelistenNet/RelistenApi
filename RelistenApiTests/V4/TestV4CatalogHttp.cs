@@ -64,6 +64,9 @@ public sealed partial class TestV4CatalogHttp
         // Reads use stored scores; only queue submission is replaced in this host.
         builder.Services.AddSingleton<IBackgroundJobClient>(refreshJobs);
         builder.Services.AddV4Catalog();
+        Relisten
+            .GraphQL.CatalogGraphRegistration.AddCatalogGraph(builder.Services)
+            .ModifyRequestOptions(o => o.IncludeExceptionDetails = true);
         builder.Services.AddResponseCompression(options => options.EnableForHttps = true);
         builder.Services.AddSwaggerGen(options =>
         {
@@ -74,10 +77,12 @@ public sealed partial class TestV4CatalogHttp
         app = builder.Build();
         app.UseDeveloperExceptionPage();
         app.UseResponseCompression();
+        app.UseRouting();
         app.UseV4CatalogCors();
         app.UseCors(policy =>
             policy.WithMethods("GET", "POST", "OPTIONS", "HEAD").WithOrigins("*").AllowAnyMethod()
         );
+        Relisten.GraphQL.CatalogGraphRegistration.UseCatalogGraph(app);
         app.UseMvc();
         app.UseSwagger(options => options.RouteTemplate = "api-docs/{documentName}/swagger.json");
         await app.StartAsync();

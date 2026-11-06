@@ -43,29 +43,31 @@ public sealed class CatalogCollectionReader
         var sql = $$"""
             WITH requests AS (
               SELECT * FROM jsonb_to_recordset(@inputs::jsonb) AS r(
-                ordinal int, owner text, owner_uuid uuid, owner_kind text, artist uuid, date_from timestamp,
+                ordinal int, owner text, owner_uuid uuid, owner_kind text, artist uuid, artists uuid[], date_from timestamp,
                 date_through timestamp, venue text, song text, soundboard boolean, flac boolean,
                 search text, include_auto boolean, include_fallback boolean, sort text, page_size int, has_after boolean,
-                after_score float8, after_label text, after_id text, need_count boolean,
-                month int,day int,changed_since timestamp,changed_by_source boolean)
+                after_score float8, after_label text, after_id text, after_secondary float8, after_descending_label text, need_count boolean,
+                month int,day int,recency text,recent_days int,require_sources boolean,show_uuid uuid,top_source_only boolean)
             )
             SELECT r.ordinal,p.* FROM requests r CROSS JOIN LATERAL (
               WITH candidates AS NOT MATERIALIZED ({{candidates}}),
               page AS (
                 SELECT * FROM candidates c WHERE NOT r.has_after OR c.score<r.after_score
-                  OR (c.score=r.after_score AND (c.label COLLATE "C",c.key COLLATE "C")>
-                      (r.after_label COLLATE "C",r.after_id COLLATE "C"))
-                ORDER BY c.score DESC,c.label COLLATE "C",c.key COLLATE "C"
+                  OR (c.score=r.after_score AND c.secondary<r.after_secondary)
+                  OR (c.score=r.after_score AND c.secondary=r.after_secondary AND c.descending_label COLLATE "C"<r.after_descending_label COLLATE "C")
+                  OR (c.score=r.after_score AND c.secondary=r.after_secondary AND c.descending_label=r.after_descending_label
+                      AND (c.label COLLATE "C",c.key COLLATE "C")>(r.after_label COLLATE "C",r.after_id COLLATE "C"))
+                ORDER BY c.score DESC,c.secondary DESC,c.descending_label COLLATE "C" DESC,c.label COLLATE "C",c.key COLLATE "C"
                 LIMIT r.page_size::bigint+1
               )
               SELECT page.*,
                      CASE WHEN r.need_count THEN (SELECT count(*) FROM candidates) END total
               FROM page
               UNION ALL
-              SELECT NULL,NULL,NULL,NULL,
+              SELECT NULL,NULL,NULL,NULL,NULL,NULL,
                      CASE WHEN r.need_count THEN (SELECT count(*) FROM candidates) END
               WHERE NOT EXISTS (SELECT 1 FROM page)
-            ) p ORDER BY r.ordinal,p.score DESC,p.label COLLATE "C",p.key COLLATE "C"
+            ) p ORDER BY r.ordinal,p.score DESC,p.secondary DESC,p.descending_label COLLATE "C" DESC,p.label COLLATE "C",p.key COLLATE "C"
             """;
         var rows = (
             await session.Connection.QueryAsync<PageRow>(
@@ -87,7 +89,13 @@ public sealed class CatalogCollectionReader
                             .Select(r => Target(Enum.Parse<CatalogReferenceKind>(r.kind!), r.key!))
                             .ToArray(),
                         selected
-                            .Select(r => new CatalogPageKey(r.score, r.label!, r.key!))
+                            .Select(r => new CatalogPageKey(
+                                r.score,
+                                r.label!,
+                                r.key!,
+                                r.secondary,
+                                r.descending_label!
+                            ))
                             .ToArray(),
                         all.Length > request.Page.First,
                         rows[index].FirstOrDefault()?.total
@@ -121,6 +129,7 @@ public sealed class CatalogCollectionReader
             owner_uuid = Guid.TryParse(owner, out var ownerUuid) ? (Guid?)ownerUuid : null,
             owner_kind = collection.OwnerKind?.ToString(),
             artist = f.Artist,
+            artists = f.Artists,
             date_from = f.From,
             date_through = f.Through,
             venue = f.Venue,
@@ -130,16 +139,21 @@ public sealed class CatalogCollectionReader
             search = f.Search is { Length: >= 3 } term
                 ? "%" + term.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_") + "%"
                 : null,
+            show_uuid = f.ShowUuid,
+            top_source_only = f.TopSourceOnly,
             month = f.Month,
             day = f.Day,
-            changed_since = f.ChangedSince,
-            changed_by_source = f.ChangedBySource,
+            recency = f.Recency?.ToString(),
+            recent_days = f.RecentDays,
+            require_sources = f.RequireSources,
             include_auto = f.IncludeAutoCreated,
             include_fallback = collection.IncludeFallback,
             sort = collection.Sort.ToString(),
             page_size = page.First,
             has_after = page.After is not null,
             after_score = page.After?.Score ?? 0,
+            after_secondary = page.After?.Secondary ?? 0,
+            after_descending_label = page.After?.DescendingLabel ?? "",
             after_label = page.After?.Label ?? "",
             after_id = page.After?.Id ?? "",
             need_count = page.Count,
@@ -161,62 +175,154 @@ public sealed class CatalogCollectionReader
         return new(kind, UuidTypeId.Format(CatalogReferenceLookup.Prefix(kind), uuid), uuid);
     }
 
-    private static string Candidates(CatalogReferenceKind kind) =>
+    private static string Candidates(CatalogReferenceKind kind)
+    {
+        var sql = BaseCandidates(kind);
+        // Search keeps its published tie-breaks; the same complete tuple is carried
+        // in the keyset cursor. UUID remains the final stable identity tie-break.
+        return kind switch
+        {
+            CatalogReferenceKind.Source => $$"""
+                SELECT raw.key,raw.kind,
+                  CASE WHEN r.sort='DateDescending' THEN (SELECT extract(epoch FROM sh.date) FROM shows sh WHERE sh.id=src.show_id)
+                       WHEN r.sort='Updated' THEN extract(epoch FROM src.updated_at)
+                       WHEN r.sort='Added' THEN extract(epoch FROM src.created_at)
+                       ELSE COALESCE(src.avg_rating_weighted,-1e30) END::float8 score,
+                  CASE WHEN r.search IS NULL THEN raw.label ELSE '' END label,
+                  CASE WHEN r.search IS NULL THEN 0 ELSE COALESCE(src.duration,-1e30) END::float8 secondary,
+                  CASE WHEN r.search IS NULL THEN '' ELSE src.display_date END descending_label
+                FROM ({{sql}}) raw JOIN sources src ON src.uuid=raw.key::uuid
+                """,
+            CatalogReferenceKind.Show => $$"""
+                SELECT raw.key,raw.kind,raw.score,
+                  CASE WHEN r.search IS NULL AND r.sort='Default' THEN raw.label ELSE '' END label,
+                  0::float8 secondary,
+                  CASE WHEN r.search IS NOT NULL OR r.sort='DateDescending' THEN raw.label ELSE '' END descending_label
+                FROM ({{sql}}) raw
+                """,
+            CatalogReferenceKind.Tour => $$"""
+                SELECT raw.key,raw.kind,raw.score,CASE WHEN r.search IS NULL THEN '' ELSE raw.label END label,0::float8 secondary,
+                  CASE WHEN r.search IS NULL THEN '' ELSE COALESCE(t.start_date::text,'~') END descending_label
+                FROM ({{sql}}) raw JOIN tours t ON t.uuid=raw.key::uuid
+                """,
+            _ => $"SELECT raw.*,0::float8 secondary,''::text descending_label FROM ({sql}) raw",
+        };
+    }
+
+    private static string BaseCandidates(CatalogReferenceKind kind) =>
         kind switch
         {
             CatalogReferenceKind.Artist => """
-                SELECT a.uuid::text key,'Artist' kind,0::float8 score,a.name label FROM artists a
-                WHERE (r.include_auto OR (a.featured & 2)=0)
+                SELECT a.uuid::text key,'Artist' kind,
+                  CASE WHEN r.sort='Popularity' THEN COALESCE(p.hot_score_30d,0)
+                    WHEN r.search IS NOT NULL THEN (SELECT count(*) FROM shows sh WHERE sh.artist_id=a.id)
+                    ELSE a.featured END::float8 score,a.name label
+                FROM artists a LEFT JOIN artist_popularity p ON p.uuid=a.uuid
+                WHERE (r.search IS NOT NULL OR NOT r.include_auto AND (a.featured & 2)=0
+                  OR r.include_auto AND (EXISTS(SELECT 1 FROM shows sh WHERE sh.artist_id=a.id)
+                                     OR EXISTS(SELECT 1 FROM sources src WHERE src.artist_id=a.id)))
                   AND (r.artist IS NULL OR a.uuid=r.artist)
                   AND (r.search IS NULL OR a.name ILIKE r.search)
                 """,
             CatalogReferenceKind.Show => ShowCandidates,
-            CatalogReferenceKind.Source => """
+            CatalogReferenceKind.Source =>
+                $$"""
+                WITH song_matches AS MATERIALIZED (
+                  SELECT m.* FROM norm.songs song JOIN artists owner_artist ON owner_artist.uuid=song.artist_uuid
+                  JOIN features owner_feature ON owner_feature.artist_id=owner_artist.id AND owner_feature.norm_catalogue
+                  CROSS JOIN LATERAL norm.song_recording_matches(song.artist_uuid,ARRAY[song.id]) m
+                  WHERE song.id=r.song
+                )
                 SELECT src.uuid::text key,'Source' kind,
                   COALESCE(src.avg_rating_weighted,0)::float8 score,src.uuid::text label
                 FROM sources src JOIN artists a ON a.id=src.artist_id JOIN shows sh ON sh.id=src.show_id
+                LEFT JOIN features f ON f.artist_id=a.id
                 WHERE (r.artist IS NULL OR a.uuid=r.artist)
                   AND (r.owner IS NULL OR r.owner_kind='Artist' AND a.uuid=r.owner_uuid
                        OR r.owner_kind='Show' AND sh.uuid=r.owner_uuid)
+                  AND (r.date_from IS NULL OR sh.date>=r.date_from)
+                  AND (r.date_through IS NULL OR sh.date<=r.date_through)
+                  AND (r.song IS NULL OR EXISTS(SELECT 1 FROM song_matches m WHERE m.source_uuid=src.uuid))
+                  AND (r.venue IS NULL OR COALESCE(f.norm_catalogue,false) AND {{CatalogVenueReader.ShowMembershipSql(
+                    "r.venue",
+                    "sh.uuid"
+                )}})
                   AND (r.soundboard IS NULL OR src.is_soundboard=r.soundboard)
                   AND (r.flac IS NULL OR (src.flac_type IN (1,2))=r.flac)
-                  AND (r.search IS NULL OR concat_ws(' ',src.upstream_identifier,src.description,
-                       src.taper_notes,src.source,src.taper,src.transferrer,src.lineage) ILIKE r.search)
+                  AND (r.search IS NULL OR src.upstream_identifier ILIKE r.search OR src.description ILIKE r.search
+                    OR src.taper_notes ILIKE r.search OR src.source ILIKE r.search OR src.taper ILIKE r.search
+                    OR src.transferrer ILIKE r.search OR src.lineage ILIKE r.search)
                 """,
-            CatalogReferenceKind.Track => """
+            CatalogReferenceKind.Track =>
+                $$"""
+                WITH song_matches AS MATERIALIZED (
+                  SELECT song.id requested_song,m.* FROM norm.songs song JOIN artists owner_artist ON owner_artist.uuid=song.artist_uuid
+                  JOIN features owner_feature ON owner_feature.artist_id=owner_artist.id AND owner_feature.norm_catalogue
+                  CROSS JOIN LATERAL norm.song_recording_matches(song.artist_uuid,ARRAY[song.id]) m
+                  WHERE song.id=ANY(ARRAY[r.song,CASE WHEN r.owner_kind='Song' THEN r.owner END])
+                ), ranked_sources AS MATERIALIZED (
+                  SELECT candidate.uuid,row_number() OVER (
+                    PARTITION BY candidate.show_id ORDER BY {{CatalogSourceRanking.OrderBy(
+                    "candidate"
+                )}}
+                  ) source_rank
+                  FROM sources candidate
+                  WHERE (r.owner_kind IS DISTINCT FROM 'Song' OR EXISTS(SELECT 1 FROM song_matches m WHERE m.requested_song=r.owner AND m.source_uuid=candidate.uuid))
+                    AND (r.song IS NULL OR EXISTS(SELECT 1 FROM song_matches m WHERE m.requested_song=r.song AND m.source_uuid=candidate.uuid))
+                    AND EXISTS(SELECT 1 FROM song_matches m WHERE m.source_uuid=candidate.uuid)
+                    AND (r.soundboard IS NULL OR candidate.is_soundboard=r.soundboard)
+                    AND (r.flac IS NULL OR (candidate.flac_type IN (1,2))=r.flac)
+                )
                 SELECT t.uuid::text key,'Track' kind,0::float8 score,
-                  sh.display_date || ':' || src.uuid || ':' || lpad(t.track_position::text,8,'0') label
+                  sh.display_date || ':' || sh.uuid || ':' ||
+                  CASE WHEN r.show_uuid IS NOT NULL THEN COALESCE(lpad(ranked.source_rank::text,12,'0'),src.uuid::text) ELSE src.uuid::text END
+                  || ':' || lpad(t.track_position::text,8,'0') label
                 FROM source_tracks t JOIN sources src ON src.id=t.source_id
                 JOIN source_sets ss ON ss.id=t.source_set_id AND ss.source_id=src.id
                 JOIN artists a ON a.id=src.artist_id JOIN shows sh ON sh.id=src.show_id
                 LEFT JOIN features f ON f.artist_id=a.id
+                LEFT JOIN ranked_sources ranked ON ranked.uuid=src.uuid
                 WHERE NOT t.is_orphaned AND (r.artist IS NULL OR a.uuid=r.artist)
+                  AND (r.show_uuid IS NULL OR sh.uuid=r.show_uuid)
+                  AND (NOT r.top_source_only OR ranked.source_rank=1)
                   AND (r.owner IS NULL OR r.owner_kind='Source' AND src.uuid=r.owner_uuid
                     OR r.owner_kind='Show' AND sh.uuid=r.owner_uuid
                     OR r.owner_kind='Song' AND COALESCE(f.norm_catalogue,false) AND EXISTS (
-                      SELECT 1 FROM norm.song_recording_matches(a.uuid,ARRAY[r.owner]) m WHERE m.track_uuid=t.uuid))
+                      SELECT 1 FROM song_matches m WHERE m.requested_song=r.owner AND m.track_uuid=t.uuid))
                   AND (r.song IS NULL OR COALESCE(f.norm_catalogue,false) AND EXISTS (
-                      SELECT 1 FROM norm.song_recording_matches(a.uuid,ARRAY[r.song]) m WHERE m.track_uuid=t.uuid))
+                      SELECT 1 FROM song_matches m WHERE m.requested_song=r.song AND m.track_uuid=t.uuid))
+                  AND (r.date_from IS NULL OR sh.date>=r.date_from)
+                  AND (r.date_through IS NULL OR sh.date<=r.date_through)
+                  AND (r.venue IS NULL OR COALESCE(f.norm_catalogue,false) AND {{CatalogVenueReader.ShowMembershipSql(
+                    "r.venue",
+                    "sh.uuid"
+                )}})
+                  AND (r.search IS NULL OR t.title ILIKE r.search)
                   AND (r.soundboard IS NULL OR src.is_soundboard=r.soundboard)
                   AND (r.flac IS NULL OR (src.flac_type IN (1,2))=r.flac)
                 """,
             CatalogReferenceKind.Year => """
-                SELECT y.uuid::text key,'Year' kind,0::float8 score,y.year label
+                SELECT y.uuid::text key,'Year' kind,
+                  CASE r.sort WHEN 'Rating' THEN COALESCE(y.avg_rating,-1e30)
+                    WHEN 'Popularity' THEN COALESCE(p.hot_score_30d,0) ELSE 0 END::float8 score,y.year label
                 FROM years y JOIN artists a ON a.id=y.artist_id
+                LEFT JOIN year_popularity p ON p.uuid=y.uuid AND p.artist_uuid=a.uuid AND NOT p.is_global
                 WHERE (r.artist IS NULL OR a.uuid=r.artist) AND (r.owner IS NULL OR a.uuid=r.owner_uuid)
                 """,
             CatalogReferenceKind.Tour => """
                 SELECT t.uuid::text key,'Tour' kind,
-                CASE WHEN r.search IS NULL THEN 0 ELSE (SELECT count(*) FROM shows s WHERE s.tour_id=t.id) END::float8 score,t.name label
+                CASE WHEN r.search IS NOT NULL THEN (SELECT count(*) FROM shows s WHERE s.tour_id=t.id)
+                  WHEN r.sort='DateDescending' THEN COALESCE(extract(epoch FROM t.start_date),-1e30)
+                  ELSE COALESCE(-extract(epoch FROM t.start_date),-1e30) END::float8 score,t.name label
                 FROM tours t JOIN artists a ON a.id=t.artist_id
                 WHERE (r.artist IS NULL OR a.uuid=r.artist) AND (r.owner IS NULL OR a.uuid=r.owner_uuid)
                   AND (r.search IS NULL OR t.name ILIKE r.search)
                 """,
             CatalogReferenceKind.SourceReview => """
                 SELECT rev.uuid::text key,'SourceReview' kind,
-                  extract(epoch FROM rev.created_at)::float8 score,rev.uuid::text label
+                  extract(epoch FROM rev.updated_at)::float8 score,rev.uuid::text label
                 FROM source_reviews rev JOIN sources src ON src.id=rev.source_id
-                WHERE src.uuid=r.owner_uuid
+                WHERE src.uuid=r.owner_uuid AND (r.artist IS NULL OR src.artist_id=(SELECT id FROM artists WHERE uuid=r.artist))
                 """,
             CatalogReferenceKind.ImportedSong => """
                 SELECT s.uuid::text key,'ImportedSong' kind,0::float8 score,s.name label
@@ -234,6 +340,9 @@ public sealed class CatalogCollectionReader
             CatalogReferenceKind.Venue => """
                 SELECT v.id key,'Venue' kind,0::float8 score,v.name label FROM norm.venues v
                 WHERE v.merged_into IS NULL AND (r.search IS NULL OR v.name ILIKE r.search)
+                  AND (r.artist IS NULL OR EXISTS(SELECT 1 FROM norm.artist_venues av
+                      JOIN artists a ON a.uuid=av.artist_uuid JOIN features f ON f.artist_id=a.id AND f.norm_catalogue
+                      WHERE av.venue_id=v.id AND av.artist_uuid=r.artist))
                 """,
             CatalogReferenceKind.ArtistVenue => CatalogBrowseMembership.Venues,
             _ => throw new ArgumentException("This entity has no browse connection.", nameof(kind)),
@@ -241,11 +350,17 @@ public sealed class CatalogCollectionReader
 
     private static string ShowCandidates =>
         $$"""
+            WITH song_matches AS MATERIALIZED (
+            SELECT song.id requested_song,m.* FROM norm.songs song JOIN artists owner_artist ON owner_artist.uuid=song.artist_uuid
+            JOIN features owner_feature ON owner_feature.artist_id=owner_artist.id AND owner_feature.norm_catalogue
+            CROSS JOIN LATERAL norm.song_recording_matches(song.artist_uuid,ARRAY[song.id]) m
+            WHERE song.id=ANY(ARRAY[r.song,CASE WHEN r.owner_kind='Song' THEN r.owner END])
+            )
             SELECT s.uuid::text key,'Show' kind,
-              CASE r.sort WHEN 'DateDescending' THEN extract(epoch FROM s.date)
-                 WHEN 'Updated' THEN extract(epoch FROM CASE WHEN r.changed_by_source THEN cnt.max_updated_at ELSE s.updated_at END)
-                 WHEN 'Added' THEN extract(epoch FROM cnt.max_created_at)
-                 WHEN 'Rating' THEN COALESCE(cnt.max_avg_rating_weighted,0)
+              CASE r.sort WHEN 'DateDescending' THEN 0
+                 WHEN 'Updated' THEN COALESCE(extract(epoch FROM CASE WHEN r.recency='Added' THEN cnt.max_updated_at ELSE s.updated_at END),-1e30)
+                 WHEN 'Added' THEN COALESCE(extract(epoch FROM cnt.max_created_at),0)
+                 WHEN 'Rating' THEN COALESCE(cnt.max_avg_rating_weighted,-1e30)
                  WHEN 'Popularity' THEN COALESCE(p.hot_score_30d,0)
                  ELSE CASE WHEN r.search IS NULL THEN 0 ELSE COALESCE(cnt.source_count,0) END END::float8 score,
               s.display_date label
@@ -255,18 +370,22 @@ public sealed class CatalogCollectionReader
             LEFT JOIN years y ON y.id=s.year_id LEFT JOIN tours t ON t.id=s.tour_id
             LEFT JOIN show_popularity p ON p.uuid=s.uuid AND NOT p.is_global AND p.artist_uuid=a.uuid
             WHERE (r.artist IS NULL OR a.uuid=r.artist)
+              AND (r.artists IS NULL OR a.uuid=ANY(r.artists))
               AND (r.month IS NULL OR extract(month FROM s.date)=COALESCE(NULLIF(r.month,0),extract(month FROM CURRENT_DATE)))
               AND (r.day IS NULL OR extract(day FROM s.date)=COALESCE(NULLIF(r.day,0),extract(day FROM CURRENT_DATE)))
-              AND (r.changed_since IS NULL OR
-                CASE WHEN r.changed_by_source AND r.sort='Updated' THEN cnt.max_updated_at
-                      WHEN r.changed_by_source THEN cnt.max_created_at ELSE s.updated_at END>=r.changed_since)
+              AND (NOT r.require_sources OR cnt.show_id IS NOT NULL)
+              AND (r.recency IS NULL
+                OR r.recency='Performed' AND (r.recent_days IS NULL OR s.date>CURRENT_DATE-LEAST(r.recent_days,90)*INTERVAL '1 day')
+                OR r.recency='Updated' AND (r.recent_days IS NULL OR s.updated_at>CURRENT_DATE-LEAST(r.recent_days,90)*INTERVAL '1 day')
+                OR r.recency='Added' AND (CASE WHEN r.sort='Updated' THEN cnt.max_updated_at ELSE cnt.max_created_at END) IS NOT NULL
+                  AND (r.recent_days IS NULL OR (CASE WHEN r.sort='Updated' THEN cnt.max_updated_at ELSE cnt.max_created_at END)>=CURRENT_DATE-LEAST(r.recent_days,CURRENT_DATE-DATE '0001-01-01')*INTERVAL '1 day'))
               AND (r.date_from IS NULL OR s.date>=r.date_from)
               AND (r.date_through IS NULL OR s.date<=r.date_through)
               AND (r.soundboard IS NULL OR COALESCE(cnt.has_soundboard_source,false)=r.soundboard)
               AND (r.flac IS NULL OR COALESCE(cnt.has_flac,false)=r.flac)
               AND (r.search IS NULL OR s.display_date ILIKE r.search)
               AND (r.song IS NULL OR COALESCE(f.norm_catalogue,false) AND EXISTS (
-                  SELECT 1 FROM norm.song_recording_matches(a.uuid,ARRAY[r.song]) m WHERE m.show_uuid=s.uuid))
+                  SELECT 1 FROM song_matches m WHERE m.requested_song=r.song AND m.show_uuid=s.uuid))
               AND (r.venue IS NULL OR COALESCE(f.norm_catalogue,false) AND {{CatalogVenueReader.ShowMembershipSql(
                 "r.venue"
             )}})
@@ -275,7 +394,7 @@ public sealed class CatalogCollectionReader
                 OR r.owner_kind='Year' AND y.uuid=r.owner_uuid
                 OR r.owner_kind='Tour' AND t.uuid=r.owner_uuid
                 OR r.owner_kind='Song' AND COALESCE(f.norm_catalogue,false) AND EXISTS (
-                  SELECT 1 FROM norm.song_recording_matches(a.uuid,ARRAY[r.owner]) m WHERE m.show_uuid=s.uuid)
+                  SELECT 1 FROM song_matches m WHERE m.requested_song=r.owner AND m.show_uuid=s.uuid)
                 OR r.owner_kind='Venue' AND COALESCE(f.norm_catalogue,false) AND {{CatalogVenueReader.ShowMembershipSql(
                 "r.owner"
             )}}
@@ -298,6 +417,8 @@ public sealed class CatalogCollectionReader
         public string? key { get; set; }
         public string? kind { get; set; }
         public double score { get; set; }
+        public double secondary { get; set; }
+        public string? descending_label { get; set; }
         public string? label { get; set; }
         public long? total { get; set; }
     }

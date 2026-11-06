@@ -1,0 +1,15 @@
+query ArtistPage($artist: ID!, $after: String) {
+  artist(id: $artist) {
+    id name features { songs normalization multipleSources }
+    showCount sourceCount
+    years(first: 100) { nodes { id year showCount } }
+    shows(first: 100, after: $after) {
+      nodes { id displayDate sourceCount hasSoundboardSource }
+      pageInfo { endCursor hasNextPage }
+    }
+    songs(first: 50) {
+      nodes { kind song { id name matchedShowCount } importedSong { id name setlistShowCount } }
+      pageInfo { endCursor hasNextPage }
+    }
+  }
+}

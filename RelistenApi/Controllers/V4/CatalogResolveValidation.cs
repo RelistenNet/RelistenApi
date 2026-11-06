@@ -41,7 +41,7 @@ internal static class CatalogResolveValidation
                 || !NormalizationEnums.TryParse<CatalogReferenceKind>(item.Kind, out var kind)
                 || !NormalizationEnums.TryParse<CatalogReferenceScheme>(item.Scheme, out var scheme)
                 || !CatalogReferenceLookup.Supports(kind, scheme)
-                || !ValidIdentity(kind, scheme, item.Id)
+                || !CatalogReferenceValidation.ValidIdentity(kind, scheme, item.Id)
             )
             {
                 error = $"references[{index}] must specify a supported kind, scheme, and valid ID.";
@@ -59,11 +59,7 @@ internal static class CatalogResolveValidation
                 artist = id.Value;
             }
 
-            if (
-                scheme is CatalogReferenceScheme.LegacyInteger or CatalogReferenceScheme.LegacySlug
-                && kind is not (CatalogReferenceKind.Artist or CatalogReferenceKind.Venue)
-                && artist is null
-            )
+            if (CatalogReferenceValidation.RequiresArtist(kind, scheme) && artist is null)
             {
                 error = $"references[{index}] requires artist_id for this legacy identity.";
                 return false;
@@ -75,62 +71,6 @@ internal static class CatalogResolveValidation
         references = parsed;
         error = null;
         return true;
-    }
-
-    private static bool ValidIdentity(
-        CatalogReferenceKind kind,
-        CatalogReferenceScheme scheme,
-        string? id
-    )
-    {
-        if (string.IsNullOrWhiteSpace(id))
-        {
-            return false;
-        }
-
-        switch (scheme)
-        {
-            case CatalogReferenceScheme.LegacyUuid:
-                return Guid.TryParseExact(id, "D", out _);
-            case CatalogReferenceScheme.LegacyInteger:
-                return long.TryParse(id, NumberStyles.None, CultureInfo.InvariantCulture, out var n)
-                    && n > 0;
-            case CatalogReferenceScheme.LegacySlug:
-                return true;
-            default:
-                if (
-                    kind
-                    is not (
-                        CatalogReferenceKind.Song
-                        or CatalogReferenceKind.Venue
-                        or CatalogReferenceKind.ArtistVenue
-                    )
-                )
-                {
-                    return UuidTypeId.TryParse(id, CatalogReferenceLookup.Prefix(kind), out _);
-                }
-
-                try
-                {
-                    switch (kind)
-                    {
-                        case CatalogReferenceKind.Song:
-                            SongId.Parse(id);
-                            break;
-                        case CatalogReferenceKind.Venue:
-                            VenueId.Parse(id);
-                            break;
-                        case CatalogReferenceKind.ArtistVenue:
-                            ArtistVenueId.Parse(id);
-                            break;
-                    }
-                    return true;
-                }
-                catch (FormatException)
-                {
-                    return false;
-                }
-        }
     }
 }
 

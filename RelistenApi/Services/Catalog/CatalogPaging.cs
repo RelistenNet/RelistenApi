@@ -3,6 +3,13 @@ using System.Collections.Generic;
 
 namespace Relisten.Catalog;
 
+public enum CatalogRecency
+{
+    Performed,
+    Updated,
+    Added,
+}
+
 public enum CatalogSort
 {
     Default,
@@ -27,11 +34,21 @@ public sealed record CatalogFilters(
     bool IncludeAutoCreated = false,
     int? Month = null,
     int? Day = null,
-    DateTime? ChangedSince = null,
-    bool ChangedBySource = false
+    CatalogRecency? Recency = null,
+    int? RecentDays = null,
+    bool RequireSources = false,
+    Guid? ShowUuid = null,
+    bool TopSourceOnly = false,
+    Guid[]? Artists = null
 );
 
-public sealed record CatalogPageKey(double Score, string Label, string Id);
+public sealed record CatalogPageKey(
+    double Score,
+    string Label,
+    string Id,
+    double Secondary = 0,
+    string DescendingLabel = ""
+);
 
 public sealed record CatalogPageRequest(
     int First,
