@@ -25,6 +25,7 @@ public sealed class CatalogImportedSong : CatalogTimestamps
     public string name { get; set; } = null!;
     public string slug { get; set; } = null!;
     public string upstream_identifier { get; set; } = null!;
+    public string? normalized_song_id { get; set; }
     public int setlist_show_count { get; set; }
 }
 

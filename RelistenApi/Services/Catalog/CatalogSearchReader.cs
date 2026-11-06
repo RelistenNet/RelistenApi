@@ -41,7 +41,7 @@ public sealed class CatalogSearchReader(
     CatalogTourMetadataReader tours,
     CatalogImportedVenueMetadataReader importedVenues,
     CatalogSongReader songs,
-    CatalogSongMetadataReader songMetadata,
+    CatalogImportedSongMappingReader importedSongMappings,
     CatalogArtistVenueMetadataReader artistVenues,
     CatalogVenueMetadataReader venueMetadata
 )
@@ -177,43 +177,20 @@ public sealed class CatalogSearchReader(
                 token
             )
         ).ToArray();
-        var evidence = (
-            await Query<SongSearchMapping>(
-                session,
-                """
-                SELECT e.setlist_song_uuid,e.song_id FROM norm.song_evidence e
-                JOIN setlist_songs s ON s.uuid=e.setlist_song_uuid JOIN artists a ON a.id=s.artist_id
-                JOIN features f ON f.artist_id=a.id AND f.norm_catalogue WHERE s.uuid=ANY(@ids)
-                """,
-                new { ids = imported.Select(song => song.uuid).ToArray() },
-                token
-            )
-        ).ToArray();
-        var mapped = await songMetadata.Read(
-            session,
-            evidence.Select(row => row.song_id).ToArray(),
-            token
-        );
-        var mappedByImported = evidence
-            .Where(row => mapped.ContainsKey(row.song_id))
-            .ToLookup(row => row.setlist_song_uuid, row => mapped[row.song_id]);
-        var mappedSongs = imported
-            .SelectMany(raw =>
-                mappedByImported[raw.uuid].Where(song => song.artist_uuid == raw.artist_uuid)
-            )
-            .ToArray();
+        await importedSongMappings.Apply(session, imported, token);
         var canonical = await songs.ReadSongDetails(
             session,
-            canonicalIds.Concat(mappedSongs.Select(song => song.id)).Distinct().ToArray(),
+            canonicalIds
+                .Concat(imported.Select(song => song.normalized_song_id).OfType<string>())
+                .Distinct()
+                .ToArray(),
             token
         );
         return canonical
             .Select(song => new CatalogArtistSongEntry(song, null))
             .Concat(
                 imported
-                    .Where(raw =>
-                        !mappedByImported[raw.uuid].Any(song => song.artist_uuid == raw.artist_uuid)
-                    )
+                    .Where(raw => raw.normalized_song_id is null)
                     .Select(raw => new CatalogArtistSongEntry(null, raw))
             )
             .OrderByDescending(entry =>
@@ -348,12 +325,6 @@ public sealed class CatalogSearchReader(
             )
             .Take(20)
             .ToArray();
-    }
-
-    private sealed class SongSearchMapping
-    {
-        public Guid setlist_song_uuid { get; set; }
-        public string song_id { get; set; } = null!;
     }
 
     private sealed class VenueSearchMatch

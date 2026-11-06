@@ -46,6 +46,12 @@ shows. Canonical song counts/shows require exact recording matches; imported son
 counts/shows use setlist evidence and cannot identify a playable file. See
 [count maintenance](../normalization-counts.md) before changing these definitions.
 
+Imported song resources always include `normalized_song_id`: the surviving `song_…`
+ID from approved mapping evidence, or `null` if no usable mapping is available.
+The link follows song merges. It does not replace the imported ID, metadata, or
+setlist-backed show collection. Inventory, detail and resolver responses expose
+the same link; browse and search continue selecting canonical targets where mapped.
+
 Canonical song detail's `shows` entries contain `{ show, timings }`.
 Each timing bucket takes the longest positive, known matching file per source,
 then reports `source_count`, `min`, `max`, `avg` and `median` across those maxima.

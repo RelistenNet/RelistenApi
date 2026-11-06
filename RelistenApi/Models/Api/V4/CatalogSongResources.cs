@@ -92,6 +92,13 @@ public sealed record SongWithTracksResource : SongDetailResource
 public record ImportedSongResource
 {
     public ImportedSongId Id { get; init; }
+
+    /// <summary>
+    /// Surviving canonical song ID from approved normalization evidence, or null when
+    /// unavailable. This link does not change imported identity or setlist show membership.
+    /// </summary>
+    public SongId? NormalizedSongId { get; init; }
+
     public ArtistId ArtistId { get; init; }
     public string Name { get; init; } = null!;
     public string Slug { get; init; } = null!;
