@@ -3,7 +3,9 @@
 Send a JSON `POST` to `/api/v4/graphql` with `query` and optional `variables` and
 `operationName`. Hot Chocolate 16.7.3 executes the public, read-only catalog graph.
 The endpoint serves web clients that want selected catalog relationships without
-a local sync engine. Responses use `Cache-Control: no-store`.
+a local sync engine. POST responses use `Cache-Control: no-store`. Deployment-owned
+[persisted GET operations](persisted-operations.md) can opt into public edge caching;
+the production registry starts empty.
 
 See [performance and verification](performance.md) for the read strategy, service
 checks and measured limits. [Runnable web queries](operations/) demonstrate the
@@ -23,10 +25,13 @@ query ArtistShows($artist: ID!, $after: String) {
 
 Use the existing opaque V4 IDs as variables. Fields use camelCase; domain enums
 use GraphQL enum values. Download the current wire contract from
-`GET /api/v4/graphql/schema.graphql`, or inspect it in the admin explorer. [Client operations](operations/) cover artist navigation, playback,
+`GET /api/v4/graphql/schema.graphql`, or inspect it in the admin explorer.
+[Client examples](operations/) cover artist navigation, playback,
 song history, venue browsing, playlist hydration, search, rankings, references,
 and public activity. These documents are validated by the HTTP integration suite;
-clients may send their own operations. There is no persisted-operation registry.
+clients may send their own operations through POST. These example documents are
+not registered as persisted operations. See the [registration guide](persisted-operations.md)
+when adding queries for a deployed client.
 
 Artist `features` is the same unsigned 64-bit decimal string as REST, not a nested
 object. Use the [shared feature constants and helper](../../../clients/typescript/artist-features.ts)
@@ -172,8 +177,9 @@ error and never returns a truncated recording. This is not a serialized-byte cei
 The HTTP deadline and abort token reach loader waits, session opening, and Dapper
 commands. The shared SQL command timeout remains 30 seconds; the graph's shorter
 linked token cancels outstanding work. REST retains its current timeout behavior.
-GET execution, operation batching, multipart uploads, mutations, and subscriptions
-are disabled. Introspection remains available through POST. Oversized known-length
+Arbitrary GET execution, operation batching, multipart uploads, mutations, and
+subscriptions are disabled. Registered queries execute through the separate
+persisted-operation GET route. Introspection remains available through POST. Oversized known-length
 bodies return HTTP 413; streaming-body rejection may use the GraphQL HTTP parser's
 error envelope. CORS permits public POST and the optional `GraphQL-Cost` header.
 

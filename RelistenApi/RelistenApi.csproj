@@ -58,6 +58,18 @@
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Migrations\Sql\*.sql" />
+    <EmbeddedResource
+      Include="GraphQL/Operations/Catalog/*.graphql"
+      LogicalName="Relisten.GraphQL.Operations.Catalog.%(Filename)%(Extension)"
+    />
+    <EmbeddedResource
+      Include="GraphQL/Operations/Rankings/*.graphql"
+      LogicalName="Relisten.GraphQL.Operations.Rankings.%(Filename)%(Extension)"
+    />
+    <EmbeddedResource
+      Include="GraphQL/Operations/Live/*.graphql"
+      LogicalName="Relisten.GraphQL.Operations.Live.%(Filename)%(Extension)"
+    />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Relisten.Normalization\Relisten.Normalization.csproj" />

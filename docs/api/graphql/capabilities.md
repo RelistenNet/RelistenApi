@@ -3,7 +3,8 @@
 The graph is an alternative web read API. Existing REST payloads, complete
 collections, ETags, and mobile sync behavior remain available. The
 `GET /api/v4/graphql/schema.graphql` provides the current field/argument reference;
-[operations](operations/) are client examples, not a persisted-operation registry.
+[operations](operations/) are client examples. The separate, initially empty
+[persisted-operation registry](persisted-operations.md) holds deployed client queries.
 
 ## Reader ownership and public mappings
 

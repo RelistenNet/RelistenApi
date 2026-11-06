@@ -1,0 +1,9 @@
+query PersistedArtist($id: ID!, $first: Int! = 1, $after: String) {
+  artist(id: $id) {
+    id name
+    shows(first: $first, after: $after) {
+      nodes { id }
+      pageInfo { endCursor hasNextPage }
+    }
+  }
+}

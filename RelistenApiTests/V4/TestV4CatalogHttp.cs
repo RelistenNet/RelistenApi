@@ -72,6 +72,9 @@ public sealed partial class TestV4CatalogHttp
             .Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
             .AddCookie(options => options.LoginPath = "/relisten-admin/login");
         builder.Services.AddAuthorization();
+        builder.Services.AddSingleton(
+            Relisten.GraphQL.CatalogPersistedOperations.Load(typeof(TestV4CatalogHttp).Assembly)
+        );
         Relisten
             .GraphQL.CatalogGraphRegistration.AddCatalogGraph(builder.Services)
             .ModifyRequestOptions(o => o.IncludeExceptionDetails = true);

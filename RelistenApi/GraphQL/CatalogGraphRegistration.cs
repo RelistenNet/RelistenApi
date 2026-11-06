@@ -1,10 +1,12 @@
 using System;
+using System.Collections.Immutable;
 using System.Threading;
 using System.Threading.Tasks;
 using ChilliCream.Nitro.App;
 using HotChocolate;
 using HotChocolate.AspNetCore;
 using HotChocolate.Execution;
+using HotChocolate.PersistedOperations;
 using HotChocolate.Types;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -24,6 +26,7 @@ namespace Relisten.GraphQL;
 public static class CatalogGraphRegistration
 {
     public const string Path = "/api/v4/graphql";
+    public const string PersistedPath = Path + "/persisted";
     public const string AdminPath = "/relisten-admin/graphql";
     private static readonly object RefreshKey = new();
     private static readonly object OperationKey = new();
@@ -38,6 +41,12 @@ public static class CatalogGraphRegistration
         options.Validate();
         services.AddSingleton(options);
         services.AddHttpContextAccessor();
+        services.TryAddSingleton(_ =>
+            CatalogPersistedOperations.Load(typeof(CatalogGraphRegistration).Assembly)
+        );
+        services.AddSingleton<IOperationDocumentStorage>(provider =>
+            provider.GetRequiredService<CatalogPersistedOperations>()
+        );
         // Hot Chocolate creates operation/fetch scopes independently of the HTTP
         // scope. Every graph reader must receive the collector finalized below.
         services.Replace(
@@ -65,6 +74,8 @@ public static class CatalogGraphRegistration
         var graph = services
             .AddGraphQLServer()
             .AddQueryType<CatalogQueryType>()
+            .AddApplicationService<IOperationDocumentStorage>()
+            .UsePersistedOperationPipeline()
             .DisableIntrospection(false)
             .AddMaxExecutionDepthRule(options.MaxDepth)
             .AddApplicationService<ILogger<CatalogGraphErrors>>()
@@ -86,6 +97,40 @@ public static class CatalogGraphRegistration
             next =>
                 async context =>
                 {
+                    var http = context
+                        .RequestServices.GetRequiredService<IHttpContextAccessor>()
+                        .HttpContext;
+                    var persisted =
+                        context.RequestServices.GetRequiredService<CatalogPersistedOperations>();
+                    // Hot Chocolate's document cache also contains arbitrary POST queries.
+                    // A cache hit must not turn one of those queries into a registered GET.
+                    if (
+                        http?.Request.Path.StartsWithSegments(
+                            PersistedPath,
+                            StringComparison.OrdinalIgnoreCase
+                        ) == true
+                        && (
+                            http.Request.RouteValues["operationId"] is not string id
+                            || !persisted.Contains(id)
+                        )
+                    )
+                    {
+                        context.Result = new OperationResult([
+                            ErrorBuilder
+                                .New()
+                                .SetCode(ErrorCodes.Execution.PersistedOperationNotFound)
+                                .SetMessage("The persisted catalog operation is not registered.")
+                                .Build(),
+                        ])
+                        {
+                            ContextData = ImmutableDictionary<string, object?>.Empty.Add(
+                                ExecutionContextData.HttpStatusCode,
+                                400
+                            ),
+                        };
+                        return;
+                    }
+
                     await next(context);
                     try
                     {
@@ -103,9 +148,13 @@ public static class CatalogGraphRegistration
                                 "GraphQL popularity refresh could not be scheduled"
                             );
                     }
+                    if (http is not null)
+                    {
+                        persisted.ApplyCachePolicy(http, context.Result);
+                    }
                 },
-            key: "CatalogRefresh",
-            before: WellKnownRequestMiddleware.OperationExecutionMiddleware
+            key: "CatalogRequest",
+            before: WellKnownRequestMiddleware.DocumentCacheMiddleware
         );
         graph.AddType(
             new InputObjectType<CatalogGraphFilter>(d =>
@@ -204,6 +253,10 @@ public static class CatalogGraphRegistration
                     context.Request.Path.Value?.TrimEnd('/'),
                     Path,
                     StringComparison.OrdinalIgnoreCase
+                )
+                || context.Request.Path.StartsWithSegments(
+                    PersistedPath,
+                    StringComparison.OrdinalIgnoreCase
                 ),
             branch =>
                 branch.Use(
@@ -212,6 +265,25 @@ public static class CatalogGraphRegistration
                         var limits =
                             context.RequestServices.GetRequiredService<CatalogGraphOptions>();
                         context.Response.Headers.CacheControl = "no-store";
+                        if (
+                            context.Request.Path.StartsWithSegments(
+                                PersistedPath,
+                                StringComparison.OrdinalIgnoreCase
+                            )
+                        )
+                        {
+                            context.Response.OnStarting(() =>
+                            {
+                                context.Response.Headers.AppendCommaSeparatedValues(
+                                    "Vary",
+                                    "Accept",
+                                    "GraphQL-Cost",
+                                    "Authorization",
+                                    "Cookie"
+                                );
+                                return Task.CompletedTask;
+                            });
+                        }
                         if (context.Request.ContentLength > limits.MaxDocumentBytes)
                         {
                             context.Response.StatusCode = StatusCodes.Status413PayloadTooLarge;
@@ -264,6 +336,7 @@ public static class CatalogGraphRegistration
                     options.UseGet = false;
                 })
                 .RequireAuthorization();
+            endpoints.MapGraphQLPersistedOperations(PersistedPath);
             endpoints
                 .MapGraphQL(Path)
                 .WithOptions(options =>

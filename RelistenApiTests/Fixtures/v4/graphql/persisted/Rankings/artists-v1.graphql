@@ -1,0 +1,3 @@
+query PersistedRankings {
+  popularArtists(limit: 1) { node { id } }
+}
