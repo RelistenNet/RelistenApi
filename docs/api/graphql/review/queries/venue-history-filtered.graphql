@@ -1,0 +1,35 @@
+query VenueHistoryFiltered(
+  $artist: ID!
+  $venue: String!
+  $from: DateTime!
+  $through: DateTime!
+) {
+  artistVenueFor(artistId: $artist, venueId: $venue) {
+    id
+    artistShowCount
+    venue {
+      id
+      name
+      city
+      region
+    }
+    shows(
+      first: 25
+      orderBy: DATE_DESCENDING
+      filter: { from: $from, through: $through, soundboard: true }
+    ) {
+      nodes {
+        id
+        displayDate
+        sourceCount
+        avgRating
+        hasSoundboardSource
+      }
+      totalCount
+      pageInfo {
+        endCursor
+        hasNextPage
+      }
+    }
+  }
+}

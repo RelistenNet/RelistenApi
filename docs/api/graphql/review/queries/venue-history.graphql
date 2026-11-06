@@ -1,0 +1,46 @@
+query VenueHistory(
+  $artist: ID!
+  $venue: String!
+  $after: String
+  $count: Boolean! = false
+) {
+  artistVenueFor(artistId: $artist, venueId: $venue) {
+    id
+    artistShowCount
+    venue {
+      id
+      slug
+      name
+      city
+      region
+      country
+      latitude
+      longitude
+    }
+    shows(first: 25, after: $after, orderBy: DATE_DESCENDING) {
+      nodes {
+        id
+        displayDate
+        sourceCount
+        popularity {
+          windows {
+            days30 {
+              plays
+            }
+          }
+        }
+        avgRating
+        hasSoundboardSource
+        artist {
+          id
+          name
+        }
+      }
+      totalCount @include(if: $count)
+      pageInfo {
+        endCursor
+        hasNextPage
+      }
+    }
+  }
+}

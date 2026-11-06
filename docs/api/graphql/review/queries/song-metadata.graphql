@@ -1,0 +1,14 @@
+query SongMetadata($song: ID!) {
+  song(id: $song) {
+    id
+    slug
+    name
+    aliases
+    matchedShowCount
+    matchedTrackCount
+    artist {
+      id
+      name
+    }
+  }
+}

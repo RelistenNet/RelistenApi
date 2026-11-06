@@ -1,6 +1,9 @@
 # Deliver the full V4 catalog graph with Hot Chocolate
 
-Status: implemented and locally verified on `codex/v4-catalog-graphql-plan`.
+Status: implemented with synthetic correctness verification on
+`codex/v4-catalog-graphql-plan`. Actual-catalog performance qualification failed;
+see the [adversarial review](../../api/graphql/review/README.md) for required reader
+fixes, measured REST regressions and proposed additional UI capabilities.
 
 This ExecPlan is a living document. Update Progress, Surprises & Discoveries,
 Decision Log, and Outcomes & Retrospective as work proceeds. Paths below are
@@ -38,6 +41,11 @@ identities must mean the same thing through either transport.
 - [x] (2026-11-06) Implement the catalog graph, SQL keysets, filters, and bounded execution.
 - [x] (2026-11-06) Verify REST parity, batching, read-unit snapshots, cancellation, and six synthetic workloads.
 - [x] (2026-11-06) Publish integration docs and local qualification results; deployment/capacity rollout remains operational work.
+- [x] (2026-11-06) Review actual-catalog workloads with independent validation;
+  confirm broad scans, repeated nested work and existing REST search regressions.
+- [ ] Resolve the confirmed performance findings before rollout. Additional
+  summary/order/filter capabilities identified by the screenshots need a separate
+  scope decision.
 
 ## Decision Log
 

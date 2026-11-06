@@ -1,5 +1,10 @@
 # GraphQL local qualification
 
+The measurements below use a small synthetic fixture and establish correctness
+and execution bounds only. The subsequent [actual-catalog adversarial review](review/README.md)
+reproduces multi-second song-history queries and a REST search regression. That
+review supersedes any implication that this branch is ready for web traffic.
+
 The defaults allow the representative web queries with headroom. The largest
 measured field cost is 18,010 against a 200,000 limit (11.1×); the largest type
 cost is 20,053 against 500,000 (24.9×). An excessive 500 × 500 × 500 traversal

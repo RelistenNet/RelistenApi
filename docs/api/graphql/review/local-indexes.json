@@ -1,0 +1,239 @@
+{
+  "indexes": [
+    {
+      "schemaname": "norm",
+      "tablename": "artist_venues",
+      "indexname": "artist_venues_artist_uuid_venue_id_key",
+      "indexdef": "CREATE UNIQUE INDEX artist_venues_artist_uuid_venue_id_key ON norm.artist_venues USING btree (artist_uuid, venue_id)"
+    },
+    {
+      "schemaname": "norm",
+      "tablename": "artist_venues",
+      "indexname": "artist_venues_pkey",
+      "indexdef": "CREATE UNIQUE INDEX artist_venues_pkey ON norm.artist_venues USING btree (id)"
+    },
+    {
+      "schemaname": "norm",
+      "tablename": "artist_venues",
+      "indexname": "artist_venues_venue_id",
+      "indexdef": "CREATE INDEX artist_venues_venue_id ON norm.artist_venues USING btree (venue_id)"
+    },
+    {
+      "schemaname": "norm",
+      "tablename": "show_venues",
+      "indexname": "show_venues_pkey",
+      "indexdef": "CREATE UNIQUE INDEX show_venues_pkey ON norm.show_venues USING btree (show_uuid)"
+    },
+    {
+      "schemaname": "norm",
+      "tablename": "show_venues",
+      "indexname": "show_venues_venue_id_idx",
+      "indexdef": "CREATE INDEX show_venues_venue_id_idx ON norm.show_venues USING btree (venue_id)"
+    },
+    {
+      "schemaname": "norm",
+      "tablename": "song_counts",
+      "indexname": "song_counts_pkey",
+      "indexdef": "CREATE UNIQUE INDEX song_counts_pkey ON norm.song_counts USING btree (song_id)"
+    },
+    {
+      "schemaname": "norm",
+      "tablename": "songs",
+      "indexname": "songs_artist_uuid_id_key",
+      "indexdef": "CREATE UNIQUE INDEX songs_artist_uuid_id_key ON norm.songs USING btree (artist_uuid, id)"
+    },
+    {
+      "schemaname": "norm",
+      "tablename": "songs",
+      "indexname": "songs_artist_uuid_idx",
+      "indexdef": "CREATE INDEX songs_artist_uuid_idx ON norm.songs USING btree (artist_uuid)"
+    },
+    {
+      "schemaname": "norm",
+      "tablename": "songs",
+      "indexname": "songs_artist_uuid_slug_key",
+      "indexdef": "CREATE UNIQUE INDEX songs_artist_uuid_slug_key ON norm.songs USING btree (artist_uuid, slug)"
+    },
+    {
+      "schemaname": "norm",
+      "tablename": "songs",
+      "indexname": "songs_pkey",
+      "indexdef": "CREATE UNIQUE INDEX songs_pkey ON norm.songs USING btree (id)"
+    },
+    {
+      "schemaname": "norm",
+      "tablename": "songs",
+      "indexname": "songs_retired_uuid_key",
+      "indexdef": "CREATE UNIQUE INDEX songs_retired_uuid_key ON norm.songs USING btree (retired_uuid)"
+    },
+    {
+      "schemaname": "norm",
+      "tablename": "track_songs",
+      "indexname": "track_songs_pkey",
+      "indexdef": "CREATE UNIQUE INDEX track_songs_pkey ON norm.track_songs USING btree (track_uuid, part)"
+    },
+    {
+      "schemaname": "norm",
+      "tablename": "track_songs",
+      "indexname": "track_songs_song_id_idx",
+      "indexdef": "CREATE INDEX track_songs_song_id_idx ON norm.track_songs USING btree (song_id) WHERE (song_id IS NOT NULL)"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "shows",
+      "indexname": "idx_shows_artist_id_venue_id",
+      "indexdef": "CREATE INDEX idx_shows_artist_id_venue_id ON public.shows USING btree (artist_id, venue_id)"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "shows",
+      "indexname": "idx_shows_artist_id_year_id",
+      "indexdef": "CREATE INDEX idx_shows_artist_id_year_id ON public.shows USING btree (artist_id, year_id)"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "shows",
+      "indexname": "idx_shows_month_day",
+      "indexdef": "CREATE INDEX idx_shows_month_day ON public.shows USING btree (EXTRACT(month FROM date), EXTRACT(day FROM date))"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "shows",
+      "indexname": "shows_artist_id_display_date_key",
+      "indexdef": "CREATE UNIQUE INDEX shows_artist_id_display_date_key ON public.shows USING btree (artist_id, display_date)"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "shows",
+      "indexname": "shows_pkey",
+      "indexdef": "CREATE UNIQUE INDEX shows_pkey ON public.shows USING btree (id)"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "shows",
+      "indexname": "shows_uuid_key",
+      "indexdef": "CREATE UNIQUE INDEX shows_uuid_key ON public.shows USING btree (uuid)"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "source_track_plays",
+      "indexname": "source_track_plays_new_created_at_idx",
+      "indexdef": "CREATE INDEX source_track_plays_new_created_at_idx ON public.source_track_plays USING brin (created_at) WITH (pages_per_range='128')"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "source_track_plays",
+      "indexname": "source_track_plays_new_created_at_idx1",
+      "indexdef": "CREATE INDEX source_track_plays_new_created_at_idx1 ON public.source_track_plays USING btree (created_at)"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "source_track_plays",
+      "indexname": "source_track_plays_new_id_created_at_uidx",
+      "indexdef": "CREATE UNIQUE INDEX source_track_plays_new_id_created_at_uidx ON public.source_track_plays USING btree (id, created_at)"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "source_track_plays",
+      "indexname": "source_track_plays_source_track_uuid_idx",
+      "indexdef": "CREATE INDEX source_track_plays_source_track_uuid_idx ON public.source_track_plays USING btree (source_track_uuid)"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "source_tracks",
+      "indexname": "idx_source_tracks_source_set_id",
+      "indexdef": "CREATE INDEX idx_source_tracks_source_set_id ON public.source_tracks USING btree (source_set_id)"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "source_tracks",
+      "indexname": "source_tracks_artist_id_idx",
+      "indexdef": "CREATE INDEX source_tracks_artist_id_idx ON public.source_tracks USING btree (artist_id)"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "source_tracks",
+      "indexname": "source_tracks_pkey",
+      "indexdef": "CREATE UNIQUE INDEX source_tracks_pkey ON public.source_tracks USING btree (id)"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "source_tracks",
+      "indexname": "source_tracks_source_id_idx",
+      "indexdef": "CREATE INDEX source_tracks_source_id_idx ON public.source_tracks USING btree (source_id)"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "source_tracks",
+      "indexname": "source_tracks_uuid_key",
+      "indexdef": "CREATE UNIQUE INDEX source_tracks_uuid_key ON public.source_tracks USING btree (uuid)"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "source_tracks",
+      "indexname": "unique_artist_id_mp3_url",
+      "indexdef": "CREATE UNIQUE INDEX unique_artist_id_mp3_url ON public.source_tracks USING btree (artist_id, mp3_url)"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "sources",
+      "indexname": "idx_source_show_id_covering",
+      "indexdef": "CREATE INDEX idx_source_show_id_covering ON public.sources USING btree (show_id, avg_rating_weighted, flac_type, is_soundboard, updated_at)"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "sources",
+      "indexname": "idx_source_venue_id",
+      "indexdef": "CREATE INDEX idx_source_venue_id ON public.sources USING btree (venue_id, show_id)"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "sources",
+      "indexname": "idx_sources_flac_upstream",
+      "indexdef": "CREATE INDEX idx_sources_flac_upstream ON public.sources USING btree (upstream_identifier, flac_type)"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "sources",
+      "indexname": "source_uniq_artist_upstream",
+      "indexdef": "CREATE UNIQUE INDEX source_uniq_artist_upstream ON public.sources USING btree (artist_id, upstream_identifier)"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "sources",
+      "indexname": "sources_pkey",
+      "indexdef": "CREATE UNIQUE INDEX sources_pkey ON public.sources USING btree (id)"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "sources",
+      "indexname": "sources_uuid_key",
+      "indexdef": "CREATE UNIQUE INDEX sources_uuid_key ON public.sources USING btree (uuid)"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "tours",
+      "indexname": "tour_artist_id_tour_upstream_identifier",
+      "indexdef": "CREATE UNIQUE INDEX tour_artist_id_tour_upstream_identifier ON public.tours USING btree (artist_id, upstream_identifier)"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "tours",
+      "indexname": "tours_pkey",
+      "indexdef": "CREATE UNIQUE INDEX tours_pkey ON public.tours USING btree (id)"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "tours",
+      "indexname": "tours_uuid_key",
+      "indexdef": "CREATE UNIQUE INDEX tours_uuid_key ON public.tours USING btree (uuid)"
+    }
+  ],
+  "extensions": [
+    "plpgsql",
+    "pg_stat_statements",
+    "pgcrypto",
+    "tablefunc",
+    "timescaledb"
+  ]
+}

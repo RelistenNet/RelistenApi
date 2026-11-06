@@ -1,0 +1,47 @@
+query SongHistoryRows(
+  $song: ID!
+  $first: Int! = 25
+  $after: String
+  $count: Boolean! = false
+) {
+  song(id: $song) {
+    id
+    name
+    matchedShowCount
+    shows(first: $first, after: $after, orderBy: DATE_DESCENDING) {
+      nodes {
+        show {
+          id
+          displayDate
+          sourceCount
+          popularity {
+            windows {
+              days30 {
+                plays
+              }
+            }
+          }
+          avgRating
+          hasSoundboardSource
+          artistVenue {
+            venue {
+              id
+              name
+              city
+              region
+            }
+          }
+          importedVenue {
+            name
+            location
+          }
+        }
+      }
+      totalCount @include(if: $count)
+      pageInfo {
+        endCursor
+        hasNextPage
+      }
+    }
+  }
+}

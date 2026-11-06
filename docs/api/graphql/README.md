@@ -5,6 +5,11 @@ Send a JSON `POST` to `/api/v4/graphql` with `query` and optional `variables` an
 The endpoint serves web clients that want selected catalog relationships without
 a local sync engine. Responses use `Cache-Control: no-store`.
 
+The [actual-catalog review](review/README.md) identifies reader performance fixes
+needed before rollout, measured REST regressions, and additional capabilities
+needed by the demonstrated web UI. [Runnable web queries](review/queries/) and
+their measured variables accompany that review.
+
 ```graphql
 query ArtistShows($artist: ID!, $after: String) {
   artist(id: $artist) {
@@ -170,5 +175,6 @@ Raw variables are not logged by these additions.
 
 This is an additive route with no migrations, imports, backfill, or client cutover.
 Remove the route registration to roll back exposure; shared reader changes retain
-REST contracts. The implementation has local qualification only; production query
-plans and capacity still need observation during normal rollout.
+REST contracts. The implementation has synthetic correctness qualification only.
+The actual-catalog review found performance regressions that need fixes before
+rollout; production plans and capacity also remain unqualified.
