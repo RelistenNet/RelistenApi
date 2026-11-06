@@ -372,29 +372,17 @@ public sealed partial class TestV4CatalogHttp
     }
 
     [Test]
-    public async Task Song_browse_uses_evidence_mapping_and_preserves_unmatched_same_name_and_zero_match_songs()
+    public async Task Approved_song_browse_excludes_imported_fallbacks_and_keeps_zero_match_songs()
     {
         var entries = (await GetJson(SongArtistPath + "/songs")).AsArray();
-        entries.Should().HaveCount(5);
+        entries.Should().HaveCount(3);
         var songs = entries.Where(entry => entry!["kind"]!.GetValue<string>() == "song").ToArray();
         songs
             .Select(entry => entry!["song"]!["id"]!.GetValue<string>())
             .Should()
             .BeEquivalentTo("song_00000101", "song_00000102", "song_00000103");
         songs.Should().OnlyContain(entry => entry!["imported_song"] == null);
-        var raw = entries
-            .Where(entry => entry!["kind"]!.GetValue<string>() == "imported_song")
-            .ToArray();
-        raw.Select(entry => entry!["imported_song"]!["id"]!.GetValue<string>())
-            .Should()
-            .BeEquivalentTo(CatalogId("imported_song", 352), CatalogId("imported_song", 353));
-        raw.Should().OnlyContain(entry => entry!["song"] == null);
-        raw.Single(entry =>
-            entry!["imported_song"]!["id"]!.GetValue<string>() == CatalogId("imported_song", 352)
-        )!["imported_song"]!["name"]!
-            .GetValue<string>()
-            .Should()
-            .Be("Scarlet Begonias");
+        entries.Should().OnlyContain(entry => entry!["kind"]!.GetValue<string>() == "song");
 
         var detail = await GetJson(DiscoverySongPath);
         detail["matched_track_count"]!.GetValue<int>().Should().Be(3);
@@ -574,12 +562,13 @@ public sealed partial class TestV4CatalogHttp
             detail["normalized_song_id"] = null;
             JsonNode.DeepEquals(current, detail).Should().BeTrue();
             var entries = (await GetJson(SongArtistPath + "/songs")).AsArray();
+            entries.Should().OnlyContain(entry => entry!["kind"]!.GetValue<string>() == "song");
+            var currentInventory = (await GetJson(SongArtistPath + "/imported-songs")).AsArray();
             JsonNode
                 .DeepEquals(
-                    entries.Single(entry =>
-                        entry!["imported_song"]?["id"]?.GetValue<string>()
-                        == CatalogId("imported_song", 351)
-                    )!["imported_song"],
+                    currentInventory.Single(song =>
+                        song!["id"]!.GetValue<string>() == CatalogId("imported_song", 351)
+                    ),
                     ResourceMetadata(current)
                 )
                 .Should()
@@ -795,7 +784,7 @@ public sealed partial class TestV4CatalogHttp
     }
 
     [Test]
-    public async Task Stored_imported_counter_correction_is_shared_by_browse_inventory_and_detail()
+    public async Task Stored_imported_counter_correction_is_shared_by_inventory_and_detail()
     {
         var path = ImportedSongPath(352);
         using var initial = await http.GetAsync(path);
@@ -816,14 +805,6 @@ public sealed partial class TestV4CatalogHttp
             changed.StatusCode.Should().Be(HttpStatusCode.OK);
             var detail = JsonNode.Parse(await changed.Content.ReadAsStringAsync())!;
             detail["setlist_show_count"]!.GetValue<int>().Should().Be(7);
-            var browse = (await GetJson(SongArtistPath + "/songs")).AsArray();
-            browse.Single(entry =>
-                entry!["imported_song"]?["id"]?.GetValue<string>()
-                == CatalogId("imported_song", 352)
-            )!["imported_song"]!["setlist_show_count"]!
-                .GetValue<int>()
-                .Should()
-                .Be(7);
             var inventory = (await GetJson(SongArtistPath + "/imported-songs")).AsArray();
             inventory.Single(song =>
                 song!["id"]!.GetValue<string>() == CatalogId("imported_song", 352)
@@ -950,7 +931,7 @@ public sealed partial class TestV4CatalogHttp
     }
 
     [Test]
-    public async Task Broken_song_merge_preserves_imported_fallback_and_recovers_after_correction()
+    public async Task Broken_song_merge_keeps_browse_canonical_and_imported_details_available_until_recovery()
     {
         await using var connection = await MigratedTestDatabase.OpenAsync();
         try
@@ -963,10 +944,7 @@ public sealed partial class TestV4CatalogHttp
             broken.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
             broken.Headers.CacheControl!.NoStore.Should().BeTrue();
             var entries = (await GetJson(SongArtistPath + "/songs")).AsArray();
-            entries
-                .Select(entry => entry!["imported_song"]?["id"]?.GetValue<string>())
-                .Should()
-                .Contain(CatalogId("imported_song", 351));
+            entries.Should().OnlyContain(entry => entry!["kind"]!.GetValue<string>() == "song");
             entries
                 .Select(entry => entry!["song"]?["id"]?.GetValue<string>())
                 .Should()

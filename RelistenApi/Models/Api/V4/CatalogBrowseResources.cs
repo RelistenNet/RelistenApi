@@ -26,49 +26,18 @@ public record ArtistResource
     public PopularityResource? Popularity { get; init; }
     public DateTime CreatedAt { get; init; }
     public DateTime UpdatedAt { get; init; }
-    public ArtistFeaturesResource Features { get; init; } = null!;
+
+    /// <summary>Unsigned 64-bit capability mask as a decimal string. See ArtistFeatures.</summary>
+    public string Features { get; init; } = "0";
     public IReadOnlyList<ArtistProviderResource> UpstreamSources { get; init; } = [];
-}
-
-[JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
-public sealed class ArtistFeaturesResource
-{
-    public bool Descriptions { get; init; }
-    public bool Eras { get; init; }
-    public bool MultipleSources { get; init; }
-    public bool Reviews { get; init; }
-    public bool Ratings { get; init; }
-    public bool Tours { get; init; }
-    public bool TaperNotes { get; init; }
-    public bool SourceInformation { get; init; }
-    public bool Sets { get; init; }
-    public bool PerShowVenues { get; init; }
-    public bool PerSourceVenues { get; init; }
-    public bool VenueCoords { get; init; }
-    public bool Songs { get; init; }
-    public bool Years { get; init; }
-    public bool TrackMd5s { get; init; }
-    public bool ReviewTitles { get; init; }
-    public bool JamCharts { get; init; }
-    public bool SetlistDataIncomplete { get; init; }
-    public bool TrackNames { get; init; }
-    public bool VenuePastNames { get; init; }
-    public bool ReviewsHaveRatings { get; init; }
-    public bool TrackDurations { get; init; }
-    public bool CanHaveFlac { get; init; }
-
-    /// <summary>Whether approved normalized interpretations may appear in this artist's reads.</summary>
-    public bool Normalization { get; init; }
 }
 
 [JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
 public sealed class ArtistProviderResource
 {
-    public string Provider { get; init; } = null!;
+    /// <summary>Known upstream provider; null for an unrecognized catalog provider.</summary>
+    public UpstreamProvider? Provider { get; init; }
     public string? UpstreamIdentifier { get; init; }
-    public string? Url { get; init; }
-    public string? Description { get; init; }
-    public string? CreditLine { get; init; }
 }
 
 [JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]

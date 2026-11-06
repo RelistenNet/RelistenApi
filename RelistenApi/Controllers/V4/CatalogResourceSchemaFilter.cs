@@ -42,6 +42,25 @@ internal sealed class CatalogResourceSchemaFilter : ISchemaFilter
                 .ToHashSet();
         }
 
+        if (
+            typeof(ArtistResource).IsAssignableFrom(context.Type)
+            && schema.Properties.TryGetValue("features", out var featureSchema)
+            && featureSchema is OpenApiSchema features
+        )
+        {
+            features.Type = JsonSchemaType.String;
+            features.Pattern = "^(0|[1-9][0-9]*)$";
+            features.MaxLength = 20;
+            features.Description =
+                "Unsigned 64-bit capability mask as a decimal string. Decode with BigInt in JavaScript; unset bits are false. Ignore unknown bits. Fixed values: "
+                + string.Join(
+                    ", ",
+                    Enum.GetValues<ArtistFeatures>()
+                        .Where(flag => flag != ArtistFeatures.None)
+                        .Select(flag => $"{flag}={flag:D}")
+                );
+        }
+
         var nullability = new NullabilityInfoContext();
         foreach (var property in contract.Properties)
         {

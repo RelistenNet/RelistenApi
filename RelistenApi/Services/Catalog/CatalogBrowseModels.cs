@@ -55,9 +55,6 @@ public sealed class CatalogProviderAssignment
     public long artist_id { get; set; }
     public string provider { get; set; } = null!;
     public string? upstream_identifier { get; set; }
-    public string? url { get; set; }
-    public string? description { get; set; }
-    public string? credit_line { get; set; }
 }
 
 public sealed record CatalogYearDetail(CatalogYear Year, IReadOnlyList<CatalogShow> Shows);

@@ -360,7 +360,7 @@ public sealed partial class TestV4CatalogHttp
     }
 
     [Test]
-    public async Task Artist_listing_and_detail_preserve_provider_identity_without_internal_keys()
+    public async Task Artist_listing_and_detail_use_compact_capabilities_and_provider_assignments()
     {
         // Other integration fixtures share this catalog. Check our fixture's membership
         // and order without assuming it owns every artist returned by the public route.
@@ -378,14 +378,21 @@ public sealed partial class TestV4CatalogHttp
         JsonNode.DeepEquals(listed, detail).Should().BeTrue();
         detail["show_count"]!.GetValue<int>().Should().Be(2);
         detail["source_count"]!.GetValue<int>().Should().Be(2);
-        detail["features"]!["normalization"]!.GetValue<bool>().Should().BeTrue();
-        detail["features"]!.AsObject().ContainsKey("id").Should().BeFalse();
+        (
+            System.Numerics.BigInteger.Parse(detail["features"]!.GetValue<string>())
+            & (System.Numerics.BigInteger.One << 23)
+        )
+            .Should()
+            .NotBe(System.Numerics.BigInteger.Zero);
         detail.AsObject().ContainsKey("capabilities").Should().BeFalse();
         var assignment = detail["upstream_sources"]![0]!;
-        assignment["provider"]!.GetValue<string>().Should().Be("review.provider");
+        assignment["provider"].Should().BeNull("unknown providers must not break artist reads");
         assignment["upstream_identifier"]!.GetValue<string>().Should().Be("matched-upstream");
-        assignment.AsObject().ContainsKey("upstream_source_id").Should().BeFalse();
-        assignment.AsObject().ContainsKey("artist_id").Should().BeFalse();
+        assignment
+            .AsObject()
+            .Select(field => field.Key)
+            .Should()
+            .BeEquivalentTo("provider", "upstream_identifier");
 
         var includingAutoCreated = (
             await GetJson("/api/v4/artists?include_autocreated=true")

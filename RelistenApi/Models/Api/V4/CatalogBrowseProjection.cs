@@ -26,46 +26,46 @@ public static class CatalogBrowseProjection
                 : null,
             CreatedAt = value.created_at,
             UpdatedAt = value.updated_at,
-            Features = Features(value.Features),
+            Features = Features(value.Features).ToString("D"),
             UpstreamSources = value.UpstreamSources.Select(Provider).ToArray(),
         };
 
-    private static ArtistFeaturesResource Features(CatalogFeatures value) =>
-        new()
-        {
-            Descriptions = value.descriptions,
-            Eras = value.eras,
-            MultipleSources = value.multiple_sources,
-            Reviews = value.reviews,
-            Ratings = value.ratings,
-            Tours = value.tours,
-            TaperNotes = value.taper_notes,
-            SourceInformation = value.source_information,
-            Sets = value.sets,
-            PerShowVenues = value.per_show_venues,
-            PerSourceVenues = value.per_source_venues,
-            VenueCoords = value.venue_coords,
-            Songs = value.songs,
-            Years = value.years,
-            TrackMd5s = value.track_md5s,
-            ReviewTitles = value.review_titles,
-            JamCharts = value.jam_charts,
-            SetlistDataIncomplete = value.setlist_data_incomplete,
-            TrackNames = value.track_names,
-            VenuePastNames = value.venue_past_names,
-            ReviewsHaveRatings = value.reviews_have_ratings,
-            TrackDurations = value.track_durations,
-            CanHaveFlac = value.can_have_flac,
-            Normalization = value.norm_catalogue,
-        };
+    private static ArtistFeatures Features(CatalogFeatures value) =>
+        (value.descriptions ? ArtistFeatures.Descriptions : ArtistFeatures.None)
+        | (value.eras ? ArtistFeatures.Eras : ArtistFeatures.None)
+        | (value.multiple_sources ? ArtistFeatures.MultipleSources : ArtistFeatures.None)
+        | (value.reviews ? ArtistFeatures.Reviews : ArtistFeatures.None)
+        | (value.ratings ? ArtistFeatures.Ratings : ArtistFeatures.None)
+        | (value.tours ? ArtistFeatures.Tours : ArtistFeatures.None)
+        | (value.taper_notes ? ArtistFeatures.TaperNotes : ArtistFeatures.None)
+        | (value.source_information ? ArtistFeatures.SourceInformation : ArtistFeatures.None)
+        | (value.sets ? ArtistFeatures.Sets : ArtistFeatures.None)
+        | (value.per_show_venues ? ArtistFeatures.PerShowVenues : ArtistFeatures.None)
+        | (value.per_source_venues ? ArtistFeatures.PerSourceVenues : ArtistFeatures.None)
+        | (value.venue_coords ? ArtistFeatures.VenueCoords : ArtistFeatures.None)
+        | (value.songs ? ArtistFeatures.Songs : ArtistFeatures.None)
+        | (value.years ? ArtistFeatures.Years : ArtistFeatures.None)
+        | (value.track_md5s ? ArtistFeatures.TrackMd5s : ArtistFeatures.None)
+        | (value.review_titles ? ArtistFeatures.ReviewTitles : ArtistFeatures.None)
+        | (value.jam_charts ? ArtistFeatures.JamCharts : ArtistFeatures.None)
+        | (
+            value.setlist_data_incomplete
+                ? ArtistFeatures.SetlistDataIncomplete
+                : ArtistFeatures.None
+        )
+        | (value.track_names ? ArtistFeatures.TrackNames : ArtistFeatures.None)
+        | (value.venue_past_names ? ArtistFeatures.VenuePastNames : ArtistFeatures.None)
+        | (value.reviews_have_ratings ? ArtistFeatures.ReviewsHaveRatings : ArtistFeatures.None)
+        | (value.track_durations ? ArtistFeatures.TrackDurations : ArtistFeatures.None)
+        | (value.can_have_flac ? ArtistFeatures.CanHaveFlac : ArtistFeatures.None)
+        | (value.norm_catalogue ? ArtistFeatures.Normalization : ArtistFeatures.None);
 
     private static ArtistProviderResource Provider(CatalogProviderAssignment value) =>
         new()
         {
-            Provider = value.provider,
+            Provider = UpstreamProviders.TryParse(value.provider, out var provider)
+                ? provider
+                : null,
             UpstreamIdentifier = value.upstream_identifier,
-            Url = value.url,
-            Description = value.description,
-            CreditLine = value.credit_line,
         };
 }

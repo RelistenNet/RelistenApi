@@ -32,26 +32,15 @@ public sealed class CatalogSongReader(
             return null;
         }
 
-        var imported = await ReadImportedSongs(session, artist.id, cancellationToken);
         if (!artist.approved)
         {
+            var imported = await ReadImportedSongs(session, artist.id, cancellationToken);
             return imported.Select(song => new CatalogArtistSongEntry(null, song)).ToArray();
         }
 
         var songs = await ReadSongDetails(session, artistUuid, null, cancellationToken);
-        return songs
-            .Select(song => new CatalogArtistSongEntry(song, null))
-            .Concat(
-                imported
-                    .Where(song => song.normalized_song_id is null)
-                    .Select(song => new CatalogArtistSongEntry(null, song))
-            )
-            .OrderBy(entry => entry.Song?.name ?? entry.ImportedSong!.name, StringComparer.Ordinal)
-            .ThenBy(
-                entry => entry.Song?.id ?? entry.ImportedSong!.uuid.ToString(),
-                StringComparer.Ordinal
-            )
-            .ToArray();
+        // Approval selects the canonical catalog even while coverage is incomplete.
+        return songs.Select(song => new CatalogArtistSongEntry(song, null)).ToArray();
     }
 
     /// <summary>Metadata and complete recording-backed show membership share one snapshot.</summary>

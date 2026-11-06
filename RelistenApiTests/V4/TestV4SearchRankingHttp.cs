@@ -126,7 +126,12 @@ public sealed partial class TestV4CatalogHttp
         var tour = await GetJson($"/api/v4/search?q=Winter&artist_id={BrowseArtistId}");
         tour["tours"]![0]!["id"]!.GetValue<string>().Should().StartWith("tour_");
         var artist = await GetJson($"/api/v4/search?q=Matched&artist_id={BrowseArtistId}");
-        artist["artists"]![0]!["features"]!["normalization"]!.GetValue<bool>().Should().BeTrue();
+        (
+            System.Numerics.BigInteger.Parse(artist["artists"]![0]!["features"]!.GetValue<string>())
+            & (System.Numerics.BigInteger.One << 23)
+        )
+            .Should()
+            .NotBe(System.Numerics.BigInteger.Zero);
         (await GetJson($"/api/v4/search?q=Scarlet&artist_id={BrowseArtistId}&songs=false"))[
             "songs"
         ]!

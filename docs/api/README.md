@@ -5,6 +5,62 @@ client. [Swagger](http://localhost:3823/api-docs/index.html) defines the routes,
 parameters and response fields. This guide explains how the music entities relate
 and which data a client may treat as authoritative.
 
+## Artist capabilities and providers
+
+V4 artist resources expose `features` as a decimal string encoding an unsigned
+64-bit mask, for example `"8388608"` (normalization only). OpenAPI declares it as
+a `string`. A set bit means true, an unset bit means false; `"0"` means no capabilities. Bit positions never change or get reused. Clients must
+ignore unknown bits. The separate `featured` field keeps its existing meaning.
+
+- Bit 0 (`1`): `descriptions`.
+- Bit 1 (`2`): `eras`.
+- Bit 2 (`4`): `multiple_sources`.
+- Bit 3 (`8`): `reviews`.
+- Bit 4 (`16`): `ratings`.
+- Bit 5 (`32`): `tours`.
+- Bit 6 (`64`): `taper_notes`.
+- Bit 7 (`128`): `source_information`.
+- Bit 8 (`256`): `sets`.
+- Bit 9 (`512`): `per_show_venues`.
+- Bit 10 (`1024`): `per_source_venues`.
+- Bit 11 (`2048`): `venue_coords`.
+- Bit 12 (`4096`): `songs`.
+- Bit 13 (`8192`): `years`.
+- Bit 14 (`16384`): `track_md5s`.
+- Bit 15 (`32768`): `review_titles`.
+- Bit 16 (`65536`): `jam_charts`.
+- Bit 17 (`131072`): `setlist_data_incomplete`.
+- Bit 18 (`262144`): `track_names`.
+- Bit 19 (`524288`): `venue_past_names`.
+- Bit 20 (`1048576`): `reviews_have_ratings`.
+- Bit 21 (`2097152`): `track_durations`.
+- Bit 22 (`4194304`): `can_have_flac`.
+- Bit 23 (`8388608`): `normalization`.
+
+JavaScript numbers represent integers exactly only through `2^53 - 1`, and
+number bitwise operators coerce to 32 bits. The decimal string preserves the full
+unsigned 64-bit range (`0` through `18446744073709551615`). Decode and test flags
+with `BigInt`; keep the string when saving JSON:
+
+```js
+const features = BigInt(artist.features);
+const hasNormalization = (features & (1n << 23n)) !== 0n;
+```
+
+`upstream_sources` contains only `{ provider, upstream_identifier }` assignments.
+`provider` uses the shared `UpstreamProvider` string enum (`archive.org`, `phish.in`,
+`phish.net`, `setlist.fm`, `phantasytour.com`, `jerrygarcia.com`, `panicstream.com`,
+`local`). An unrecognized stored provider is returned as `null` without failing
+artist reads; its upstream identifier is retained. Multiple assignments remain
+separate. Provider URLs, descriptions and credit lines are no longer repeated
+on each artist. List, detail, search, ranking and resolver artist resources share
+this representation.
+
+This is a breaking V4 response change. Clients must update feature decoding and
+provider handling together, then refresh persisted artist and song/venue browse
+responses. Existing V2/V3 resources and database records are unchanged; no schema
+migration or backfill is required.
+
 ## Shows group recordings; tracks identify playable files
 
 One show can have several recordings, each represented by a source. A source
@@ -29,9 +85,14 @@ requires accepted normalization evidence. A show's venue assignment can differ
 from its source's imported venue observation.
 
 Normalization is optional and can be incomplete. Artist venue/song browse lists
-choose canonical targets and imported fallbacks on the server. Follow each entry's
-kind; a client does not need a feature-flag decision to select a browsing route.
-`features.normalization` permits normalized reads but does not promise coverage.
+return only canonical entries when normalization is enabled, even if coverage is
+incomplete or the canonical list is empty. Otherwise they return imported entries.
+Follow each entry's kind; a client does not need a feature-flag decision to select
+a browsing route. The normalization bit permits normalized reads but does not
+promise coverage.
+The imported inventory and detail routes, and imported references in the resolver,
+remain available for either kind of artist. Embedded imported venues and track titles
+continue to describe the original observations.
 
 Display imported show venue labels and track titles. Link a venue label to its
 canonical venue when one exists; use canonical display metadata only when the
@@ -41,8 +102,8 @@ history from which a client should infer the venue's name on the concert date.
 A show's `artist_venue` represents the artist/place pair, with that artist's show
 count. Its nested venue's global count spans approved artists. An imported venue's
 count covers its entire imported group. During partial normalization, an imported
-group can overlap canonical groups, so adding browse-entry counts can double-count
-shows. Canonical song counts/shows require exact recording matches; imported song
+group can overlap canonical groups, so combining imported inventory counts with
+canonical group counts can double-count shows. Canonical song counts/shows require exact recording matches; imported song
 counts/shows use setlist evidence and cannot identify a playable file. See
 [count maintenance](../normalization-counts.md) before changing these definitions.
 
@@ -50,7 +111,8 @@ Imported song resources always include `normalized_song_id`: the surviving `song
 ID from approved mapping evidence, or `null` if no usable mapping is available.
 The link follows song merges. It does not replace the imported ID, metadata, or
 setlist-backed show collection. Inventory, detail and resolver responses expose
-the same link; browse and search continue selecting canonical targets where mapped.
+the same link. Approved browse lists contain only canonical songs; search selects
+canonical targets where mapped and otherwise retains imported results.
 
 Canonical song detail's `shows` entries contain `{ show, timings }`.
 Each timing bucket takes the longest positive, known matching file per source,
