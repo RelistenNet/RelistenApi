@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json.Nodes;
 using Dapper;
 using FluentAssertions;
+using Relisten.Api.Models.Api.V4;
 
 namespace RelistenApiTests.V4;
 
@@ -86,6 +87,15 @@ public sealed partial class TestV4CatalogHttp
                 schema["pattern"]!.GetValue<string>().Should().Be("^(0|[1-9][0-9]*)$");
                 schema["enum"].Should().BeNull("combined masks must be allowed");
                 schema["description"]!.GetValue<string>().Should().Contain("Normalization=8388608");
+                schema["x-feature-flags"]!
+                    .AsObject()
+                    .ToDictionary(flag => flag.Key, flag => flag.Value!.GetValue<string>())
+                    .Should()
+                    .BeEquivalentTo(
+                        Enum.GetValues<ArtistFeatures>()
+                            .Where(flag => flag != ArtistFeatures.None)
+                            .ToDictionary(flag => flag.ToString(), flag => flag.ToString("D"))
+                    );
             }
         }
         finally

@@ -40,12 +40,51 @@ ignore unknown bits. The separate `featured` field keeps its existing meaning.
 JavaScript numbers represent integers exactly only through `2^53 - 1`, and
 number bitwise operators coerce to 32 bits. The decimal string preserves the full
 unsigned 64-bit range (`0` through `18446744073709551615`). Decode and test flags
-with `BigInt`; keep the string when saving JSON:
+with the generated TypeScript helper; keep the string when saving JSON:
 
-```js
-const features = BigInt(artist.features);
-const hasNormalization = (features & (1n << 23n)) !== 0n;
+```ts
+import { ArtistFeature, hasArtistFeature } from "./artist-features";
+
+if (hasArtistFeature(artist, ArtistFeature.Normalization)) {
+  // Normalized metadata is enabled for this artist.
+}
 ```
+
+Copy or import [the generated module](../../clients/typescript/artist-features.ts)
+into a TypeScript client. It exports named decimal-string constants and the
+`hasArtistFeature` helper, so callers never copy bit positions or expand the mask.
+The helper uses `BigInt` internally and requires runtime support for it. It uses
+no bigint literals, so it can compile with an ES2017 target and ES2020 (or newer)
+library definitions.
+
+OpenAPI publishes all flag names and decimal-string values under
+`components.schemas.ArtistResource.properties.features.x-feature-flags`, and on
+`RankedArtistResource` as well. An excerpt:
+
+```json
+{
+  "x-feature-flags": {
+    "Descriptions": "1",
+    "Normalization": "8388608"
+  }
+}
+```
+
+The map and human-readable description both come from `ArtistFeatures.cs`. The
+TypeScript generation tool builds the real V4 Swagger document and reads that
+map; it starts no API server and connects to no database. From the repository root:
+
+```sh
+dotnet run --project tools/generate-artist-features
+dotnet run --project tools/generate-artist-features -- --check
+node --test clients/typescript/artist-features.test.mjs
+```
+
+Regenerate the module when adding a feature. `--check` fails if the checked-in
+module differs from the current schema; an optional output path after `--` lets
+clients generate the same module directly into their own source tree. The Node
+tests require Node 22.18 or newer for TypeScript loading. Other OpenAPI generators
+must explicitly consume `x-feature-flags` to produce equivalent named constants.
 
 `upstream_sources` contains only `{ provider, upstream_identifier }` assignments.
 `provider` uses the shared `UpstreamProvider` string enum (`archive.org`, `phish.in`,
