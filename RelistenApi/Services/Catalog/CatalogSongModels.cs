@@ -39,14 +39,6 @@ public sealed record CatalogImportedSongDetail(
     IReadOnlyList<CatalogShow> Shows
 );
 
-/// <summary>An artist-scoped song lookup: exactly one of a canonical ID or a stored slug.</summary>
-public sealed record CatalogSongKey(string? Id, string? Slug)
-{
-    public static CatalogSongKey ForId(string id) => new(id, null);
-
-    public static CatalogSongKey ForSlug(string slug) => new(null, slug);
-}
-
 /// <summary>Which matching files a song-show entry carries; None omits the collection.</summary>
 public enum CatalogSongShowTracks
 {

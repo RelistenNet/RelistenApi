@@ -92,12 +92,11 @@ Saved references may therefore resolve as redirected, retired or unavailable.
 Unavailable metadata does not imply that a listener removed a favorite. The
 resolver returns entity patches, without ownership of unreturned child collections.
 
-`artists/{artistId}/songs/{songIdOrSlug}` returns the same song detail as
-`songs/{songId}`, including `tracks`. A value beginning with `song_` must
-be a canonical song ID owned by that artist; any other value is that artist's
-canonical song slug. Merged IDs and slugs return the survivor, so a client
-redirects when the returned `slug` differs from its URL. Imported song slugs are
-not accepted here; resolve them with the reference resolver.
+`artists/{artistId}/songs/by-slug/{slug}` returns the same song detail as
+`songs/{songId}`, including `tracks`, for that artist's canonical song slug. A merged
+song's slug returns the survivor, so a client redirects when the returned `slug`
+differs from its URL. Imported song slugs are not accepted here; resolve them with
+the reference resolver.
 
 Canonical venue slugs support readable URLs through the explicit global and
 artist-scoped `venues/by-slug/{slug}` routes. They return the same resource as an

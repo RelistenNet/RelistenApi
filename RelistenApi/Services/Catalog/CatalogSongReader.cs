@@ -67,32 +67,26 @@ public sealed class CatalogSongReader(
     }
 
     /// <summary>
-    /// Finds an artist's song by canonical ID or by stored slug. Slugs are unique per
-    /// artist and stay on merged rows, so an old slug or ID returns the survivor; callers
-    /// compare the returned slug to decide whether to redirect.
+    /// Finds an artist's song by stored slug. Slugs are unique per artist and stay on
+    /// merged rows, so an old slug returns the survivor; callers compare the returned
+    /// slug to decide whether to redirect. Merges never cross artists.
     /// </summary>
-    public async Task<CatalogSongWithShows?> ReadArtistSong(
+    public async Task<CatalogSongWithShows?> ReadArtistSongBySlug(
         Guid artistUuid,
-        CatalogSongKey key,
+        string slug,
         CatalogSongShowTracks tracks = CatalogSongShowTracks.None,
         CancellationToken cancellationToken = default
     )
     {
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
-        var songId =
-            key.Id ?? await ReadSongIdBySlug(session, artistUuid, key.Slug!, cancellationToken);
+        var songId = await ReadSongIdBySlug(session, artistUuid, slug, cancellationToken);
         if (songId is null)
         {
             return null;
         }
 
         var song = await ReadApprovedSongDetail(session, songId, cancellationToken);
-        if (song is null || song.artist_uuid != artistUuid)
-        {
-            return null;
-        }
-
-        return await ReadSongShows(session, song, tracks, cancellationToken);
+        return song is null ? null : await ReadSongShows(session, song, tracks, cancellationToken);
     }
 
     private static Task<string?> ReadSongIdBySlug(

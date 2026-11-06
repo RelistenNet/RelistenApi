@@ -199,43 +199,37 @@ public sealed partial class TestV4CatalogHttp
     }
 
     [Test]
-    public async Task Artist_song_lookup_accepts_ids_and_slugs_and_returns_merge_survivors()
+    public async Task Artist_song_slug_lookup_returns_merge_survivors()
     {
         var detail = await GetJson(DiscoverySongPath);
         var withTracks = await GetJson(DiscoverySongPath + "?tracks=all");
-        foreach (
-            var key in new[]
-            {
-                "scarlet-begonias",
-                "song_00000101",
-                "old-scarlet-name",
-                "song_00000104",
-            }
-        )
+        foreach (var slug in new[] { "scarlet-begonias", "old-scarlet-name" })
         {
-            var path = SongArtistPath + "/songs/" + key;
-            JsonNode.DeepEquals(await GetJson(path), detail).Should().BeTrue(key);
+            var path = SongArtistPath + "/songs/by-slug/" + slug;
+            JsonNode.DeepEquals(await GetJson(path), detail).Should().BeTrue(slug);
             JsonNode
                 .DeepEquals(await GetJson(path + "?tracks=all"), withTracks)
                 .Should()
-                .BeTrue(key);
+                .BeTrue(slug);
         }
 
         foreach (
             var (path, expected) in new[]
             {
-                // Another artist's song, by ID or by the owner's slug.
-                (SongArtistPath + "/songs/song_00000105", HttpStatusCode.NotFound),
-                (ArtistPath(302) + "/songs/disabled-song", HttpStatusCode.NotFound),
-                (ArtistPath(302) + "/songs/scarlet-begonias", HttpStatusCode.NotFound),
-                // Imported slugs belong to the reference resolver, not this route.
-                (SongArtistPath + "/songs/imported-scarlet", HttpStatusCode.NotFound),
-                (SongArtistPath + "/songs/unknown-song", HttpStatusCode.NotFound),
-                (ArtistPath(399) + "/songs/scarlet-begonias", HttpStatusCode.NotFound),
-                (SongArtistPath + "/songs/song_bad", HttpStatusCode.UnprocessableEntity),
-                ("/api/v4/artists/bad/songs/scarlet-begonias", HttpStatusCode.UnprocessableEntity),
+                // Slugs are artist-scoped, and unapproved artists have no canonical songs.
+                (ArtistPath(302) + "/songs/by-slug/disabled-song", HttpStatusCode.NotFound),
+                (ArtistPath(302) + "/songs/by-slug/scarlet-begonias", HttpStatusCode.NotFound),
+                // Imported slugs belong to the reference resolver; IDs use /songs/{songId}.
+                (SongArtistPath + "/songs/by-slug/imported-scarlet", HttpStatusCode.NotFound),
+                (SongArtistPath + "/songs/by-slug/song_00000101", HttpStatusCode.NotFound),
+                (SongArtistPath + "/songs/by-slug/unknown-song", HttpStatusCode.NotFound),
+                (ArtistPath(399) + "/songs/by-slug/scarlet-begonias", HttpStatusCode.NotFound),
                 (
-                    SongArtistPath + "/songs/scarlet-begonias?tracks=bad",
+                    "/api/v4/artists/bad/songs/by-slug/scarlet-begonias",
+                    HttpStatusCode.UnprocessableEntity
+                ),
+                (
+                    SongArtistPath + "/songs/by-slug/scarlet-begonias?tracks=bad",
                     HttpStatusCode.UnprocessableEntity
                 ),
             }

@@ -39,44 +39,35 @@ public sealed class CatalogSongsController(
                     .ToArray()
         );
 
-    /// <summary>Finds an artist's song by canonical ID or by its stored slug.</summary>
+    /// <summary>Finds an artist's canonical song by its stored slug.</summary>
     /// <param name="tracks">none omits show tracks; top lists each show's top-ranked
     /// matching source; all lists every matching file.</param>
     /// <remarks>
-    /// Values starting with "song_" must be canonical IDs; anything else is a slug. A merged
-    /// song's ID or slug returns the survivor, including its current ID and slug.
+    /// A merged song's slug returns the survivor, including its current ID and slug.
+    /// Imported song slugs are not accepted; resolve them with the reference resolver.
     /// </remarks>
-    [HttpGet("artists/{artistId}/songs/{songIdOrSlug}")]
+    [HttpGet("artists/{artistId}/songs/by-slug/{slug}")]
     [ProducesResponseType(typeof(SongWithShowsResource), 200)]
-    public Task<IActionResult> ArtistSong(
+    public Task<IActionResult> ArtistSongBySlug(
         string artistId,
-        string songIdOrSlug,
+        string slug,
         [FromQuery, AllowedValues("none", "top", "all")] string tracks = "none",
         CancellationToken cancellationToken = default
-    )
-    {
-        var isId = songIdOrSlug.StartsWith(SongId.Prefix + "_", StringComparison.Ordinal);
-        if (isId && !IsSongId(songIdOrSlug))
-        {
-            return Task.FromResult<IActionResult>(InvalidId(SongId.Prefix));
-        }
-
-        var key = isId ? CatalogSongKey.ForId(songIdOrSlug) : CatalogSongKey.ForSlug(songIdOrSlug);
-        return Read(
+    ) =>
+        Read(
             artistId,
             ArtistId.Prefix,
             async artist =>
             {
-                var song = await reader.ReadArtistSong(
+                var song = await reader.ReadArtistSongBySlug(
                     artist,
-                    key,
+                    slug,
                     ShowTracks(tracks),
                     cancellationToken
                 );
                 return song is null ? null : V4CatalogProjection.SongWithShows(song);
             }
         );
-    }
 
     /// <param name="tracks">none omits show tracks; top lists each show's top-ranked
     /// matching source; all lists every matching file.</param>
