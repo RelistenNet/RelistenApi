@@ -2,7 +2,7 @@
 
 The graph is an alternative web read API. Existing REST payloads, complete
 collections, ETags, and mobile sync behavior remain available. The
-[exported executable schema](schema.graphql) is the field/argument reference;
+`GET /api/v4/graphql/schema.graphql` provides the current field/argument reference;
 [operations](operations/) are client examples, not a persisted-operation registry.
 
 ## Reader ownership and public mappings

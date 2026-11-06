@@ -22,8 +22,8 @@ query ArtistShows($artist: ID!, $after: String) {
 ```
 
 Use the existing opaque V4 IDs as variables. Fields use camelCase; domain enums
-use GraphQL enum values. The [executable schema](schema.graphql) defines the wire
-contract. [Client operations](operations/) cover artist navigation, playback,
+use GraphQL enum values. Download the current wire contract from
+`GET /api/v4/graphql/schema.graphql`, or inspect it in the admin explorer. [Client operations](operations/) cover artist navigation, playback,
 song history, venue browsing, playlist hydration, search, rankings, references,
 and public activity. These documents are validated by the HTTP integration suite;
 clients may send their own operations. There is no persisted-operation registry.

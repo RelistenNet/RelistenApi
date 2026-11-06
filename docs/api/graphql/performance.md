@@ -94,7 +94,6 @@ workload mixes, so these observations do not establish small speedups or capacit
 ./test-local.sh --filter 'FullyQualifiedName~RelistenApiTests.V4'
 dotnet build RelistenApi.sln
 curl --fail http://127.0.0.1:3823/api/v4/graphql/schema.graphql > /tmp/graphql-schema.graphql
-diff -u docs/api/graphql/schema.graphql /tmp/graphql-schema.graphql
 ```
 
 The HTTP suite protects REST projection parity, cursor continuation and ties,
