@@ -38,7 +38,10 @@ public sealed record SongShowResource(
         IReadOnlyList<SongShowTrackResource>? Tracks
 );
 
-/// <summary>A matching file, included in its show entry only with include_tracks=true.</summary>
+/// <summary>
+/// A matching file, included in its show entry only with tracks=top (the show's
+/// top-ranked matching source) or tracks=all (every matching source, in rank order).
+/// </summary>
 [JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
 public sealed record SongShowTrackResource(
     TrackId Id,

@@ -27,11 +27,11 @@ public sealed partial class TestV4CatalogHttp
             entry.AsObject().ContainsKey("occurrences").Should().BeFalse();
         }
         JsonNode
-            .DeepEquals(ordinary, await GetJson(DiscoverySongPath + "?include_tracks=false"))
+            .DeepEquals(ordinary, await GetJson(DiscoverySongPath + "?tracks=none"))
             .Should()
             .BeTrue();
 
-        var includedPath = DiscoverySongPath + "?include_tracks=true";
+        var includedPath = DiscoverySongPath + "?tracks=top";
         using var includedResponse = await http.GetAsync(includedPath);
         var included = JsonNode.Parse(await includedResponse.Content.ReadAsStringAsync())!;
         var slimSample = included["shows"]![0]!["tracks"]![0]!;
@@ -61,10 +61,33 @@ public sealed partial class TestV4CatalogHttp
             }
             entry!.AsObject().Remove("tracks");
         }
-        includedIds.Should().BeEquivalentTo(fullTracks.Keys).And.OnlyHaveUniqueItems();
+        // Show 311 has two unrated matching sources; the UUID tie-break keeps source 321
+        // and omits source 322's file, which the full /tracks route still lists.
+        includedIds
+            .Should()
+            .Equal(CatalogId("track", 341), CatalogId("track", 343))
+            .And.OnlyHaveUniqueItems();
+        fullTracks.Keys.Should().Contain(CatalogId("track", 342));
         JsonNode.DeepEquals(ordinary, included).Should().BeTrue();
 
+        // All keeps every matching file, with each show's sources in rank order.
+        (await GetJson(DiscoverySongPath + "?tracks=all"))["shows"]!
+            .AsArray()
+            .SelectMany(entry => entry!["tracks"]!.AsArray())
+            .Select(track => track!["id"]!.GetValue<string>())
+            .Should()
+            .Equal(CatalogId("track", 341), CatalogId("track", 342), CatalogId("track", 343));
+
         var document = await GetJson("/api-docs/v4/swagger.json");
+        document["paths"]!["/api/v4/songs/{songId}"]!["get"]!["parameters"]!
+            .AsArray()
+            .Single(parameter => parameter!["name"]!.GetValue<string>() == "tracks")!["schema"]![
+            "enum"
+        ]!
+            .AsArray()
+            .Select(value => value!.GetValue<string>())
+            .Should()
+            .Equal("none", "top", "all");
         var schema = document["components"]!["schemas"]!;
         schema["SongShowResource"]!["required"]!
             .AsArray()
@@ -111,6 +134,107 @@ public sealed partial class TestV4CatalogHttp
                 "UPDATE source_tracks SET title=@originalTitle WHERE id=925041",
                 new { originalTitle }
             );
+        }
+    }
+
+    [Test]
+    public async Task Song_show_tracks_come_from_the_client_ranked_matching_source()
+    {
+        // Show 311 has sources 321 (track 341) and 322 (track 342). Each step promotes
+        // the source that loses the previous step by a higher-precedence rule.
+        var source321 = new[] { CatalogId("track", 341), CatalogId("track", 343) };
+        var source322 = new[] { CatalogId("track", 342), CatalogId("track", 343) };
+        await using var connection = await MigratedTestDatabase.OpenAsync();
+        try
+        {
+            // A rated source outranks an unrated one even when its UUID sorts later.
+            await UpdateSources("avg_rating_weighted=CASE id WHEN 925021 THEN NULL ELSE 3.5 END");
+            (await ShowTrackIds()).Should().Equal(source322);
+
+            await UpdateSources("avg_rating_weighted=CASE id WHEN 925021 THEN 4.5 ELSE 3.5 END");
+            (await ShowTrackIds()).Should().Equal(source321);
+
+            // The last all-digit segment is the etree ID; a higher one beats the rating.
+            await UpdateSources(
+                "upstream_identifier=CASE id WHEN 925021 THEN 'gd95.miller.12345.flac16' ELSE 'gd95.aud.99999' END"
+            );
+            (await ShowTrackIds()).Should().Equal(source322);
+
+            await UpdateSources("transferrer=CASE id WHEN 925021 THEN 'Charlie Miller' END");
+            (await ShowTrackIds()).Should().Equal(source321);
+
+            await UpdateSources("is_soundboard=(id=925022)");
+            (await ShowTrackIds()).Should().Equal(source322);
+        }
+        finally
+        {
+            await UpdateSources(
+                """
+                avg_rating_weighted=NULL,is_soundboard=false,transferrer=NULL,
+                upstream_identifier='song-recording-'||(id-925020)
+                """
+            );
+        }
+
+        Task UpdateSources(string assignments) =>
+            connection.ExecuteAsync(
+                "UPDATE sources SET " + assignments + " WHERE id IN(925021,925022)"
+            );
+
+        async Task<string[]> ShowTrackIds() =>
+            (await GetJson(DiscoverySongPath + "?tracks=top"))["shows"]!
+                .AsArray()
+                .SelectMany(entry => entry!["tracks"]!.AsArray())
+                .Select(track => track!["id"]!.GetValue<string>())
+                .ToArray();
+    }
+
+    [Test]
+    public async Task Artist_song_lookup_accepts_ids_and_slugs_and_returns_merge_survivors()
+    {
+        var detail = await GetJson(DiscoverySongPath);
+        var withTracks = await GetJson(DiscoverySongPath + "?tracks=all");
+        foreach (
+            var key in new[]
+            {
+                "scarlet-begonias",
+                "song_00000101",
+                "old-scarlet-name",
+                "song_00000104",
+            }
+        )
+        {
+            var path = SongArtistPath + "/songs/" + key;
+            JsonNode.DeepEquals(await GetJson(path), detail).Should().BeTrue(key);
+            JsonNode
+                .DeepEquals(await GetJson(path + "?tracks=all"), withTracks)
+                .Should()
+                .BeTrue(key);
+        }
+
+        foreach (
+            var (path, expected) in new[]
+            {
+                // Another artist's song, by ID or by the owner's slug.
+                (SongArtistPath + "/songs/song_00000105", HttpStatusCode.NotFound),
+                (ArtistPath(302) + "/songs/disabled-song", HttpStatusCode.NotFound),
+                (ArtistPath(302) + "/songs/scarlet-begonias", HttpStatusCode.NotFound),
+                // Imported slugs belong to the reference resolver, not this route.
+                (SongArtistPath + "/songs/imported-scarlet", HttpStatusCode.NotFound),
+                (SongArtistPath + "/songs/unknown-song", HttpStatusCode.NotFound),
+                (ArtistPath(399) + "/songs/scarlet-begonias", HttpStatusCode.NotFound),
+                (SongArtistPath + "/songs/song_bad", HttpStatusCode.UnprocessableEntity),
+                ("/api/v4/artists/bad/songs/scarlet-begonias", HttpStatusCode.UnprocessableEntity),
+                (
+                    SongArtistPath + "/songs/scarlet-begonias?tracks=bad",
+                    HttpStatusCode.UnprocessableEntity
+                ),
+            }
+        )
+        {
+            using var response = await http.GetAsync(path);
+            response.StatusCode.Should().Be(expected, path);
+            response.Headers.CacheControl!.NoStore.Should().BeTrue(path);
         }
     }
 
@@ -502,7 +626,8 @@ public sealed partial class TestV4CatalogHttp
     [TestCase("/api/v4/songs/song_zzzzzzzz", HttpStatusCode.NotFound)]
     [TestCase("/api/v4/songs/venue_00000101", HttpStatusCode.UnprocessableEntity)]
     [TestCase("/api/v4/songs/song_bad/tracks", HttpStatusCode.UnprocessableEntity)]
-    [TestCase("/api/v4/songs/song_00000101?include_tracks=bad", HttpStatusCode.UnprocessableEntity)]
+    [TestCase("/api/v4/songs/song_00000101?tracks=bad", HttpStatusCode.UnprocessableEntity)]
+    [TestCase("/api/v4/songs/song_00000101?tracks=longest", HttpStatusCode.UnprocessableEntity)]
     public async Task Song_routes_distinguish_unavailable_unknown_and_invalid_targets(
         string path,
         HttpStatusCode expected
