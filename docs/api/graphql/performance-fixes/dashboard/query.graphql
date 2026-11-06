@@ -1,0 +1,76 @@
+query WebDashboard($historySize: Int! = 10) {
+  artist(id: "artist_3qmp7zjbg1rpebhtyfy43096vj") {
+    id name showCount sourceCount
+    years(first: 5, orderBy: RATING) {
+      nodes { id year showCount sourceCount }
+    }
+    songs(first: 8) {
+      nodes {
+        kind
+        song { id name matchedShowCount matchedTrackCount }
+        importedSong { id name setlistShowCount }
+      }
+      pageInfo { endCursor hasNextPage }
+    }
+  }
+
+  scarlet: song(id: "song_62mhvjyd") { ...SongHistory }
+  drums: song(id: "song_pxnavq74") { ...SongHistory }
+
+  oakland: artistVenueFor(
+    artistId: "artist_3qmp7zjbg1rpebhtyfy43096vj"
+    venueId: "venue_yn1268r4"
+  ) {
+    artistShowCount
+    venue { id name city region latitude longitude }
+    shows(first: 8, orderBy: DATE_DESCENDING) {
+      nodes { ...ShowCard }
+      totalCount
+      pageInfo { endCursor hasNextPage }
+    }
+  }
+
+  recording: source(id: "source_0d6jj9kcqwayrky1qpbwb2m6a1") {
+    id displayDate isSoundboard taper lineage
+    sets {
+      id index isEncore
+      tracks { ...PlayableFile }
+    }
+  }
+}
+
+fragment SongHistory on Song {
+  id name matchedShowCount matchedTrackCount
+  shows(first: $historySize, orderBy: DATE_DESCENDING) {
+    nodes {
+      show { ...ShowCard }
+      timings {
+        singleSong { median min max sourceCount }
+        multiSong { median sourceCount }
+      }
+      tracks(first: 3, selection: TOP) {
+        nodes {
+          ...PlayableFile
+          source { id isSoundboard taper avgRating }
+        }
+        pageInfo { endCursor hasNextPage }
+      }
+    }
+    pageInfo { endCursor hasNextPage }
+  }
+}
+
+fragment ShowCard on Show {
+  id displayDate sourceCount avgRating hasSoundboardSource
+  artistVenue { venue { id name city region } }
+  importedVenue { name location }
+  popularity { windows { days30 { plays } } }
+}
+
+fragment PlayableFile on SourceTrack {
+  id title duration mp3Url flacUrl
+  normalization {
+    state
+    parts { ordinal segueAfter song { id name } }
+  }
+}
