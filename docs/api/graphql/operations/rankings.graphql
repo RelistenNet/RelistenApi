@@ -1,0 +1,13 @@
+query Rankings($artist: ID!) {
+  popularShows(limit: 20) {
+    rank metrics { momentumScore }
+    node { id displayDate popularity { momentumScore } }
+  }
+  artistRankings(artistIds: [$artist], limit: 10) {
+    artistId popularShows { rank node { id displayDate } }
+    trendingShows { rank node { id displayDate } }
+  }
+  momentumShows(artistIds: [$artist], limit: 20) {
+    rank metrics { momentumScore } node { id displayDate }
+  }
+}

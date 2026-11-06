@@ -1,6 +1,6 @@
 # Deliver the full V4 catalog graph with Hot Chocolate
 
-Status: implementation in progress on `codex/v4-catalog-graphql-plan`.
+Status: implemented and locally verified on `codex/v4-catalog-graphql-plan`.
 
 This ExecPlan is a living document. Update Progress, Surprises & Discoveries,
 Decision Log, and Outcomes & Retrospective as work proceeds. Paths below are
@@ -33,11 +33,11 @@ identities must mean the same thing through either transport.
 - [x] (2026-11-06) Confirm scope and execution policies with Alec and write this plan.
 - [x] (2026-11-06) Incorporate the validated review: shared ranking results,
   safe refresh collection, fixed read boundaries, and normalization error precedence.
-- [ ] Freeze the complete schema, capability inventory, and representative operations.
-- [ ] Add Hot Chocolate hosting and shared shallow/batch read capabilities.
-- [ ] Implement the complete graph, pagination, filters, and bounded execution.
-- [ ] Verify REST parity, batching, consistency, failures, and realistic workloads.
-- [ ] Publish integration documentation and qualify the additive endpoint for release.
+- [x] (2026-11-06) Export the executable schema and document capabilities/client operations.
+- [x] (2026-11-06) Add Hot Chocolate 16.7.3 hosting and shared shallow/complete entity batches.
+- [x] (2026-11-06) Implement the catalog graph, SQL keysets, filters, and bounded execution.
+- [x] (2026-11-06) Verify REST parity, batching, read-unit snapshots, cancellation, and six synthetic workloads.
+- [x] (2026-11-06) Publish integration docs and local qualification results; deployment/capacity rollout remains operational work.
 
 ## Decision Log
 
@@ -68,6 +68,20 @@ identities must mean the same thing through either transport.
   Use normal GraphQL error propagation for independent fields; do not add
   savepoints, failed-field markers, or partial-recording recovery for hypothetical
   failures. Normal domain states still describe unavailable or inconsistent data.
+
+- Implementation choice, 2026-11-06: preserve the existing bounded top-N ranking
+  readers. Named popular/trending/momentum views use `limit`; ordinary catalog
+  connections provide exhaustive paging. Grouped views reserve the combined
+  artist count × per-ranking limit before querying.
+- Implementation choice, 2026-11-06: normalization part songs expose materialized
+  identity fields as `TrackPartSong`; its `catalog` edge starts independent full
+  song traversal. This prevents a second read from replacing an interpretation
+  already materialized with the recording.
+- Implementation choice, 2026-11-06: use the linked 20-second cancellation token
+  with the existing 30-second SQL command timeout. No separate remaining-time
+  scheduler or command-timeout adaptation is needed. Runtime row accounting bounds
+  complete arrays; HTTP body size bounds input. There is no buffered response-byte
+  ceiling or silent truncation.
 
 ## Surprises & Discoveries
 
@@ -464,12 +478,12 @@ serve a partially recovered recording. Revisit recovery only for an observed
 failure that warrants the added complexity.
 
 Link HTTP abort and the GraphQL execution deadline into every reader/loader call
-and Dapper command. Allow a per-session command timeout bounded by remaining
-execution time without changing REST's existing default. A timeout must cancel
+and Dapper command. Keep the existing SQL command timeout and use the graph's shorter linked
+cancellation deadline without changing REST's default. A timeout must cancel
 database work and dispose connections, not merely stop awaiting it. No automatic
 SQL retries are introduced; retries could change the unit's observed snapshot.
-If the remaining deadline is exhausted, reject the command before dispatch;
-never translate it into Npgsql's zero/infinite timeout value.
+Pass the cancellation token into Dapper rather than turning exhausted deadlines
+into Npgsql's zero/infinite timeout value.
 
 Preserve existing demand-driven popularity refresh behavior by adapting
 `PopularityRefreshRequest`, not replacing it. Supply exactly one collector per
@@ -494,8 +508,7 @@ unconditional conservative library defaults should block ordinary web pages.
 Charge actual work categories: shallow scalar projections are cheap; relationship
 reads, counts, statistics, and search have database weights. Account for list
 fan-out, repeated aliases, and complete sets/tracks/parts. Static size estimates
-for complete recordings must be accompanied by runtime materialized-row/response
-budgets; exceeding a budget fails the relevant field explicitly and never
+for complete recordings are accompanied by a runtime materialized-row budget; exceeding a budget fails the relevant field explicitly and never
 silently slices its tracks. Test unusually long real-shaped synthetic recordings
 so complete lists remain practical. Cost rejection should explain the applicable
 limit. Return GraphQL HTTP responses with an explicit cache policy, initially
@@ -699,11 +712,27 @@ package version actually selected.
 
 ## Outcomes & Retrospective
 
-Planning completed on 2026-11-06. No packages, readers, endpoints, tests, deployed
-configuration, or production data were changed by this planning task. Numeric
-limits, measured capacity, and implementation evidence remain work for the
-milestones above. Product scope and consistency/error policies are settled.
-The shared ranking-result and safe refresh-collection changes are committed.
-GraphQL implementation and qualification are underway. Look-ahead is limited to
-the fixed source bundle. Alec's subsequent simplicity decision removes custom
-normalization/child recovery: shared reader units fail normally on exceptions.
+The full catalog transport is implemented with Hot Chocolate 16.7.3 and GreenDonut
+on this branch. REST and GraphQL share entity hydration, source bundles, canonical
+membership, search/discovery selection, score readers, and public projections.
+Source bundles and immediate page hydration keep fixed read units; no arbitrary
+query planner or recovery protocol was added.
+
+The two-pass implementation review found real ordering, filter, reference-syntax,
+score-context, and cost-accounting bugs. Fixes and HTTP regressions are included.
+The full local run passed 627 API-project tests plus 366 normalization tests,
+with 37 existing API skips. The final V4 pass passed 191 tests; the workload
+pagination/simplicity follow-up passed its focused check. All nine client examples
+execute through HTTP; the final count-cost and example checks pass. The solution builds.
+Schema, client examples, capability ownership, and synthetic measurements are
+under `docs/api/graphql/`. Workloads use at most 30 domain SQL commands in the
+recorded run, and six concurrent requests complete with a four-connection pool.
+The largest measured field/type costs are 18,010/20,053 versus limits of
+200,000/500,000. These are local measurements with the qualifications in
+`docs/api/graphql/performance.md`.
+
+There are no migrations, production writes, imports, deployment, or client cutover.
+Local measurements establish useful-query headroom and batching for the supplied
+fixtures, not production capacity. Existing normalization-unavailable states are
+reported normally; exceptions fail the affected reader unit. Savepoints and
+failed-child salvage remain deliberately absent.

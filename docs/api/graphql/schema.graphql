@@ -1,0 +1,1579 @@
+schema {
+  query: Query
+}
+
+type Query {
+  artistRankings(
+    limit: Int = 50
+    window: PopularitySortWindow = DAYS30
+    artistIds: [ID!]!
+  ): [ArtistRankingGroup]
+    @cost(weight: "20")
+    @listSize(assumedSize: 500, requireOneSlicingArgument: false)
+  popularShows(limit: Int = 50, window: PopularitySortWindow = DAYS30): [ShowRank]
+    @cost(weight: "20")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["limit"]
+      slicingArgumentDefaultValue: 50
+      requireOneSlicingArgument: false
+    )
+  popularArtists(limit: Int = 50, window: PopularitySortWindow = DAYS30): [ArtistRank]
+    @cost(weight: "20")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["limit"]
+      slicingArgumentDefaultValue: 50
+      requireOneSlicingArgument: false
+    )
+  popularYears(limit: Int = 50, window: PopularitySortWindow = DAYS30): [YearRank]
+    @cost(weight: "20")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["limit"]
+      slicingArgumentDefaultValue: 50
+      requireOneSlicingArgument: false
+    )
+  trendingShows(limit: Int = 50, window: PopularitySortWindow = DAYS30): [ShowRank]
+    @cost(weight: "20")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["limit"]
+      slicingArgumentDefaultValue: 50
+      requireOneSlicingArgument: false
+    )
+  trendingArtists(limit: Int = 50, window: PopularitySortWindow = DAYS30): [ArtistRank]
+    @cost(weight: "20")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["limit"]
+      slicingArgumentDefaultValue: 50
+      requireOneSlicingArgument: false
+    )
+  trendingYears(limit: Int = 50, window: PopularitySortWindow = DAYS30): [YearRank]
+    @cost(weight: "20")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["limit"]
+      slicingArgumentDefaultValue: 50
+      requireOneSlicingArgument: false
+    )
+  momentumShows(
+    limit: Int = 50
+    window: PopularitySortWindow = DAYS30
+    artistIds: [ID!]!
+  ): [ShowRank]
+    @cost(weight: "20")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["limit"]
+      slicingArgumentDefaultValue: 50
+      requireOneSlicingArgument: false
+    )
+  showsOnDate(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = DEFAULT
+    month: Int!
+    day: Int!
+  ): ShowConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+  showsToday(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = DEFAULT
+  ): ShowConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+  topShows(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = RATING
+  ): ShowConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+  recentlyPerformedShows(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = DATE_DESCENDING
+    days: Int
+  ): ShowConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+  recentlyUpdatedShows(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = UPDATED
+    days: Int
+  ): ShowConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+  recentlyAddedShows(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = ADDED
+    days: Int
+  ): ShowConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+  randomShow(artistId: ID!): Show @cost(weight: "10")
+  showByDate(artistId: ID!, date: String!): Show @cost(weight: "10")
+  liveHistory(afterSequence: Int, limit: Int = 20, artistIds: [ID!]): [LiveHistoryResource]
+    @cost(weight: "20")
+    @listSize(assumedSize: 2000, requireOneSlicingArgument: false)
+  liveSummary(
+    minutes: Int = 15
+    showsLimit: Int = 20
+    artistsLimit: Int = 10
+    monthDay: String
+    sort: String = "surprise"
+    maxPerArtist: Int = 2
+    freshDays: Int = 7
+  ): LiveSummaryResource @cost(weight: "100")
+  artistBySlug(slug: String!): Artist @cost(weight: "10")
+  songBySlug(slug: String!, artistId: ID!): Song @cost(weight: "10")
+  venueBySlug(slug: String!): Venue @cost(weight: "10")
+  tourBySlug(slug: String!, artistId: ID!): Tour @cost(weight: "10")
+  importedSongBySlug(slug: String!, artistId: ID!): ImportedSong
+    @cost(weight: "10")
+  importedVenueBySlug(slug: String!, artistId: ID!): ImportedVenue
+    @cost(weight: "10")
+  sourceTrackBySlug(slug: String!, artistId: ID!): SourceTrack
+    @cost(weight: "10")
+  artistVenueFor(artistId: ID!, venueId: String!): ArtistVenue
+    @cost(weight: "10")
+  artistVenueBySlug(artistId: ID!, slug: String!): ArtistVenue
+    @cost(weight: "10")
+  yearByNumber(artistId: ID!, year: Int!): Year @cost(weight: "10")
+  search(q: String!, artistId: ID): CatalogSearch @cost(weight: "10")
+  resolve(references: [CatalogGraphReferenceInput!]!): [CatalogResolution]
+    @cost(weight: "50")
+    @listSize(assumedSize: 500, requireOneSlicingArgument: false)
+  sourceTracksByIds(ids: [ID!]!): [SourceTrack]
+    @cost(weight: "10")
+    @listSize(assumedSize: 500, requireOneSlicingArgument: false)
+  artist(id: ID!): Artist @cost(weight: "10")
+  artists(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = DEFAULT
+  ): ArtistConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+  show(id: ID!): Show @cost(weight: "10")
+  shows(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = DEFAULT
+  ): ShowConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+  source(id: ID!): Source @cost(weight: "10")
+  sources(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = DEFAULT
+  ): SourceConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+  sourceSet(id: ID!): SourceSet @cost(weight: "10")
+  sourceTrack(id: ID!): SourceTrack @cost(weight: "10")
+  sourceTracks(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = DEFAULT
+  ): SourceTrackConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+  year(id: ID!): Year @cost(weight: "10")
+  years(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = DEFAULT
+  ): YearConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+  tour(id: ID!): Tour @cost(weight: "10")
+  tours(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = DEFAULT
+  ): TourConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+  song(id: ID!): Song @cost(weight: "10")
+  songs(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = DEFAULT
+  ): SongConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+  importedSong(id: ID!): ImportedSong @cost(weight: "10")
+  importedSongs(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = DEFAULT
+  ): ImportedSongConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+  venue(id: ID!): Venue @cost(weight: "10")
+  venues(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = DEFAULT
+  ): VenueConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+  importedVenue(id: ID!): ImportedVenue @cost(weight: "10")
+  importedVenues(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = DEFAULT
+  ): ImportedVenueConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+  artistVenue(id: ID!): ArtistVenue @cost(weight: "10")
+  artistVenues(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = DEFAULT
+  ): ArtistVenueConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+  sourceReview(id: ID!): SourceReview @cost(weight: "10")
+  setlistShow(id: ID!): SetlistShow @cost(weight: "10")
+}
+
+type Artist {
+  shows(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = DEFAULT
+  ): ShowConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+  years(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = DEFAULT
+  ): YearConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+  tours(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = DEFAULT
+  ): TourConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+  songs(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = DEFAULT
+  ): SongEntryConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+  importedSongs(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = DEFAULT
+  ): ImportedSongConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+  venues(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = DEFAULT
+  ): VenueEntryConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+  importedVenues(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = DEFAULT
+  ): ImportedVenueConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+  eras: [EraResource] @cost(weight: "10")
+  id: ID!
+  name: String!
+  slug: String!
+  sortName: String
+  musicbrainzId: String
+  featured: Int!
+  showCount: Int!
+  sourceCount: Int!
+  popularity: PopularityResource
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  features: ArtistFeaturesResource!
+  upstreamSources: [ArtistProviderResource!]!
+}
+
+type ArtistConnection {
+  nodes: [Artist!]
+  edges: [ArtistEdge!]
+  pageInfo: CatalogGraphPageInfo!
+  totalCount: Long @cost(weight: "10")
+}
+
+type ArtistEdge {
+  node: Artist
+  cursor: String!
+}
+
+type ArtistFeaturesResource {
+  descriptions: Boolean!
+  eras: Boolean!
+  multipleSources: Boolean!
+  reviews: Boolean!
+  ratings: Boolean!
+  tours: Boolean!
+  taperNotes: Boolean!
+  sourceInformation: Boolean!
+  sets: Boolean!
+  perShowVenues: Boolean!
+  perSourceVenues: Boolean!
+  venueCoords: Boolean!
+  songs: Boolean!
+  years: Boolean!
+  trackMd5s: Boolean!
+  reviewTitles: Boolean!
+  jamCharts: Boolean!
+  setlistDataIncomplete: Boolean!
+  trackNames: Boolean!
+  venuePastNames: Boolean!
+  reviewsHaveRatings: Boolean!
+  trackDurations: Boolean!
+  canHaveFlac: Boolean!
+  normalization: Boolean!
+}
+
+type ArtistProviderResource {
+  provider: String!
+  upstreamIdentifier: String
+  url: String
+  description: String
+  creditLine: String
+}
+
+type ArtistRank {
+  node: Artist
+  rank: Int!
+  metrics: PopularityResource!
+}
+
+type ArtistRankingGroup {
+  artistId: ID @cost(weight: "10")
+  artist: Artist @cost(weight: "10")
+  popularShows: [ShowRank]
+    @listSize(assumedSize: 50, requireOneSlicingArgument: false)
+    @cost(weight: "10")
+  trendingShows: [ShowRank]
+    @listSize(assumedSize: 50, requireOneSlicingArgument: false)
+    @cost(weight: "10")
+}
+
+type ArtistVenue {
+  shows(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = DEFAULT
+  ): ShowConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+  artist: Artist @cost(weight: "10")
+  id: ID!
+  artistId: ID!
+  artistShowCount: Int!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  venue: Venue!
+}
+
+type ArtistVenueConnection {
+  nodes: [ArtistVenue!]
+  edges: [ArtistVenueEdge!]
+  pageInfo: CatalogGraphPageInfo!
+  totalCount: Long @cost(weight: "10")
+}
+
+type ArtistVenueEdge {
+  node: ArtistVenue
+  cursor: String!
+}
+
+type CatalogGraphPageInfo {
+  endCursor: String
+  hasNextPage: Boolean!
+}
+
+type CatalogResolution {
+  target: CatalogTarget
+  kind: CatalogReferenceKind!
+  scheme: CatalogReferenceScheme!
+  id: String!
+  availability: CatalogReferenceAvailability!
+  reason: String
+}
+
+type CatalogSearch {
+  artists(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = DEFAULT
+  ): ArtistConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+  shows(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = DEFAULT
+  ): ShowConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+  sources(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = DEFAULT
+  ): SourceConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+  songs(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = DEFAULT
+  ): SongEntryConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+  tours(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = DEFAULT
+  ): TourConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+  venues(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = DEFAULT
+  ): VenueEntryConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+}
+
+type EraResource {
+  order: Int!
+  name: String!
+}
+
+type ImportedSong {
+  shows(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = DEFAULT
+  ): ShowConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+  artist: Artist @cost(weight: "10")
+  normalizedSong: Song @cost(weight: "10")
+  id: ID!
+  normalizedSongId: ID
+  artistId: ID!
+  name: String!
+  slug: String!
+  upstreamIdentifier: String!
+  setlistShowCount: Int!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type ImportedSongConnection {
+  nodes: [ImportedSong!]
+  edges: [ImportedSongEdge!]
+  pageInfo: CatalogGraphPageInfo!
+  totalCount: Long @cost(weight: "10")
+}
+
+type ImportedSongEdge {
+  node: ImportedSong
+  cursor: String!
+}
+
+type ImportedVenue {
+  shows(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = DEFAULT
+  ): ShowConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+  artist: Artist @cost(weight: "10")
+  showCount: Int!
+  id: ID!
+  artistId: ID!
+  latitude: Float
+  longitude: Float
+  name: String
+  location: String
+  upstreamIdentifier: String
+  slug: String
+  pastNames: String
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type ImportedVenueConnection {
+  nodes: [ImportedVenue!]
+  edges: [ImportedVenueEdge!]
+  pageInfo: CatalogGraphPageInfo!
+  totalCount: Long @cost(weight: "10")
+}
+
+type ImportedVenueEdge {
+  node: ImportedVenue
+  cursor: String!
+}
+
+type LinkResource {
+  sourceId: ID!
+  provider: String!
+  forReviews: Boolean!
+  forRatings: Boolean!
+  forSource: Boolean!
+  url: String!
+  label: String!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type LiveAppTypeResource {
+  appType: PlayAppType!
+  plays: Long!
+}
+
+type LiveArtistResource {
+  artistId: ID!
+  plays: Long!
+  listenedSeconds: Long!
+  showCount: Int!
+  share: Float!
+  expectedPlays: Float!
+  surprise: Float!
+  topShow: LiveShow
+}
+
+type LiveHistoryResource {
+  sequence: Int!
+  playedAt: DateTime!
+  appType: PlayAppType!
+  track: SourceTrack!
+  show: Show!
+}
+
+type LiveLatestPlayResource {
+  track: SourceTrack!
+  playedAt: DateTime!
+}
+
+type LiveOnThisDayResource {
+  monthDay: String!
+  plays: Long!
+  showCount: Int!
+  showIds: [ID!]!
+}
+
+type LiveShow {
+  source: Source @cost(weight: "10")
+  show: Show!
+  latestPlay: LiveLatestPlayResource!
+  plays: Long!
+  listenedSeconds: Long!
+  plays30d: Long!
+  expectedPlays: Float!
+  surprise: Float!
+  isAnniversary: Boolean!
+  sourceCount: Int!
+  firstPlayedAt: DateTime!
+  lastPlayedAt: DateTime!
+  timeline: [Int!]!
+}
+
+type LiveSummaryResource {
+  windowMinutes: Int!
+  windowStart: DateTime!
+  windowEnd: DateTime!
+  lastSequence: Long
+  totalPlays: Long!
+  listenedSeconds: Long!
+  appTypes: [LiveAppTypeResource!]!
+  timeline: [LiveTimelineResource!]!
+  artistCount: Int!
+  otherArtistsPlays: Long!
+  shows: [LiveShow!]!
+  artists: [LiveArtistResource!]!
+  deepCuts: [LiveShow!]!
+  fresh: [LiveShow!]!
+  onThisDay: LiveOnThisDayResource!
+}
+
+type LiveTimelineResource {
+  bucketStart: DateTime!
+  plays: Long!
+}
+
+type PopularityResource {
+  momentumScore: Float!
+  trendRatio: Float!
+  windows: PopularityWindowsResource!
+}
+
+type PopularityWindowResource {
+  plays: Long!
+  hours: Float!
+  hotScore: Float!
+}
+
+type PopularityWindowsResource {
+  hours48: PopularityWindowResource!
+  days7: PopularityWindowResource!
+  days30: PopularityWindowResource!
+}
+
+type SetlistShow {
+  artist: Artist @cost(weight: "10")
+  importedVenue: ImportedVenue @cost(weight: "10")
+  tour: Tour @cost(weight: "10")
+  id: ID!
+  artistId: ID!
+  date: DateTime!
+  importedVenueId: ID!
+  tourId: ID
+  era: EraResource
+  upstreamIdentifier: String!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type Show {
+  sources(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = DEFAULT
+  ): SourceConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+  artist: Artist @cost(weight: "10")
+  year: Year @cost(weight: "10")
+  tour: Tour @cost(weight: "10")
+  id: ID!
+  artistId: ID!
+  yearId: ID
+  tourId: ID
+  date: DateTime!
+  displayDate: String!
+  avgRating: Float!
+  avgDuration: Float
+  mostRecentSourceUpdatedAt: DateTime!
+  hasSoundboardSource: Boolean!
+  hasStreamableFlacSource: Boolean!
+  sourceCount: Int!
+  popularity: PopularityResource
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  importedVenue: ImportedVenue
+  artistVenue: ArtistVenue
+  era: EraResource
+}
+
+type ShowConnection {
+  nodes: [Show!]
+  edges: [ShowEdge!]
+  pageInfo: CatalogGraphPageInfo!
+  totalCount: Long @cost(weight: "10")
+}
+
+type ShowEdge {
+  node: Show
+  cursor: String!
+}
+
+type ShowRank {
+  node: Show
+  rank: Int!
+  metrics: PopularityResource!
+}
+
+type Song {
+  shows(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = DEFAULT
+  ): SongShowConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+  tracks(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = DEFAULT
+  ): SourceTrackConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+  artist: Artist @cost(weight: "10")
+  id: ID!
+  artistId: ID!
+  name: String!
+  kind: SongKind
+  slug: String!
+  originalArtist: String
+  aliases: [String!]!
+  matchedTrackCount: Int!
+  matchedShowCount: Int!
+}
+
+type SongConnection {
+  nodes: [Song!]
+  edges: [SongEdge!]
+  pageInfo: CatalogGraphPageInfo!
+  totalCount: Long @cost(weight: "10")
+}
+
+type SongEdge {
+  node: Song
+  cursor: String!
+}
+
+type SongEntry {
+  song: Song
+  importedSong: ImportedSong
+  kind: SongEntryKind!
+}
+
+type SongEntryConnection {
+  nodes: [SongEntry!]
+  edges: [SongEntryEdge!]
+  pageInfo: CatalogGraphPageInfo!
+  totalCount: Long @cost(weight: "10")
+}
+
+type SongEntryEdge {
+  node: SongEntry
+  cursor: String!
+}
+
+type SongShow {
+  show: Show
+  timings: SongShowTimingsResource!
+  tracks(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = DEFAULT
+    selection: SongTrackSelection = ALL
+  ): SourceTrackConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+}
+
+type SongShowConnection {
+  nodes: [SongShow!]
+  edges: [SongShowEdge!]
+  pageInfo: CatalogGraphPageInfo!
+  totalCount: Long @cost(weight: "10")
+}
+
+type SongShowEdge {
+  node: SongShow
+  cursor: String!
+}
+
+type SongShowTimingsResource {
+  singleSong: SourceStatisticsResource
+  multiSong: SourceStatisticsResource
+}
+
+type Source {
+  reviews(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = DEFAULT
+  ): SourceReviewConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+  artist: Artist @cost(weight: "10")
+  show: Show @cost(weight: "10")
+  sets: [SourceSet!]
+    @listSize(assumedSize: 4, requireOneSlicingArgument: false)
+    @cost(weight: "10")
+  links: [LinkResource!] @cost(weight: "10")
+  id: ID!
+  artistId: ID!
+  showId: ID!
+  displayDate: String!
+  isSoundboard: Boolean!
+  isRemaster: Boolean!
+  hasJamcharts: Boolean!
+  avgRating: Float!
+  numReviews: Int!
+  numRatings: Int
+  avgRatingWeighted: Float!
+  duration: Float!
+  upstreamIdentifier: String!
+  description: String
+  taperNotes: String
+  source: String
+  taper: String
+  transferrer: String
+  lineage: String
+  flacType: SourceFlacType!
+  reviewCount: Int!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  importedVenue: ImportedVenue
+}
+
+type SourceConnection {
+  nodes: [Source!]
+  edges: [SourceEdge!]
+  pageInfo: CatalogGraphPageInfo!
+  totalCount: Long @cost(weight: "10")
+}
+
+type SourceEdge {
+  node: Source
+  cursor: String!
+}
+
+type SourceReview {
+  source: Source @cost(weight: "10")
+  id: ID!
+  sourceId: ID!
+  rating: Int
+  title: String
+  review: String!
+  author: String
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type SourceReviewConnection {
+  nodes: [SourceReview!]
+  edges: [SourceReviewEdge!]
+  pageInfo: CatalogGraphPageInfo!
+  totalCount: Long @cost(weight: "10")
+}
+
+type SourceReviewEdge {
+  node: SourceReview
+  cursor: String!
+}
+
+type SourceSet {
+  artist: Artist @cost(weight: "10")
+  source: Source @cost(weight: "10")
+  tracks: [SourceTrack!]
+    @listSize(assumedSize: 50, requireOneSlicingArgument: false)
+    @cost(weight: "10")
+  id: ID!
+  sourceId: ID!
+  artistId: ID!
+  index: Int!
+  isEncore: Boolean!
+  name: String!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type SourceStatisticsResource {
+  sourceCount: Int!
+  min: Int!
+  max: Int!
+  avg: Float!
+  median: Float!
+}
+
+type SourceTrack {
+  artist: Artist @cost(weight: "10")
+  show: Show @cost(weight: "10")
+  source: Source @cost(weight: "10")
+  sourceSet: SourceSet @cost(weight: "10")
+  id: ID!
+  sourceId: ID!
+  sourceSetId: ID!
+  showId: ID!
+  artistId: ID!
+  trackPosition: Int!
+  duration: Int
+  title: String!
+  slug: String!
+  mp3Url: String
+  mp3Md5: String
+  flacUrl: String
+  flacMd5: String
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  normalization: TrackNormalization!
+}
+
+type SourceTrackConnection {
+  nodes: [SourceTrack!]
+  edges: [SourceTrackEdge!]
+  pageInfo: CatalogGraphPageInfo!
+  totalCount: Long @cost(weight: "10")
+}
+
+type SourceTrackEdge {
+  node: SourceTrack
+  cursor: String!
+}
+
+type Tour {
+  shows(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = DEFAULT
+  ): ShowConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+  artist: Artist @cost(weight: "10")
+  id: ID!
+  artistId: ID!
+  showCount: Int!
+  startDate: DateTime
+  endDate: DateTime
+  name: String!
+  slug: String!
+  upstreamIdentifier: String!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type TourConnection {
+  nodes: [Tour!]
+  edges: [TourEdge!]
+  pageInfo: CatalogGraphPageInfo!
+  totalCount: Long @cost(weight: "10")
+}
+
+type TourEdge {
+  node: Tour
+  cursor: String!
+}
+
+type TrackNormalization {
+  parts: [TrackPart!]!
+    @listSize(assumedSize: 4, requireOneSlicingArgument: false)
+  state: TrackNormalizationState!
+  reason: TrackNormalizationUnavailableReason
+}
+
+type TrackPart {
+  song: TrackPartSong
+  ordinal: Int!
+  text: String
+  qualifiers: [TrackQualifier!]!
+  notes: [String!]!
+  segueAfter: Boolean!
+  state: TrackPartState!
+}
+
+type TrackPartSong {
+  catalog: Song @cost(weight: "10")
+  artist: Artist @cost(weight: "10")
+  id: ID!
+  artistId: ID!
+  name: String!
+  kind: SongKind
+}
+
+type Venue {
+  shows(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = DEFAULT
+  ): ShowConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+  parent: Venue @cost(weight: "10")
+  id: ID!
+  slug: String!
+  globalShowCount: Int!
+  name: String!
+  kind: VenueKind!
+  parentId: ID
+  city: String
+  region: String
+  country: String
+  latitude: Float
+  longitude: Float
+  coordinatePrecision: VenueCoordinatePrecision
+  names: [VenueNameResource!]!
+}
+
+type VenueConnection {
+  nodes: [Venue!]
+  edges: [VenueEdge!]
+  pageInfo: CatalogGraphPageInfo!
+  totalCount: Long @cost(weight: "10")
+}
+
+type VenueEdge {
+  node: Venue
+  cursor: String!
+}
+
+type VenueEntry {
+  artistVenue: ArtistVenue
+  importedVenue: ImportedVenue
+  kind: VenueEntryKind!
+}
+
+type VenueEntryConnection {
+  nodes: [VenueEntry!]
+  edges: [VenueEntryEdge!]
+  pageInfo: CatalogGraphPageInfo!
+  totalCount: Long @cost(weight: "10")
+}
+
+type VenueEntryEdge {
+  node: VenueEntry
+  cursor: String!
+}
+
+type VenueNameResource {
+  name: String!
+  kind: VenueNameKind!
+}
+
+type Year {
+  shows(
+    first: Int = 50
+    after: String
+    filter: CatalogGraphFilterInput
+    orderBy: CatalogSort = DEFAULT
+  ): ShowConnection
+    @cost(weight: "10")
+    @listSize(
+      assumedSize: 500
+      slicingArguments: ["first"]
+      slicingArgumentDefaultValue: 50
+      sizedFields: ["nodes", "edges"]
+      requireOneSlicingArgument: false
+    )
+  artist: Artist @cost(weight: "10")
+  popularity: PopularityResource
+  id: ID!
+  artistId: ID!
+  showCount: Int!
+  sourceCount: Int!
+  hasSoundboardSource: Boolean!
+  duration: Int
+  avgDuration: Float
+  avgRating: Float!
+  year: String!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type YearConnection {
+  nodes: [Year!]
+  edges: [YearEdge!]
+  pageInfo: CatalogGraphPageInfo!
+  totalCount: Long @cost(weight: "10")
+}
+
+type YearEdge {
+  node: Year
+  cursor: String!
+}
+
+type YearRank {
+  node: Year
+  rank: Int!
+  metrics: PopularityResource!
+}
+
+union CatalogTarget =
+  | Artist
+  | Show
+  | Source
+  | SourceSet
+  | SourceTrack
+  | Year
+  | Tour
+  | Song
+  | ImportedSong
+  | Venue
+  | ImportedVenue
+  | ArtistVenue
+  | SourceReview
+  | SetlistShow
+
+input CatalogGraphFilterInput {
+  includeAutoCreated: Boolean! = false
+  artistId: ID
+  songId: ID
+  venueId: ID
+  from: DateTime
+  through: DateTime
+  soundboard: Boolean
+  flac: Boolean
+  search: String
+}
+
+input CatalogGraphReferenceInput {
+  scheme: CatalogReferenceScheme! = V4
+  kind: CatalogReferenceKind!
+  id: String!
+  artistId: String
+}
+
+enum CatalogReferenceAvailability {
+  AVAILABLE
+  UNAVAILABLE
+  REDIRECTED
+  RETIRED
+}
+
+enum CatalogReferenceKind {
+  ARTIST
+  SHOW
+  SOURCE
+  SOURCE_SET
+  TRACK
+  YEAR
+  TOUR
+  IMPORTED_VENUE
+  IMPORTED_SONG
+  SETLIST_SHOW
+  SOURCE_REVIEW
+  VENUE
+  SONG
+  ARTIST_VENUE
+}
+
+enum CatalogReferenceScheme {
+  V4
+  LEGACY_UUID
+  LEGACY_INTEGER
+  LEGACY_SLUG
+}
+
+enum CatalogSort {
+  DEFAULT
+  DATE_DESCENDING
+  RATING
+  POPULARITY
+  UPDATED
+  ADDED
+}
+
+enum PlayAppType {
+  IOS
+  WEB
+  SONOS
+  ANDROID
+}
+
+enum PopularitySortWindow {
+  HOURS48
+  DAYS7
+  DAYS30
+}
+
+enum SongEntryKind {
+  SONG
+  IMPORTED_SONG
+}
+
+enum SongKind {
+  SONG
+  JAM
+  SEGMENT
+  TUNING
+  BANTER
+  OTHER
+}
+
+enum SongTrackSelection {
+  ALL
+  TOP
+}
+
+enum SourceFlacType {
+  NO_FLAC
+  FLAC16_BIT
+  FLAC24_BIT
+  NO_PLAYABLE_FLAC
+  UNKNOWN
+}
+
+enum TrackNormalizationState {
+  UNAVAILABLE
+  PARTIAL
+  INTERPRETED
+}
+
+enum TrackNormalizationUnavailableReason {
+  DISABLED
+  NOT_INTERPRETED
+  INCONSISTENT
+}
+
+enum TrackPartState {
+  MATCHED
+  NON_SONG
+  UNRESOLVED
+}
+
+enum TrackQualifier {
+  REPRISE
+  PARTIAL
+  UNFINISHED
+  INSTRUMENTAL
+  ACOUSTIC
+  WITH_GUEST
+  CONTINUED
+  TAPE_FLIP
+  SOUNDCHECK
+  TEASE
+  INTRO
+  OUTRO
+  JAM
+}
+
+enum VenueCoordinatePrecision {
+  VENUE
+  CITY
+}
+
+enum VenueEntryKind {
+  ARTIST_VENUE
+  IMPORTED_VENUE
+}
+
+enum VenueKind {
+  SITE
+  ROOM
+}
+
+enum VenueNameKind {
+  OFFICIAL
+  SHORT
+  SPELLING
+}
+
+"The `DateTime` scalar type represents a date and time with time zone offset information."
+scalar DateTime
+  @specifiedBy(url: "https://scalars.graphql.org/chillicream/date-time.html")
+
+"The `Long` scalar type represents a signed 64-bit integer."
+scalar Long
+  @specifiedBy(url: "https://scalars.graphql.org/chillicream/long.html")
+
+"The purpose of the `cost` directive is to define a `weight` for GraphQL types, fields, and arguments. Static analysis can use these weights when calculating the overall cost of a query or response."
+directive @cost(
+  "The `weight` argument defines what value to add to the overall cost for every appearance, or possible appearance, of a type, field, argument, etc."
+  weight: String!
+) on
+  | SCALAR
+  | OBJECT
+  | FIELD_DEFINITION
+  | ARGUMENT_DEFINITION
+  | ENUM
+  | INPUT_FIELD_DEFINITION
+
+"The purpose of the `@listSize` directive is to either inform the static analysis about the size of returned lists (if that information is statically available), or to point the analysis to where to find that information."
+directive @listSize(
+  "The `assumedSize` argument can be used to statically define the maximum length of a list returned by a field."
+  assumedSize: Int
+  "The `slicingArguments` argument can be used to define which of the field's arguments with numeric type are slicing arguments, so that their value determines the size of the list returned by that field. It may specify a list of multiple slicing arguments."
+  slicingArguments: [String!]
+  "The `slicingArgumentDefaultValue` argument can be used to define a default value for a slicing argument, which is used if the argument is not present in a query."
+  slicingArgumentDefaultValue: Int
+  "The `sizedFields` argument can be used to define that the value of the `assumedSize` argument or of a slicing argument does not affect the size of a list returned by a field itself, but that of a list returned by one of its sub-fields."
+  sizedFields: [String!]
+  "The `requireOneSlicingArgument` argument can be used to inform the static analysis that it should expect that exactly one of the defined slicing arguments is present in a query. If that is not the case (i.e., if none or multiple slicing arguments are present), the static analysis may throw an error."
+  requireOneSlicingArgument: Boolean = true
+) on FIELD_DEFINITION

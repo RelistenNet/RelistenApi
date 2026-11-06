@@ -1,0 +1,6 @@
+query References($show: String!) {
+  resolve(references: [{ kind: SHOW, id: $show }]) {
+    id availability reason
+    target { ... on Show { id displayDate artist { id name } } }
+  }
+}

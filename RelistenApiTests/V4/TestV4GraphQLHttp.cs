@@ -550,7 +550,7 @@ public sealed partial class TestV4CatalogHttp
                     new { query = await File.ReadAllTextAsync(path), variables }
                 ),
             };
-            request.Headers.Add("GraphQL-Cost", "validate");
+            request.Headers.Add("GraphQL-Cost", "report");
             using var response = await http.SendAsync(request);
             var json = JsonNode.Parse(await response.Content.ReadAsStringAsync())!;
             json["errors"].Should().BeNull(Path.GetFileName(path) + ": " + json.ToJsonString());
