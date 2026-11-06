@@ -25,7 +25,9 @@ first work is selecting files efficiently, rather than replacing hydration.
   Six real-catalog comparison cases retain identical JSON; Scarlet25 falls from
   6.1 seconds to 637 ms and Drums25 from 13 seconds to 1.05 seconds. See
   `docs/api/graphql/performance-fixes/` for fresh before and stage measurements.
-- [ ] Replace broad owner selection with explicit scoped SQL.
+- [x] (2026-11-06) Replace broad owner selection with explicit scoped SQL. All 20
+  GraphQL payloads and 12 REST payloads match this branch's before run; Scarlet25
+  playback is 144 ms, Drums25 533 ms, venue history 24 ms. 194 V4 tests pass.
 - [ ] Omit timing statistics when the operation does not select them.
 - [ ] Rerun representative full-catalog workloads and affected REST reads; commit
       the new evidence and remaining limitations.

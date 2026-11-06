@@ -334,7 +334,13 @@ public sealed class CatalogVenueReader(
     // all merged predecessors, so old assignments and old filter IDs keep working.
     internal static string ShowMembershipSql(string venue, string show = "s.uuid") =>
         $$"""
-            EXISTS (
+            EXISTS (SELECT 1 FROM ({{ShowMembershipRowsSql(
+                venue
+            )}}) membership WHERE membership.show_uuid={{show}})
+            """;
+
+    internal static string ShowMembershipRowsSql(string venue) =>
+        $$"""
               WITH RECURSIVE forward AS (
                 SELECT v.id,v.merged_into,ARRAY[v.id] path FROM norm.venues v WHERE v.id={{venue}}
                 UNION ALL
@@ -345,8 +351,7 @@ public sealed class CatalogVenueReader(
                 UNION ALL
                 SELECT v.id,o.path || v.id FROM owners o JOIN norm.venues v ON v.merged_into=o.id
                 WHERE cardinality(o.path)<32 AND NOT v.id=ANY(o.path)
-              ) SELECT 1 FROM norm.show_venues sv JOIN owners o ON o.id=sv.venue_id WHERE sv.show_uuid={{show}}
-            )
+              ) SELECT sv.show_uuid FROM norm.show_venues sv JOIN owners o ON o.id=sv.venue_id
             """;
 
     private async Task<IReadOnlyList<CatalogShow>> ReadShows(

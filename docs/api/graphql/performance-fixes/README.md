@@ -44,8 +44,31 @@ The focused V4 suite passes 193 tests. Its new HTTP case exercises independent
 per-show limits, TOP/ALL source selection and two simultaneously requested songs
 whose file populations overlap. Existing intersection and REST parity tests pass.
 
+## Stage 2: owner-scoped membership
+
+The shared collection reader now chooses explicit owner/filter predicates and
+starts show pages from the owner's membership. Venue EXISTS filters and paged
+membership share the same merge-aware row definition. Song/venue browsing also
+uses explicit artist scope, including the imported fallback branches.
+
+[stage2.json](stage2.json) records the full corpus, with variables unchanged from
+`before.json`. All 20 GraphQL payloads and all 12 REST payloads match the same
+branch's before run. The known pre-GraphQL search payload difference is unchanged.
+Warm medians include:
+
+- Scarlet history rows / rows with count: 95 / 88 ms; playback 25: 144 ms.
+- Drums rows / playback 25: 299 / 533 ms.
+- Artist shows / artist navigation: 34 / 95 ms.
+- Venue history / filtered history: 24 / 19 ms.
+- REST artist songs: 73 ms, down from the before run's 144 ms.
+
+The V4 suite passes 194 tests. The new owner test compares artist, year, tour,
+canonical/imported venue, imported song and artist-venue collections against REST,
+including a conflicting song/artist filter and a zero-count page. Search-specific
+selection/ranking remains unchanged.
+
 ## Remaining work
 
-Scope membership before catalog joins, omit unselected timing statistics, then
-rerun the full corpus and affected REST routes. No migration, persistent index,
+Omit unselected timing statistics, then rerun the full corpus and affected REST
+routes. No migration, persistent index,
 new caching layer, deployment or search-specific fix has been made.

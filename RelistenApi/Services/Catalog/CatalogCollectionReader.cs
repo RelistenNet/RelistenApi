@@ -37,17 +37,18 @@ public sealed class CatalogCollectionReader
         }
 
         var results = new CatalogPageSelection[requests.Count];
-        // Song-backed tracks start from matching files; other collections retain their
-        // normal membership. Original ordinals preserve order across both SQL batches.
+        // Choose explicit ownership/filter predicates so PostgreSQL can use scoped indexes.
+        // Values stay parameterized; original ordinals preserve order across SQL batches.
         var groups = requests
             .Select((request, index) => (request.Collection, request.Page, Index: index))
-            .GroupBy(r =>
-                r.Collection.Kind == CatalogReferenceKind.Track
-                && (
-                    r.Collection.OwnerKind == CatalogReferenceKind.Song
-                    || r.Collection.Filters?.Song is not null
-                )
-            );
+            .GroupBy(r => new
+            {
+                r.Collection.OwnerKind,
+                Artist = r.Collection.Filters?.Artist is not null,
+                Song = r.Collection.Filters?.Song is not null,
+                Show = r.Collection.Filters?.ShowUuid is not null,
+                Venue = r.Collection.Filters?.Venue is not null,
+            });
         foreach (var group in groups)
         {
             var batch = group.ToArray();
@@ -262,16 +263,16 @@ public sealed class CatalogCollectionReader
                   AND (r.artist IS NULL OR a.uuid=r.artist)
                   AND (r.search IS NULL OR a.name ILIKE r.search)
                 """,
-            CatalogReferenceKind.Show => ShowCandidates,
+            CatalogReferenceKind.Show => ShowCandidates(collection),
             CatalogReferenceKind.Source =>
                 $$"""
                 SELECT src.uuid::text key,'Source' kind,
                   COALESCE(src.avg_rating_weighted,0)::float8 score,src.uuid::text label
-                FROM sources src JOIN artists a ON a.id=src.artist_id JOIN shows sh ON sh.id=src.show_id
+                FROM {{SourceMembership(collection)}}
+                JOIN artists a ON a.id=src.artist_id JOIN shows sh ON sh.id=src.show_id
                 LEFT JOIN features f ON f.artist_id=a.id
-                WHERE (r.artist IS NULL OR a.uuid=r.artist)
-                  AND (r.owner IS NULL OR r.owner_kind='Artist' AND a.uuid=r.owner_uuid
-                       OR r.owner_kind='Show' AND sh.uuid=r.owner_uuid)
+                WHERE {{ArtistPredicate(collection)}}
+                  AND {{SourceOwnerPredicate(collection.OwnerKind)}}
                   AND (r.date_from IS NULL OR sh.date>=r.date_from)
                   AND (r.date_through IS NULL OR sh.date<=r.date_through)
                   AND (r.song IS NULL OR EXISTS(SELECT 1 FROM song_matches m WHERE m.requested_song=r.song AND m.source_uuid=src.uuid))
@@ -312,13 +313,10 @@ public sealed class CatalogCollectionReader
                 JOIN artists a ON a.id=src.artist_id JOIN shows sh ON sh.id=src.show_id
                 LEFT JOIN features f ON f.artist_id=a.id
                 LEFT JOIN ranked_sources ranked ON ranked.uuid=src.uuid
-                WHERE NOT t.is_orphaned AND (r.artist IS NULL OR a.uuid=r.artist)
-                  AND (r.show_uuid IS NULL OR sh.uuid=r.show_uuid)
+                WHERE NOT t.is_orphaned AND {{ArtistPredicate(collection)}}
+                  AND {{(collection.Filters?.ShowUuid is not null ? "sh.uuid=r.show_uuid" : "TRUE")}}
                   AND (NOT r.top_source_only OR ranked.source_rank=1)
-                  AND (r.owner IS NULL OR r.owner_kind='Source' AND src.uuid=r.owner_uuid
-                    OR r.owner_kind='Show' AND sh.uuid=r.owner_uuid
-                    OR r.owner_kind='Song' AND COALESCE(f.norm_catalogue,false) AND EXISTS (
-                      SELECT 1 FROM song_matches m WHERE m.requested_song=r.owner AND m.track_uuid=t.uuid))
+                  AND {{TrackOwnerPredicate(collection.OwnerKind)}}
                   AND (r.song IS NULL OR COALESCE(f.norm_catalogue,false) AND EXISTS (
                       SELECT 1 FROM song_matches m WHERE m.requested_song=r.song AND m.track_uuid=t.uuid))
                   AND (r.date_from IS NULL OR sh.date>=r.date_from)
@@ -366,7 +364,7 @@ public sealed class CatalogCollectionReader
                 WHERE (r.artist IS NULL OR a.uuid=r.artist) AND (r.owner IS NULL OR a.uuid=r.owner_uuid)
                   AND (r.search IS NULL OR v.name ILIKE r.search)
                 """,
-            CatalogReferenceKind.Song => CatalogBrowseMembership.Songs,
+            CatalogReferenceKind.Song => CatalogBrowseMembership.Songs(collection),
             CatalogReferenceKind.Venue => """
                 SELECT v.id key,'Venue' kind,0::float8 score,v.name label FROM norm.venues v
                 WHERE v.merged_into IS NULL AND (r.search IS NULL OR v.name ILIKE r.search)
@@ -374,14 +372,14 @@ public sealed class CatalogCollectionReader
                       JOIN artists a ON a.uuid=av.artist_uuid JOIN features f ON f.artist_id=a.id AND f.norm_catalogue
                       WHERE av.venue_id=v.id AND av.artist_uuid=r.artist))
                 """,
-            CatalogReferenceKind.ArtistVenue => CatalogBrowseMembership.Venues,
+            CatalogReferenceKind.ArtistVenue => CatalogBrowseMembership.Venues(collection),
             _ => throw new ArgumentException(
                 "This entity has no browse connection.",
                 nameof(collection)
             ),
         };
 
-    private static string ShowCandidates =>
+    private static string ShowCandidates(CatalogCollection collection) =>
         $$"""
             SELECT s.uuid::text key,'Show' kind,
               CASE r.sort WHEN 'DateDescending' THEN 0
@@ -391,12 +389,12 @@ public sealed class CatalogCollectionReader
                  WHEN 'Popularity' THEN COALESCE(p.hot_score_30d,0)
                  ELSE CASE WHEN r.search IS NULL THEN 0 ELSE COALESCE(cnt.source_count,0) END END::float8 score,
               s.display_date label
-            FROM shows s JOIN artists a ON a.id=s.artist_id
+            FROM {{ShowMembership(collection)}}
+            JOIN artists a ON a.id=s.artist_id
             LEFT JOIN features f ON f.artist_id=a.id
             LEFT JOIN show_source_information cnt ON cnt.show_id=s.id
-            LEFT JOIN years y ON y.id=s.year_id LEFT JOIN tours t ON t.id=s.tour_id
             LEFT JOIN show_popularity p ON p.uuid=s.uuid AND NOT p.is_global AND p.artist_uuid=a.uuid
-            WHERE (r.artist IS NULL OR a.uuid=r.artist)
+            WHERE {{ArtistPredicate(collection)}}
               AND (r.artists IS NULL OR a.uuid=ANY(r.artists))
               AND (r.month IS NULL OR extract(month FROM s.date)=COALESCE(NULLIF(r.month,0),extract(month FROM CURRENT_DATE)))
               AND (r.day IS NULL OR extract(day FROM s.date)=COALESCE(NULLIF(r.day,0),extract(day FROM CURRENT_DATE)))
@@ -416,26 +414,96 @@ public sealed class CatalogCollectionReader
               AND (r.venue IS NULL OR COALESCE(f.norm_catalogue,false) AND {{CatalogVenueReader.ShowMembershipSql(
                 "r.venue"
             )}})
-              AND (r.owner IS NULL
-                OR r.owner_kind='Artist' AND a.uuid=r.owner_uuid
-                OR r.owner_kind='Year' AND y.uuid=r.owner_uuid
-                OR r.owner_kind='Tour' AND t.uuid=r.owner_uuid
-                OR r.owner_kind='Song' AND COALESCE(f.norm_catalogue,false) AND EXISTS (
-                  SELECT 1 FROM song_matches m WHERE m.requested_song=r.owner AND m.show_uuid=s.uuid)
-                OR r.owner_kind='Venue' AND COALESCE(f.norm_catalogue,false) AND {{CatalogVenueReader.ShowMembershipSql(
-                "r.owner"
-            )}}
-                OR r.owner_kind='ArtistVenue' AND COALESCE(f.norm_catalogue,false) AND EXISTS (
-                  SELECT 1 FROM norm.artist_venues av
-                  WHERE av.id=r.owner AND av.artist_uuid=a.uuid AND {{CatalogVenueReader.ShowMembershipSql(
-                "av.venue_id"
-            )}})
-                OR r.owner_kind='ImportedVenue' AND EXISTS (
-                  SELECT 1 FROM venues v WHERE v.id=s.venue_id AND v.uuid=r.owner_uuid)
-                OR r.owner_kind='ImportedSong' AND EXISTS (
-                  SELECT 1 FROM setlist_songs song JOIN setlist_songs_plays sp ON sp.played_setlist_song_id=song.id
-                  JOIN setlist_shows ss ON ss.id=sp.played_setlist_show_id
-                  WHERE song.uuid=r.owner_uuid AND ss.artist_id=s.artist_id AND ss.date=s.date))
+              AND {{(collection.OwnerKind is CatalogReferenceKind.Song or CatalogReferenceKind.Venue or CatalogReferenceKind.ArtistVenue ? "COALESCE(f.norm_catalogue,false)" : "TRUE")}}
+            """;
+
+    private static string ArtistPredicate(CatalogCollection collection) =>
+        collection.Filters?.Artist is not null ? "a.uuid=r.artist" : "TRUE";
+
+    private static string SourceOwnerPredicate(CatalogReferenceKind? owner) =>
+        owner switch
+        {
+            CatalogReferenceKind.Artist => "a.uuid=r.owner_uuid",
+            CatalogReferenceKind.Show => "sh.uuid=r.owner_uuid",
+            _ => "r.owner IS NULL",
+        };
+
+    private static string TrackOwnerPredicate(CatalogReferenceKind? owner) =>
+        owner switch
+        {
+            CatalogReferenceKind.Source => "src.uuid=r.owner_uuid",
+            CatalogReferenceKind.Show => "sh.uuid=r.owner_uuid",
+            CatalogReferenceKind.Song => """
+                COALESCE(f.norm_catalogue,false) AND EXISTS (
+                  SELECT 1 FROM song_matches m WHERE m.requested_song=r.owner AND m.track_uuid=t.uuid)
+                """,
+            _ => "r.owner IS NULL",
+        };
+
+    private static string SourceMembership(CatalogCollection collection) =>
+        collection.Filters?.Song is not null
+            ? """
+                (SELECT DISTINCT m.source_uuid FROM song_matches m WHERE m.requested_song=r.song) matched
+                JOIN sources src ON src.uuid=matched.source_uuid
+                """
+            : "sources src";
+
+    // Ownership enters through a small membership set, before metadata and ordering.
+    // Approval gates stay in ShowCandidates; the venue row definition is also used by REST.
+    private static string ShowMembership(CatalogCollection collection) =>
+        collection.OwnerKind switch
+        {
+            CatalogReferenceKind.Artist => """
+                artists owner_artist JOIN shows s ON s.artist_id=owner_artist.id AND owner_artist.uuid=r.owner_uuid
+                """,
+            CatalogReferenceKind.Year => """
+                years owner_year JOIN shows s ON s.year_id=owner_year.id AND owner_year.uuid=r.owner_uuid
+                """,
+            CatalogReferenceKind.Tour => """
+                tours owner_tour JOIN shows s ON s.tour_id=owner_tour.id AND owner_tour.uuid=r.owner_uuid
+                """,
+            CatalogReferenceKind.Song => SongShowMembership("r.owner"),
+            CatalogReferenceKind.Venue => VenueShowMembership("r.owner"),
+            CatalogReferenceKind.ArtistVenue =>
+                $$"""
+                (SELECT av.artist_uuid,member.show_uuid FROM norm.artist_venues av
+                 CROSS JOIN LATERAL ({{CatalogVenueReader.ShowMembershipRowsSql(
+                    "av.venue_id"
+                )}}) member
+                 WHERE av.id=r.owner) owned
+                JOIN shows s ON s.uuid=owned.show_uuid
+                  AND s.artist_id=(SELECT id FROM artists WHERE uuid=owned.artist_uuid)
+                """,
+            CatalogReferenceKind.ImportedVenue => """
+                venues owner_venue JOIN shows s ON s.venue_id=owner_venue.id AND owner_venue.uuid=r.owner_uuid
+                """,
+            CatalogReferenceKind.ImportedSong => """
+                (SELECT DISTINCT ss.artist_id,ss.date FROM setlist_songs song
+                 JOIN setlist_songs_plays sp ON sp.played_setlist_song_id=song.id
+                 JOIN setlist_shows ss ON ss.id=sp.played_setlist_show_id
+                 WHERE song.uuid=r.owner_uuid) owned
+                JOIN shows s ON s.artist_id=owned.artist_id AND s.date=owned.date
+                """,
+            _ => collection.Filters switch
+            {
+                { Song: not null } => SongShowMembership("r.song"),
+                { Venue: not null } => VenueShowMembership("r.venue"),
+                { Artist: not null } =>
+                    "artists owner_artist JOIN shows s ON s.artist_id=owner_artist.id AND owner_artist.uuid=r.artist",
+                _ => "shows s",
+            },
+        };
+
+    private static string SongShowMembership(string song) =>
+        $$"""
+            (SELECT DISTINCT m.show_uuid FROM song_matches m WHERE m.requested_song={{song}}) owned
+            JOIN shows s ON s.uuid=owned.show_uuid
+            """;
+
+    private static string VenueShowMembership(string venue) =>
+        $$"""
+            ({{CatalogVenueReader.ShowMembershipRowsSql(venue)}}) owned
+            JOIN shows s ON s.uuid=owned.show_uuid
             """;
 
     private static string TrackMembership(CatalogCollection collection) =>
