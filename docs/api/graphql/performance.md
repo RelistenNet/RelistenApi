@@ -9,6 +9,9 @@ normalization pipeline or a graph-specific catalog cache. See the
 
 - Collection SQL applies filters, stable keysets, and limits before entity
   hydration. Each parent has its own page; later pages do not use offsets.
+- Shared catalog read transactions disable PostgreSQL JIT locally. The batched
+  pagination query's estimates can trigger expensive compilation even for small
+  pages. Other database transactions retain their configured JIT behavior.
 - Large song histories with small pages scan candidate shows first and match
   recordings within those candidates to fill the page. Small populations use the
   complete matching path; sparse scans fall back to it in the same snapshot.
@@ -87,6 +90,14 @@ Repeated interleaved REST controls also preserved payloads. Artist-song and
 song-history warm medians were within 3%; source and grouped-ranking controls
 were faster on the updated host. Absolute latency varied substantially between
 workload mixes, so these observations do not establish small speedups or capacity.
+
+Production verification on 2026-11-06 exposed an environment difference: the local
+ARM64 database had JIT disabled/unavailable, while production had LLVM JIT enabled.
+A read-only replica comparison of the same 500-show membership query returned 501
+rows in 3,257 ms with JIT (3,220 ms compiling), 23 ms without, and 2,943 ms with JIT
+again. The public dashboard's warm median before the transaction-local fix was
+16.5 seconds. This is why JIT is disabled inside shared catalog read sessions,
+rather than relying on local latency or changing database-wide settings.
 
 ## Contract checks
 

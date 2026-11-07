@@ -41,9 +41,12 @@ public sealed class CatalogReadSession : IAsyncDisposable
                 IsolationLevel.RepeatableRead,
                 cancellationToken
             );
+            // Bounded pages can have high planner estimates: production JIT spent
+            // 3.2s compiling a page query that executes in 23ms without it. Scope
+            // this to catalog reads; other transactions retain their JIT policy.
             await connection.ExecuteAsync(
                 new CommandDefinition(
-                    "SET TRANSACTION READ ONLY",
+                    "SET TRANSACTION READ ONLY; SET LOCAL jit = off",
                     transaction: transaction,
                     commandTimeout: 30,
                     cancellationToken: cancellationToken
