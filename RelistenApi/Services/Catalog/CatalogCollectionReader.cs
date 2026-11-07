@@ -55,6 +55,25 @@ public sealed class CatalogCollectionReader(CatalogSongMatchReader songMatches)
                 Song = r.Collection.Filters?.Song is not null,
                 Show = r.Collection.Filters?.ShowUuid is not null,
                 Venue = r.Collection.Filters?.Venue is not null,
+                // Show SQL omits unused predicates and joins. Batch only requests
+                // with the same shape; filter values remain in the JSON input.
+                ShowShape = r.Collection.Kind == CatalogReferenceKind.Show
+                    ? new
+                    {
+                        r.Collection.Sort,
+                        r.Collection.Filters?.Recency,
+                        Artists = r.Collection.Filters?.Artists is not null,
+                        Month = r.Collection.Filters?.Month is not null,
+                        Day = r.Collection.Filters?.Day is not null,
+                        From = r.Collection.Filters?.From is not null,
+                        Through = r.Collection.Filters?.Through is not null,
+                        Soundboard = r.Collection.Filters?.Soundboard is not null,
+                        Flac = r.Collection.Filters?.Flac is not null,
+                        Search = r.Collection.Filters?.Search is { Length: >= 3 },
+                        RequireSources = r.Collection.Filters?.RequireSources ?? false,
+                        RecentDays = r.Collection.Filters?.RecentDays is not null,
+                    }
+                    : null,
                 ScanShows = r.Collection.Kind == CatalogReferenceKind.Show
                     && (
                         r.Collection.OwnerKind == CatalogReferenceKind.Song
@@ -338,13 +357,7 @@ public sealed class CatalogCollectionReader(CatalogSongMatchReader songMatches)
                   CASE WHEN r.search IS NULL THEN '' ELSE src.display_date END descending_label
                 FROM ({{sql}}) raw JOIN sources src ON src.uuid=raw.key::uuid
                 """,
-            CatalogReferenceKind.Show => $$"""
-                SELECT raw.key,raw.kind,raw.score,
-                  CASE WHEN r.search IS NULL AND r.sort='Default' THEN raw.label ELSE '' END label,
-                  0::float8 secondary,
-                  CASE WHEN r.search IS NOT NULL OR r.sort='DateDescending' THEN raw.label ELSE '' END descending_label
-                FROM ({{sql}}) raw
-                """,
+            CatalogReferenceKind.Show => sql,
             CatalogReferenceKind.Tour => $$"""
                 SELECT raw.key,raw.kind,raw.score,CASE WHEN r.search IS NULL THEN '' ELSE raw.label END label,0::float8 secondary,
                   CASE WHEN r.search IS NULL THEN '' ELSE COALESCE(t.start_date::text,'~') END descending_label
@@ -487,49 +500,143 @@ public sealed class CatalogCollectionReader(CatalogSongMatchReader songMatches)
 
     private static string ShowCandidates(CatalogCollection collection, bool matchSongs)
     {
-        var ownerApproval = collection.OwnerKind
+        var filters = collection.Filters ?? new();
+        var search = filters.Search is { Length: >= 3 };
+        var approvedOwner =
+            collection.OwnerKind
             is CatalogReferenceKind.Song
                 or CatalogReferenceKind.Venue
-                or CatalogReferenceKind.ArtistVenue
-            ? "COALESCE(f.norm_catalogue,false)"
-            : "TRUE";
+                or CatalogReferenceKind.ArtistVenue;
+        var needsApproval = approvedOwner || filters.Song is not null || filters.Venue is not null;
+        var needsSourceInformation =
+            collection.Sort is CatalogSort.Added or CatalogSort.Rating
+            || filters.Recency == CatalogRecency.Added
+            || collection.Sort == CatalogSort.Default && search
+            || filters.RequireSources
+            || filters.Soundboard is not null
+            || filters.Flac is not null;
+        var sourceJoin =
+            filters.RequireSources || filters.Recency == CatalogRecency.Added
+                ? "JOIN"
+                : "LEFT JOIN";
+        var score = collection.Sort switch
+        {
+            CatalogSort.DateDescending => "0",
+            CatalogSort.Updated => filters.Recency == CatalogRecency.Added
+                ? "COALESCE(extract(epoch FROM cnt.max_updated_at),-1e30)"
+                : "COALESCE(extract(epoch FROM s.updated_at),-1e30)",
+            CatalogSort.Added => "COALESCE(extract(epoch FROM cnt.max_created_at),0)",
+            CatalogSort.Rating => "COALESCE(cnt.max_avg_rating_weighted,-1e30)",
+            CatalogSort.Popularity => "COALESCE(p.hot_score_30d,0)",
+            _ => search ? "COALESCE(cnt.source_count,0)" : "0",
+        };
+        var label =
+            search || collection.Sort != CatalogSort.Default ? "''::text" : "s.display_date";
+        var descendingLabel =
+            search || collection.Sort == CatalogSort.DateDescending ? "s.display_date" : "''::text";
+        var featuresJoin = needsApproval ? "LEFT JOIN features f ON f.artist_id=a.id" : "";
+        var sourceInformationJoin = needsSourceInformation
+            ? sourceJoin + " show_source_information cnt ON cnt.show_id=s.id"
+            : "";
+        var popularityJoin =
+            collection.Sort == CatalogSort.Popularity
+                ? "LEFT JOIN show_popularity p ON p.uuid=s.uuid AND NOT p.is_global AND p.artist_uuid=a.uuid"
+                : "";
+
+        // Global discovery must not probe metadata for every show just to choose
+        // a page. Only joins used by this selection belong before the limit.
         return $$"""
-            SELECT s.uuid::text key,'Show' kind,
-              CASE r.sort WHEN 'DateDescending' THEN 0
-                 WHEN 'Updated' THEN COALESCE(extract(epoch FROM CASE WHEN r.recency='Added' THEN cnt.max_updated_at ELSE s.updated_at END),-1e30)
-                 WHEN 'Added' THEN COALESCE(extract(epoch FROM cnt.max_created_at),0)
-                 WHEN 'Rating' THEN COALESCE(cnt.max_avg_rating_weighted,-1e30)
-                 WHEN 'Popularity' THEN COALESCE(p.hot_score_30d,0)
-                 ELSE CASE WHEN r.search IS NULL THEN 0 ELSE COALESCE(cnt.source_count,0) END END::float8 score,
-              s.display_date label
+            SELECT s.uuid::text key,'Show' kind,({{score}})::float8 score,
+              {{label}} label,0::float8 secondary,{{descendingLabel}} descending_label
             FROM {{ShowMembership(collection, matchSongs)}}
             JOIN artists a ON a.id=s.artist_id
-            LEFT JOIN features f ON f.artist_id=a.id
-            LEFT JOIN show_source_information cnt ON cnt.show_id=s.id
-            LEFT JOIN show_popularity p ON p.uuid=s.uuid AND NOT p.is_global AND p.artist_uuid=a.uuid
-            WHERE {{ArtistPredicate(collection)}}
-              AND (r.artists IS NULL OR a.uuid=ANY(r.artists))
-              AND (r.month IS NULL OR extract(month FROM s.date)=COALESCE(NULLIF(r.month,0),extract(month FROM CURRENT_DATE)))
-              AND (r.day IS NULL OR extract(day FROM s.date)=COALESCE(NULLIF(r.day,0),extract(day FROM CURRENT_DATE)))
-              AND (NOT r.require_sources OR cnt.show_id IS NOT NULL)
-              AND (r.recency IS NULL
-                OR r.recency='Performed' AND (r.recent_days IS NULL OR s.date>CURRENT_DATE-LEAST(r.recent_days,90)*INTERVAL '1 day')
-                OR r.recency='Updated' AND (r.recent_days IS NULL OR s.updated_at>CURRENT_DATE-LEAST(r.recent_days,90)*INTERVAL '1 day')
-                OR r.recency='Added' AND (CASE WHEN r.sort='Updated' THEN cnt.max_updated_at ELSE cnt.max_created_at END) IS NOT NULL
-                  AND (r.recent_days IS NULL OR (CASE WHEN r.sort='Updated' THEN cnt.max_updated_at ELSE cnt.max_created_at END)>=CURRENT_DATE-LEAST(r.recent_days,CURRENT_DATE-DATE '0001-01-01')*INTERVAL '1 day'))
-              AND (r.date_from IS NULL OR s.date>=r.date_from)
-              AND (r.date_through IS NULL OR s.date<=r.date_through)
-              AND (r.soundboard IS NULL OR COALESCE(cnt.has_soundboard_source,false)=r.soundboard)
-              AND (r.flac IS NULL OR COALESCE(cnt.has_flac,false)=r.flac)
-              AND (r.search IS NULL OR s.display_date ILIKE r.search)
-              AND (r.song IS NULL OR COALESCE(f.norm_catalogue,false) AND {{(matchSongs
-                  ? "EXISTS (SELECT 1 FROM song_matches m WHERE m.requested_song=r.song AND m.show_uuid=s.uuid)"
-                  : "TRUE")}})
-              AND (r.venue IS NULL OR COALESCE(f.norm_catalogue,false) AND {{CatalogVenueReader.ShowMembershipSql(
-                "r.venue"
-            )}})
-              AND {{ownerApproval}}
+            {{featuresJoin}}
+            {{sourceInformationJoin}}
+            {{popularityJoin}}
+            WHERE {{ShowPredicates(collection, matchSongs, needsApproval)}}
             """;
+    }
+
+    private static string ShowPredicates(
+        CatalogCollection collection,
+        bool matchSongs,
+        bool needsApproval
+    )
+    {
+        var filters = collection.Filters ?? new();
+        var predicates = new List<string> { ArtistPredicate(collection) };
+        if (filters.Artists is not null)
+        {
+            predicates.Add("a.uuid=ANY(r.artists)");
+        }
+        if (filters.Month is not null)
+        {
+            predicates.Add(
+                "extract(month FROM s.date)=COALESCE(NULLIF(r.month,0),extract(month FROM CURRENT_DATE))"
+            );
+        }
+        if (filters.Day is not null)
+        {
+            predicates.Add(
+                "extract(day FROM s.date)=COALESCE(NULLIF(r.day,0),extract(day FROM CURRENT_DATE))"
+            );
+        }
+        if (filters.Recency == CatalogRecency.Added)
+        {
+            var timestamp =
+                collection.Sort == CatalogSort.Updated
+                    ? "cnt.max_updated_at"
+                    : "cnt.max_created_at";
+            predicates.Add(timestamp + " IS NOT NULL");
+            if (filters.RecentDays is not null)
+            {
+                predicates.Add(
+                    timestamp
+                        + ">=CURRENT_DATE-LEAST(r.recent_days,CURRENT_DATE-DATE '0001-01-01')*INTERVAL '1 day'"
+                );
+            }
+        }
+        else if (filters.Recency is { } recency && filters.RecentDays is not null)
+        {
+            var timestamp = recency == CatalogRecency.Performed ? "s.date" : "s.updated_at";
+            predicates.Add(timestamp + ">CURRENT_DATE-LEAST(r.recent_days,90)*INTERVAL '1 day'");
+        }
+        if (filters.From is not null)
+        {
+            predicates.Add("s.date>=r.date_from");
+        }
+        if (filters.Through is not null)
+        {
+            predicates.Add("s.date<=r.date_through");
+        }
+        if (filters.Soundboard is not null)
+        {
+            predicates.Add("COALESCE(cnt.has_soundboard_source,false)=r.soundboard");
+        }
+        if (filters.Flac is not null)
+        {
+            predicates.Add("COALESCE(cnt.has_flac,false)=r.flac");
+        }
+        if (filters.Search is { Length: >= 3 })
+        {
+            predicates.Add("s.display_date ILIKE r.search");
+        }
+        if (filters.Song is not null && matchSongs)
+        {
+            predicates.Add(
+                "EXISTS (SELECT 1 FROM song_matches m WHERE m.requested_song=r.song AND m.show_uuid=s.uuid)"
+            );
+        }
+        if (filters.Venue is not null)
+        {
+            predicates.Add(CatalogVenueReader.ShowMembershipSql("r.venue"));
+        }
+        if (needsApproval)
+        {
+            predicates.Add("COALESCE(f.norm_catalogue,false)");
+        }
+
+        return string.Join("\n  AND ", predicates);
     }
 
     private static string ArtistPredicate(CatalogCollection collection) =>

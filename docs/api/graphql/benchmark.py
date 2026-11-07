@@ -155,6 +155,8 @@ def main():
         ("rest-artist-songs", "/api/v4/artists/" + artist + "/songs", None),
         ("rest-song-history", "/api/v4/songs/" + song, None),
         ("rest-source", "/api/v4/sources/" + source, None),
+        ("rest-recent-performed", "/api/v4/shows/recently-performed?shows=25", None),
+        ("rest-recent-added", "/api/v4/shows/recently-added?limit=200", None),
     ]
     result = {
         "url": args.url,

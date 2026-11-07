@@ -50,8 +50,8 @@ python3 docs/api/graphql/benchmark.py --runs 7 --output /tmp/graphql-benchmark.j
 
 The standard-library-only command exercises the
 [web dashboard](operations/dashboard.graphql), source headers, a 500-show page,
-ranking headers, and REST controls. It is read-only and fails on HTTP or GraphQL
-errors. Defaults use real Grateful Dead catalog IDs; `--variables path.json`
+ranking headers, and REST controls including global recent-show lists. It is
+read-only and fails on HTTP or GraphQL errors. Defaults use real Grateful Dead catalog IDs; `--variables path.json`
 overrides dashboard variables and the corresponding controls. `--url` selects
 another host. Small synthetic fixtures cannot qualify catalog performance.
 
@@ -98,6 +98,35 @@ rows in 3,257 ms with JIT (3,220 ms compiling), 23 ms without, and 2,943 ms with
 again. The public dashboard's warm median before the transaction-local fix was
 16.5 seconds. This is why JIT is disabled inside shared catalog read sessions,
 rather than relying on local latency or changing database-wide settings.
+
+## Production discovery selectors
+
+Production replica profiling on 2026-11-06 found that recent-show membership
+queries probed feature, source aggregate, and popularity rows for roughly 216,000
+shows before selecting a page. The shared collection reader now emits only the
+joins and predicates required by each request shape, with the same keyset tuple,
+limits, counts, and hydration used by REST and GraphQL. Batches group by shape;
+filter values remain parameterized.
+
+Alternating the old and revised SQL in the same read-only repeatable-read
+transaction, with JIT disabled and three samples per version, measured these
+medians including planning:
+
+- Global recently performed, 25 shows: 1,402 ms to 142 ms.
+- Global recently added, 200 shows: 1,520 ms to 305 ms.
+- Global anniversary: 151 ms to 18 ms.
+- Artist top shows, 100 shows: 59 ms to 32 ms.
+
+Ordered membership rows, scores, and cursor fields matched for every comparison.
+Recent-query buffer hits fell from about 2.47 million to 5,752 and 7,988. These
+are selector measurements on a warm replica, not full HTTP response latencies or
+load-test percentiles. No index or database setting changed for this improvement.
+
+The remaining recent-query work is a broad scan and top-K sort. Global performed
+ordering uses `display_date`, which has only an artist-scoped index. Source-recency
+scoring uses numeric epoch expressions rather than the existing timestamp-index
+ordering. Further reductions would need index-compatible ordering and pagination;
+the current change keeps the existing cursor contract and one shared selector.
 
 ## Contract checks
 
