@@ -118,6 +118,27 @@ public sealed partial class TestV4CatalogHttp
                     new(Song: "song_00000101"),
                     CatalogSort.DateDescending
                 ),
+                song with
+                {
+                    Sort = CatalogSort.Default,
+                },
+                song with
+                {
+                    Sort = CatalogSort.Rating,
+                },
+                song with
+                {
+                    Sort = CatalogSort.Popularity,
+                },
+                song with
+                {
+                    Filters = new(Soundboard: false, Flac: false),
+                },
+                song with
+                {
+                    Sort = CatalogSort.Added,
+                    Filters = new(Recency: CatalogRecency.Added),
+                },
                 song,
                 song,
             ];
