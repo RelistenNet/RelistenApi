@@ -26,6 +26,8 @@ public static class V4CatalogRegistration
     {
         services.AddScoped<PopularityRefreshRequest>();
         services.AddTransient<CatalogReader>();
+        services.AddTransient<CatalogEntityReader>();
+        services.AddTransient<CatalogCollectionReader>();
         services.AddTransient<CatalogRecordingReader>();
         services.AddTransient<CatalogLiveReader>();
         services.AddTransient<CatalogLiveSummaryReader>();
@@ -58,7 +60,7 @@ public static class V4CatalogRegistration
                     policy
                         .AllowAnyOrigin()
                         .WithMethods("GET", "POST")
-                        .WithHeaders("If-None-Match", "Content-Type")
+                        .WithHeaders("If-None-Match", "Content-Type", "GraphQL-Cost")
                         .WithExposedHeaders("ETag")
             )
         );

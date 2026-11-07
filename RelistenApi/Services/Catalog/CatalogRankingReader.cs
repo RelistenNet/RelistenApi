@@ -26,6 +26,7 @@ public sealed class CatalogRankingReader(
     DbService db,
     CatalogBrowseReader browse,
     CatalogShowMetadataReader metadata,
+    CatalogPopularityMetadataReader popularity,
     PopularityRefreshRequest refresh
 )
 {
@@ -81,13 +82,14 @@ public sealed class CatalogRankingReader(
                 )
             )
         ).ToDictionary(year => year.uuid);
+        await popularity.ApplyYears(session, years.Values.ToArray(), cancellationToken);
         return scores
             .Where(row => years.ContainsKey(row.uuid))
             .Select(row => new CatalogRanked<CatalogYear>(years[row.uuid], row.ToMetrics()!))
             .ToArray();
     }
 
-    public async Task<IReadOnlyList<CatalogShow>> ReadShows(
+    public async Task<IReadOnlyList<CatalogRanked<CatalogShow>>> ReadShows(
         bool trending,
         int limit,
         PopularitySortWindow window,
@@ -109,20 +111,25 @@ public sealed class CatalogRankingReader(
             cancellationToken
         );
         var map = scores.ToDictionary(row => row.uuid, row => row.ToMetrics()!);
-        await metadata.Apply(session, shows, cancellationToken, map);
+        await metadata.Apply(session, shows, cancellationToken);
         var byId = shows.ToDictionary(show => show.uuid);
         return scores
             .Where(row => byId.ContainsKey(row.uuid))
-            .Select(row => byId[row.uuid])
+            .Select(row => new CatalogRanked<CatalogShow>(byId[row.uuid], map[row.uuid]))
             .ToArray();
     }
 
-    /// <summary>Unknown filter artists are omitted; existing artists retain empty groups.</summary>
+    /// <summary>
+    /// Reads selected ranking series in one snapshot; REST defaults to both series.
+    /// Unknown filter artists are omitted; existing artists retain empty groups.
+    /// </summary>
     public async Task<IReadOnlyList<CatalogArtistRankings>> ReadArtistGroups(
         Guid[] artists,
         int limit,
         PopularitySortWindow window,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        bool includePopular = true,
+        bool includeTrending = true
     )
     {
         if (artists.Length == 0)
@@ -139,6 +146,10 @@ public sealed class CatalogRankingReader(
                 )
             )
         ).ToArray();
+        if (!includePopular && !includeTrending)
+        {
+            return owners.Select(artist => new CatalogArtistRankings(artist, [], [])).ToArray();
+        }
         foreach (var artist in owners)
         {
             refresh.Require(PopularityPopulationKind.Show, artist);
@@ -154,11 +165,11 @@ public sealed class CatalogRankingReader(
                     SELECT ranked.* FROM unnest(@artists::uuid[]) owner(uuid)
                     CROSS JOIN LATERAL (
                         (SELECT uuid,artist_uuid,false trending,row_number() OVER (ORDER BY {popularOrder}) ordinal
-                         FROM show_popularity WHERE NOT is_global AND artist_uuid=owner.uuid AND momentum_score IS NOT NULL
+                         FROM show_popularity WHERE @includePopular AND NOT is_global AND artist_uuid=owner.uuid AND momentum_score IS NOT NULL
                          ORDER BY {popularOrder} LIMIT @limit)
                         UNION ALL
                         (SELECT uuid,artist_uuid,true trending,row_number() OVER (ORDER BY {trendingOrder}) ordinal
-                         FROM show_popularity WHERE NOT is_global AND artist_uuid=owner.uuid AND momentum_score IS NOT NULL
+                         FROM show_popularity WHERE @includeTrending AND NOT is_global AND artist_uuid=owner.uuid AND momentum_score IS NOT NULL
                            AND plays_48h>=@recentFloor AND plays_30d>=@monthlyFloor
                          ORDER BY {trendingOrder} LIMIT @limit)
                     ) ranked ORDER BY artist_uuid,trending,ordinal
@@ -166,6 +177,8 @@ public sealed class CatalogRankingReader(
                     new
                     {
                         artists = owners,
+                        includePopular,
+                        includeTrending,
                         limit,
                         recentFloor = PopularityService.ShowTrendingPlays48hFloor,
                         monthlyFloor = PopularityService.ShowTrendingPlays30dFloor,
@@ -200,7 +213,7 @@ public sealed class CatalogRankingReader(
             .ToArray();
     }
 
-    public async Task<IReadOnlyList<CatalogShow>> ReadMomentum(
+    public async Task<IReadOnlyList<CatalogRanked<CatalogShow>>> ReadMomentum(
         Guid[] artists,
         int limit,
         CancellationToken cancellationToken
@@ -238,13 +251,13 @@ public sealed class CatalogRankingReader(
             )
             .ToArray();
         var ordered = owned.Select(row => shows[row.uuid]).ToArray();
-        await metadata.Apply(
-            session,
-            ordered,
-            cancellationToken,
-            owned.ToDictionary(row => row.uuid, row => row.ToMetrics(organic: true)!)
-        );
-        return ordered;
+        await metadata.Apply(session, ordered, cancellationToken);
+        return owned
+            .Select(row => new CatalogRanked<CatalogShow>(
+                shows[row.uuid],
+                row.ToMetrics(organic: true)!
+            ))
+            .ToArray();
     }
 
     private async Task<StoredPopularity[]> ReadGlobalScores(

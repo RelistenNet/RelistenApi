@@ -5,6 +5,11 @@ client. [Swagger](http://localhost:3823/api-docs/index.html) defines the routes,
 parameters and response fields. This guide explains how the music entities relate
 and which data a client may treat as authoritative.
 
+Web clients can also use the read-only [V4 GraphQL catalog](graphql/README.md) at
+`/api/v4/graphql`. It shares catalog readers and public mappings with REST and adds
+selected graph traversal, bounded connections, and operation budgets. REST retains
+its complete collections, validators, and sync-oriented contract.
+
 ## Artist capabilities and providers
 
 V4 artist resources expose `features` as a decimal string encoding an unsigned

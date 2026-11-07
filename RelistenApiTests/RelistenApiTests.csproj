@@ -31,6 +31,23 @@
       Link="Fixtures/catalog-schema.sql"
       CopyToOutputDirectory="PreserveNewest"
     />
+    <Content
+      Include="../docs/api/graphql/operations/*.graphql"
+      Link="Fixtures/graphql-operations/%(Filename)%(Extension)"
+      CopyToOutputDirectory="PreserveNewest"
+    />
+    <EmbeddedResource
+      Include="Fixtures/v4/graphql/persisted/Catalog/*.graphql"
+      LogicalName="Relisten.GraphQL.Operations.Catalog.%(Filename)%(Extension)"
+    />
+    <EmbeddedResource
+      Include="Fixtures/v4/graphql/persisted/Rankings/*.graphql"
+      LogicalName="Relisten.GraphQL.Operations.Rankings.%(Filename)%(Extension)"
+    />
+    <EmbeddedResource
+      Include="Fixtures/v4/graphql/persisted/Live/*.graphql"
+      LogicalName="Relisten.GraphQL.Operations.Live.%(Filename)%(Extension)"
+    />
     <Content Include="Fixtures\**\*.*">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>

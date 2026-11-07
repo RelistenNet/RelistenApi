@@ -25,6 +25,13 @@ public static partial class V4CatalogProjection
             Rank = rank,
         };
 
+    public static RankedShowResource RankedShow(CatalogRanked<CatalogShow> value, int rank) =>
+        ProjectShow<RankedShowResource>(value.Resource) with
+        {
+            Rank = rank,
+            Popularity = ProjectPopularity(value.Metrics),
+        };
+
     public static ArtistRankingResource RankingGroup(CatalogArtistRankings value) =>
         new(
             new(value.ArtistUuid),

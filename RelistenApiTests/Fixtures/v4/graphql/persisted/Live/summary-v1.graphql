@@ -1,0 +1,3 @@
+query PersistedLive {
+  liveSummary(showsLimit: 1, artistsLimit: 1) { totalPlays }
+}

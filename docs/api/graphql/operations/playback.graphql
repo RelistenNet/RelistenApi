@@ -1,0 +1,19 @@
+query Playback($show: ID!) {
+  show(id: $show) {
+    id displayDate artist { id name }
+    importedVenue { id name location }
+    sources(first: 10) {
+      nodes {
+        id isSoundboard taper avgRating
+        sets {
+          id index isEncore
+          tracks {
+            id title duration mp3Url flacUrl
+            normalization { state reason parts { ordinal segueAfter song { id name } } }
+          }
+        }
+      }
+      pageInfo { endCursor hasNextPage }
+    }
+  }
+}

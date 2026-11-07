@@ -171,6 +171,28 @@ public sealed partial class TestV4CatalogHttp
                 .Should()
                 .Be(CatalogId("imported_song", 355));
             references[6]!["reason"]!.GetValue<string>().Should().Be("normalization_unavailable");
+            using var graphResponse = await http.PostAsJsonAsync(
+                "/api/v4/graphql",
+                new
+                {
+                    query = "query($artist:ID!,$songArtist:ID!) { song(id:\"song_00000103\") { id } songBySlug(artistId:$songArtist,slug:\"resolver-cycle\") { id } artist(id:$artist) { id } }",
+                    variables = new
+                    {
+                        artist = BrowseArtistId,
+                        songArtist = CatalogId("artist", 301),
+                    },
+                }
+            );
+            var graph = JsonNode.Parse(await graphResponse.Content.ReadAsStringAsync())!;
+            graph["errors"]![0]!["extensions"]!["code"]!
+                .GetValue<string>()
+                .Should()
+                .Be("normalization_unavailable");
+            graph["data"]!["song"].Should().BeNull();
+            graph["data"]!["songBySlug"].Should().BeNull();
+            graph["errors"]!.AsArray().Should().HaveCount(2);
+            graph["data"]!["artist"].Should().NotBeNull();
+
             foreach (
                 var item in references.Where(item =>
                     item!["availability"]!.GetValue<string>() == "unavailable"

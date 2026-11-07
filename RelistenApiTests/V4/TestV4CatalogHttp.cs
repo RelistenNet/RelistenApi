@@ -1,13 +1,17 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Security.Claims;
 using System.Text.Json.Nodes;
 using Dapper;
 using FluentAssertions;
 using Hangfire;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -64,6 +68,16 @@ public sealed partial class TestV4CatalogHttp
         // Reads use stored scores; only queue submission is replaced in this host.
         builder.Services.AddSingleton<IBackgroundJobClient>(refreshJobs);
         builder.Services.AddV4Catalog();
+        builder
+            .Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+            .AddCookie(options => options.LoginPath = "/relisten-admin/login");
+        builder.Services.AddAuthorization();
+        builder.Services.AddSingleton(
+            Relisten.GraphQL.CatalogPersistedOperations.Load(typeof(TestV4CatalogHttp).Assembly)
+        );
+        Relisten
+            .GraphQL.CatalogGraphRegistration.AddCatalogGraph(builder.Services)
+            .ModifyRequestOptions(o => o.IncludeExceptionDetails = true);
         builder.Services.AddResponseCompression(options => options.EnableForHttps = true);
         builder.Services.AddSwaggerGen(options =>
         {
@@ -74,10 +88,29 @@ public sealed partial class TestV4CatalogHttp
         app = builder.Build();
         app.UseDeveloperExceptionPage();
         app.UseResponseCompression();
+        app.UseRouting();
         app.UseV4CatalogCors();
         app.UseCors(policy =>
             policy.WithMethods("GET", "POST", "OPTIONS", "HEAD").WithOrigins("*").AllowAnyMethod()
         );
+        app.UseAuthentication();
+        app.UseAuthorization();
+        // Issue a real test-host cookie without requiring production Identity users.
+        app.MapPost(
+            "/test-admin-login",
+            async (HttpContext context) =>
+            {
+                await context.SignInAsync(
+                    new ClaimsPrincipal(
+                        new ClaimsIdentity(
+                            [new Claim(ClaimTypes.Name, "catalog-test-admin")],
+                            CookieAuthenticationDefaults.AuthenticationScheme
+                        )
+                    )
+                );
+            }
+        );
+        Relisten.GraphQL.CatalogGraphRegistration.UseCatalogGraph(app);
         app.UseMvc();
         app.UseSwagger(options => options.RouteTemplate = "api-docs/{documentName}/swagger.json");
         await app.StartAsync();
@@ -611,6 +644,56 @@ public sealed partial class TestV4CatalogHttp
         summary["imported_venue"]!["name"]!.GetValue<string>().Should().Be("Imported Civic Center");
         summary.AsObject().ContainsKey("venue_display").Should().BeFalse();
         year["shows"]![0]!.AsObject().ContainsKey("venue_display").Should().BeFalse();
+
+        var graph = await Graph(
+            """
+            query($venue: ID!, $show: ID!) {
+              venue(id: $venue) { ...PublicNames }
+              show(id: $show) { artistVenue { venue { ...PublicNames } } }
+              search(q: "Historical Areena") {
+                venues(first: 10) { nodes { artistVenue { venue { id ...PublicNames } } } }
+              }
+              __type(name: "VenueNameResourceKind") { enumValues { name } }
+            }
+            fragment PublicNames on Venue { names { name kind } }
+            """,
+            new { venue = "venue_00000001", show = ShowId(4) }
+        );
+        var searchVenues = graph["search"]!["venues"]!["nodes"]!
+            .AsArray()
+            .Select(entry => entry?["artistVenue"]?["venue"])
+            .OfType<JsonNode>()
+            .Where(value => value["id"]!.GetValue<string>() == "venue_00000001")
+            .ToArray();
+        searchVenues.Should().NotBeEmpty();
+        var graphVenues = new[]
+        {
+            graph["venue"]!,
+            graph["show"]!["artistVenue"]!["venue"]!,
+        }.Concat(searchVenues);
+        var expectedNames = names
+            .Select(item =>
+                (
+                    item!["name"]!.GetValue<string>(),
+                    item["kind"]!.GetValue<string>().ToUpperInvariant()
+                )
+            )
+            .ToArray();
+        foreach (var graphVenue in graphVenues)
+        {
+            graphVenue["names"]!
+                .AsArray()
+                .Select(item =>
+                    (item!["name"]!.GetValue<string>(), item["kind"]!.GetValue<string>())
+                )
+                .Should()
+                .Equal(expectedNames);
+        }
+        graph["__type"]!["enumValues"]!
+            .AsArray()
+            .Select(value => value!["name"]!.GetValue<string>())
+            .Should()
+            .BeEquivalentTo("OFFICIAL", "SHORT");
 
         var document = await GetJson("/api-docs/v4/swagger.json");
         AssertSchemaFields(document, "VenueResource", venue);

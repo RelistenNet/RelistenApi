@@ -1,0 +1,8 @@
+query PublicActivity {
+  liveHistory(limit: 20) {
+    sequence playedAt track { id title show { id displayDate } }
+  }
+  liveSummary(showsLimit: 10, artistsLimit: 5) {
+    totalPlays
+  }
+}

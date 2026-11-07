@@ -59,6 +59,7 @@ namespace Relisten
         {
             services.AddCors();
             Relisten.Controllers.V4.V4CatalogRegistration.AddV4Catalog(services);
+            Relisten.GraphQL.CatalogGraphRegistration.AddCatalogGraph(services, Configuration);
             services.AddResponseCompression();
             services.AddHttpContextAccessor();
             services.AddTransient<
@@ -127,6 +128,7 @@ namespace Relisten
                             })
                             .AddHangfireInstrumentation()
                             .AddSource("Relisten.Import")
+                            .AddSource("Relisten.GraphQL")
                             .AddOtlpExporter(otlpOptions =>
                             {
                                 otlpOptions.Endpoint = new Uri(otlpEndpoint);
@@ -138,6 +140,8 @@ namespace Relisten
                         metrics
                             .AddAspNetCoreInstrumentation()
                             .AddMeter("Npgsql")
+                            .AddMeter("Relisten.Catalog")
+                            .AddMeter("Relisten.GraphQL")
                             .AddOtlpExporter(otlpOptions =>
                             {
                                 otlpOptions.Endpoint = new Uri(otlpEndpoint);
@@ -363,6 +367,8 @@ namespace Relisten
                 };
             });
 
+            app.UseRouting();
+
             // Legacy global CORS handles preflight before MVC sees controller attributes.
             // Select v4's validator policy first so browsers may send If-None-Match.
             Relisten.Controllers.V4.V4CatalogRegistration.UseV4CatalogCors(app);
@@ -379,8 +385,10 @@ namespace Relisten
             );
 
             app.UseAuthentication();
+            app.UseAuthorization();
             app.UseStaticFiles();
 
+            Relisten.GraphQL.CatalogGraphRegistration.UseCatalogGraph(app);
             app.UseMvc();
 
             if (!env.IsDevelopment())

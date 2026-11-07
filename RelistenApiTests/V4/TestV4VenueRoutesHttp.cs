@@ -64,6 +64,24 @@ public sealed partial class TestV4CatalogHttp
                 .Select(venue => venue!["global_show_count"]!.GetValue<int>())
                 .Should()
                 .Equal(0, 2, 0, 0, 0);
+            var graph = (
+                await Graph(
+                    """
+                    { venues(first: 500) { nodes { id name globalShowCount } totalCount } }
+                    """
+                )
+            )["venues"]!;
+            graph["totalCount"]!.GetValue<int>().Should().Be(venues.Count);
+            graph["nodes"]!
+                .AsArray()
+                .Select(venue => venue!["id"]!.GetValue<string>())
+                .Should()
+                .Equal(venues.Select(venue => venue!["id"]!.GetValue<string>()));
+            graph["nodes"]!
+                .AsArray()
+                .Select(venue => venue!["globalShowCount"]!.GetValue<int>())
+                .Should()
+                .Equal(venues.Select(venue => venue!["global_show_count"]!.GetValue<int>()));
             var detail = await GetJson(CanonicalVenuePath);
             JsonNode.DeepEquals(fixtureVenues[1], ResourceMetadata(detail)).Should().BeTrue();
 

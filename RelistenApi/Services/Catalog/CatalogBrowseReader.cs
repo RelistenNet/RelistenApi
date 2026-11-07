@@ -135,7 +135,8 @@ public sealed class CatalogBrowseReader(
         Guid artistUuid,
         Guid? yearUuid,
         int? yearNumber,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        bool includeShows = true
     )
     {
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
@@ -161,7 +162,9 @@ public sealed class CatalogBrowseReader(
             return null;
         }
         await popularity.ApplyYears(session, [year], cancellationToken);
-        var shows = await ReadShowSummaries(session, artistUuid, year.uuid, cancellationToken);
+        var shows = includeShows
+            ? await ReadShowSummaries(session, artistUuid, year.uuid, cancellationToken)
+            : [];
         return new(year, shows);
     }
 

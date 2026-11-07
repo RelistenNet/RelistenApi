@@ -17,7 +17,8 @@ public sealed class CatalogSongReader(
     CatalogImportedSongMappingReader importedSongMappings,
     CatalogSongMatchReader matches,
     CatalogTrackNormalizationReader trackNormalization,
-    CatalogShowMetadataReader showMetadata
+    CatalogShowMetadataReader showMetadata,
+    CatalogCollectionReader collections
 )
 {
     public async Task<IReadOnlyList<CatalogArtistSongEntry>?> ReadArtistSongs(
@@ -32,15 +33,52 @@ public sealed class CatalogSongReader(
             return null;
         }
 
-        if (!artist.approved)
-        {
-            var imported = await ReadImportedSongs(session, artist.id, cancellationToken);
-            return imported.Select(song => new CatalogArtistSongEntry(null, song)).ToArray();
-        }
-
-        var songs = await ReadSongDetails(session, artistUuid, null, cancellationToken);
-        // Approval selects the canonical catalog even while coverage is incomplete.
-        return songs.Select(song => new CatalogArtistSongEntry(song, null)).ToArray();
+        var selection = await collections.ReadAll(
+            session,
+            new(
+                CatalogReferenceKind.Song,
+                CatalogReferenceKind.Artist,
+                Relisten.Identifiers.UuidTypeId.Format("artist", artistUuid),
+                IncludeFallback: true
+            ),
+            cancellationToken
+        );
+        var songs = await ReadSongDetails(
+            session,
+            selection
+                .Targets.Where(t => t.Kind == CatalogReferenceKind.Song)
+                .Select(t => t.Id)
+                .ToArray(),
+            cancellationToken
+        );
+        var imported = (
+            await session.Connection.QueryAsync<CatalogImportedSong>(
+                session.Command(
+                    ImportedSongSelect + " WHERE s.uuid=ANY(@uuids)",
+                    new
+                    {
+                        uuids = selection
+                            .Targets.Where(t => t.Kind == CatalogReferenceKind.ImportedSong)
+                            .Select(t => t.Uuid!.Value)
+                            .ToArray(),
+                    },
+                    cancellationToken
+                )
+            )
+        ).ToArray();
+        await importedSongMappings.Apply(session, imported, cancellationToken);
+        var entries = songs
+            .Select(s => (Id: s.id, Entry: new CatalogArtistSongEntry(s, null)))
+            .Concat(
+                imported.Select(s =>
+                    (
+                        Id: Relisten.Identifiers.UuidTypeId.Format("imported_song", s.uuid),
+                        Entry: new CatalogArtistSongEntry(null, s)
+                    )
+                )
+            )
+            .ToDictionary(e => e.Id, e => e.Entry);
+        return selection.Targets.Select(t => entries[t.Id]).ToArray();
     }
 
     /// <summary>Metadata and complete recording-backed show membership share one snapshot.</summary>

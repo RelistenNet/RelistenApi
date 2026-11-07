@@ -1,0 +1,7 @@
+query PlaylistTracks($ids: [ID!]!) {
+  sourceTracksByIds(ids: $ids) {
+    id title duration mp3Url flacUrl
+    show { id displayDate artist { id name } }
+    source { id isSoundboard }
+  }
+}

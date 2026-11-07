@@ -31,7 +31,8 @@ public sealed class CatalogReader(
     public async Task<CatalogShow?> ReadShowByDate(
         Guid artistUuid,
         string showDate,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        bool includeRecordings = true
     )
     {
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
@@ -39,14 +40,16 @@ public sealed class CatalogReader(
             session,
             "a.uuid=@artistUuid AND s.display_date=@showDate",
             new { artistUuid, showDate },
-            cancellationToken
+            cancellationToken,
+            includeRecordings
         );
     }
 
     /// <summary>Returns one full random show, or null for an unknown/empty artist.</summary>
     public async Task<CatalogShow?> ReadRandomShow(
         Guid artistUuid,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        bool includeRecordings = true
     )
     {
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
@@ -54,7 +57,8 @@ public sealed class CatalogReader(
             session,
             "s.id=(SELECT s.id FROM shows s JOIN artists a ON a.id=s.artist_id WHERE a.uuid=@artistUuid ORDER BY random() LIMIT 1)",
             new { artistUuid },
-            cancellationToken
+            cancellationToken,
+            includeRecordings
         );
     }
 
@@ -62,7 +66,8 @@ public sealed class CatalogReader(
         CatalogReadSession session,
         string predicate,
         object parameters,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        bool includeRecordings = true
     )
     {
         var show = await session.Connection.QuerySingleOrDefaultAsync<CatalogShow>(
@@ -77,7 +82,12 @@ public sealed class CatalogReader(
             return null;
         }
 
-        show.Sources = (await recordings.ReadForShow(session, show.id, cancellationToken)).ToList();
+        if (includeRecordings)
+        {
+            show.Sources = (
+                await recordings.ReadForShow(session, show.id, cancellationToken)
+            ).ToList();
+        }
         await metadata.Apply(session, [show], cancellationToken);
         await trackNormalization.Apply(
             session,

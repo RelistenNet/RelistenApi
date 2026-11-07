@@ -4,6 +4,7 @@ Start with the task you need to do:
 
 - [Run locally](../local-dev/README.md): databases, services, dummy/Google sign-in and tests.
 - [Integrate the catalog](api/README.md): concert/recording identity, imported versus canonical data and ranking context.
+- [Use the catalog graph](api/graphql/README.md): full V4 GraphQL reads, shared REST mappings, pagination, consistency, and execution budgets.
 - [Persist catalog responses](api/mobile-sync.md): collection ownership, shared records and ETag limitations.
 - [Work on accounts](api/accounts.md): personal membership, catalog references and authentication ownership.
 - [Maintain derived counts](normalization-counts.md): writer responsibilities, concurrency and repair.

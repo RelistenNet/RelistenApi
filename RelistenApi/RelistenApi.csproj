@@ -12,6 +12,7 @@
     <DebugType>portable</DebugType>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="HotChocolate.AspNetCore" Version="16.7.3" />
     <PackageReference Include="OpenAI" Version="2.1.0" />
     <PackageReference Include="Temporalio.Extensions.Hosting" Version="1.20.0" />
     <PackageReference Include="Dapper" Version="2.1.66" />
@@ -57,6 +58,18 @@
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Migrations\Sql\*.sql" />
+    <EmbeddedResource
+      Include="GraphQL/Operations/Catalog/*.graphql"
+      LogicalName="Relisten.GraphQL.Operations.Catalog.%(Filename)%(Extension)"
+    />
+    <EmbeddedResource
+      Include="GraphQL/Operations/Rankings/*.graphql"
+      LogicalName="Relisten.GraphQL.Operations.Rankings.%(Filename)%(Extension)"
+    />
+    <EmbeddedResource
+      Include="GraphQL/Operations/Live/*.graphql"
+      LogicalName="Relisten.GraphQL.Operations.Live.%(Filename)%(Extension)"
+    />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Relisten.Normalization\Relisten.Normalization.csproj" />

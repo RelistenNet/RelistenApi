@@ -1,0 +1,14 @@
+query CatalogSearch($q: String!, $artist: ID) {
+  search(q: $q, artistId: $artist) {
+    artists(first: 20) { nodes { id name } pageInfo { endCursor hasNextPage } }
+    shows(first: 20) { nodes { id displayDate artist { id name } } pageInfo { endCursor hasNextPage } }
+    songs(first: 20) {
+      nodes { kind song { id name matchedShowCount } importedSong { id name } }
+      pageInfo { endCursor hasNextPage }
+    }
+    venues(first: 20) {
+      nodes { kind artistVenue { id artistShowCount venue { id name } } importedVenue { id name } }
+      pageInfo { endCursor hasNextPage }
+    }
+  }
+}
