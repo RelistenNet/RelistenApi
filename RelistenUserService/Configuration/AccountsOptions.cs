@@ -11,6 +11,9 @@ public sealed class AccountsOptions
     public string[] WebOrigins { get; init; } =
     ["https://relisten.net", "https://web.relisten.localhost:5173"];
     public string[] TrustedProxyNetworks { get; init; } = [];
+
+    /// <summary>Optional projected JSON file containing exact preview origins. Disabled when unset.</summary>
+    public string? PreviewOriginsFile { get; init; }
     public bool EnableDevelopmentPersonas { get; init; }
     public bool EnableExternalProviders { get; init; }
     public bool AllowInsecureHttp { get; init; }

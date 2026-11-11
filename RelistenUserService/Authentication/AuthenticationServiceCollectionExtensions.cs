@@ -41,6 +41,10 @@ public static class AuthenticationServiceCollectionExtensions
         services.AddSingleton(runtime);
         services.AddSingleton(runtime.Options);
         services.AddSingleton<PreviewOriginReload>();
+        services.AddSingleton<PreviewOriginFileLoader>();
+        services.AddHostedService(provider =>
+            provider.GetRequiredService<PreviewOriginFileLoader>()
+        );
         services.AddSingleton<ReloadableClientOptionsCache>();
         services.AddSingleton<IOptionsMonitorCache<OpenIddictClientOptions>>(provider =>
             provider.GetRequiredService<ReloadableClientOptionsCache>()

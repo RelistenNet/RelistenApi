@@ -63,7 +63,7 @@ public sealed class TestPreviewOriginReload
         await StartApplicationAsync(caPath);
     }
 
-    private async Task StartApplicationAsync(string caPath)
+    private async Task StartApplicationAsync(string caPath, string? previewFile = null)
     {
         var builder = WebApplication.CreateBuilder(
             new WebApplicationOptions
@@ -84,6 +84,7 @@ public sealed class TestPreviewOriginReload
                 ["AllowedHosts"] =
                     "auth.relisten.localhost;accounts.relisten.localhost;relisten.net",
                 ["Accounts:Issuer"] = ProofBrowser.Issuer,
+                ["Accounts:PreviewOriginsFile"] = previewFile,
                 ["Accounts:AuthHost"] = "auth.relisten.localhost:5443",
                 ["Accounts:AccountsHost"] = "accounts.relisten.localhost:5443",
                 ["Accounts:WebClientSecret"] = "disposable-proof-secret",
@@ -443,6 +444,78 @@ public sealed class TestPreviewOriginReload
             CancellationToken.None
         );
         current.CookieValue.Should().NotBeNullOrEmpty();
+    }
+
+    [Test]
+    public async Task Projected_file_replacement_reloads_auth_and_bad_or_missing_files_preserve_it()
+    {
+        var path = Path.Combine(_directory, "preview-origins.json");
+        await File.WriteAllTextAsync(
+            path,
+            JsonSerializer.Serialize(
+                new
+                {
+                    version = 1,
+                    revision = 1,
+                    origins = new[] { PreviewA, PreviewB },
+                }
+            )
+        );
+        await _app.DisposeAsync();
+        await StartApplicationAsync(Path.Combine(_directory, "ca.pem"), path);
+        var loader = _app.Services.GetRequiredService<PreviewOriginFileLoader>();
+        await WaitForAsync(() =>
+            loader.Status == new PreviewOriginFileStatus(1, PreviewOriginSourceState.Ready)
+        );
+        using var first = Browser();
+        using var second = Browser();
+        await first.LoginAsync(PreviewA);
+        await second.LoginAsync(PreviewB);
+        await ReplaceFileAsync("not json");
+        await WaitForAsync(() =>
+            loader.Status == new PreviewOriginFileStatus(1, PreviewOriginSourceState.Invalid)
+        );
+        (await first.SendAsync(PreviewA + "/v1/me")).StatusCode.Should().Be(HttpStatusCode.OK);
+        await ReplaceFileAsync(
+            JsonSerializer.Serialize(
+                new
+                {
+                    version = 1,
+                    revision = 2,
+                    origins = new[] { PreviewB },
+                }
+            )
+        );
+        await WaitForAsync(() =>
+            loader.Status == new PreviewOriginFileStatus(2, PreviewOriginSourceState.Ready)
+        );
+        (await first.SendAsync(PreviewA + "/v1/me"))
+            .StatusCode.Should()
+            .Be(HttpStatusCode.BadRequest);
+        (await second.SendAsync(PreviewB + "/v1/me")).StatusCode.Should().Be(HttpStatusCode.OK);
+        File.Delete(path);
+        await WaitForAsync(() =>
+            loader.Status == new PreviewOriginFileStatus(2, PreviewOriginSourceState.Missing)
+        );
+        using var canonical = Browser();
+        await canonical.LoginAsync(AuthenticationConstants.CanonicalWebOrigin);
+        (await second.SendAsync(PreviewB + "/v1/me")).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        async Task ReplaceFileAsync(string json)
+        {
+            var next = path + ".next";
+            await File.WriteAllTextAsync(next, json);
+            File.Move(next, path, overwrite: true);
+        }
+    }
+
+    private static async Task WaitForAsync(Func<bool> ready)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(12));
+        while (!ready())
+        {
+            await Task.Delay(25, timeout.Token);
+        }
     }
 
     private sealed class ProofClock : TimeProvider
