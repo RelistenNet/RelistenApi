@@ -61,6 +61,7 @@ public sealed class TestIdentitySessionLifecycleIntegration
                     _userId,
                     authSso.SessionId,
                     "https://web.relisten.localhost:5173",
+                    AuthenticationConstants.LocalWebRegistration,
                     CancellationToken.None
                 );
         }
@@ -271,6 +272,7 @@ public sealed class TestIdentitySessionLifecycleIntegration
                         _userId,
                         authSso.SessionId,
                         AuthenticationConstants.LocalWebOrigin,
+                        AuthenticationConstants.LocalWebRegistration,
                         CancellationToken.None
                     );
             await create.Should().ThrowAsync<InvalidOperationException>();
@@ -484,6 +486,7 @@ public sealed class TestIdentitySessionLifecycleIntegration
                 _userId,
                 authSsoSessionId,
                 "https://web.relisten.localhost:5173",
+                AuthenticationConstants.LocalWebRegistration,
                 CancellationToken.None
             );
     }

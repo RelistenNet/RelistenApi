@@ -39,13 +39,7 @@ public sealed class WebSessionController(
             return BadRequest();
         }
 
-        var registrationId = webOrigin.Origin switch
-        {
-            AuthenticationConstants.CanonicalWebOrigin =>
-                AuthenticationConstants.CanonicalWebRegistration,
-            AuthenticationConstants.LocalWebOrigin => AuthenticationConstants.LocalWebRegistration,
-            _ => null,
-        };
+        var registrationId = runtime.BrowserOrigins.RegistrationId(webOrigin.Origin);
         if (registrationId is null)
         {
             return BadRequest();
@@ -96,13 +90,7 @@ public sealed class WebSessionController(
             return Unauthorized();
         }
 
-        var expectedRegistration = webOrigin.Origin switch
-        {
-            AuthenticationConstants.CanonicalWebOrigin =>
-                AuthenticationConstants.CanonicalWebRegistration,
-            AuthenticationConstants.LocalWebOrigin => AuthenticationConstants.LocalWebRegistration,
-            _ => null,
-        };
+        var expectedRegistration = runtime.BrowserOrigins.RegistrationId(webOrigin.Origin);
         string? registrationId = null;
         var hasRegistration =
             result.Properties is not null
@@ -126,6 +114,7 @@ public sealed class WebSessionController(
                 userId,
                 authSsoSessionId,
                 webOrigin.Origin,
+                registrationId!,
                 cancellationToken
             );
         }

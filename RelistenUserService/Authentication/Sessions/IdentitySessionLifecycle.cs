@@ -48,69 +48,80 @@ public sealed class IdentitySessionLifecycle(
         UserId userId,
         SessionId authSsoSessionId,
         string webOrigin,
+        string authenticatedRegistrationId,
         CancellationToken cancellationToken
     )
     {
-        if (!runtime.WebOrigins.Contains(webOrigin, StringComparer.Ordinal))
+        var gate = runtime.BrowserOrigins.SessionCreationAndReload;
+        await gate.WaitAsync(cancellationToken);
+        try
         {
-            throw new InvalidOperationException(
-                "The web origin is not configured for browser sessions."
-            );
-        }
-
-        var now = timeProvider.GetUtcNow();
-        await using var transaction = await dbContext.Database.BeginTransactionAsync(
-            cancellationToken
-        );
-        var parent = await dbContext
-            .Sessions.FromSqlInterpolated(
-                $"""
-                SELECT *
-                FROM identity.sessions
-                WHERE id = {authSsoSessionId.Value}
-                FOR UPDATE
-                """
-            )
-            .SingleOrDefaultAsync(cancellationToken);
-        var user = await LoadActiveUserAsync(userId, cancellationToken);
-
-        if (
-            parent is null
-            || parent.Purpose != IdentitySessionPurposes.AuthSso
-            || parent.UserId != user.Id
-            || parent.SecurityVersion != user.SecurityVersion
-            || parent.RevokedAt is not null
-            || parent.SlidingExpiresAt <= now
-            || parent.AbsoluteExpiresAt <= now
-            || parent.Capabilities != IdentitySessionCapabilities.None
-        )
-        {
-            throw new InvalidOperationException(
-                "The auth SSO session cannot create a web session."
-            );
-        }
-
-        var session = await CreateAsync(
-            new IdentitySession
+            var currentRegistration = runtime.BrowserOrigins.RegistrationId(webOrigin);
+            if (currentRegistration is null || authenticatedRegistrationId != currentRegistration)
             {
-                Id = SessionId.New(),
-                UserId = user.Id,
-                Purpose = IdentitySessionPurposes.Web,
-                SecurityVersion = user.SecurityVersion,
-                AuthenticatedAt = parent.AuthenticatedAt,
-                CreatedAt = now,
-                UpdatedAt = now,
-                LastSeenAt = now,
-                SlidingExpiresAt = now + WebSlidingLifetime,
-                AbsoluteExpiresAt = now + WebAbsoluteLifetime,
-                AuthSsoSessionId = parent.Id,
-                WebOrigin = webOrigin,
-                Capabilities = IdentitySessionCapabilities.AllWeb,
-            },
-            cancellationToken
-        );
-        await transaction.CommitAsync(cancellationToken);
-        return session;
+                throw new InvalidOperationException(
+                    "The authenticated web registration is no longer active."
+                );
+            }
+
+            var now = timeProvider.GetUtcNow();
+            await using var transaction = await dbContext.Database.BeginTransactionAsync(
+                cancellationToken
+            );
+            var parent = await dbContext
+                .Sessions.FromSqlInterpolated(
+                    $"""
+                    SELECT *
+                    FROM identity.sessions
+                    WHERE id = {authSsoSessionId.Value}
+                    FOR UPDATE
+                    """
+                )
+                .SingleOrDefaultAsync(cancellationToken);
+            var user = await LoadActiveUserAsync(userId, cancellationToken);
+
+            if (
+                parent is null
+                || parent.Purpose != IdentitySessionPurposes.AuthSso
+                || parent.UserId != user.Id
+                || parent.SecurityVersion != user.SecurityVersion
+                || parent.RevokedAt is not null
+                || parent.SlidingExpiresAt <= now
+                || parent.AbsoluteExpiresAt <= now
+                || parent.Capabilities != IdentitySessionCapabilities.None
+            )
+            {
+                throw new InvalidOperationException(
+                    "The auth SSO session cannot create a web session."
+                );
+            }
+
+            var session = await CreateAsync(
+                new IdentitySession
+                {
+                    Id = SessionId.New(),
+                    UserId = user.Id,
+                    Purpose = IdentitySessionPurposes.Web,
+                    SecurityVersion = user.SecurityVersion,
+                    AuthenticatedAt = parent.AuthenticatedAt,
+                    CreatedAt = now,
+                    UpdatedAt = now,
+                    LastSeenAt = now,
+                    SlidingExpiresAt = now + WebSlidingLifetime,
+                    AbsoluteExpiresAt = now + WebAbsoluteLifetime,
+                    AuthSsoSessionId = parent.Id,
+                    WebOrigin = webOrigin,
+                    Capabilities = IdentitySessionCapabilities.AllWeb,
+                },
+                cancellationToken
+            );
+            await transaction.CommitAsync(cancellationToken);
+            return session;
+        }
+        finally
+        {
+            gate.Release();
+        }
     }
 
     public async Task<AuthenticatedIdentitySession?> AuthenticateAsync(
