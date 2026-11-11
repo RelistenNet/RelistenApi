@@ -501,6 +501,17 @@ public sealed class TestPreviewOriginReload
         await canonical.LoginAsync(AuthenticationConstants.CanonicalWebOrigin);
         (await second.SendAsync(PreviewB + "/v1/me")).StatusCode.Should().Be(HttpStatusCode.OK);
 
+        await ReplaceFileAsync("""{"version":1,"revision":3,"origins":[]}""");
+        await WaitForAsync(() =>
+            loader.Status == new PreviewOriginFileStatus(3, PreviewOriginSourceState.Ready)
+        );
+        (await second.SendAsync(PreviewB + "/v1/me"))
+            .StatusCode.Should()
+            .Be(HttpStatusCode.BadRequest);
+        (await canonical.SendAsync(AuthenticationConstants.CanonicalWebOrigin + "/v1/me"))
+            .StatusCode.Should()
+            .Be(HttpStatusCode.OK);
+
         async Task ReplaceFileAsync(string json)
         {
             var next = path + ".next";

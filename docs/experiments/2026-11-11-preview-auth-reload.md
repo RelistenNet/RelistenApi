@@ -46,7 +46,7 @@ Four fault experiments disabled one fix at a time. The corresponding regressions
 
 This is a **single-process proof**, matching the current one-replica User Service. The retirement lock and options snapshots are process-local. Scaling requires a design for coordinating activation and session creation across replicas; this change does not establish that guarantee.
 
-The optional projected-file loader is disabled until `Accounts__PreviewOriginsFile` names a file. It reopens that path every two seconds, following atomic ConfigMap projection replacement. Missing, malformed, stale, oversized, or dependency-failing snapshots retain the last active configuration and are retried. It logs only state transitions and active revisions. The source accepts at most 16 KiB, schema version 1, required exact property names, and no duplicate/unknown properties. Mount the containing directory without `subPath`.
+The optional projected-file loader is disabled until `Accounts__PreviewOriginsFile` names a file. It reopens that path every two seconds, following atomic ConfigMap projection replacement. Missing, malformed, stale, oversized, or dependency-failing snapshots retain the last active configuration and are retried. A valid snapshot with a newer revision and `"origins":[]` deliberately retires every active preview origin; a missing file or invalid snapshot preserves the last active set. It logs only state transitions and active revisions. The source accepts at most 16 KiB, schema version 1, required exact property names, and no duplicate/unknown properties. Mount the containing directory without `subPath`.
 
 ```json
 {"version":1,"revision":42,"origins":["https://pr-138.preview.relisten.net"]}
