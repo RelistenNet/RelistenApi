@@ -7,7 +7,10 @@ using Microsoft.AspNetCore.Authorization.Policy;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using OpenIddict.Abstractions;
 using OpenIddict.Client;
 using OpenIddict.Client.AspNetCore;
 using OpenIddict.Validation.AspNetCore;
@@ -37,7 +40,25 @@ public static class AuthenticationServiceCollectionExtensions
     {
         services.AddSingleton(runtime);
         services.AddSingleton(runtime.Options);
-        services.AddSingleton(TimeProvider.System);
+        services.AddSingleton<PreviewOriginReload>();
+        services.AddSingleton<PreviewOriginFileLoader>();
+        services.AddHostedService(provider =>
+            provider.GetRequiredService<PreviewOriginFileLoader>()
+        );
+        services.AddSingleton<ReloadableClientOptionsCache>();
+        services.AddSingleton<IOptionsMonitorCache<OpenIddictClientOptions>>(provider =>
+            provider.GetRequiredService<ReloadableClientOptionsCache>()
+        );
+        services.Configure<OpenIddictClientOptions>(options =>
+        {
+            foreach (var preview in runtime.BrowserOrigins.ConfiguredRegistrations.Previews)
+            {
+                options.Registrations.Add(
+                    WebClientRegistration(runtime, preview.RegistrationId, preview.Callback)
+                );
+            }
+        });
+        services.TryAddSingleton(TimeProvider.System);
         // Validate the direct-primary exception during startup, not on the first refresh.
         _ = DatabaseConnectionString.ResolveRefreshTokenLocks(configuration, environment);
         services.AddSingleton<RefreshTokenLockProvider>();
@@ -209,6 +230,24 @@ public static class AuthenticationServiceCollectionExtensions
         return services;
     }
 
+    private static OpenIddictClientRegistration WebClientRegistration(
+        AccountsRuntimeConfiguration runtime,
+        string registrationId,
+        Uri callback
+    ) =>
+        new()
+        {
+            RegistrationId = registrationId,
+            Issuer = runtime.Issuer,
+            ClientId = AuthenticationConstants.WebClientId,
+            ClientSecret = runtime.Options.WebClientSecret,
+            ClientType = ClientTypes.Confidential,
+            RedirectUri = callback,
+            Scopes = { Scopes.OpenId, Scopes.Profile },
+            CodeChallengeMethods = { CodeChallengeMethods.Sha256 },
+            ResponseModes = { ResponseModes.Query },
+        };
+
     private static void ConfigureClients(
         OpenIddictClientBuilder options,
         IHostEnvironment environment,
@@ -216,6 +255,41 @@ public static class AuthenticationServiceCollectionExtensions
     )
     {
         options.AllowAuthorizationCodeFlow().SetStateTokenLifetime(TimeSpan.FromMinutes(15));
+        options.AddEventHandler<OpenIddictClientEvents.ProcessAuthenticationContext>(handler =>
+            handler
+                .AddFilter<OpenIddictClientHandlerFilters.RequireStateTokenPrincipal>()
+                .AddFilter<OpenIddictClientHandlerFilters.RequireStateTokenValidated>()
+                .SetOrder(
+                    OpenIddictClientHandlers
+                        .ResolveClientRegistrationFromStateToken
+                        .Descriptor
+                        .Order - 500
+                )
+                .UseInlineHandler(context =>
+                {
+                    var registrationId = context.StateTokenPrincipal!.GetClaim(
+                        Claims.Private.RegistrationId
+                    );
+                    // Retired registrations are intentionally absent. Reject their validated
+                    // state before OpenIddict's missing-registration lookup throws.
+                    if (
+                        registrationId?.StartsWith(
+                            "relisten-web-preview-pr-",
+                            StringComparison.Ordinal
+                        ) == true
+                        && !runtime.BrowserOrigins.Current.Previews.Any(preview =>
+                            preview.RegistrationId == registrationId
+                        )
+                    )
+                    {
+                        context.Reject(
+                            Errors.InvalidRequest,
+                            "This preview login has retired. Start a new login."
+                        );
+                    }
+                    return ValueTask.CompletedTask;
+                })
+        );
         if (environment.IsDevelopment() && OperatingSystem.IsMacOS())
         {
             // Preview/tunnel authentication must remain safe to run on macOS. Reuse the
@@ -258,32 +332,18 @@ public static class AuthenticationServiceCollectionExtensions
         }
 
         options.AddRegistration(
-            new OpenIddictClientRegistration
-            {
-                RegistrationId = AuthenticationConstants.CanonicalWebRegistration,
-                Issuer = runtime.Issuer,
-                ClientId = AuthenticationConstants.WebClientId,
-                ClientSecret = runtime.Options.WebClientSecret,
-                ClientType = ClientTypes.Confidential,
-                RedirectUri = new Uri(AuthenticationConstants.CanonicalWebCallback),
-                Scopes = { Scopes.OpenId, Scopes.Profile },
-                CodeChallengeMethods = { CodeChallengeMethods.Sha256 },
-                ResponseModes = { ResponseModes.Query },
-            }
+            WebClientRegistration(
+                runtime,
+                AuthenticationConstants.CanonicalWebRegistration,
+                new Uri(AuthenticationConstants.CanonicalWebCallback)
+            )
         );
         options.AddRegistration(
-            new OpenIddictClientRegistration
-            {
-                RegistrationId = AuthenticationConstants.LocalWebRegistration,
-                Issuer = runtime.Issuer,
-                ClientId = AuthenticationConstants.WebClientId,
-                ClientSecret = runtime.Options.WebClientSecret,
-                ClientType = ClientTypes.Confidential,
-                RedirectUri = new Uri(AuthenticationConstants.LocalWebCallback),
-                Scopes = { Scopes.OpenId, Scopes.Profile },
-                CodeChallengeMethods = { CodeChallengeMethods.Sha256 },
-                ResponseModes = { ResponseModes.Query },
-            }
+            WebClientRegistration(
+                runtime,
+                AuthenticationConstants.LocalWebRegistration,
+                new Uri(AuthenticationConstants.LocalWebCallback)
+            )
         );
 
         options.UseAspNetCore().EnableRedirectionEndpointPassthrough();
@@ -300,11 +360,7 @@ public static class AuthenticationServiceCollectionExtensions
             systemNetHttp.ConfigureHttpClientHandler(
                 (registration, handler) =>
                 {
-                    if (
-                        registration.RegistrationId
-                        is AuthenticationConstants.CanonicalWebRegistration
-                            or AuthenticationConstants.LocalWebRegistration
-                    )
+                    if (registration.ClientId == AuthenticationConstants.WebClientId)
                     {
                         handler.ServerCertificateCustomValidationCallback = trust.Validate;
                     }

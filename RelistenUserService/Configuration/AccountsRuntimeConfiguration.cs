@@ -18,7 +18,9 @@ public sealed record AccountsRuntimeConfiguration(
         StringComparer.Ordinal
     );
 
-    public IReadOnlyList<string> WebOrigins { get; init; } = Options.WebOrigins;
+    public WebOriginRegistry BrowserOrigins { get; } = new(Options.WebOrigins);
+
+    public IReadOnlyList<string> WebOrigins => BrowserOrigins.Origins;
 
     public bool IsLocalDevelopment { get; init; }
 
@@ -116,7 +118,6 @@ public sealed record AccountsRuntimeConfiguration(
 
         return new AccountsRuntimeConfiguration(options, issuer, trustedProxyNetworks)
         {
-            WebOrigins = webOrigins,
             IsLocalDevelopment = isLocalDevelopmentProfile,
         };
     }

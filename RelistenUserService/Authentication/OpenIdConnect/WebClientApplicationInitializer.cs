@@ -43,21 +43,34 @@ public sealed class WebClientApplicationInitializer(
             return;
         }
 
+        await ValidateAsync(manager, existing, runtime, cancellationToken);
+    }
+
+    internal static async Task ValidateAsync(
+        IOpenIddictApplicationManager manager,
+        object application,
+        AccountsRuntimeConfiguration runtime,
+        CancellationToken cancellationToken
+    )
+    {
         var validSecret = await manager.ValidateClientSecretAsync(
-            existing,
+            application,
             runtime.Options.WebClientSecret,
             cancellationToken
         );
-        var clientType = await manager.GetClientTypeAsync(existing, cancellationToken);
-        var permissions = await manager.GetPermissionsAsync(existing, cancellationToken);
-        var requirements = await manager.GetRequirementsAsync(existing, cancellationToken);
-        var redirectUris = await manager.GetRedirectUrisAsync(existing, cancellationToken);
+        var clientType = await manager.GetClientTypeAsync(application, cancellationToken);
+        var permissions = await manager.GetPermissionsAsync(application, cancellationToken);
+        var requirements = await manager.GetRequirementsAsync(application, cancellationToken);
+        var redirectUris = await manager.GetRedirectUrisAsync(application, cancellationToken);
         if (
             !validSecret
             || clientType != ClientTypes.Confidential
             || !permissions.ToHashSet(StringComparer.Ordinal).SetEquals(ExpectedPermissions)
             || !requirements.ToHashSet(StringComparer.Ordinal).SetEquals(ExpectedRequirements)
-            || !redirectUris.ToHashSet(StringComparer.Ordinal).SetEquals(ExpectedRedirectUris)
+            || !ExpectedRedirectUris.IsSubsetOf(redirectUris)
+            || redirectUris.Any(uri =>
+                !ExpectedRedirectUris.Contains(uri) && !WebOriginRegistry.IsPreviewCallback(uri)
+            )
         )
         {
             throw new InvalidOperationException(
