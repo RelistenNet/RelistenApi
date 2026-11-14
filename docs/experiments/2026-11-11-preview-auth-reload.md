@@ -2,13 +2,13 @@
 
 ## Purpose and context
 
-The local proof passes on OpenIddict 7.6.0: one running User Service can add two exact preview origins, authenticate both, and retire one while canonical login and the other preview continue. The change is prepared for review on `codex/private-preview-auth-reload`. The complete User Service test suite passed **195/195 with zero skips**. Nothing has been pushed or deployed.
+The local proof passes on OpenIddict 7.6.0: one running User Service can add two exact preview origins, authenticate both, and retire one while canonical login and the other preview continue. The change is prepared for review on `codex/private-preview-auth-reload`. The complete User Service test suite passed **199/199 with zero skips** after switching preview origins to Tailscale names on November 14. Alec authorized publishing the branch and the separate synthetic gateway pilot; this auth support remains disabled in production.
 
 Private previews will share the production account backend. Their browser origins must change without restarting the single User Service. This experiment uses disposable local PostgreSQL databases and synthetic development identities. It exercises the normal application pipeline and OAuth code exchange through ASP.NET TestServer, with an in-process backchannel replacing network transport.
 
 ## What changes
 
-`WebOriginRegistry` owns the fixed origins and an immutable, validated preview snapshot. `PreviewOriginReload.ApplyAsync(revision, origins)` is the local entry point. It requires increasing revisions, permits an identical retry, caps the active set at four, and accepts only exact `https://pr-<positive-integer>.preview.relisten.net` origins.
+`WebOriginRegistry` owns the fixed origins and an immutable, validated preview snapshot. `PreviewOriginReload.ApplyAsync(revision, origins)` is the local entry point. It requires increasing revisions, permits an identical retry, caps the active set at four, and accepts only exact `https://relisten-pr-<positive-integer>.tail09dbf.ts.net` origins.
 
 A reload executes these steps:
 
@@ -49,13 +49,13 @@ This is a **single-process proof**, matching the current one-replica User Servic
 The optional projected-file loader is disabled until `Accounts__PreviewOriginsFile` names a file. It reopens that path every two seconds, following atomic ConfigMap projection replacement. Missing, malformed, stale, oversized, or dependency-failing snapshots retain the last active configuration and are retried. A valid snapshot with a newer revision and `"origins":[]` deliberately retires every active preview origin; a missing file or invalid snapshot preserves the last active set. It logs only state transitions and active revisions. The source accepts at most 16 KiB, schema version 1, required exact property names, and no duplicate/unknown properties. Mount the containing directory without `subPath`.
 
 ```json
-{"version":1,"revision":42,"origins":["https://pr-138.preview.relisten.net"]}
+{"version":1,"revision":42,"origins":["https://relisten-pr-138.tail09dbf.ts.net"]}
 ```
 
 `PreviewOriginFileLoader.Status` supplies the applied revision and source state in-process. There is no HTTP diagnostic or remote mutation endpoint yet. Private revision acknowledgment remains part of gateway integration. The hosted-loader test verifies atomic replacement, invalid input, recovery, file removal, and continued canonical/preview auth. An active preview cookie remains usable after a restart if the same origin is restored; origins omitted from the new snapshot are revoked using persisted callback state. Pending login completion across process restart was not tested; fresh registration IDs are assigned after restart, so callers should restart unfinished preview logins.
 
-Real Google/Apple login, projected ConfigMap propagation, private gateway header handling, Tailscale access denial, and TLS reload still require integration/pilot verification. The local proof does not establish public-network isolation. Test restore also reports advisories on existing cryptography package versions; dependency remediation is separate from this experiment.
+Real Google/Apple login and projected ConfigMap propagation still require integration verification. The private gateway now sits behind Tailscale-managed HTTPS, with one hostname and ingress slot per PR. Gateway headers and private access are tested in the separate infrastructure pilot; this local auth proof alone does not establish those network guarantees. Test restore also reports advisories on existing cryptography package versions; dependency remediation is separate from this experiment.
 
 ## Review guidance
 
-Review the order of publication and retirement, the transaction/cache rollback, and the incarnation check at session creation. The bounded projected-file loader is also prepared locally. The next step is private gateway/resource preparation, including restricted revision acknowledgment. Production rollout and any push remain subject to Alec's sign-off.
+Review the order of publication and retirement, the transaction/cache rollback, and the incarnation check at session creation. The bounded projected-file loader is also prepared locally. The next auth milestone is the production file mount, restricted revision acknowledgment, public relay-header stripping and a real-provider test through the private gateway. The Tailscale hostname change accepts only this tailnet's exact generated PR names; it rejects other tailnets, the synthetic probe and the former custom preview domain. No custom preview origins were deployed, so no production callback migration is needed for this hostname change.
