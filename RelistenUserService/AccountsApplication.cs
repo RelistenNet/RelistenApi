@@ -40,7 +40,19 @@ public static class AccountsApplication
         builder.Services.Configure<ApiBehaviorOptions>(AccountApiBehavior.Configure);
         builder.Services.AddRelistenAccounts(builder.Configuration, builder.Environment, runtime);
 
+        if (!string.IsNullOrWhiteSpace(runtime.Options.PreviewOriginsFile))
+        {
+            // The control listener is never routed by public ingress. NetworkPolicy
+            // admits only the trusted preview gateway to port 8082.
+            builder.WebHost.ConfigureKestrel(options =>
+            {
+                options.ListenAnyIP(8080);
+                options.ListenAnyIP(PreviewControlMiddleware.Port);
+            });
+        }
+
         var app = builder.Build();
+        app.UseMiddleware<PreviewControlMiddleware>();
         // TLS terminates at the cluster ingress. Only configured ingress networks may tell
         // OpenIddict that the original request was HTTPS or select a public Relisten host.
         app.UseForwardedHeaders();

@@ -5,6 +5,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
@@ -115,6 +116,45 @@ public sealed class TestPreviewOriginReload
         await AccountsApplication.InitializeAsync(_app, CancellationToken.None);
         await _app.StartAsync();
         _reload = _app.Services.GetRequiredService<PreviewOriginReload>();
+    }
+
+    [Test]
+    public async Task Reload_status_is_only_available_on_the_private_transport()
+    {
+        await _reload.ApplyAsync(17, [PreviewA], CancellationToken.None);
+        var server = _app.GetTestServer();
+        var privateRequest = await server.SendAsync(context =>
+        {
+            context.Request.Host = new HostString("accounts.relisten.localhost", 5443);
+            context.Connection.LocalPort = PreviewControlMiddleware.Port;
+            context.Request.Method = "GET";
+            context.Request.Path = PreviewControlMiddleware.Path;
+        });
+        privateRequest.Response.StatusCode.Should().Be(200);
+        using var body = new StreamReader(privateRequest.Response.Body);
+        var status = await body.ReadToEndAsync();
+        status.Should().Contain("\"appliedRevision\":17");
+        status.Should().NotContain(PreviewA);
+
+        foreach (var path in new[] { PreviewControlMiddleware.Path, "/__preview/auth/" })
+        {
+            var publicRequest = await server.SendAsync(context =>
+            {
+                context.Request.Host = new HostString("accounts.relisten.localhost", 5443);
+                context.Connection.LocalPort = 8080;
+                context.Request.Path = path;
+                context.Request.Headers["X-Forwarded-Port"] = "8082";
+                context.Request.Headers["X-Forwarded-Host"] = "accounts.relisten.net";
+            });
+            publicRequest.Response.StatusCode.Should().Be(404);
+        }
+        var privateLogin = await server.SendAsync(context =>
+        {
+            context.Request.Host = new HostString("accounts.relisten.localhost", 5443);
+            context.Connection.LocalPort = PreviewControlMiddleware.Port;
+            context.Request.Path = "/auth/session/login";
+        });
+        privateLogin.Response.StatusCode.Should().Be(404);
     }
 
     [TearDown]
