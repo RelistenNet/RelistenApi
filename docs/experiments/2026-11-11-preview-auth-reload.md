@@ -2,7 +2,7 @@
 
 ## Purpose and context
 
-The local proof passes on OpenIddict 7.6.0: one running User Service can add two exact preview origins, authenticate both, and retire one while canonical login and the other preview continue. The change is prepared for review on `codex/private-preview-auth-reload`. The complete User Service test suite passed **199/199 with zero skips** after switching preview origins to Tailscale names on November 14. Alec authorized publishing the branch and the separate synthetic gateway pilot; this auth support remains disabled in production.
+The local proof passes on OpenIddict 7.6.0: one running User Service can add two exact preview origins, authenticate both, and retire one while canonical login and the other preview continue. The change is prepared for review on `codex/private-preview-auth-reload`. The complete User Service test suite passed **200/200 with zero skips** after switching preview origins to Tailscale names on November 14. Alec authorized production integration. The shared-auth image is deployed with an empty preview-origin set; no real PR preview is active.
 
 Private previews will share the production account backend. Their browser origins must change without restarting the single User Service. This experiment uses disposable local PostgreSQL databases and synthetic development identities. It exercises the normal application pipeline and OAuth code exchange through ASP.NET TestServer, with an in-process backchannel replacing network transport.
 
@@ -58,4 +58,11 @@ Real Google/Apple login and projected ConfigMap propagation still require integr
 
 ## Review guidance
 
-Review the order of publication and retirement, the transaction/cache rollback, and the incarnation check at session creation. The bounded projected-file loader is also prepared locally. The next auth milestone is the production file mount, restricted revision acknowledgment, public relay-header stripping and a real-provider test through the private gateway. The Tailscale hostname change accepts only this tailnet's exact generated PR names; it rejects other tailnets, the synthetic probe and the former custom preview domain. No custom preview origins were deployed, so no production callback migration is needed for this hostname change.
+Review the order of publication and retirement, the transaction/cache rollback, and the incarnation check at session creation. The bounded projected-file loader is also prepared locally. The production file mount, transport-separated revision acknowledgment and public relay-header stripping are now deployed. Live port checks passed, as did 12 CNI checks. An empty-set ConfigMap revision advanced from 1 to 2 in 39.53 seconds while the auth pod, container and restart count remained unchanged. The remaining auth milestone is real-provider login and shared-account behavior across two private PR hosts. The Tailscale hostname change accepts only this tailnet's exact generated PR names; it rejects other tailnets, the synthetic probe and the former custom preview domain. No custom preview origins were deployed, so no production callback migration is needed for this hostname change.
+
+
+## Production integration — November 14
+
+The deployed User Service image is `ghcr.io/relistennet/relisten-user-service@sha256:b977da16445e0d7a4662569a6076aac4dabe5b8e93cd2180515f89acec4701df`, built from `4c0d514eb02cfd04ed65178242c4248c9e6b4b27`. `Accounts__PreviewOriginsFile` points to the named projected ConfigMap directory, without `subPath`. Kestrel serves the minimal revision acknowledgment on 8082, which NetworkPolicy admits only from the trusted gateway. Port 8080 rejects the diagnostic path; 8082 rejects login routes. Public ingress removes caller-supplied origin relay hints.
+
+The permanent private control hostname acknowledges auth revision 2 with an empty origin set. Advancing only that revision caused no auth process replacement. This verifies the deployed file projection/reload path; it does not establish real-provider login through a PR host. The infrastructure [runbook and evidence](https://github.com/RelistenNet/relisten-flux/blob/codex/private-branch-previews/previews/pilot/README.md) separate implemented, deployed and still-unverified behavior.
