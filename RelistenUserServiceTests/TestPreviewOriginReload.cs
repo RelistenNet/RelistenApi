@@ -31,8 +31,8 @@ namespace RelistenUserServiceTests;
 [NonParallelizable]
 public sealed class TestPreviewOriginReload
 {
-    private const string PreviewA = "https://pr-138.preview.relisten.net";
-    private const string PreviewB = "https://pr-139.preview.relisten.net";
+    private const string PreviewA = "https://relisten-pr-138.tail09dbf.ts.net";
+    private const string PreviewB = "https://relisten-pr-139.tail09dbf.ts.net";
     private readonly PostgresIntegrationDatabase _database = new();
     private string _directory = "";
     private WebApplication _app = null!;
@@ -284,7 +284,7 @@ public sealed class TestPreviewOriginReload
         var invalid = () =>
             _reload.ApplyAsync(
                 current.Revision + 1,
-                ["https://pr-1.preview.relisten.net.evil.example"]
+                ["https://relisten-pr-1.tail09dbf.ts.net.evil.example"]
             );
         await invalid.Should().ThrowAsync<ArgumentException>();
         var stale = () => _reload.ApplyAsync(current.Revision, []);
@@ -708,14 +708,18 @@ public sealed class TestPreviewOriginReload
 [TestFixture]
 public sealed class TestPreviewOriginPolicy
 {
-    [TestCase("http://pr-1.preview.relisten.net")]
-    [TestCase("https://pr-0.preview.relisten.net")]
-    [TestCase("https://pr-01.preview.relisten.net")]
-    [TestCase("https://pr-1.preview.relisten.net:443")]
-    [TestCase("https://pr-1.preview.relisten.net/")]
-    [TestCase("https://user@pr-1.preview.relisten.net")]
-    [TestCase("https://pr-1.preview.relisten.net?x=1")]
-    [TestCase("https://pr-1.preview.relisten.net\n")]
+    [TestCase("https://pr-1.preview.relisten.net")]
+    [TestCase("https://relisten-pr-1.other-tailnet.ts.net")]
+    [TestCase("https://relisten-preview-probe.tail09dbf.ts.net")]
+    [TestCase("https://relisten-pr-1.tail09dbf.ts.net.evil.example")]
+    [TestCase("http://relisten-pr-1.tail09dbf.ts.net")]
+    [TestCase("https://relisten-pr-0.tail09dbf.ts.net")]
+    [TestCase("https://relisten-pr-01.tail09dbf.ts.net")]
+    [TestCase("https://relisten-pr-1.tail09dbf.ts.net:443")]
+    [TestCase("https://relisten-pr-1.tail09dbf.ts.net/")]
+    [TestCase("https://user@relisten-pr-1.tail09dbf.ts.net")]
+    [TestCase("https://relisten-pr-1.tail09dbf.ts.net?x=1")]
+    [TestCase("https://relisten-pr-1.tail09dbf.ts.net\n")]
     public void Preview_origins_must_be_exact_generated_origins(string origin)
     {
         var parse = () => WebOriginRegistry.Parse(1, [origin]);
