@@ -105,7 +105,7 @@ public sealed partial class WebOriginRegistry
                 if (!match.Success)
                 {
                     throw new ArgumentException(
-                        "Preview origins must be exact https://relisten-pr-<number>.tail09dbf.ts.net origins.",
+                        "Preview origins must be exact https://relisten-web-previews-pr-<number>.tail09dbf.ts.net origins.",
                         nameof(origins)
                     );
                 }
@@ -130,7 +130,7 @@ public sealed partial class WebOriginRegistry
         && PreviewOrigin().IsMatch(callback[..^"/auth/session/callback".Length]);
 
     [GeneratedRegex(
-        @"\Ahttps://relisten-pr-([1-9][0-9]{0,9})\.tail09dbf\.ts\.net\z",
+        @"\Ahttps://relisten-web-previews-pr-([1-9][0-9]{0,9})\.tail09dbf\.ts\.net\z",
         RegexOptions.CultureInvariant
     )]
     private static partial Regex PreviewOrigin();
