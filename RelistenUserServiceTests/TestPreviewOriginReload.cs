@@ -32,8 +32,8 @@ namespace RelistenUserServiceTests;
 [NonParallelizable]
 public sealed class TestPreviewOriginReload
 {
-    private const string PreviewA = "https://relisten-pr-138.tail09dbf.ts.net";
-    private const string PreviewB = "https://relisten-pr-139.tail09dbf.ts.net";
+    private const string PreviewA = "https://relisten-web-previews-pr-138.tail09dbf.ts.net";
+    private const string PreviewB = "https://relisten-web-previews-pr-139.tail09dbf.ts.net";
     private readonly PostgresIntegrationDatabase _database = new();
     private string _directory = "";
     private WebApplication _app = null!;
@@ -324,7 +324,7 @@ public sealed class TestPreviewOriginReload
         var invalid = () =>
             _reload.ApplyAsync(
                 current.Revision + 1,
-                ["https://relisten-pr-1.tail09dbf.ts.net.evil.example"]
+                ["https://relisten-web-previews-pr-1.tail09dbf.ts.net.evil.example"]
             );
         await invalid.Should().ThrowAsync<ArgumentException>();
         var stale = () => _reload.ApplyAsync(current.Revision, []);
@@ -748,18 +748,29 @@ public sealed class TestPreviewOriginReload
 [TestFixture]
 public sealed class TestPreviewOriginPolicy
 {
+    [TestCase("https://relisten-web-previews-pr-138.tail09dbf.ts.net")]
+    public void Generated_preview_preserves_the_exact_origin(string origin)
+    {
+        var preview = WebOriginRegistry.Parse(1, [origin]).Previews.Single();
+        preview.Origin.Should().Be(origin);
+        preview.RegistrationId.Should().Be("relisten-web-preview-pr-138");
+        preview.Callback.AbsoluteUri.Should().Be(origin + "/auth/session/callback");
+    }
+
+    [TestCase("https://relisten-pr-138.tail09dbf.ts.net")]
+    [TestCase("https://pr-138.relisten-web-previews.tail09dbf.ts.net")]
     [TestCase("https://pr-1.preview.relisten.net")]
-    [TestCase("https://relisten-pr-1.other-tailnet.ts.net")]
+    [TestCase("https://relisten-web-previews-pr-1.other-tailnet.ts.net")]
     [TestCase("https://relisten-preview-probe.tail09dbf.ts.net")]
-    [TestCase("https://relisten-pr-1.tail09dbf.ts.net.evil.example")]
-    [TestCase("http://relisten-pr-1.tail09dbf.ts.net")]
-    [TestCase("https://relisten-pr-0.tail09dbf.ts.net")]
-    [TestCase("https://relisten-pr-01.tail09dbf.ts.net")]
-    [TestCase("https://relisten-pr-1.tail09dbf.ts.net:443")]
-    [TestCase("https://relisten-pr-1.tail09dbf.ts.net/")]
-    [TestCase("https://user@relisten-pr-1.tail09dbf.ts.net")]
-    [TestCase("https://relisten-pr-1.tail09dbf.ts.net?x=1")]
-    [TestCase("https://relisten-pr-1.tail09dbf.ts.net\n")]
+    [TestCase("https://relisten-web-previews-pr-1.tail09dbf.ts.net.evil.example")]
+    [TestCase("http://relisten-web-previews-pr-1.tail09dbf.ts.net")]
+    [TestCase("https://relisten-web-previews-pr-0.tail09dbf.ts.net")]
+    [TestCase("https://relisten-web-previews-pr-01.tail09dbf.ts.net")]
+    [TestCase("https://relisten-web-previews-pr-1.tail09dbf.ts.net:443")]
+    [TestCase("https://relisten-web-previews-pr-1.tail09dbf.ts.net/")]
+    [TestCase("https://user@relisten-web-previews-pr-1.tail09dbf.ts.net")]
+    [TestCase("https://relisten-web-previews-pr-1.tail09dbf.ts.net?x=1")]
+    [TestCase("https://relisten-web-previews-pr-1.tail09dbf.ts.net\n")]
     public void Preview_origins_must_be_exact_generated_origins(string origin)
     {
         var parse = () => WebOriginRegistry.Parse(1, [origin]);

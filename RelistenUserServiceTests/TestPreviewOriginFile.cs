@@ -46,10 +46,10 @@ public sealed class TestPreviewOriginFile
     {
         await File.WriteAllTextAsync(
             _path,
-            """{"version":1,"revision":42,"origins":["https://relisten-pr-138.tail09dbf.ts.net"]}"""
+            """{"version":1,"revision":42,"origins":["https://relisten-web-previews-pr-138.tail09dbf.ts.net"]}"""
         );
         var snapshot = await PreviewOriginFileLoader.ReadAsync(_path, CancellationToken.None);
         snapshot.Revision.Should().Be(42);
-        snapshot.Origins.Should().Equal("https://relisten-pr-138.tail09dbf.ts.net");
+        snapshot.Origins.Should().Equal("https://relisten-web-previews-pr-138.tail09dbf.ts.net");
     }
 }
