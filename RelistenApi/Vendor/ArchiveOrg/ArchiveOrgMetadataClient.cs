@@ -13,6 +13,7 @@ public enum ArchiveOrgItemStatus
     Unknown,
     Present,
     Deleted,
+    Dark,
 }
 
 public sealed class ArchiveOrgMetadataClient(HttpClient httpClient)
@@ -56,7 +57,17 @@ public sealed class ArchiveOrgMetadataClient(HttpClient httpClient)
                 return (ArchiveOrgItemStatus.Unknown, "invalid or mismatched item metadata");
             }
 
-            // Only this documented code establishes deletion; empty responses and 404s do not.
+            // Dark items are not publicly playable. Remove their catalog metadata
+            // through the normal cleanup path, which retains track rows and play events.
+            if (root["is_dark"]?.Type == JTokenType.Boolean && (bool)root["is_dark"]!)
+            {
+                return (
+                    ArchiveOrgItemStatus.Dark,
+                    "Archive item is dark (not publicly accessible)"
+                );
+            }
+
+            // Only this documented code establishes upstream deletion; empty responses and 404s do not.
             // https://archive.org/developers/md-read.html#extended-errors
             if (root["errcode"]?.Type == JTokenType.Integer && root["errcode"]!.ToString() == "104")
             {

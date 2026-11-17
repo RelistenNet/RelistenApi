@@ -356,6 +356,9 @@ namespace Relisten.Data
             );
         }
 
+        // Catalog cleanup deliberately retains source_tracks and source_track_plays.
+        // Foreign keys detach tracks from deleted sources/sets; a restored upstream
+        // item can reattach those same track identities on import.
         public async Task<int> RemoveSourcesWithUpstreamIdentifiers(
             int artistId,
             IEnumerable<string> upstreamIdentifiers

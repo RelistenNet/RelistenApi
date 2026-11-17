@@ -56,6 +56,7 @@ public enum ArchiveDeletionEvidence
     Deleted,
     Unknown,
     NoVbrMp3,
+    Dark,
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter<ArchiveDeletionAction>))]

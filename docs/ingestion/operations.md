@@ -174,8 +174,10 @@ before observing cancellation. Wait for the worker's activities to stop before h
 ingestion to another owner. Committed catalog changes remain committed.
 
 Archive verification results include fixed deletion evidence in Temporal history. Only
-errcode 104 proves upstream deletion; a successful metadata parse showing no VBR MP3s
-provides separate removal evidence. The admin's **Archive deletion candidate limit**
+errcode 104 proves upstream deletion. Boolean `is_dark: true` establishes public
+unavailability and permits catalog cleanup without deleting track rows or playback
+events. A successful metadata parse showing no VBR MP3s provides separate removal
+evidence. The admin's **Archive deletion candidate limit**
 applies only to the requested full refresh. Leaving it blank uses five; zero blocks
 cleanup when any candidate exists. If the candidate count exceeds the limit, none
 are deleted. Candidates within the allowance still require verification. Single-item
@@ -201,6 +203,10 @@ requests omit `ArchiveDeletionLimit`, retain the five-candidate policy, and cont
 to schedule the original three-argument `Archive.VerifyDeletionCandidates` activity.
 An explicit override selects `Archive.VerifyDeletionCandidatesWithLimit`. Both
 handlers are registered in new workers. Saved verification plans remain fixed.
+Dark-item cleanup changes activity verification, not workflow commands. Recorded
+plans keep their original decisions; newly executed verification can return `Dark`
+evidence. Complete the worker rollout before admitting cleanup requests.
+
 The original registered activity signature also allows queued old verification
 calls to execute. Missing override fields retain the original continuation and
 checkpoint behavior.

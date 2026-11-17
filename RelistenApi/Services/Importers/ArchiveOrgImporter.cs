@@ -306,7 +306,7 @@ namespace Relisten.Import
                         identifier,
                         result.Status.ToString(),
                         result.Reason,
-                        result.Status == ArchiveOrgItemStatus.Deleted
+                        result.Status is ArchiveOrgItemStatus.Deleted or ArchiveOrgItemStatus.Dark
                     );
                 }
 

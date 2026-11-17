@@ -28,28 +28,48 @@ public class TestArchiveOrgDeletionVerification
     }
 
     [Test]
-    public async Task OnlyExplicitDeletionAndSeparateConfirmedNoMp3PolicyReachTheDeletionList()
+    public async Task OnlyDeletedDarkAndConfirmedNoMp3ItemsReachTheDeletionList()
     {
         using var handler = new MetadataHandler(
             "{\"metadata\":{\"identifier\":\"present\"}}",
             "{\"errcode\":104}",
-            "{}"
+            "{}",
+            "{\"is_dark\":true}"
         );
         using var http = new HttpClient(handler);
         var log = new List<string>();
 
         var result = await ArchiveOrgImporter.VerifyDeletionCandidatesAsync(
-            ["present", "deleted", "unknown", "no-mp3"],
+            ["present", "deleted", "unknown", "no-mp3", "dark"],
             new HashSet<string> { "no-mp3" },
             http,
             log.Add
         );
 
         result.Guarded.Should().BeFalse();
-        result.Identifiers.Should().Equal("deleted", "no-mp3");
-        handler.Requests.Should().HaveCount(3);
-        log.Should().HaveCount(4);
+        result.Identifiers.Should().Equal("deleted", "no-mp3", "dark");
+        handler.Requests.Should().HaveCount(4);
+        log.Should().HaveCount(5);
         log.Should().Contain(message => message.Contains("unknown: Unknown"));
+    }
+
+    [TestCase("{\"is_dark\":false}")]
+    [TestCase("{\"is_dark\":\"true\"}")]
+    [TestCase("{\"is_dark\":true,\"metadata\":{\"identifier\":\"recording\"}}")]
+    [TestCase("{\"is_dark\":true,\"metadata\":{\"identifier\":\"other\"}}")]
+    public async Task DarkCleanupRequiresAnExplicitFlagWithoutConflictingMetadata(string metadata)
+    {
+        using var handler = new MetadataHandler(metadata);
+        using var http = new HttpClient(handler);
+
+        var result = await ArchiveOrgImporter.VerifyDeletionCandidatesAsync(
+            ["recording"],
+            new HashSet<string>(),
+            http,
+            _ => { }
+        );
+
+        result.Identifiers.Should().BeEmpty();
     }
 
     [TestCase(10, false)]
