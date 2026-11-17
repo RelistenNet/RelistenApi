@@ -16,9 +16,16 @@ public sealed class AccountsDbContextFactory : IDesignTimeDbContextFactory<Accou
             .AddEnvironmentVariables()
             .Build();
 
+        return CreateMigrationContext(configuration);
+    }
+
+    // Design-time tools, startup DDL and restore generation rotation require the direct primary,
+    // even when ordinary runtime traffic has a PgBouncer host override.
+    public static AccountsDbContext CreateMigrationContext(IConfiguration configuration)
+    {
         var builder = new DbContextOptionsBuilder<AccountsDbContext>();
         builder.UseNpgsql(
-            DatabaseConnectionString.Resolve(configuration),
+            DatabaseConnectionString.ResolveMigrations(configuration),
             postgres => postgres.MigrationsHistoryTable("__EFMigrationsHistory", "identity")
         );
         builder.UseOpenIddict<Guid>();

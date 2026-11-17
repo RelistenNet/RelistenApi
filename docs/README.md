@@ -7,6 +7,8 @@ Start with the task you need to do:
 - [Use the catalog graph](api/graphql/README.md): full V4 GraphQL reads, shared REST mappings, pagination, consistency, and execution budgets.
 - [Persist catalog responses](api/mobile-sync.md): collection ownership, shared records and ETag limitations.
 - [Work on accounts](api/accounts.md): personal membership, catalog references and authentication ownership.
+- [Operate private playlists](api/private-playlists.md): private API, local verification, restore generations and compatible rollout/rollback.
+- [Plan playlists](plans/active/2026-11-06-v4-playlists.md): v4-only typed contracts, staged delivery and open product decisions; not yet implemented.
 - [Maintain derived counts](normalization-counts.md): writer responsibilities, concurrency and repair.
 - [Maintain popularity](popularity/README.md): score publication, demand refresh and recovery.
 - [Work on ingestion](ingestion/README.md): provider contracts and operator procedures.
@@ -17,6 +19,6 @@ Start with the task you need to do:
 payload reference. The docs above explain domain meaning, responsibilities and
 operational procedures that span multiple components.
 
-Dated playlist/history/Sonos documents under `architecture/`, `design/` and
-`plans/active/` describe broader future work; use the account guide above for
-implemented behavior.
+Use the account and private-playlist guides above for implemented behavior.
+Dated documents under `architecture/`, `design/` and `plans/active/` also describe
+later public playlists, collaboration, history and Sonos work.

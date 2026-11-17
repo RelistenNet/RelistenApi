@@ -11,6 +11,7 @@ namespace RelistenUserService.Controllers;
 [ApiController]
 [Route("v1/library")]
 [Authorize(Policy = AuthenticationConstants.LibraryAccessPolicy)]
+[ServiceFilter(typeof(RelistenUserService.Playlists.PlaylistHttpFilter))]
 public sealed class LibraryController(
     CurrentAccountContext currentAccount,
     FavoriteMutationService mutationService,

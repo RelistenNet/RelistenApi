@@ -1,6 +1,8 @@
+using System.Data.Common;
 using FluentAssertions;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using NUnit.Framework;
 using Relisten.Accounts.Contracts.Library;
 using RelistenUserService.Library;
@@ -96,7 +98,7 @@ public sealed class TestFavoriteLibraryIntegration
                         .Match<FavoriteLibraryChange>(change =>
                             change.ChangeType == FavoriteChangeTypes.Added
                             && change.FavoriteId == add.FavoriteId
-                            && change.Target.Id == missingCatalogId
+                            && change.Target!.Id == missingCatalogId
                         ),
                 removed =>
                     removed
@@ -104,7 +106,7 @@ public sealed class TestFavoriteLibraryIntegration
                         .Match<FavoriteLibraryChange>(change =>
                             change.ChangeType == FavoriteChangeTypes.Removed
                             && change.FavoriteId == add.FavoriteId
-                            && change.Target.Id == missingCatalogId
+                            && change.Target!.Id == missingCatalogId
                         )
             );
     }
@@ -202,7 +204,7 @@ public sealed class TestFavoriteLibraryIntegration
             .Match<FavoriteLibraryChange>(change =>
                 change.ChangeType == FavoriteChangeTypes.Added
                 && change.FavoriteId == mutation.FavoriteId
-                && change.Target.Id == _catalogId
+                && change.Target!.Id == _catalogId
             );
 
         var crossAccountCursor = await ChangesAsync(_userB, before.NextCursor, cursorProtector);
@@ -216,37 +218,98 @@ public sealed class TestFavoriteLibraryIntegration
         userBSnapshot.Favorites.Should().BeEmpty();
     }
 
-    [Test]
-    public async Task Snapshot_lock_prevents_membership_from_advancing_past_its_revision()
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task Snapshot_stays_coherent_while_a_writer_commits(bool hasExistingState)
     {
-        await using var snapshotContext = _database.CreateContext();
-        await using var snapshotTransaction =
-            await snapshotContext.Database.BeginTransactionAsync();
-        var snapshotState = await new LibraryStateStore(snapshotContext).GetOrCreateAsync(
-            _userA,
-            DateTimeOffset.UtcNow,
-            LibraryStateLockMode.SharedRead,
-            CancellationToken.None
-        );
+        if (hasExistingState)
+        {
+            await ExecuteAsync(_userA, [Add(_catalogId)]);
+        }
 
-        var mutationTask = ExecuteAsync(_userA, [Add(_catalogId)]);
-        await Task.Delay(100);
+        var beforeRevision = hasExistingState ? 1 : 0;
+        var addedCatalogId = Relisten.Identifiers.UuidTypeId.Format("artist", Guid.NewGuid());
+        var reader = new ReadObserver(async () =>
+        {
+            var mutation = await ExecuteAsync(_userA, [Add(addedCatalogId)])
+                .WaitAsync(TimeSpan.FromSeconds(5));
+            mutation.Response!.LibraryRevision.Should().Be(beforeRevision + 1);
+        });
+        await using var snapshotContext = ObservedContext(reader);
+        var cursorProtector = new LibraryCursorProtector(_dataProtection);
 
-        mutationTask
-            .IsCompleted.Should()
-            .BeFalse("the snapshot holds a share lock on the same state row that mutations update");
-        snapshotState.Revision.Should().Be(0);
-        (await snapshotContext.Favorites.CountAsync(favorite => favorite.UserId == _userA))
+        var snapshot = await ReadService(snapshotContext, cursorProtector)
+            .GetSnapshotAsync(_userA, CancellationToken.None);
+
+        snapshot.LibraryRevision.Should().Be(beforeRevision);
+        snapshot
+            .Favorites.Select(favorite => favorite.Target.Id)
             .Should()
-            .Be(0);
+            .Equal(hasExistingState ? [_catalogId] : Array.Empty<string>());
+        var next = await ChangesAsync(_userA, snapshot.NextCursor, cursorProtector);
+        next.Response!.LibraryRevision.Should().Be(beforeRevision + 1);
+        next.Response.Changes.Should().ContainSingle().Which.Target!.Id.Should().Be(addedCatalogId);
+    }
 
-        await snapshotTransaction.CommitAsync();
-        var mutation = await mutationTask.WaitAsync(TimeSpan.FromSeconds(5));
-        mutation.Response!.LibraryRevision.Should().Be(1);
+    [Test]
+    public async Task Delta_head_and_changes_stay_coherent_while_a_writer_commits()
+    {
+        var cursorProtector = new LibraryCursorProtector(_dataProtection);
+        var before = await SnapshotAsync(_userA, cursorProtector);
+        var first = Add(_catalogId);
+        await ExecuteAsync(_userA, [first]);
+        var second = Add(Relisten.Identifiers.UuidTypeId.Format("artist", Guid.NewGuid()));
+        var reader = new ReadObserver(async () =>
+        {
+            var mutation = await ExecuteAsync(_userA, [second]).WaitAsync(TimeSpan.FromSeconds(5));
+            mutation.Response!.LibraryRevision.Should().Be(2);
+        });
+        await using var deltaContext = ObservedContext(reader);
 
-        var current = await SnapshotAsync(_userA, new LibraryCursorProtector(_dataProtection));
-        current.LibraryRevision.Should().Be(1);
-        current.Favorites.Should().ContainSingle();
+        var page = await ReadService(deltaContext, cursorProtector)
+            .GetChangesAsync(_userA, before.NextCursor, CancellationToken.None);
+
+        page.Response!.LibraryRevision.Should().Be(1);
+        page.Response.Changes.Should()
+            .ContainSingle()
+            .Which.FavoriteId.Should()
+            .Be(first.FavoriteId);
+        page.Response.HasMore.Should().BeFalse();
+        var next = await ChangesAsync(_userA, page.Response.NextCursor, cursorProtector);
+        next.Response!.LibraryRevision.Should().Be(2);
+        next.Response.Changes.Should()
+            .ContainSingle()
+            .Which.FavoriteId.Should()
+            .Be(second.FavoriteId);
+    }
+
+    [Test]
+    public async Task First_snapshot_and_unchanged_poll_do_not_initialize_library_state()
+    {
+        var cursorProtector = new LibraryCursorProtector(_dataProtection);
+        var snapshot = await SnapshotAsync(_userA, cursorProtector);
+        var reader = new ReadObserver();
+        await using var context = ObservedContext(reader);
+
+        var poll = await ReadService(context, cursorProtector)
+            .GetChangesAsync(_userA, snapshot.NextCursor, CancellationToken.None);
+
+        snapshot.LibraryRevision.Should().Be(0);
+        snapshot.Favorites.Should().BeEmpty();
+        snapshot.Playlists.Should().BeEmpty();
+        poll.Response!.LibraryRevision.Should().Be(0);
+        poll.Response.Changes.Should().BeEmpty();
+        poll.Response.HasMore.Should().BeFalse();
+        reader.CommandCount.Should().Be(1, "an unchanged poll only needs its generation and head");
+        (await context.LibraryStates.CountAsync(state => state.UserId == _userA)).Should().Be(0);
+    }
+
+    private AccountsDbContext ObservedContext(DbCommandInterceptor interceptor)
+    {
+        var options = new DbContextOptionsBuilder<AccountsDbContext>();
+        options.UseNpgsql(_database.ConnectionString).UseOpenIddict<Guid>();
+        options.AddInterceptors(interceptor);
+        return new(options.Options);
     }
 
     private async Task<FavoriteMutationExecution> ExecuteAsync(
@@ -288,7 +351,38 @@ public sealed class TestFavoriteLibraryIntegration
     private static LibraryReadService ReadService(
         AccountsDbContext dbContext,
         LibraryCursorProtector cursorProtector
-    ) => new(dbContext, new LibraryStateStore(dbContext), cursorProtector, TimeProvider.System);
+    ) => new(dbContext, cursorProtector);
+
+    private sealed class ReadObserver(Func<Task>? afterFirstRead = null) : DbCommandInterceptor
+    {
+        public int CommandCount { get; private set; }
+
+        public override async ValueTask<DbDataReader> ReaderExecutedAsync(
+            DbCommand command,
+            CommandExecutedEventData eventData,
+            DbDataReader result,
+            CancellationToken cancellationToken = default
+        )
+        {
+            CommandCount++;
+            if (CommandCount == 1 && afterFirstRead is not null)
+            {
+                await afterFirstRead();
+            }
+            return result;
+        }
+
+        public override ValueTask<int> NonQueryExecutedAsync(
+            DbCommand command,
+            CommandExecutedEventData eventData,
+            int result,
+            CancellationToken cancellationToken = default
+        )
+        {
+            CommandCount++;
+            return ValueTask.FromResult(result);
+        }
+    }
 
     private static FavoriteMutationCommand Add(string catalogId) =>
         new(

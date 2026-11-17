@@ -39,7 +39,7 @@ public static class ReviewedBrowserEndpointConvention
 
     internal static string? PolicyForRoute(PathString path)
     {
-        if (BrowserRouteBoundary.IsLibraryPath(path))
+        if (BrowserRouteBoundary.IsLibraryPath(path) || BrowserRouteBoundary.IsPlaylistPath(path))
         {
             return AuthenticationConstants.LibraryAccessPolicy;
         }

@@ -1,5 +1,10 @@
 # Deliver Relisten accounts from API to TestFlight
 
+> Playlist guidance: the [November 6 playlist plan](2026-11-06-v4-playlists.md) supersedes this
+> document's playlist contracts and implementation requirements, including raw UUID
+> examples, availability-clock assumptions and the proposed Queue V2 rewrite.
+> Playlists remain unimplemented; other feature sections retain their own scope.
+
 > Scope: this dated document includes work beyond the current account release.
 > The [current account contract](../../api/accounts.md) supersedes its UUID identity,
 > favorite payload and alpha-cutover details. Unimplemented playlist/history/Sonos

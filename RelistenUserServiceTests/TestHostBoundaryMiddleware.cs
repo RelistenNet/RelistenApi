@@ -40,6 +40,8 @@ public sealed class TestHostBoundaryMiddleware
     [TestCase("/v1/me", "relisten.net", true)]
     [TestCase("/v1/me", "web.relisten.localhost:5173", true)]
     [TestCase("/v1/library/new-action", "web.relisten.localhost:5173", true)]
+    [TestCase("/v1/playlists/example/snapshot", "web.relisten.localhost:5173", true)]
+    [TestCase("/v1/playlists-evil", "web.relisten.localhost:5173", false)]
     [TestCase("/v1/library-evil", "web.relisten.localhost:5173", false)]
     [TestCase("/v1/logout", "web.relisten.localhost:5173", false)]
     [TestCase("/v1/not-reviewed", "web.relisten.localhost:5173", false)]

@@ -28,12 +28,13 @@ public sealed class LibraryChangeConfiguration : IEntityTypeConfiguration<Librar
                 );
                 table.HasCheckConstraint(
                     "ck_library_changes_change_type",
-                    "change_type IN ('favorite_added', 'favorite_removed')"
+                    "(change_type IN ('favorite_added', 'favorite_removed') AND favorite_id IS NOT NULL AND catalog_type IS NOT NULL AND catalog_id IS NOT NULL AND playlist_json IS NULL) OR (change_type = 'playlist_summary' AND favorite_id IS NULL AND catalog_type IS NULL AND catalog_id IS NULL AND playlist_json IS NOT NULL)"
                 );
                 table.HasCheckConstraint("ck_library_changes_revision", "revision > 0");
             }
         );
         builder.HasKey(change => change.Id);
+        builder.Property(change => change.PlaylistJson).HasColumnType("jsonb");
         builder
             .Property(change => change.Id)
             .HasValueGenerator<AccountIdValueGenerator<LibraryChangeId>>()

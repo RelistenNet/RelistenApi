@@ -1,5 +1,7 @@
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 using Npgsql;
 using NUnit.Framework;
 using RelistenUserService.Persistence;
@@ -9,6 +11,113 @@ namespace RelistenUserServiceTests;
 [TestFixture]
 public sealed class TestDatabaseConnectionString
 {
+    [Test]
+    public void Pooler_override_changes_only_runtime_routing()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["ACCOUNTS_DATABASE_URL"] =
+                        "postgresql://accounts:p%40ss@primary.internal:5433/relisten?sslmode=require&application_name=relisten-users",
+                    ["PGBOUNCER_WRITE_HOST"] = "pooler.internal",
+                    ["ACCOUNTS_MIGRATION_DATABASE_URL"] =
+                        "postgresql://migrator:ddl@migration-primary.internal:5433/relisten?sslmode=require",
+                    ["ACCOUNTS_LOCK_DATABASE_URL"] =
+                        "postgresql://accounts:locks@lock-primary.internal:5433/relisten?sslmode=require",
+                }
+            )
+            .Build();
+        var runtime = new NpgsqlConnectionStringBuilder(
+            DatabaseConnectionString.Resolve(configuration)
+        );
+        runtime.Host.Should().Be("pooler.internal");
+        runtime.Port.Should().Be(5433);
+        runtime.Database.Should().Be("relisten");
+        runtime.Username.Should().Be("accounts");
+        runtime.Password.Should().Be("p@ss");
+        runtime.SslMode.Should().Be(SslMode.Require);
+        runtime.ApplicationName.Should().Be("relisten-users");
+
+        // Exercise the context used by startup migrations and EF/restore tools, not just the selector.
+        using var migration = AccountsDbContextFactory.CreateMigrationContext(configuration);
+        new NpgsqlConnectionStringBuilder(migration.Database.GetDbConnection().ConnectionString)
+            .Host.Should()
+            .Be("migration-primary.internal");
+        new NpgsqlConnectionStringBuilder(
+            DatabaseConnectionString.ResolveRefreshTokenLocks(configuration, null!)
+        )
+            .Host.Should()
+            .Be("lock-primary.internal");
+    }
+
+    [Test]
+    public void Direct_fallbacks_do_not_inherit_runtime_pooler_override()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["ACCOUNTS_DATABASE_URL"] =
+                        "postgresql://accounts:local@primary.internal/relisten",
+                    ["PGBOUNCER_WRITE_HOST"] = "pooler.internal",
+                }
+            )
+            .Build();
+        new NpgsqlConnectionStringBuilder(DatabaseConnectionString.ResolveMigrations(configuration))
+            .Host.Should()
+            .Be("primary.internal");
+        var environment = new Microsoft.Extensions.Hosting.Internal.HostingEnvironment
+        {
+            EnvironmentName = Environments.Development,
+        };
+        new NpgsqlConnectionStringBuilder(
+            DatabaseConnectionString.ResolveRefreshTokenLocks(configuration, environment)
+        )
+            .Host.Should()
+            .Be("primary.internal");
+    }
+
+    [TestCase("0")]
+    [TestCase("-1")]
+    [TestCase("invalid")]
+    public void Rejects_invalid_refresh_capacity_during_configuration(string capacity)
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["ACCOUNTS_LOCK_DATABASE_URL"] = "Host=primary.internal;Database=accounts",
+                    ["ACCOUNTS_REFRESH_MAX_POOL_SIZE"] = capacity,
+                }
+            )
+            .Build();
+
+        var resolve = () => DatabaseConnectionString.ResolveRefreshTokenLocks(configuration, null!);
+
+        resolve
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*ACCOUNTS_REFRESH_MAX_POOL_SIZE*");
+    }
+
+    [TestCase("postgresql://accounts:secret@primary.internal/accounts", 100)]
+    [TestCase("Host=primary.internal;Database=accounts;MaxPoolSize=7", 7)]
+    public void Runtime_pool_serializes_default_without_overwriting_explicit_capacity(
+        string connectionString,
+        int expectedCapacity
+    )
+    {
+        var configuration = BuildConfiguration(connectionString);
+
+        var resolved = new NpgsqlConnectionStringBuilder(
+            DatabaseConnectionString.Resolve(configuration)
+        );
+
+        resolved.MaxPoolSize.Should().Be(expectedCapacity);
+        resolved.ShouldSerialize("Maximum Pool Size").Should().BeTrue();
+    }
+
     [Test]
     public void PreservesSecurityAndPrimaryRoutingOptionsFromUri()
     {

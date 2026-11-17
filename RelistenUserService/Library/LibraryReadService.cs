@@ -1,6 +1,10 @@
+using System.Data;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Relisten.Accounts.Contracts.Library;
+using Relisten.Accounts.Contracts.Playlists;
 using RelistenUserService.Persistence;
+using RelistenUserService.Playlists;
 
 namespace RelistenUserService.Library;
 
@@ -14,9 +18,7 @@ public sealed record LibraryChangesExecution(FavoriteLibraryChanges? Response, b
 
 public sealed class LibraryReadService(
     AccountsDbContext dbContext,
-    LibraryStateStore stateStore,
-    LibraryCursorProtector cursorProtector,
-    TimeProvider timeProvider
+    LibraryCursorProtector cursorProtector
 )
 {
     public const int MaximumChangesPerPage = 500;
@@ -27,14 +29,10 @@ public sealed class LibraryReadService(
     )
     {
         await using var transaction = await dbContext.Database.BeginTransactionAsync(
+            IsolationLevel.RepeatableRead,
             cancellationToken
         );
-        var state = await stateStore.GetOrCreateAsync(
-            userId,
-            timeProvider.GetUtcNow(),
-            LibraryStateLockMode.SharedRead,
-            cancellationToken
-        );
+        var head = await ReadHeadAsync(userId, cancellationToken);
         var favorites = await dbContext
             .Favorites.AsNoTracking()
             .Where(favorite => favorite.UserId == userId)
@@ -47,14 +45,32 @@ public sealed class LibraryReadService(
                 favorite.UpdatedAt
             ))
             .ToArrayAsync(cancellationToken);
+        var playlists = await dbContext
+            .Playlists.AsNoTracking()
+            .Where(row => row.OwnerId == userId)
+            .OrderByDescending(row => row.UpdatedAt)
+            .ThenBy(row => row.Id)
+            .Select(row => new PlaylistSummary(
+                row.Id,
+                row.Name,
+                row.EntryCount,
+                row.Archived,
+                row.Revision,
+                row.UpdatedAt
+            ))
+            .ToArrayAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
         return new(
             FavoriteMutationRequestValidator.ContractVersion,
-            state.Revision,
-            cursorProtector.Protect(userId, state.Revision),
+            head.Revision,
+            cursorProtector.Protect(userId, head.Revision, head.Generation),
             favorites
-        );
+        )
+        {
+            HistoryGeneration = head.Generation,
+            Playlists = playlists,
+        };
     }
 
     public async Task<LibraryChangesExecution> GetChangesAsync(
@@ -63,23 +79,43 @@ public sealed class LibraryReadService(
         CancellationToken cancellationToken
     )
     {
-        if (!cursorProtector.TryUnprotect(cursor, userId, out var afterRevision))
+        if (
+            !cursorProtector.TryUnprotect(
+                cursor,
+                userId,
+                out var afterRevision,
+                out var cursorGeneration
+            )
+        )
         {
             return LibraryChangesExecution.Expired();
         }
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(
+            IsolationLevel.RepeatableRead,
             cancellationToken
         );
-        var state = await stateStore.GetOrCreateAsync(
-            userId,
-            timeProvider.GetUtcNow(),
-            LibraryStateLockMode.SharedRead,
-            cancellationToken
-        );
-        if (afterRevision > state.Revision)
+        var head = await ReadHeadAsync(userId, cancellationToken);
+        if (afterRevision > head.Revision || head.Generation != cursorGeneration)
         {
             return LibraryChangesExecution.Expired();
+        }
+
+        if (afterRevision == head.Revision)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return LibraryChangesExecution.Succeeded(
+                new(
+                    FavoriteMutationRequestValidator.ContractVersion,
+                    head.Revision,
+                    [],
+                    cursorProtector.Protect(userId, head.Revision, head.Generation),
+                    false
+                )
+                {
+                    HistoryGeneration = head.Generation,
+                }
+            );
         }
 
         var changes = await dbContext
@@ -88,36 +124,62 @@ public sealed class LibraryReadService(
             .OrderBy(change => change.Revision)
             .Take(MaximumChangesPerPage + 1)
             .ToArrayAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         // Revisions are contiguous per user. A gap means the cursor predates retained history,
         // even if the protected token itself is still cryptographically valid.
-        if (
-            afterRevision < state.Revision
-            && (changes.Length == 0 || changes[0].Revision != afterRevision + 1)
-        )
+        if (changes.Length == 0 || changes[0].Revision != afterRevision + 1)
         {
             return LibraryChangesExecution.Expired();
         }
 
         var hasMore = changes.Length > MaximumChangesPerPage;
         var page = changes.Take(MaximumChangesPerPage).ToArray();
-        var nextRevision = hasMore ? page[^1].Revision : state.Revision;
+        var nextRevision = hasMore ? page[^1].Revision : head.Revision;
         var response = new FavoriteLibraryChanges(
             FavoriteMutationRequestValidator.ContractVersion,
-            state.Revision,
+            head.Revision,
             page.Select(change => new FavoriteLibraryChange(
                     change.Id,
                     change.Revision,
                     change.ChangeType,
                     change.FavoriteId,
-                    new FavoriteTarget(change.CatalogType, change.CatalogId),
-                    change.ChangedAt
+                    change.FavoriteId is null
+                        ? null
+                        : new FavoriteTarget(change.CatalogType!, change.CatalogId!),
+                    change.ChangedAt,
+                    change.PlaylistJson is null
+                        ? null
+                        : JsonSerializer.Deserialize<PlaylistSummary>(
+                            change.PlaylistJson,
+                            PlaylistJson.Options
+                        )
                 ))
                 .ToArray(),
-            cursorProtector.Protect(userId, nextRevision),
+            cursorProtector.Protect(userId, nextRevision, head.Generation),
             hasMore
-        );
-        await transaction.CommitAsync(cancellationToken);
+        )
+        {
+            HistoryGeneration = head.Generation,
+        };
         return LibraryChangesExecution.Succeeded(response);
     }
+
+    private Task<LibraryHead> ReadHeadAsync(UserId userId, CancellationToken cancellationToken) =>
+        // Writers commit the revision and library-visible data atomically. One repeatable-read
+        // snapshot binds this head to the later rows without blocking those writers. Before the
+        // first mutation, no state row is needed: the account's library is at revision zero.
+        dbContext
+            .HistoryGenerations.AsNoTracking()
+            .Select(generation => new LibraryHead(
+                generation.Value,
+                dbContext
+                    .LibraryStates.Where(state => state.UserId == userId)
+                    .Select(state => (long?)state.Revision)
+                    .SingleOrDefault()
+                    ?? 0
+            ))
+            .SingleAsync(cancellationToken);
+
+    private sealed record LibraryHead(string Generation, long Revision);
 }

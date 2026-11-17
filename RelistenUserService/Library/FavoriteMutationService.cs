@@ -86,12 +86,7 @@ public sealed class FavoriteMutationService(
         }
 
         var now = timeProvider.GetUtcNow();
-        var state = await stateStore.GetOrCreateAsync(
-            userId,
-            now,
-            LibraryStateLockMode.ExclusiveWrite,
-            cancellationToken
-        );
+        var state = await stateStore.GetOrCreateForUpdateAsync(userId, now, cancellationToken);
         var favorites = await dbContext
             .Favorites.Where(favorite => favorite.UserId == userId)
             .ToListAsync(cancellationToken);
@@ -198,12 +193,14 @@ public sealed class FavoriteMutationService(
             ))
             .ToArrayAsync(cancellationToken);
         var changeRows = await dbContext
-            .LibraryChanges.Where(change => submittedFavoriteIds.Contains(change.FavoriteId))
+            .LibraryChanges.Where(change =>
+                change.FavoriteId != null && submittedFavoriteIds.Contains(change.FavoriteId.Value)
+            )
             .Select(change => new FavoriteIdentity(
-                change.FavoriteId,
+                change.FavoriteId!.Value,
                 change.UserId,
-                change.CatalogType,
-                change.CatalogId
+                change.CatalogType!,
+                change.CatalogId!
             ))
             .ToArrayAsync(cancellationToken);
         var receiptRows = await dbContext

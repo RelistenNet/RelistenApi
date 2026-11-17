@@ -41,5 +41,8 @@ catalog remains anonymous, so account outages do not prevent browsing or playbac
 
 Use [local setup](../../local-dev/README.md#run-the-net-services) for dummy or real
 Google sign-in and the existing [smoke commands](../../RelistenUserService/SmokeTests/)
-for session checks. Broader playlist/history/Sonos proposals are future designs;
-they do not describe implemented account features.
+for session checks. Private playlists for v4 clients are implemented in the User
+Service; see the [frozen contracts](../plans/active/2026-11-16-v4-playlist-contracts.md)
+and [operations/recovery guide](private-playlists.md). Mobile integration and
+deployment remain separate qualification steps. Public playlists, collaboration,
+history and Sonos proposals describe later work.

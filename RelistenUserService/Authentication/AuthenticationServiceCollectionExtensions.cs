@@ -222,6 +222,9 @@ public static class AuthenticationServiceCollectionExtensions
         services.AddScoped<NativePrincipalFactory>();
         services.AddSingleton<WebBootstrapPrincipalFactory>();
         services.AddScoped<FavoriteMutationService>();
+        services.AddScoped<RelistenUserService.Playlists.PlaylistWriteService>();
+        services.AddScoped<RelistenUserService.Playlists.PlaylistReadService>();
+        services.AddScoped<RelistenUserService.Playlists.PlaylistHttpFilter>();
         services.AddScoped<LibraryStateStore>();
         services.AddScoped<LibraryReadService>();
         services.AddSingleton<LibraryCursorProtector>();
