@@ -33,7 +33,9 @@ namespace Relisten
             writeHost = string.IsNullOrWhiteSpace(writeHost) ? uri.Host : writeHost;
             readOnlyHost = string.IsNullOrWhiteSpace(readOnlyHost) ? writeHost : readOnlyHost;
             var connectionOptions =
-                PreparedStatementOptions + (usesPooler ? ";No Reset On Close=true" : "");
+                PreparedStatementOptions
+                + ";Maximum Pool Size=100"
+                + (usesPooler ? ";No Reset On Close=true" : "");
 
             ConnStr =
                 $"Host={writeHost};Port={port};Username={parts[0]};Password={parts[1]};Database={database};Include Error Detail=true{connectionOptions}";

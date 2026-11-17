@@ -78,6 +78,46 @@ public sealed class TestDatabaseConnectionString
             .Be("primary.internal");
     }
 
+    [TestCase("0")]
+    [TestCase("-1")]
+    [TestCase("invalid")]
+    public void Rejects_invalid_refresh_capacity_during_configuration(string capacity)
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["ACCOUNTS_LOCK_DATABASE_URL"] = "Host=primary.internal;Database=accounts",
+                    ["ACCOUNTS_REFRESH_MAX_POOL_SIZE"] = capacity,
+                }
+            )
+            .Build();
+
+        var resolve = () => DatabaseConnectionString.ResolveRefreshTokenLocks(configuration, null!);
+
+        resolve
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*ACCOUNTS_REFRESH_MAX_POOL_SIZE*");
+    }
+
+    [TestCase("postgresql://accounts:secret@primary.internal/accounts", 100)]
+    [TestCase("Host=primary.internal;Database=accounts;MaxPoolSize=7", 7)]
+    public void Runtime_pool_serializes_default_without_overwriting_explicit_capacity(
+        string connectionString,
+        int expectedCapacity
+    )
+    {
+        var configuration = BuildConfiguration(connectionString);
+
+        var resolved = new NpgsqlConnectionStringBuilder(
+            DatabaseConnectionString.Resolve(configuration)
+        );
+
+        resolved.MaxPoolSize.Should().Be(expectedCapacity);
+        resolved.ShouldSerialize("Maximum Pool Size").Should().BeTrue();
+    }
+
     [Test]
     public void PreservesSecurityAndPrimaryRoutingOptionsFromUri()
     {

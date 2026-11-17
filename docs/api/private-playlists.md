@@ -80,8 +80,17 @@ without replica lag making a client appear ahead of the server.
 Startup migrations, EF tools and restore generation rotation use
 `ACCOUNTS_MIGRATION_DATABASE_URL`, falling back to the direct accounts connection
 when absent. They do not inherit the runtime pooler override. Refresh-token
-replay locks use `ACCOUNTS_LOCK_DATABASE_URL` and retain their separate, direct
-two-connection pool. That pool does not limit playlist sync requests.
+replay locks use `ACCOUNTS_LOCK_DATABASE_URL` and a separate, direct pool with
+`ACCOUNTS_REFRESH_MAX_POOL_SIZE=16` by default. The setting must be a positive
+integer; invalid values fail startup. This limit applies per User Service process
+and does not limit playlist sync requests. Refreshes hold a lock connection while
+OpenIddict uses the ordinary pool, so the pools must remain separate.
+
+Ordinary User Service connections explicitly default to 100 per Npgsql pool;
+an explicit maximum in a key/value accounts connection string takes precedence.
+Catalog API and worker connections also explicitly use 100. These are client-pool
+ceilings, not PostgreSQL backend allocations. Read/write routing, timeout variants
+and fallback hosts can create additional pools within a process.
 
 The performance review removed work from the common sync paths:
 
@@ -113,7 +122,24 @@ PostgreSQL allowed 100 connections. The matching Flux change, `d9b6830` on
 `codex/v4-playlist-perf` in `relisten-flux`, prepares the RW route and both network
 policy directions. It sets User Service requests to 500m/512Mi and limits to
 2 CPU/1Gi; each pooler requests 100m/128Mi with limits of 1 CPU/512Mi.
-The existing backend/client limits remain unchanged.
+The follow-up sizing change raises the candidate RW client ceiling to 2,000,
+keeps RO at 1,000, and retains 30 backend connections per user/database pair on
+each pooler. The User Service manifest explicitly sets the refresh pool to 16.
+The follow-up read-only snapshot found RW/RO pooler memory at 44/59Mi and file
+descriptor limits at 1,048,576, against candidate memory limits of 512Mi each.
+That supports trying the higher client ceiling; peak memory and queueing still
+need workload validation. Increasing client admission does not increase the
+configured backend pool size. See [PgBouncer configuration](https://www.pgbouncer.org/config).
+
+After ordinary User Service traffic moves through PgBouncer, the shared RW
+pooler plus one User Service refresh pool need at most `30 + 16 = 46` primary
+connections. Budgeting for two User Service processes gives
+`30 + 2 × 16 = 62`, leaving 35 of PostgreSQL's 97 non-superuser slots for other
+direct clients and operations. This assumes one RW pooler instance and one
+application user/database pair. Extra pooler instances or pairs multiply backend
+allocations. The current deployment uses one User Service replica with no surge;
+the two-process budget is headroom, not an instruction to change that strategy.
+
 On the 12-CPU, roughly 31Gi app/database node, the candidate requests total
 4.733 CPU and 22.37Gi memory including the other workloads. These are reservations,
 not measured demand.
