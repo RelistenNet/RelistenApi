@@ -1,6 +1,9 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Relisten.Accounts.Contracts.Library;
+using Relisten.Accounts.Contracts.Playlists;
 using RelistenUserService.Persistence;
+using RelistenUserService.Playlists;
 
 namespace RelistenUserService.Library;
 
@@ -47,14 +50,35 @@ public sealed class LibraryReadService(
                 favorite.UpdatedAt
             ))
             .ToArrayAsync(cancellationToken);
+        var generation = await dbContext
+            .HistoryGenerations.Select(row => row.Value)
+            .SingleAsync(cancellationToken);
+        var playlists = await dbContext
+            .Playlists.AsNoTracking()
+            .Where(row => row.OwnerId == userId)
+            .OrderByDescending(row => row.UpdatedAt)
+            .ThenBy(row => row.Id)
+            .Select(row => new PlaylistSummary(
+                row.Id,
+                row.Name,
+                row.EntryCount,
+                row.Archived,
+                row.Revision,
+                row.UpdatedAt
+            ))
+            .ToArrayAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
         return new(
             FavoriteMutationRequestValidator.ContractVersion,
             state.Revision,
-            cursorProtector.Protect(userId, state.Revision),
+            cursorProtector.Protect(userId, state.Revision, generation),
             favorites
-        );
+        )
+        {
+            HistoryGeneration = generation,
+            Playlists = playlists,
+        };
     }
 
     public async Task<LibraryChangesExecution> GetChangesAsync(
@@ -63,7 +87,14 @@ public sealed class LibraryReadService(
         CancellationToken cancellationToken
     )
     {
-        if (!cursorProtector.TryUnprotect(cursor, userId, out var afterRevision))
+        if (
+            !cursorProtector.TryUnprotect(
+                cursor,
+                userId,
+                out var afterRevision,
+                out var cursorGeneration
+            )
+        )
         {
             return LibraryChangesExecution.Expired();
         }
@@ -77,7 +108,10 @@ public sealed class LibraryReadService(
             LibraryStateLockMode.SharedRead,
             cancellationToken
         );
-        if (afterRevision > state.Revision)
+        var generation = await dbContext
+            .HistoryGenerations.Select(row => row.Value)
+            .SingleAsync(cancellationToken);
+        if (afterRevision > state.Revision || generation != cursorGeneration)
         {
             return LibraryChangesExecution.Expired();
         }
@@ -110,13 +144,24 @@ public sealed class LibraryReadService(
                     change.Revision,
                     change.ChangeType,
                     change.FavoriteId,
-                    new FavoriteTarget(change.CatalogType, change.CatalogId),
-                    change.ChangedAt
+                    change.FavoriteId is null
+                        ? null
+                        : new FavoriteTarget(change.CatalogType!, change.CatalogId!),
+                    change.ChangedAt,
+                    change.PlaylistJson is null
+                        ? null
+                        : JsonSerializer.Deserialize<PlaylistSummary>(
+                            change.PlaylistJson,
+                            PlaylistJson.Options
+                        )
                 ))
                 .ToArray(),
-            cursorProtector.Protect(userId, nextRevision),
+            cursorProtector.Protect(userId, nextRevision, generation),
             hasMore
-        );
+        )
+        {
+            HistoryGeneration = generation,
+        };
         await transaction.CommitAsync(cancellationToken);
         return LibraryChangesExecution.Succeeded(response);
     }

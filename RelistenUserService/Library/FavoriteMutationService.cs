@@ -198,12 +198,14 @@ public sealed class FavoriteMutationService(
             ))
             .ToArrayAsync(cancellationToken);
         var changeRows = await dbContext
-            .LibraryChanges.Where(change => submittedFavoriteIds.Contains(change.FavoriteId))
+            .LibraryChanges.Where(change =>
+                change.FavoriteId != null && submittedFavoriteIds.Contains(change.FavoriteId.Value)
+            )
             .Select(change => new FavoriteIdentity(
-                change.FavoriteId,
+                change.FavoriteId!.Value,
                 change.UserId,
-                change.CatalogType,
-                change.CatalogId
+                change.CatalogType!,
+                change.CatalogId!
             ))
             .ToArrayAsync(cancellationToken);
         var receiptRows = await dbContext

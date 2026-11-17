@@ -201,7 +201,7 @@ public static class PlaylistValidation
     private static string Name(string? text)
     {
         Require(text is not null, "name cannot be null.");
-        var value = text!.Trim().Normalize(NormalizationForm.FormC);
+        var value = NormalizeText(text!);
         Require(
             value.EnumerateRunes().Count() is >= 1 and <= 100,
             "name must contain 1–100 characters."
@@ -211,12 +211,25 @@ public static class PlaylistValidation
 
     private static string? Description(string? text)
     {
-        var value = text?.Trim().Normalize(NormalizationForm.FormC);
+        var value = text is null ? null : NormalizeText(text);
         Require(
             value is null || value.EnumerateRunes().Count() <= 1_000,
             "description may contain at most 1,000 characters."
         );
         return string.IsNullOrEmpty(value) ? null : value;
+    }
+
+    private static string NormalizeText(string text)
+    {
+        Require(!text.Contains('\0'), "Text cannot contain NUL characters.");
+        try
+        {
+            return text.Trim().Normalize(NormalizationForm.FormC);
+        }
+        catch (ArgumentException)
+        {
+            throw Invalid("Text must contain valid Unicode.");
+        }
     }
 
     private static void Version(int version)

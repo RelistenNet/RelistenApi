@@ -44,6 +44,7 @@ public sealed class TestWebRequestBoundaries
 
     [TestCase("/auth/session/callback")]
     [TestCase("/v1/me")]
+    [TestCase("/v1/playlists/example/snapshot")]
     public async Task Relays_an_exact_configured_web_origin_on_a_reviewed_route(string path)
     {
         var reachedApplication = false;
@@ -279,6 +280,8 @@ public sealed class TestWebRequestBoundaries
     [TestCase("/v1/me", true)]
     [TestCase("/v1/library/new-read-model", true)]
     [TestCase("/auth/session-evil", false)]
+    [TestCase("/v1/playlists/example/snapshot", true)]
+    [TestCase("/v1/playlists-evil", false)]
     [TestCase("/api/user/v1/me", false)]
     [TestCase("/v1/playback", false)]
     [TestCase("/v1/me/", false)]

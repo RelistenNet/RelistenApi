@@ -96,7 +96,7 @@ public sealed class TestFavoriteLibraryIntegration
                         .Match<FavoriteLibraryChange>(change =>
                             change.ChangeType == FavoriteChangeTypes.Added
                             && change.FavoriteId == add.FavoriteId
-                            && change.Target.Id == missingCatalogId
+                            && change.Target!.Id == missingCatalogId
                         ),
                 removed =>
                     removed
@@ -104,7 +104,7 @@ public sealed class TestFavoriteLibraryIntegration
                         .Match<FavoriteLibraryChange>(change =>
                             change.ChangeType == FavoriteChangeTypes.Removed
                             && change.FavoriteId == add.FavoriteId
-                            && change.Target.Id == missingCatalogId
+                            && change.Target!.Id == missingCatalogId
                         )
             );
     }
@@ -202,7 +202,7 @@ public sealed class TestFavoriteLibraryIntegration
             .Match<FavoriteLibraryChange>(change =>
                 change.ChangeType == FavoriteChangeTypes.Added
                 && change.FavoriteId == mutation.FavoriteId
-                && change.Target.Id == _catalogId
+                && change.Target!.Id == _catalogId
             );
 
         var crossAccountCursor = await ChangesAsync(_userB, before.NextCursor, cursorProtector);

@@ -6,8 +6,9 @@ public sealed class LibraryChange
     public UserId UserId { get; set; }
     public long Revision { get; set; }
     public string ChangeType { get; set; } = "";
-    public FavoriteId FavoriteId { get; set; }
-    public string CatalogType { get; set; } = "";
-    public string CatalogId { get; set; } = "";
+    public FavoriteId? FavoriteId { get; set; }
+    public string? CatalogType { get; set; }
+    public string? CatalogId { get; set; }
+    public string? PlaylistJson { get; set; }
     public DateTimeOffset ChangedAt { get; set; }
 }

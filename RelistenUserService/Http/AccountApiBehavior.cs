@@ -17,6 +17,23 @@ public static class AccountApiBehavior
                 "contract_version",
                 "ContractVersion"
             );
+            if (context.HttpContext.Request.Path.StartsWithSegments("/v1/playlists"))
+            {
+                var playlistCode = invalidContractVersion
+                    ? AccountErrorCodes.InvalidContractVersion
+                    : "invalid_playlist_operation";
+                var playlistProblem = new ValidationProblemDetails(context.ModelState)
+                {
+                    Status = StatusCodes.Status422UnprocessableEntity,
+                    Title = playlistCode,
+                };
+                playlistProblem.Extensions["code"] = playlistCode;
+                return new ObjectResult(playlistProblem)
+                {
+                    StatusCode = playlistProblem.Status,
+                    ContentTypes = { "application/problem+json" },
+                };
+            }
             var (status, code) = (invalidCommandId, invalidContractVersion) switch
             {
                 (true, _) => (

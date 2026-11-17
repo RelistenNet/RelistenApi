@@ -13,19 +13,25 @@ public sealed class LibraryCursorProtector
     public LibraryCursorProtector(IDataProtectionProvider dataProtectionProvider)
     {
         _protector = dataProtectionProvider
-            .CreateProtector("Relisten.UserService.LibraryCursor.typed.v2")
+            .CreateProtector("Relisten.UserService.LibraryCursor.typed.v3")
             .ToTimeLimitedDataProtector();
     }
 
-    public string Protect(UserId userId, long revision)
+    public string Protect(UserId userId, long revision, string historyGeneration)
     {
-        var payload = Encoding.UTF8.GetBytes($"{userId.Value}\n{revision}");
+        var payload = Encoding.UTF8.GetBytes($"{userId.Value}\n{revision}\n{historyGeneration}");
         return WebEncoders.Base64UrlEncode(_protector.Protect(payload, Lifetime));
     }
 
-    public bool TryUnprotect(string? cursor, UserId expectedUserId, out long revision)
+    public bool TryUnprotect(
+        string? cursor,
+        UserId expectedUserId,
+        out long revision,
+        out string historyGeneration
+    )
     {
         revision = 0;
+        historyGeneration = "";
         if (string.IsNullOrWhiteSpace(cursor))
         {
             return false;
@@ -35,7 +41,8 @@ public sealed class LibraryCursorProtector
         {
             var payload = _protector.Unprotect(WebEncoders.Base64UrlDecode(cursor), out _);
             var fields = Encoding.UTF8.GetString(payload).Split('\n');
-            return fields.Length == 2
+            historyGeneration = fields.Length == 3 ? fields[2] : "";
+            return fields.Length == 3
                 && UserId.TryParse(fields[0], out var userId)
                 && userId == expectedUserId
                 && long.TryParse(

@@ -10,6 +10,7 @@ using RelistenUserService.Authentication.OpenIdConnect;
 using RelistenUserService.Configuration;
 using RelistenUserService.Http;
 using RelistenUserService.Persistence;
+using RelistenUserService.Playlists;
 
 namespace RelistenUserService;
 
@@ -38,6 +39,12 @@ public static class AccountsApplication
                     JsonUnmappedMemberHandling.Disallow;
             });
         builder.Services.Configure<ApiBehaviorOptions>(AccountApiBehavior.Configure);
+        builder
+            .Services.AddOptions<MvcOptions>()
+            .Configure<ILogger<Microsoft.AspNetCore.Mvc.Formatters.SystemTextJsonInputFormatter>>(
+                (options, logger) =>
+                    options.InputFormatters.Insert(0, new PlaylistInputFormatter(logger))
+            );
         builder.Services.AddRelistenAccounts(builder.Configuration, builder.Environment, runtime);
 
         if (!string.IsNullOrWhiteSpace(runtime.Options.PreviewOriginsFile))

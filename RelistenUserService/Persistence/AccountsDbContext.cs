@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using OpenIddict.EntityFrameworkCore.Models;
 using RelistenUserService.Identity.Entities;
 using RelistenUserService.Library.Entities;
+using RelistenUserService.Playlists.Entities;
 
 namespace RelistenUserService.Persistence;
 
@@ -23,6 +24,12 @@ public sealed class AccountsDbContext(DbContextOptions<AccountsDbContext> option
         Set<FavoriteMutationReceipt>();
     public DbSet<LibraryState> LibraryStates => Set<LibraryState>();
     public DbSet<LibraryChange> LibraryChanges => Set<LibraryChange>();
+    public DbSet<Playlist> Playlists => Set<Playlist>();
+    public DbSet<PlaylistSegment> PlaylistSegments => Set<PlaylistSegment>();
+    public DbSet<PlaylistEntry> PlaylistEntries => Set<PlaylistEntry>();
+    public DbSet<PlaylistRevisionRow> PlaylistRevisions => Set<PlaylistRevisionRow>();
+    public DbSet<PlaylistReceipt> PlaylistReceipts => Set<PlaylistReceipt>();
+    public DbSet<HistoryGeneration> HistoryGenerations => Set<HistoryGeneration>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder builder)
     {
@@ -32,6 +39,11 @@ public sealed class AccountsDbContext(DbContextOptions<AccountsDbContext> option
         builder.Properties<MutationId>().HaveConversion<AccountIdConverter<MutationId>>();
         builder.Properties<LibraryChangeId>().HaveConversion<AccountIdConverter<LibraryChangeId>>();
         builder.Properties<CommandId>().HaveConversion<AccountIdConverter<CommandId>>();
+        builder.Properties<PlaylistId>().HaveConversion<AccountIdConverter<PlaylistId>>();
+        builder
+            .Properties<PlaylistSegmentId>()
+            .HaveConversion<AccountIdConverter<PlaylistSegmentId>>();
+        builder.Properties<PlaylistEntryId>().HaveConversion<AccountIdConverter<PlaylistEntryId>>();
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

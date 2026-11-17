@@ -13,5 +13,7 @@ public static class PlaylistJson
             UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
             AllowDuplicateProperties = false,
             RespectRequiredConstructorParameters = true,
+            // PostgreSQL jsonb does not preserve the discriminator's position in an object.
+            AllowOutOfOrderMetadataProperties = true,
         };
 }
