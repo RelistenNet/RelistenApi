@@ -52,6 +52,36 @@ public class TestArchiveOrgDeletionVerification
         log.Should().Contain(message => message.Contains("unknown: Unknown"));
     }
 
+    [TestCase(10, false)]
+    [TestCase(11, true)]
+    public async Task OverrideStillRequiresEvidenceAndBlocksAllCandidatesAboveItsLimit(
+        int candidateCount,
+        bool guarded
+    )
+    {
+        var candidates = Enumerable
+            .Range(0, candidateCount)
+            .Select(i => $"recording-{i}")
+            .ToArray();
+        // Keep one ambiguous item; the allowance never establishes deletion evidence.
+        using var handler = new MetadataHandler([
+            "{}",
+            .. Enumerable.Repeat("{\"errcode\":104}", candidateCount - 2),
+        ]);
+        using var http = new HttpClient(handler);
+        var result = await ArchiveOrgImporter.VerifyDeletionCandidatesAsync(
+            candidates,
+            new HashSet<string> { candidates[^1] },
+            http,
+            _ => { },
+            deletionLimit: 10
+        );
+
+        result.Guarded.Should().Be(guarded);
+        result.Identifiers.Should().BeEquivalentTo(guarded ? [] : candidates.Skip(1));
+        handler.Requests.Should().HaveCount(guarded ? 0 : candidateCount - 1);
+    }
+
     [Test]
     public void MissingFilesCannotBecomeConfirmedNoMp3()
     {

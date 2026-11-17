@@ -90,16 +90,19 @@ public class TestIngestionWorkflows
             .Be(failedStep == "cache" ? 2 : 1);
     }
 
-    [Test]
-    public async Task ContinueAsNewRetainsSelectionAndResumesAfterTheLastCompletedItem()
+    [TestCase(0)]
+    [TestCase(13)]
+    public async Task ContinueAsNewRetainsSelectionAndResumesAfterTheLastCompletedItem(
+        int noMp3Count
+    )
     {
-        var activities = new RecordingActivities(180);
+        var activities = new RecordingActivities(180) { NoMp3Count = noMp3Count };
         await WithWorkers(
             activities,
             async () =>
             {
                 var input = new ProviderRequest<RefreshArchiveArtist>(
-                    new(new ArtistId(Guid.NewGuid())),
+                    new(new ArtistId(Guid.NewGuid()), ArchiveDeletionLimit: 10),
                     Execution()
                 );
                 var handle = await environment.Client.StartWorkflowAsync(
@@ -107,10 +110,20 @@ public class TestIngestionWorkflows
                     Options()
                 );
                 var result = await handle.GetResultAsync();
-                result.CompletedItems.Should().Be(180);
-                activities.Applied.Should().BeEquivalentTo(Enumerable.Range(0, 180));
+                result.CompletedItems.Should().Be(180 - noMp3Count);
+                result.SkippedItems.Should().Be(noMp3Count);
+                activities
+                    .Applied.Should()
+                    .BeEquivalentTo(Enumerable.Range(noMp3Count, 180 - noMp3Count));
+                if (noMp3Count > 10)
+                {
+                    // Enough evidence must survive rollover to keep this run
+                    // above its allowance, regardless of the buffering strategy.
+                    activities.VerifiedNoMp3.Should().HaveCountGreaterThan(10);
+                }
                 activities.Discoveries.Should().Be(1);
                 activities.Verifications.Should().Be(1);
+                activities.VerifiedDeletionLimit.Should().Be(10);
                 activities.DeletionApplications.Should().Be(1);
                 var firstHistory = await environment
                     .Client.GetWorkflowHandle(handle.Id, handle.ResultRunId)
@@ -595,6 +608,9 @@ public class TestIngestionWorkflows
         public DateTimeOffset? ExecutionDeadline { get; private set; }
         public int Discoveries { get; private set; }
         public int Verifications { get; private set; }
+        public int VerifiedDeletionLimit { get; private set; }
+        public ArchiveItemId[] VerifiedNoMp3 { get; private set; } = [];
+        public int NoMp3Count { get; init; }
         public int DeletionApplications { get; private set; }
         public int RequestedItems { get; private set; }
         public int Selections { get; private set; }
@@ -750,6 +766,15 @@ public class TestIngestionWorkflows
                         "InvalidMetadata",
                         nonRetryable: true
                     );
+                if (index < NoMp3Count)
+                {
+                    return new(
+                        key,
+                        ItemDisposition.Skipped,
+                        new CatalogSourceId(index + 1),
+                        ArchiveSkipReason.NoVbrMp3
+                    );
+                }
                 if (index == SkippedIndex)
                     return new(key, ItemDisposition.Skipped, null, ArchiveSkipReason.DarkItem);
                 lock (sync)
@@ -768,10 +793,28 @@ public class TestIngestionWorkflows
             ProviderWorkflowContext context,
             ArchiveSelection selection,
             ArchiveItemId[] noMp3
+        ) =>
+            VerifyDeletionCandidatesWithLimit(
+                context,
+                selection,
+                noMp3,
+                RefreshArchiveArtist.DefaultDeletionLimit
+            );
+
+        [Activity("Archive.VerifyDeletionCandidatesWithLimit")]
+        public ArchiveDeletionPlan VerifyDeletionCandidatesWithLimit(
+            ProviderWorkflowContext context,
+            ArchiveSelection selection,
+            ArchiveItemId[] noMp3,
+            int deletionLimit
         )
         {
             lock (sync)
+            {
                 Verifications++;
+                VerifiedDeletionLimit = deletionLimit;
+                VerifiedNoMp3 = noMp3;
+            }
             return new(ArchiveDeletionDisposition.Allowed, []);
         }
 

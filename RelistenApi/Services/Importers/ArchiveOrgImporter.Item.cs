@@ -231,7 +231,8 @@ public partial class ArchiveOrgImporter
     private async Task ReportDeletionGuard(
         Artist artist,
         IReadOnlyCollection<string> candidates,
-        PerformContext? ctx
+        PerformContext? ctx,
+        int deletionLimit = MaxSourcesDeletedPerSync
     )
     {
         foreach (var identifier in candidates)
@@ -246,7 +247,12 @@ public partial class ArchiveOrgImporter
             );
         }
 
-        var message = BuildDeletionGuardMessage(artist, candidates, ctx?.BackgroundJob.Id);
+        var message = BuildDeletionGuardMessage(
+            artist,
+            candidates,
+            ctx?.BackgroundJob.Id,
+            deletionLimit
+        );
 
         ImportProgress.WriteLine(log, ctx, message);
         log.LogWarning(
@@ -256,7 +262,7 @@ public partial class ArchiveOrgImporter
             candidates.Count,
             artist.name,
             artist.slug,
-            MaxSourcesDeletedPerSync
+            deletionLimit
         );
         try
         {
@@ -277,13 +283,14 @@ public partial class ArchiveOrgImporter
     internal static string BuildDeletionGuardMessage(
         Artist artist,
         IReadOnlyCollection<string> candidates,
-        string? hangfireJobId
+        string? hangfireJobId,
+        int deletionLimit = MaxSourcesDeletedPerSync
     )
     {
         var summary =
             $"🛑 Archive.org deletion guard blocked {candidates.Count} source "
             + $"deletions for {artist.name} ({artist.slug}); threshold is "
-            + $"{MaxSourcesDeletedPerSync}. No sources were deleted.";
+            + $"{deletionLimit}. No sources were deleted.";
 
         var footer =
             hangfireJobId == null

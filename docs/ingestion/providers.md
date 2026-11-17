@@ -49,15 +49,18 @@ A full refresh verifies deletion candidates after item processing. An apparently
 complete listing can still omit recordings, so absence alone never authorizes
 deletion. Preserve all of these checks:
 
-- Load current catalog candidates and apply the five-candidate guard. More than
-  five candidates prevents deletion.
+- Load current catalog candidates and apply the candidate-count guard. The default
+  limit is five. An explicit full-artist or Archive refresh can supply a nonnegative
+  `ArchiveDeletionLimit` for that execution only; scheduled imports keep the default.
+  More than the allowed number of candidates prevents all deletion, before upstream
+  verification. The allowance is not a request to delete the first N candidates.
 - For recordings absent from the listing, check upstream metadata directly.
   Only Archive error code 104 establishes deletion. HTTP 404, an empty response,
   or a dark flag leaves deletion unproved.
 - A successfully parsed item with no VBR MP3 can provide separate removal
   evidence, but only if that recording already exists in the catalog. New
   unplayable items do not consume the guard allowance. The workflow retains at
-  most six such identifiers because six already triggers the guard.
+  most one more than the run's candidate allowance, enough to trigger the guard.
 - Exhausted item failures cannot supply missing-MP3 or deletion evidence.
 
 Verification returns an allowed, guarded, or not-applicable plan. The deletion

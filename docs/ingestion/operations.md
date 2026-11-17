@@ -4,8 +4,8 @@
 services and parsers. It starts no API or Hangfire server. [Local
 setup](../../local-dev/README.md) uses the normal development PostgreSQL and Redis
 services. Tests create disposable databases and temporary Temporal servers. Use
-[deployment](#deploy-or-update) for release checks and [engine
-handoff](#switch-from-hangfire) when changing ingestion ownership.
+[deployment](#deploy-or-update) for release checks. Temporal is the sole ingestion engine; Hangfire continues to
+serve cache and popularity jobs.
 
 ## Configuration
 
@@ -20,13 +20,13 @@ handoff](#switch-from-hangfire) when changing ingestion ownership.
 | `PGBOUNCER_WRITE_HOST`, `PGBOUNCER_READ_ONLY_HOST` | Optional existing database routing |
 | `Temporal__Address` | Temporal gRPC endpoint; default `localhost:7233` |
 | `Temporal__Namespace` | Namespace; default `default` |
-| `Ingestion__Engine=Temporal` | API admission and Hangfire handoff switch; unset or `Hangfire` retains legacy admission |
+| `Temporal__WebUrl` | Browser UI base URL for admin execution links; default `http://localhost:8233`, with the private Tailscale UI configured in production |
 | `Ingestion__Concurrency__ingest-archive=10` | Example provider activity concurrency override; each provider defaults to ten |
 | `Ingestion__Rate__ingest-archive` | Optional queue activities-per-second limit |
 
-`Ingestion__Engine` controls API admission and Hangfire ingestion registration.
-It does not stop a running Temporal worker or its schedules. Pause schedules,
-stop new requests, and drain or cancel running work when stopping ingestion.
+Ingestion HTTP routes always admit Temporal work. There is no engine-selection
+flag. To stop ingestion, stop admission and pause Temporal schedules; stopping a
+poller alone does not close running workflows.
 
 ### Concurrency and schedules
 
@@ -142,9 +142,8 @@ Artist admission conflicts return `409` with `code: import_already_running`,
 `code: unsupported_import_operation`. Both include a plain-language message.
 A missing artist retains the route's existing not-found response.
 
-Synchronous debug and destructive `deleteOldContent=true` routes return `409`
-when Temporal is selected. They cannot bypass Temporal admission and write
-alongside active workflows.
+Synchronous debug and destructive `deleteOldContent=true` routes return `409`.
+They cannot bypass Temporal admission and write alongside active workflows.
 
 ## Inspect and recover
 
@@ -175,9 +174,43 @@ before observing cancellation. Wait for the worker's activities to stop before h
 ingestion to another owner. Committed catalog changes remain committed.
 
 Archive verification results include fixed deletion evidence in Temporal history. Only
-errcode 104 proves upstream deletion. The completeness checks and five-candidate guard
-apply independently of workflow status. A guarded result must remain visible in logs
-even if an external alert fails.
+errcode 104 proves upstream deletion; a successful metadata parse showing no VBR MP3s
+provides separate removal evidence. The admin's **Archive deletion candidate limit**
+applies only to the requested full refresh. Leaving it blank uses five; zero blocks
+cleanup when any candidate exists. If the candidate count exceeds the limit, none
+are deleted. Candidates within the allowance still require verification. Single-item
+and year-filtered Archive imports do not reconcile deletions.
+
+The authenticated full-artist endpoint accepts, for example,
+`POST /api/v2/import/max-creek?archiveDeletionLimit=10`. It preserves the existing
+201 text response and includes a `Location` header pointing to the admitted Temporal
+run, including namespace, workflow ID, and run ID. The admin displays that link only
+after a successful response. Access to the production Temporal UI requires Tailscale.
+
+The legacy admin is private at
+[relisten-ingestion-admin.tail09dbf.ts.net/relisten-admin/](https://relisten-ingestion-admin.tail09dbf.ts.net/relisten-admin/).
+Use this host for authenticated artist edits and imports. The public API redirects
+those privileged routes to the private host; `POST /api/v2/import/phishin` remains
+public with its existing API-key check. Public catalog reads and listener writes
+such as play reporting remain available. The private endpoint retains the existing
+admin login. Infrastructure and the Switz cross-tailnet grant are documented in
+`relisten-flux/clusters/relisten3-k3s/tailscale/README.md`.
+
+This deletion-limit change supports deployment while imports are running. Existing
+requests omit `ArchiveDeletionLimit`, retain the five-candidate policy, and continue
+to schedule the original three-argument `Archive.VerifyDeletionCandidates` activity.
+An explicit override selects `Archive.VerifyDeletionCandidatesWithLimit`. Both
+handlers are registered in new workers. Saved verification plans remain fixed.
+The original registered activity signature also allows queued old verification
+calls to execute. Missing override fields retain the original continuation and
+checkpoint behavior.
+
+Roll out ingestion workers first, wait for all old pollers to be replaced, then
+roll out the API that exposes the override. Scheduled imports can continue during
+this sequence. Worker-first ordering ensures new override requests cannot land on
+code that does not understand the option. Rolling back after admitting overrides
+requires workers that understand the new activity contract, or draining those
+specific executions before restoring older workers.
 
 Watch queue wait, activity failures, upstream 429/5xx responses, Temporal history
 growth, and Redis eviction/persistence. HTTP requests have a 60-second timeout and 64
@@ -222,9 +255,11 @@ and payload Redis. Infrastructure manifests and their runbook live in the
 [infrastructure repository](https://github.com/RelistenNet/relisten-flux), under
 `clusters/relisten3-k3s/temporal/`.
 
-1. Pause Temporal schedules and stop manual ingestion admission. Record the
-   current API and worker image digests for rollback.
-2. Drain running imports before deploying incompatible workflow changes. When
+1. Record the current API and worker image digests for rollback. For a compatible
+   change verified against old histories, keep schedules and existing imports running.
+   Deploy new workers before enabling new request options in API clients.
+2. For incompatible changes without versioning, pause schedules, stop manual
+   admission, and drain running imports before deploying. When
    work cannot finish, cancel it and wait for activities to stop writing before
    terminating remaining executions. Stopping a poller alone does not erase open
    histories. To retain incompatible histories, use Temporal workflow versioning.
@@ -243,13 +278,13 @@ and payload Redis. Infrastructure manifests and their runbook live in the
    and `relistenapi-ingestion-worker`. Keep the existing Hangfire worker serving
    its `default` cache queue. Follow the infrastructure runbook for rollout and
    schema checks; the Temporal development test server is not a production service.
-5. Verify API readiness and a targeted Archive import before resuming schedules.
+5. Verify API readiness and a targeted Archive import; resume schedules if paused.
    Compare source/track UUIDs, set order, playable URLs, and show/year counts
    through listener APIs. Admission only starts work; wait for its typed result.
    Repeat the import to check stable identities, then run a standalone rebuild.
 6. For shared importer changes, test an appropriate artist for each affected
    provider. Observe queue delay, upstream failures, database load, and listener
-   errors. Resume schedules after these checks and inspect the next thin result.
+   errors. Resume any paused schedules after these checks and inspect the next thin result.
 
 Replacing a worker with the same image should resume unfinished work. A restart
 may finish an in-flight activity gracefully; inspect history before claiming that
@@ -262,36 +297,17 @@ new code. Keep committed catalog changes; use a fresh import or standalone
 rebuild after correcting the failure. Stop ingestion when an error can remove
 unrelated data or overload the listener database.
 
-## Switch from Hangfire
+## Retired Hangfire ingestion
 
-1. Stop manual ingestion admission. Disable or remove the three saved Hangfire
-   ingestion schedules: Archive discovery, full refresh, and thin refresh. Let
-   running work finish, or stop its process and verify that writes have ended.
-2. Verify catalog migration history, Temporal namespace retention of at most
-   seven days, and Redis persistence/eviction settings. Do not use the disposable
-   local schema-baseline flag on an existing catalog.
-3. Set `Ingestion__Engine=Temporal` on both `relistenapi` and `relistenapi-worker`
-   with the reviewed API image. Configure the same Temporal address, namespace,
-   and payload Redis on those deployments and the ingestion worker. This stops
-   ingestion schedule registration and the `artist_import` Hangfire server.
-   Already queued ingestion methods return without importing in this mode.
-   Keep `ENABLE_HANGFIRE_SERVER=true` on the existing worker so its `default`
-   cache queue continues to run.
-4. Start one ingestion worker. Verify manual imports, then register schedules.
-   New schedules are active immediately; repeated registration preserves saved
-   schedules and their paused state. Inspect their next actions before leaving
-   ingestion unattended.
+The API no longer registers ingestion schedules or an `artist_import` Hangfire
+server. The admin and import HTTP routes use Temporal unconditionally. Hangfire's
+`default` queue still serves cache and popularity jobs; retain
+`ENABLE_HANGFIRE_SERVER=true` on that worker.
 
-Stopping recurring registration does not remove jobs already stored in Hangfire. Drain
-both scheduled and manually admitted ingestion before switching. Artist workflow
-admission applies only to Temporal. It does not coordinate admission or finalization
-with Hangfire; drain the old engine before switching.
-
-Rollback: pause Temporal schedules and manual admission, cancel/drain work, and stop the
-worker. Verify no activity is still writing before selecting Hangfire on the API. Review
-the old `artist_import` queue and discard obsolete queued work where appropriate.
-Restarting the API in Hangfire mode restores its recurring registrations. Keep committed
-catalog changes. Do not reset Temporal workflows while Hangfire owns ingestion.
+`ScheduledService` retains no-op method signatures solely for previously saved
+Hangfire jobs. Retrying one cannot import or delete catalog data. Remove stale
+saved ingestion schedules operationally if any remain; they are not recreated by
+startup. The obsolete `Ingestion__Engine` setting has no effect.
 
 ## Stored artist venue count refresh
 

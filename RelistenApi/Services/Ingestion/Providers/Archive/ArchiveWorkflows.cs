@@ -22,6 +22,7 @@ public sealed class ArchiveWorkflow
     private ProviderSummary _summary = null!;
     private List<ArchiveItemId> _noMp3 = null!;
     private int _completedCalls;
+    private int _deletionLimit;
 
     [WorkflowRun]
     public async Task<ProviderSummary> RunAsync(
@@ -49,6 +50,8 @@ public sealed class ArchiveWorkflow
         // Replay reconstructs these fields. ContinueAsNew starts a fresh instance,
         // so selection and durable progress must also travel in the run arguments.
         _input = input;
+        _deletionLimit =
+            input.Request.ArchiveDeletionLimit ?? RefreshArchiveArtist.DefaultDeletionLimit;
         _context = new ProviderWorkflowContext(input.Request.Artist, input.Execution);
         _options = ImportWorkflowOptions.Activity(
             IngestionQueues.Providers[UpstreamProvider.ArchiveOrg]
@@ -134,12 +137,12 @@ public sealed class ArchiveWorkflow
             _summary = _summary.Add(outcome.Result!.Disposition);
 
             // New unplayable items have no stored recording to delete. Only keep
-            // existing recordings here; six are enough to trigger the deletion
-            // guard without enlarging the continuation payload further.
+            // existing recordings here; one beyond this run's allowance proves
+            // the guard must block, without retaining an unbounded payload.
             if (
                 outcome.Result.SkipReason == ArchiveSkipReason.NoVbrMp3
                 && outcome.Result.Source != null
-                && _noMp3.Count < 6
+                && _noMp3.Count <= _deletionLimit
             )
             {
                 _noMp3.Add(item.Id);
@@ -157,13 +160,7 @@ public sealed class ArchiveWorkflow
         ImportWorkflowOptions.RequireActive(_input.Execution);
         ContinueWithCheckpointIfNeeded();
 
-        var plan =
-            _progress.Deletions
-            ?? await Workflow.ExecuteActivityAsync(
-                (ArchiveActivities a) =>
-                    a.VerifyDeletionCandidates(_context, _selection, _noMp3.ToArray()),
-                _options
-            );
+        var plan = _progress.Deletions ?? await VerifyDeletionCandidatesAsync();
         _completedCalls++;
 
         // Keep the verified list across rollover. Applying it must never discover
@@ -176,6 +173,32 @@ public sealed class ArchiveWorkflow
 
         await Workflow.ExecuteActivityAsync(
             (ArchiveActivities a) => a.ApplyVerifiedDeletions(_context, plan),
+            _options
+        );
+    }
+
+    private Task<ArchiveDeletionPlan> VerifyDeletionCandidatesAsync()
+    {
+        // Existing histories have no override. Keep their activity name, three
+        // arguments, and five-candidate policy unchanged, including pending retries.
+        // Only an explicit limit in the durable request selects the new contract.
+        if (_input.Request.ArchiveDeletionLimit == null)
+        {
+            return Workflow.ExecuteActivityAsync(
+                (ArchiveActivities a) =>
+                    a.VerifyDeletionCandidates(_context, _selection, _noMp3.ToArray()),
+                _options
+            );
+        }
+
+        return Workflow.ExecuteActivityAsync(
+            (ArchiveActivities a) =>
+                a.VerifyDeletionCandidatesWithLimit(
+                    _context,
+                    _selection,
+                    _noMp3.ToArray(),
+                    _deletionLimit
+                ),
             _options
         );
     }

@@ -3,7 +3,6 @@ using System.Linq;
 using Dapper;
 using Hangfire;
 using Hangfire.Console;
-using Hangfire.RecurringJobExtensions;
 using Hangfire.Redis.StackExchange;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.DataProtection;
@@ -287,14 +286,6 @@ namespace Relisten
                     }
                 );
                 hangfire.UseConsole();
-                if (
-                    !string.Equals(
-                        Configuration["Ingestion:Engine"],
-                        "Temporal",
-                        StringComparison.OrdinalIgnoreCase
-                    )
-                )
-                    hangfire.UseRecurringJob(typeof(ScheduledService));
             });
 
             if (!HostEnvironment.IsDevelopment())
@@ -304,23 +295,6 @@ namespace Relisten
                     && Configuration["ENABLE_HANGFIRE_SERVER"] != "false"
                 )
                 {
-                    if (
-                        !string.Equals(
-                            Configuration["Ingestion:Engine"],
-                            "Temporal",
-                            StringComparison.OrdinalIgnoreCase
-                        )
-                    )
-                    {
-                        services.AddHangfireServer(options =>
-                        {
-                            options.Queues = ["artist_import"];
-                            options.ServerName =
-                                $"relistenapi:artist_import ({Environment.MachineName})";
-                            options.WorkerCount = 10;
-                        });
-                    }
-
                     services.AddHangfireServer(options =>
                     {
                         options.Queues = ["default"];

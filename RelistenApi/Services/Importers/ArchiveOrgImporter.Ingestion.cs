@@ -116,7 +116,8 @@ public partial class ArchiveOrgImporter
     public async Task<ArchiveDeletionPlan> VerifyDeletionsAsync(
         ProviderContext context,
         ArchiveSelection selection,
-        ArchiveItemId[] noMp3
+        ArchiveItemId[] noMp3,
+        int deletionLimit = RefreshArchiveArtist.DefaultDeletionLimit
     )
     {
         var existing = await _sourceService.AllForArtistFromPrimary(context.Artist);
@@ -129,9 +130,9 @@ public partial class ArchiveOrgImporter
 
         // The guard limits stored recordings at risk, not skipped upstream items.
         // Candidates already include existing recordings that lost their MP3s.
-        if (ExceedsDeletionLimit(candidates.Length))
+        if (ExceedsDeletionLimit(candidates.Length, deletionLimit))
         {
-            await ReportDeletionGuard(context.Artist, candidates, null);
+            await ReportDeletionGuard(context.Artist, candidates, null, deletionLimit);
             return new(ArchiveDeletionDisposition.Guarded, []);
         }
 
@@ -139,7 +140,8 @@ public partial class ArchiveOrgImporter
             candidates,
             ineligible,
             http,
-            message => ImportProgress.WriteLine(log, null, message)
+            message => ImportProgress.WriteLine(log, null, message),
+            deletionLimit
         );
 
         return new(
