@@ -1,419 +1,50 @@
 using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Linq;
 using System.Threading.Tasks;
-using Hangfire;
-using Hangfire.Console;
-using Hangfire.RecurringJobExtensions;
 using Hangfire.Server;
-using Microsoft.Extensions.Configuration;
 using Relisten.Api.Models;
-using Relisten.Data;
-using Relisten.Import;
-using Relisten.Services.Indexing;
-using Sentry;
 
-namespace Relisten
+namespace Relisten;
+
+/// <summary>
+/// Retired Hangfire ingestion entrypoints. Preserve their signatures so saved
+/// jobs can still deserialize, but never restart a second catalog writer when
+/// an old job is retried. New ingestion is admitted only through Temporal.
+/// </summary>
+public class ScheduledService
 {
-    public class ScheduledService
-    {
-        private readonly ConcurrentDictionary<int, bool> artistsCurrentlySyncing = new();
+    public Task IndexArchiveOrgArtists(PerformContext? context, bool allowedInDev = false) =>
+        Task.CompletedTask;
 
-        public ScheduledService(
-            ImporterService importerService,
-            ArtistService artistService,
-            ArchiveOrgArtistIndexer archiveOrgArtistIndexer,
-            RedisService redisService,
-            JerryGarciaComImporter jerryGarciaComImporter,
-            ShowService showService,
-            IConfiguration config
-        )
-        {
-            _importerService = importerService;
-            _artistService = artistService;
-            _archiveOrgArtistIndexer = archiveOrgArtistIndexer;
-            _config = config;
-            _redisService = redisService;
-            _jerryGarciaComImporter = jerryGarciaComImporter;
-            _showService = showService;
-        }
+    public Task RefreshAllArtists(PerformContext? context, bool allowedInDev = false) =>
+        Task.CompletedTask;
 
-        private bool TemporalOwnsIngestion =>
-            string.Equals(
-                _config["Ingestion:Engine"],
-                "Temporal",
-                StringComparison.OrdinalIgnoreCase
-            );
+    public Task RebuildAllArtists(PerformContext? context) => Task.CompletedTask;
 
-        private ImporterService _importerService { get; }
-        private ArtistService _artistService { get; }
-        private ArchiveOrgArtistIndexer _archiveOrgArtistIndexer { get; }
-        private IConfiguration _config { get; }
-        private RedisService _redisService { get; }
-        private JerryGarciaComImporter _jerryGarciaComImporter { get; }
-        private ShowService _showService { get; }
+    public Task RefreshArtist(string idOrSlug, bool deleteOldContent, PerformContext? ctx) =>
+        Task.CompletedTask;
 
-        // run every day at 6:30 AM UTC to seed artists before the refresh
-        [RecurringJob("30 6 * * *", Enabled = true)]
-        [AutomaticRetry(Attempts = 0)]
-        [Queue("artist_import")]
-        [DisplayName("Index archive.org Artists")]
-        public async Task IndexArchiveOrgArtists(PerformContext? context, bool allowedInDev = false)
-        {
-            if (TemporalOwnsIngestion)
-                return;
+    public Task RefreshPhishFromPhishinOnly(PerformContext? ctx) => Task.CompletedTask;
 
-            if (!allowedInDev && _config["ASPNETCORE_ENVIRONMENT"] != "Production")
-            {
-                context?.WriteLine($"Not running in {_config["ASPNETCORE_ENVIRONMENT"]}");
-                return;
-            }
+    public Task RefreshArtist(
+        string idOrSlug,
+        string? specificShowId,
+        bool deleteOldContent,
+        PerformContext? ctx
+    ) => Task.CompletedTask;
 
-            await _archiveOrgArtistIndexer.IndexArtists(context);
-        }
+    public Task RefreshArtist(
+        string idOrSlug,
+        string? specificShowId,
+        bool deleteOldContent,
+        Func<ArtistUpstreamSource, bool>? filterUpstreamSources,
+        PerformContext? ctx
+    ) => Task.CompletedTask;
 
-        // run every day at 3 AM EST, midnight PST, 7 AM UTC
-        [RecurringJob("0 7 * * *", Enabled = true)]
-        [AutomaticRetry(Attempts = 0)]
-        [Queue("artist_import")]
-        [DisplayName("Refresh All Artists")]
-        public async Task RefreshAllArtists(PerformContext? context, bool allowedInDev = false)
-        {
-            if (TemporalOwnsIngestion)
-                return;
+    public Task BackfillJerryGarciaVenues(string artistSlug, PerformContext? ctx) =>
+        Task.CompletedTask;
 
-            if (!allowedInDev && _config["ASPNETCORE_ENVIRONMENT"] != "Production")
-            {
-                context?.WriteLine($"Not running in {_config["ASPNETCORE_ENVIRONMENT"]}");
-                return;
-            }
+    public Task RefreshActiveArtists(PerformContext? context, bool allowedInDev = false) =>
+        Task.CompletedTask;
 
-            var artists = (await _artistService.All()).ToList();
-
-            context?.WriteLine($"--> Updating all {artists.Count} artists");
-
-            foreach (var artist in artists)
-            {
-                context?.WriteLine($"--> Queueing {artist.name} ({artist.slug})");
-                BackgroundJob.Enqueue(() => RefreshArtist(artist.slug, false, null));
-            }
-
-            context?.WriteLine("--> Queued updates for all artists! ");
-        }
-
-        [AutomaticRetry(Attempts = 0)]
-        [Queue("artist_import")]
-        [DisplayName("Rebuild All Artists Shows/Years")]
-        public async Task RebuildAllArtists(PerformContext? context)
-        {
-            if (TemporalOwnsIngestion)
-                return;
-
-            if (_config["ASPNETCORE_ENVIRONMENT"] != "Production")
-            {
-                context?.WriteLine($"Not running in {_config["ASPNETCORE_ENVIRONMENT"]}");
-                return;
-            }
-
-            var artists = (await _artistService.All()).ToList();
-
-            context?.WriteLine($"--> Rebuilding all {artists.Count} artists");
-            var bar = context?.WriteProgressBar();
-
-            Func<Artist, Task> rebuildArtist = async artist =>
-            {
-                await _importerService.Rebuild(artist, context);
-            };
-
-            if (bar == null)
-            {
-                foreach (var artist in artists)
-                {
-                    await rebuildArtist(artist);
-                }
-            }
-            else
-            {
-                await artists.AsyncForEachWithProgress(bar, rebuildArtist);
-            }
-
-            context?.WriteLine("--> Rebuilt all artists! ");
-        }
-
-        // this actually runs all of them without enqueing anything else
-        [Queue("artist_import")]
-        [AutomaticRetry(Attempts = 0)]
-        private async Task __old(PerformContext? context)
-        {
-            var artists = (await _artistService.All()).ToList();
-
-            context?.WriteLine($"--> Updating all {artists.Count} artists");
-
-            var progress = context?.WriteProgressBar();
-
-            var stats = new ImportStats();
-
-            Func<Artist, Task> importArtist = async artist =>
-            {
-                context?.WriteLine($"--> Importing {artist.name}");
-
-                var artistStats = await _importerService.Import(artist, null, context);
-
-                context?.WriteLine($"--> Imported {artist.name}! " + artistStats);
-
-                stats += artistStats;
-            };
-
-            if (progress == null)
-            {
-                foreach (var artist in artists)
-                {
-                    await importArtist(artist);
-                }
-            }
-            else
-            {
-                await artists.AsyncForEachWithProgress(progress, importArtist);
-            }
-
-            context?.WriteLine("--> Imported all artists! " + stats);
-        }
-
-        [Queue("artist_import")]
-        [DisplayName("Refresh Artist: {0}")]
-        [AutomaticRetry(Attempts = 0)]
-        public async Task RefreshArtist(string idOrSlug, bool deleteOldContent, PerformContext? ctx)
-        {
-            await RefreshArtist(idOrSlug, null, deleteOldContent, null, ctx);
-        }
-
-        [Queue("artist_import")]
-        [DisplayName("Refresh from Phish.in")]
-        [AutomaticRetry(Attempts = 0)]
-        public async Task RefreshPhishFromPhishinOnly(PerformContext? ctx)
-        {
-            await RefreshArtist(
-                "phish",
-                null,
-                false,
-                u =>
-                    u.upstream_source_id
-                    == 3 /* phish.in */
-                ,
-                ctx
-            );
-        }
-
-        [Queue("artist_import")]
-        [DisplayName("Refresh Artist Show: {0}, {1}, {2}")]
-        [AutomaticRetry(Attempts = 0)]
-        public async Task RefreshArtist(
-            string idOrSlug,
-            string? specificShowId,
-            bool deleteOldContent,
-            PerformContext? ctx
-        )
-        {
-            await RefreshArtist(idOrSlug, specificShowId, deleteOldContent, null, ctx);
-        }
-
-        [Queue("artist_import")]
-        [DisplayName("Refresh Artist Show: {0}, {1}, {2}")]
-        [AutomaticRetry(Attempts = 0)]
-        public async Task RefreshArtist(
-            string idOrSlug,
-            string? specificShowId,
-            bool deleteOldContent,
-            Func<ArtistUpstreamSource, bool>? filterUpstreamSources,
-            PerformContext? ctx
-        )
-        {
-            if (TemporalOwnsIngestion)
-                return;
-
-            var artist = await _artistService.FindArtistWithIdOrSlug(idOrSlug);
-
-            if (artist == null)
-            {
-                ctx?.WriteLine($"No artist found for {idOrSlug}");
-                return;
-            }
-
-            if (artistsCurrentlySyncing.ContainsKey(artist.id))
-            {
-                ctx?.WriteLine($"Already syncing {artist.name}. Will not overlap.");
-                return;
-            }
-
-            try
-            {
-                artistsCurrentlySyncing[artist.id] = true;
-
-                if (deleteOldContent)
-                {
-                    ctx?.WriteLine("Removing content for " + artist.name);
-
-                    var rows = await _artistService.RemoveAllContentForArtist(artist);
-
-                    ctx?.WriteLine($"Removed {rows} rows!");
-                }
-
-                ImportStats artistStats;
-
-                if (specificShowId != null)
-                {
-                    artistStats = await _importerService.Import(
-                        artist,
-                        filterUpstreamSources,
-                        specificShowId,
-                        ctx
-                    );
-                }
-                else
-                {
-                    artistStats = await _importerService.Import(artist, filterUpstreamSources, ctx);
-                }
-
-                ctx?.WriteLine($"--> Imported {artist.name}! " + artistStats);
-            }
-            catch (Exception e)
-            {
-                ctx?.WriteLine($"Error processing {artist.name}:");
-                ctx?.LogException(e);
-
-                e.Data["artist"] = artist.name;
-
-                SentrySdk.CaptureException(e);
-
-                throw;
-            }
-            finally
-            {
-                artistsCurrentlySyncing.TryRemove(artist.id, out var _);
-            }
-        }
-
-        [Queue("artist_import")]
-        [DisplayName("Backfill JerryGarcia Venues: {0}")]
-        [AutomaticRetry(Attempts = 0)]
-        public async Task BackfillJerryGarciaVenues(string artistSlug, PerformContext? ctx)
-        {
-            if (TemporalOwnsIngestion)
-                return;
-
-            var artist = await _artistService.FindArtistWithIdOrSlug(artistSlug);
-
-            if (artist == null)
-            {
-                ctx?.WriteLine($"No artist found for {artistSlug}");
-                return;
-            }
-
-            var src = artist.upstream_sources.FirstOrDefault(s =>
-                s.upstream_source.Provider == UpstreamProvider.JerryGarcia
-            );
-
-            if (src == null)
-            {
-                ctx?.WriteLine(
-                    $"No {UpstreamProvider.JerryGarcia.ToValue()} upstream source for {artist.name}"
-                );
-                return;
-            }
-
-            var stats = await _jerryGarciaComImporter.BackfillVenuesForArtist(artist, src, ctx);
-
-            ctx?.WriteLine($"Backfill complete for {artist.name}. {stats}");
-        }
-
-        // Every 2 hours, avoiding the 6-11 AM UTC window where daily full import runs
-        [RecurringJob("0 0,2,4,12,14,16,18,20,22 * * *", Enabled = true)]
-        [AutomaticRetry(Attempts = 0)]
-        [Queue("artist_import")]
-        [DisplayName("Refresh Active Artists (Thin Scrape)")]
-        public async Task RefreshActiveArtists(PerformContext? context, bool allowedInDev = false)
-        {
-            if (TemporalOwnsIngestion)
-                return;
-
-            if (!allowedInDev && _config["ASPNETCORE_ENVIRONMENT"] != "Production")
-            {
-                context?.WriteLine($"Not running in {_config["ASPNETCORE_ENVIRONMENT"]}");
-                return;
-            }
-
-            var activeArtistIds = (await _showService.ActiveArtistIds(7)).ToHashSet();
-
-            if (activeArtistIds.Count == 0)
-            {
-                context?.WriteLine("No active artists found with shows in the past 7 days");
-                return;
-            }
-
-            var allArtists = await _artistService.All();
-            var activeArtists = allArtists.Where(a => activeArtistIds.Contains(a.id)).ToList();
-
-            context?.WriteLine(
-                $"--> Found {activeArtists.Count} active artists with shows in the past 7 days"
-            );
-
-            foreach (var artist in activeArtists)
-            {
-                context?.WriteLine($"--> Queueing thin scrape for {artist.name} ({artist.slug})");
-                BackgroundJob.Enqueue(() => RefreshArtistThinScrape(artist.slug, null));
-            }
-
-            context?.WriteLine("--> Queued thin scrape updates for all active artists!");
-        }
-
-        [Queue("artist_import")]
-        [DisplayName("Thin Scrape: {0}")]
-        [AutomaticRetry(Attempts = 0)]
-        public async Task RefreshArtistThinScrape(string idOrSlug, PerformContext? ctx)
-        {
-            if (TemporalOwnsIngestion)
-                return;
-
-            var artist = await _artistService.FindArtistWithIdOrSlug(idOrSlug);
-
-            if (artist == null)
-            {
-                ctx?.WriteLine($"No artist found for {idOrSlug}");
-                return;
-            }
-
-            if (artistsCurrentlySyncing.ContainsKey(artist.id))
-            {
-                ctx?.WriteLine($"Already syncing {artist.name}. Will not overlap.");
-                return;
-            }
-
-            try
-            {
-                artistsCurrentlySyncing[artist.id] = true;
-
-                var options = new ImportOptions { OnlyYear = DateTime.UtcNow.Year };
-                var artistStats = await _importerService.Import(artist, null, options, ctx);
-
-                ctx?.WriteLine($"--> Thin scrape imported {artist.name}! " + artistStats);
-            }
-            catch (Exception e)
-            {
-                ctx?.WriteLine($"Error processing thin scrape for {artist.name}:");
-                ctx?.LogException(e);
-
-                e.Data["artist"] = artist.name;
-
-                SentrySdk.CaptureException(e);
-
-                throw;
-            }
-            finally
-            {
-                artistsCurrentlySyncing.TryRemove(artist.id, out var _);
-            }
-        }
-    }
+    public Task RefreshArtistThinScrape(string idOrSlug, PerformContext? ctx) => Task.CompletedTask;
 }

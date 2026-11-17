@@ -1,4 +1,21 @@
-﻿var addArtist = new Vue({
+// Fetch resolves for HTTP errors; every admin action checks status before reporting success.
+async function readAdminResponse(response) {
+  if (response.redirected) {
+    throw new Error("Your session may have expired. Reload the admin and sign in again.");
+  }
+  var text = await response.text();
+  var message = text;
+  if ((response.headers.get("Content-Type") || "").includes("json")) {
+    var body = JSON.parse(text);
+    message = body.message || body.title || text;
+  }
+  if (!response.ok) {
+    throw new Error(message || "Request failed (HTTP " + response.status + ").");
+  }
+  return message;
+}
+
+var addArtist = new Vue({
   el: "#add-artist",
   data: () => {
     var features = Object.keys(window.artists[0].features)
@@ -87,8 +104,8 @@
 
       return r;
     },
-    sendArtistJson: function (route, method, payload) {
-      return fetch("/api/v2/" + route, {
+    sendArtistJson: async function (route, method, payload) {
+      var response = await fetch("/api/v2/" + route, {
         method: method,
         headers: {
           'Accept': 'application/json',
@@ -97,6 +114,7 @@
         credentials: 'include',
         body: JSON.stringify(payload)
       });
+      await readAdminResponse(response);
     },
     addArtist: function () {
       var payload = this.buildArtistPayload();
@@ -105,34 +123,29 @@
 
       this.$data.loading = true;
 
-      this.sendArtistJson("artists", "POST", payload)
+      return this.sendArtistJson("artists", "POST", payload)
         .then(() => {
           this.$data.loading = false;
           this.$data.result = "Artist added";
         })
-        .catch((res) => {
+        .catch((error) => {
           this.$data.loading = false;
-
-          res.text().then((text) => {
-            this.$data.result = "Error: " + text;
-          });
+          this.$data.result = "Error: " + error.message;
         })
       ;
     },
     updateArtist: function () {
+      this.$data.loading = true;
       var payload = this.buildArtistPayload();
 
-      this.sendArtistJson("artists/" + payload.SlimArtist.id, "PUT", payload)
+      return this.sendArtistJson("artists/" + payload.SlimArtist.id, "PUT", payload)
         .then(() => {
           this.$data.loading = false;
           this.$data.result = "Artist updated";
         })
-        .catch((res) => {
+        .catch((error) => {
           this.$data.loading = false;
-
-          res.text().then((text) => {
-            this.$data.result = "Error: " + text;
-          });
+          this.$data.result = "Error: " + error.message;
         })
       ;
     }
@@ -145,105 +158,59 @@ var refresh = new Vue({
     artists: window.artists,
     loading: false,
     result: null,
-
+    executionUrl: null,
     selected: {
       artist: -1,
-      delete_existing: false,
+      archive_deletion_limit: "",
       upstream_identifier: ""
     }
   },
   methods: {
     queueImport: function () {
-      var specificShow = this.$data.selected.upstream_identifier.length > 0 ? "/" + this.$data.selected.upstream_identifier : "";
+      var identifier = this.selected.upstream_identifier.trim();
+      var query = new URLSearchParams();
+      var limit = this.selected.archive_deletion_limit;
+      if (!identifier && limit !== "") {
+        if (!Number.isSafeInteger(Number(limit)) || Number(limit) < 0 || Number(limit) > 2147483647) {
+          this.result = "Error: Enter a whole deletion candidate limit of zero or greater.";
+          this.executionUrl = null;
+          return;
+        }
+        query.set("archiveDeletionLimit", limit);
+      }
 
-      fetch("/api/v2/import/" + this.$data.selected.artist + specificShow + "?deleteOldContent=" + this.$data.selected.delete_existing, {
-        method: 'POST',
-        credentials: 'include'
-      })
-        .then((res) => {
-          this.$data.loading = false;
-
-          res.text().then((text) => {
-            this.$data.result = "Artist update queued: " + text;
-          });
-        })
-        .catch((res) => {
-          this.$data.loading = false;
-
-          res.text().then((text) => {
-            this.$data.result = "Error: " + text;
-          });
-        })
-      ;
+      var path = "/api/v2/import/" + encodeURIComponent(this.selected.artist);
+      if (identifier) {
+        path += "/" + encodeURIComponent(identifier);
+      }
+      return this.queueRequest(path + "?" + query.toString());
+    },
+    // Keep request state and the execution link consistent across all import controls.
+    queueRequest: async function (url) {
+      if (this.loading) {
+        return;
+      }
+      this.loading = true;
+      this.result = null;
+      this.executionUrl = null;
+      try {
+        var response = await fetch(url, { method: "POST", credentials: "include" });
+        this.result = await readAdminResponse(response);
+        this.executionUrl = response.headers.get("Location");
+      } catch (error) {
+        this.result = "Error: " + error.message;
+      } finally {
+        this.loading = false;
+      }
     },
     queueArchiveOrgIndex: function () {
-      this.$data.loading = true;
-
-      fetch("/relisten-admin/index-archiveorg", {
-        method: "POST",
-        credentials: "include"
-      })
-        .then((res) => {
-          this.$data.loading = false;
-
-          res.text().then((text) => {
-            this.$data.result = "Archive.org index queued: " + text;
-          });
-        })
-        .catch((res) => {
-          this.$data.loading = false;
-
-          res.text().then((text) => {
-            this.$data.result = "Error: " + text;
-          });
-        })
-      ;
+      return this.queueRequest("/relisten-admin/index-archiveorg");
     },
     queueRefreshAllArtists: function () {
-      this.$data.loading = true;
-
-      fetch("/relisten-admin/refresh-all-artists", {
-        method: "POST",
-        credentials: "include"
-      })
-        .then((res) => {
-          this.$data.loading = false;
-
-          res.text().then((text) => {
-            this.$data.result = "Refresh all artists queued: " + text;
-          });
-        })
-        .catch((res) => {
-          this.$data.loading = false;
-
-          res.text().then((text) => {
-            this.$data.result = "Error: " + text;
-          });
-        })
-      ;
+      return this.queueRequest("/relisten-admin/refresh-all-artists");
     },
     queueJerryGarciaVenueBackfill: function () {
-      this.$data.loading = true;
-
-      fetch("/relisten-admin/backfill-jerrygarcia-venues?artistSlug=grateful-dead", {
-        method: "POST",
-        credentials: "include"
-      })
-        .then((res) => {
-          this.$data.loading = false;
-
-          res.text().then((text) => {
-            this.$data.result = "JerryGarcia venue backfill queued: " + text;
-          });
-        })
-        .catch((res) => {
-          this.$data.loading = false;
-
-          res.text().then((text) => {
-            this.$data.result = "Error: " + text;
-          });
-        })
-      ;
+      return this.queueRequest("/relisten-admin/backfill-jerrygarcia-venues?artistSlug=grateful-dead");
     }
   }
-})
+});

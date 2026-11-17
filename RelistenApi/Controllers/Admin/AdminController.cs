@@ -25,7 +25,6 @@ namespace Relisten.Controllers.Admin
         private readonly PopularityCacheService _popularityCacheService;
         private readonly PopularityJobs _popularityJobs;
         private readonly SignInManager<ApplicationUser> _signInManager;
-        private readonly ScheduledService _scheduledService;
         private readonly UpstreamSourceService _upstreamSourceService;
         private readonly UserManager<ApplicationUser> _userManager;
 
@@ -34,7 +33,6 @@ namespace Relisten.Controllers.Admin
             SignInManager<ApplicationUser> signInManager,
             ILoggerFactory loggerFactory,
             ArtistService artistService,
-            ScheduledService scheduledService,
             UpstreamSourceService upstreamSourceService,
             PopularityJobs popularityJobs,
             PopularityCacheService popularityCacheService,
@@ -50,7 +48,6 @@ namespace Relisten.Controllers.Admin
             _popularityCacheService = popularityCacheService;
 
             _artistService = artistService;
-            _scheduledService = scheduledService;
         }
 
         [HttpGet("/relisten-admin/login")]
@@ -294,26 +291,18 @@ namespace Relisten.Controllers.Admin
         [Authorize]
         public async Task<IActionResult> IndexArchiveOrgArtists()
         {
-            var jobId = _temporal.Enabled
-                ? (
-                    await _temporal.DiscoverArchiveArtistsAsync(new DiscoverArchiveArtists())
-                ).WorkflowId
-                : Hangfire.BackgroundJob.Enqueue(() =>
-                    _scheduledService.IndexArchiveOrgArtists(null, allowedInDev: true)
-                );
-            return Json(new { message = $"Queued as job {jobId}!" });
+            var handle = await _temporal.DiscoverArchiveArtistsAsync(new DiscoverArchiveArtists());
+            Response.Headers.Location = _temporal.ExecutionUrl(handle);
+            return Json(new { message = $"Queued as job {handle.WorkflowId}!" });
         }
 
         [HttpPost("/relisten-admin/refresh-all-artists")]
         [Authorize]
         public async Task<IActionResult> RefreshAllArtists()
         {
-            var jobId = _temporal.Enabled
-                ? (await _temporal.RefreshCatalogAsync(new RefreshCatalog())).WorkflowId
-                : Hangfire.BackgroundJob.Enqueue(() =>
-                    _scheduledService.RefreshAllArtists(null, allowedInDev: true)
-                );
-            return Json(new { message = $"Queued as job {jobId}!" });
+            var handle = await _temporal.RefreshCatalogAsync(new RefreshCatalog());
+            Response.Headers.Location = _temporal.ExecutionUrl(handle);
+            return Json(new { message = $"Queued as job {handle.WorkflowId}!" });
         }
 
         [HttpPost("/relisten-admin/backfill-jerrygarcia-venues")]
@@ -322,29 +311,17 @@ namespace Relisten.Controllers.Admin
             [FromQuery] string artistSlug = "grateful-dead"
         )
         {
-            string jobId;
-            if (_temporal.Enabled)
+            var artist = await _artistService.FindArtistForImport(artistSlug);
+            if (artist == null)
             {
-                var artist = await _artistService.FindArtistForImport(artistSlug);
-                if (artist == null)
-                {
-                    return NotFound();
-                }
-
-                jobId = (
-                    await _temporal.RepairJerryVenuesAsync(
-                        new RepairJerryVenues(new ArtistId(artist.uuid))
-                    )
-                ).WorkflowId;
-            }
-            else
-            {
-                jobId = Hangfire.BackgroundJob.Enqueue(() =>
-                    _scheduledService.BackfillJerryGarciaVenues(artistSlug, null)
-                );
+                return NotFound();
             }
 
-            return Json(new { message = $"Queued as job {jobId}!" });
+            var handle = await _temporal.RepairJerryVenuesAsync(
+                new RepairJerryVenues(new ArtistId(artist.uuid))
+            );
+            Response.Headers.Location = _temporal.ExecutionUrl(handle);
+            return Json(new { message = $"Queued as job {handle.WorkflowId}!" });
         }
 
         private IActionResult RedirectToLocal(string? returnUrl)

@@ -24,7 +24,7 @@ namespace Relisten.Import
 {
     public partial class ArchiveOrgImporter : ImporterBase
     {
-        private const int MaxSourcesDeletedPerSync = 5;
+        private const int MaxSourcesDeletedPerSync = RefreshArchiveArtist.DefaultDeletionLimit;
 
         private static readonly ActivitySource ActivitySource = new("Relisten.Import");
 
@@ -276,10 +276,11 @@ namespace Relisten.Import
             IReadOnlyCollection<string> candidates,
             ISet<string> identifiersWithoutMP3s,
             HttpClient httpClient,
-            Action<string> log
+            Action<string> log,
+            int deletionLimit = MaxSourcesDeletedPerSync
         )
         {
-            if (ExceedsDeletionLimit(candidates.Count))
+            if (ExceedsDeletionLimit(candidates.Count, deletionLimit))
             {
                 return new ArchiveDeletionVerification(true, []);
             }
@@ -339,9 +340,12 @@ namespace Relisten.Import
             return !details.files.Any(file => file?.format == "VBR MP3");
         }
 
-        internal static bool ExceedsDeletionLimit(int sourceCount)
+        internal static bool ExceedsDeletionLimit(
+            int sourceCount,
+            int deletionLimit = MaxSourcesDeletedPerSync
+        )
         {
-            return sourceCount > MaxSourcesDeletedPerSync;
+            return sourceCount > deletionLimit;
         }
 
         private async Task<ImportStats> ImportSingleIdentifier(

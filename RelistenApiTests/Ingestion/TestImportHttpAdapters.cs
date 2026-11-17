@@ -23,6 +23,7 @@ using Relisten.Controllers;
 using Relisten.Controllers.Admin;
 using Relisten.Data;
 using Relisten.Ingestion;
+using Temporalio.Converters;
 using Temporalio.Testing;
 
 namespace RelistenApiTests.Ingestion;
@@ -83,8 +84,8 @@ public class TestImportHttpAdapters
         builder.Configuration.AddInMemoryCollection(
             new Dictionary<string, string?>
             {
-                ["Ingestion:Engine"] = "Temporal",
                 ["PANIC_KEY"] = "test-hook-key",
+                ["Temporal:WebUrl"] = "https://temporal.example.test/console/",
             }
         );
         var admission = new TemporalIngestionClient(
@@ -102,8 +103,6 @@ public class TestImportHttpAdapters
             null!,
             db,
             artists,
-            null!,
-            null!,
             builder.Configuration,
             admission
         ));
@@ -112,7 +111,6 @@ public class TestImportHttpAdapters
             null!,
             service.GetRequiredService<ILoggerFactory>(),
             artists,
-            null!,
             null!,
             null!,
             null!,
@@ -187,6 +185,46 @@ public class TestImportHttpAdapters
             .Should()
             .Be($"Queued as job {ArtistWorkflowId}!");
         response.Content.Headers.ContentType!.MediaType.Should().Be("text/plain");
+        var description = await environment!
+            .Client.GetWorkflowHandle(ArtistWorkflowId)
+            .DescribeAsync();
+        response
+            .Headers.Location!.AbsoluteUri.Should()
+            .Be(
+                "https://temporal.example.test/console/namespaces/default/workflows/"
+                    + Uri.EscapeDataString(ArtistWorkflowId)
+                    + $"/{description.RunId}/history"
+            );
+    }
+
+    [Test]
+    public async Task OverrideIsRecordedInTheAdmittedTemporalRequest()
+    {
+        using var response = await Post("/api/v2/import/phish?archiveDeletionLimit=10");
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        workflows.Add(ArtistWorkflowId);
+        var history = await environment!
+            .Client.GetWorkflowHandle(ArtistWorkflowId)
+            .FetchHistoryAsync();
+        var payload = history
+            .Events.First()
+            .WorkflowExecutionStartedEventAttributes.Input.Payloads_[0];
+        var command =
+            environment.Client.Options.DataConverter.PayloadConverter.ToValue<ArtistRefreshCommand>(
+                payload
+            );
+        command.Should().Be(new RefreshArtist(new ArtistId(artistUuid), 10));
+    }
+
+    [TestCase("/api/v2/import/phish?archiveDeletionLimit=-1")]
+    [TestCase("/api/v2/import/phish?archiveDeletionLimit=garbage")]
+    [TestCase("/api/v2/import/phish?archiveDeletionLimit=1.5")]
+    [TestCase("/api/v2/import/phish?archiveDeletionLimit=2147483648")]
+    [TestCase("/api/v2/import/phish/show-one?archiveDeletionLimit=10")]
+    public async Task InvalidDeletionOverridesAreRejectedBeforeAdmission(string route)
+    {
+        using var response = await Post(route);
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
     [TestCase("/api/v2/import/phish/show-one")]

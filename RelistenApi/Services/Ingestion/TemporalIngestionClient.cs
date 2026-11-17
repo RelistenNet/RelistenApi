@@ -30,16 +30,36 @@ public sealed class TemporalIngestionClient
         this.catalog = catalog;
     }
 
-    public bool Enabled =>
-        string.Equals(
-            configuration["Ingestion:Engine"],
-            "Temporal",
-            StringComparison.OrdinalIgnoreCase
-        );
+    /// <summary>Links to the admitted run, even after this workflow ID is reused.</summary>
+    public string ExecutionUrl<TResult>(ImportHandle<TResult> handle)
+    {
+        var webUrl = configuration["Temporal:WebUrl"] ?? "http://localhost:8233";
+        var temporalNamespace = client.Options.Namespace;
+        return $"{webUrl.TrimEnd('/')}/namespaces/{Uri.EscapeDataString(temporalNamespace)}"
+            + $"/workflows/{Uri.EscapeDataString(handle.WorkflowId)}"
+            + $"/{Uri.EscapeDataString(handle.ResultRunId)}/history";
+    }
 
     /// <summary>Starts an explicit refresh scope, preserving each provider's filter meaning.</summary>
     public Task<ImportHandle<ArtistImportResult>> RefreshAsync(ArtistRefreshCommand request)
     {
+        var deletionLimit = request switch
+        {
+            RefreshArtist r => r.ArchiveDeletionLimit,
+            RefreshArchiveArtist r => r.ArchiveDeletionLimit,
+            _ => null,
+        };
+
+        if (deletionLimit < 0)
+        {
+            throw new InvalidImportRequest("Archive deletion limit must be zero or greater.");
+        }
+
+        if (request is RefreshArchiveArtist { Year: not null, ArchiveDeletionLimit: not null })
+        {
+            throw new InvalidImportRequest("Year-filtered imports do not reconcile deletions.");
+        }
+
         var provider = request switch
         {
             RefreshArchiveArtist r => ValidateYear(r.Year, UpstreamProvider.ArchiveOrg),

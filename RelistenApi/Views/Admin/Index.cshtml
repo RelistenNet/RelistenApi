@@ -123,23 +123,30 @@
                         {{ art.name }}
                     </option>
                 </select>
-                &nbsp;
-                <input type="checkbox" id="delete_existing" v-model="selected.delete_existing"/>
-                &nbsp;<label for="delete_existing">Delete existing imported content</label>
             </p>
+            <div class="form-group">
+                <label for="archive_deletion_limit">Archive deletion candidate limit</label>
+                <input type="number" class="form-control" style="max-width: 12em" id="archive_deletion_limit"
+                       min="0" max="2147483647" step="1" placeholder="5" aria-describedby="archive_deletion_help"
+                       v-model="selected.archive_deletion_limit" v-bind:disabled="selected.upstream_identifier.trim().length > 0"/>
+                <small id="archive_deletion_help" class="help-block">
+                    Optional, for this refresh only. Default: 5. More than this many candidates blocks all cleanup.
+                    Each candidate still requires upstream verification. Single-recording imports never reconcile deletions.
+                </small>
+            </div>
             <p v-if="selected.artist != -1">
                 <input class="form-control" v-model="selected.upstream_identifier" placeholder="Optional: provide a source upstream identifier to only import 1" width="75"/>
             </p>
             <p>
-                <button class="btn btn-success" v-on:click="queueImport" v-bind:disabled="selected.artist == -1">Start Import</button>
+                <button class="btn btn-success" v-on:click="queueImport" v-bind:disabled="loading || selected.artist == -1">Start Import</button>
             </p>
             <br/>
             <p v-if="loading || result">
                 <span v-if="loading">Loading...</span>
                 <span v-if="result">{{ result }}</span>
             </p>
-            <p>
-                <a href="/relisten-admin/hangfire/jobs/processing">View processing jobs</a>
+            <p v-if="executionUrl">
+                <a v-bind:href="executionUrl" target="_blank" rel="noopener">View Temporal execution</a>
             </p>
             <p>
                 <a href="/relisten-admin/popularity">Popularity cache admin</a>

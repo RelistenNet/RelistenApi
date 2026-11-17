@@ -99,7 +99,11 @@ public class ArtistRefreshWorkflow
             {
                 var command =
                     request as RefreshArchiveArtist
-                    ?? new RefreshArchiveArtist(artist, filteredYear);
+                    ?? new RefreshArchiveArtist(
+                        artist,
+                        filteredYear,
+                        (request as RefreshArtist)?.ArchiveDeletionLimit
+                    );
                 var providerRequest = new ProviderRequest<RefreshArchiveArtist>(command, execution);
 
                 return Workflow.ExecuteChildWorkflowAsync(

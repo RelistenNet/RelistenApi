@@ -68,7 +68,6 @@ public class TestIngestionPersistence
             {
                 ["Temporal:Address"] = temporal.Client.Connection.Options.TargetHost,
                 ["Temporal:Namespace"] = testNamespace,
-                ["Ingestion:Engine"] = "Temporal",
                 ["PHISHNET_API_KEY"] = "test-key",
             }
         );
@@ -325,6 +324,10 @@ public class TestIngestionPersistence
                 ActivatorUtilities.CreateInstance<Relisten.Controllers.ImportController>(
                     scope.ServiceProvider
                 );
+            controller.ControllerContext = new Microsoft.AspNetCore.Mvc.ControllerContext
+            {
+                HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext(),
+            };
             var response = (Microsoft.AspNetCore.Mvc.ObjectResult)await controller.Post(identifier);
             response.StatusCode.Should().Be(201);
             var result = await host
@@ -461,11 +464,15 @@ public class TestIngestionPersistence
         notifications.Messages.Should().ContainSingle();
     }
 
-    [TestCase(0)]
-    [TestCase(1)]
-    [TestCase(6)]
+    [TestCase(0, null)]
+    [TestCase(1, null)]
+    [TestCase(6, null)]
+    [TestCase(10, 10)]
+    [TestCase(11, 10)]
+    [TestCase(1, 0)]
     public async Task ArchiveDeletionGuardCountsStoredRecordingsNotNewUnplayableItems(
-        int existingCount
+        int existingCount,
+        int? deletionLimit
     )
     {
         var existing = Enumerable.Range(0, existingCount).Select(i => $"fixture-existing-{i}");
@@ -519,15 +526,23 @@ public class TestIngestionPersistence
         logs.Entries.Clear();
         notifications.Messages.Clear();
 
-        var result = await Import();
+        var result = await Import(deletionLimit: deletionLimit);
 
         result.Status.Should().Be(ImportStatus.Completed);
         result.SkippedItems.Should().Be(6 + existingCount);
         var guards = logs.Entries.Where(entry => entry.Event == ImportEvents.ArchiveDeletionGuard);
-        if (existingCount > 5)
+        var effectiveLimit = deletionLimit ?? 5;
+        if (existingCount > effectiveLimit)
         {
             (await Catalog()).Should().HaveCount(existingCount);
-            guards.Should().ContainSingle().Which.Fields["SourceDeletionCount"].Should().Be(6);
+            guards
+                .Should()
+                .ContainSingle()
+                .Which.Fields["SourceDeletionCount"]
+                .Should()
+                .Be(effectiveLimit + 1);
+            guards.Single().Fields["DeletionThreshold"].Should().Be(effectiveLimit);
+            notifications.Messages.Single().Should().Contain($"threshold is {effectiveLimit}.");
             notifications.Messages.Should().ContainSingle();
         }
         else
@@ -1597,6 +1612,10 @@ public class TestIngestionPersistence
         var controller = ActivatorUtilities.CreateInstance<Relisten.Controllers.ImportController>(
             scope.ServiceProvider
         );
+        controller.ControllerContext = new Microsoft.AspNetCore.Mvc.ControllerContext
+        {
+            HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext(),
+        };
         var response = (Microsoft.AspNetCore.Mvc.ObjectResult)
             await controller.Post(artistUuid.ToString());
         response.StatusCode.Should().Be(201);
@@ -1636,7 +1655,8 @@ public class TestIngestionPersistence
     private async Task<ArtistImportResult> Import(
         string? item = null,
         int? year = null,
-        bool backfill = false
+        bool backfill = false,
+        int? deletionLimit = null
     )
     {
         var client = host.Services.GetRequiredService<TemporalIngestionClient>();
@@ -1647,8 +1667,9 @@ public class TestIngestionPersistence
                 ? await client.ImportArchiveItemAsync(
                     new ImportArchiveItem(artist, new ArchiveItemId(item))
                 )
-            : year.HasValue ? await client.RefreshAsync(new RefreshArchiveArtist(artist, year))
-            : await client.RefreshAsync(new RefreshArtist(artist));
+            : year.HasValue
+                ? await client.RefreshAsync(new RefreshArchiveArtist(artist, year, deletionLimit))
+            : await client.RefreshAsync(new RefreshArtist(artist, deletionLimit));
         return await handle.GetResultAsync();
     }
 

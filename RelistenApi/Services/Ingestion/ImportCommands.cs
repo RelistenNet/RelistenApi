@@ -38,10 +38,18 @@ public readonly record struct CatalogSetlistId(long Value);
 [JsonDerivedType(typeof(RefreshFilteredArtist), "filtered-artist")]
 public abstract record ArtistRefreshCommand(ArtistId Artist);
 
-public sealed record RefreshArtist(ArtistId Artist) : ArtistRefreshCommand(Artist);
-
-public sealed record RefreshArchiveArtist(ArtistId Artist, int? Year = null)
+/// <param name="ArchiveDeletionLimit">Per-run candidate allowance; null retains the default guard.</param>
+public sealed record RefreshArtist(ArtistId Artist, int? ArchiveDeletionLimit = null)
     : ArtistRefreshCommand(Artist);
+
+public sealed record RefreshArchiveArtist(
+    ArtistId Artist,
+    int? Year = null,
+    int? ArchiveDeletionLimit = null
+) : ArtistRefreshCommand(Artist)
+{
+    public const int DefaultDeletionLimit = 5;
+}
 
 public sealed record RefreshPhishInArtist(ArtistId Artist, int? FromYear = null)
     : ArtistRefreshCommand(Artist);
