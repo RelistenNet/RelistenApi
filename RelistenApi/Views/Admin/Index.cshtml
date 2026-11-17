@@ -3,6 +3,10 @@
     ViewData["Title"] = "Relisten Admin";
 }
 
+<p>
+    <a href="@Model.TemporalWebUrl" target="_blank" rel="noopener">Browse Temporal</a>
+</p>
+
 <div class="row">
     <div class="col-md-12">
         <section>
@@ -203,5 +207,5 @@
 	    var artists = @Html.Raw(Json.Serialize(Model.Artists));
 	    var upstream_sources = @Html.Raw(Json.Serialize(Model.UpstreamSources));
 	</script>
-    <script type="text/javascript" src="~/js/admin.js"></script>
+    <script type="text/javascript" src="~/js/admin.js" asp-append-version="true"></script>
 }

@@ -104,6 +104,7 @@ namespace Relisten.Controllers.Admin
             return View(
                 new AdminViewModel
                 {
+                    TemporalWebUrl = _temporal.WebUrl,
                     Artists = await _artistService.All(),
                     UpstreamSources = await _upstreamSourceService.AllUpstreamSources(),
                 }
@@ -350,6 +351,7 @@ namespace Relisten.Controllers.Admin
 
     public class AdminViewModel
     {
+        public string TemporalWebUrl { get; set; } = null!;
         public IEnumerable<Artist> Artists { get; set; } = null!;
         public IEnumerable<UpstreamSource> UpstreamSources { get; set; } = null!;
     }

@@ -30,12 +30,13 @@ public sealed class TemporalIngestionClient
         this.catalog = catalog;
     }
 
+    public string WebUrl => configuration["Temporal:WebUrl"] ?? "http://localhost:8233";
+
     /// <summary>Links to the admitted run, even after this workflow ID is reused.</summary>
     public string ExecutionUrl<TResult>(ImportHandle<TResult> handle)
     {
-        var webUrl = configuration["Temporal:WebUrl"] ?? "http://localhost:8233";
         var temporalNamespace = client.Options.Namespace;
-        return $"{webUrl.TrimEnd('/')}/namespaces/{Uri.EscapeDataString(temporalNamespace)}"
+        return $"{WebUrl.TrimEnd('/')}/namespaces/{Uri.EscapeDataString(temporalNamespace)}"
             + $"/workflows/{Uri.EscapeDataString(handle.WorkflowId)}"
             + $"/{Uri.EscapeDataString(handle.ResultRunId)}/history";
     }
