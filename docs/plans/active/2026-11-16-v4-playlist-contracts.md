@@ -9,6 +9,11 @@ plan owns product decisions and rationale; this document owns shapes, statuses a
 ordering rules. Publication and collaboration add to these contracts later; nothing
 here is dormant schema for them.
 
+The API implementation is locally verified as of 2026-11-17. The plan's
+2026-11-17 Decision Log entry records implementation clarifications for text,
+validation, error precedence and generation on problems. See
+[operations and recovery](../../api/private-playlists.md) before rollout.
+
 IDs in examples are illustrative TypeIDs (`<prefix>_<26 lowercase base32 chars>`).
 
 ## Conventions
@@ -70,8 +75,9 @@ and `initial_segments` name are dropped.
 | `name` | 1–100 characters after trimming | `422 invalid_playlist_operation` |
 | `description` | 0–1,000 characters | `422 invalid_playlist_operation` |
 
-Names are trimmed and NFC-normalized. They need not be unique. An empty
-description is stored as `null`.
+Names and descriptions are trimmed and NFC-normalized. Character limits count
+Unicode scalar values after normalization. Names need not be unique. An empty
+description is stored as `null`; NUL and invalid Unicode are rejected.
 
 ## Endpoints
 
@@ -258,6 +264,10 @@ normal operation.
 
 - Every playlist response (create, snapshot, changes, batch, archive and list) and
   every library response (snapshot and changes) includes `history_generation`.
+- Domain and body-validation problem bodies also carry the current generation.
+  Framework authentication/authorization, content-type and request-size failures
+  may omit it. A replay preserves its stored outcome while its response envelope
+  carries the current generation, not the one from the original receipt.
 - Mobile stores the generation with each playlist base and with its library cursor.
   Before applying any response, it compares the generation. On a mismatch it
   applies nothing from that response and runs restore recovery (see Client model),
@@ -603,6 +613,10 @@ playlist's lifetime.
 
 The hash is SHA-256 over UTF-8 lines joined by `\n`, like `FavoriteMutationHasher`.
 Because playlist payloads contain free text, every value line is tagged:
+
+The v1 field order is explicit in `PlaylistHasher` and stays fixed if C# records
+are later reordered. `insert_segment` and `insert_entries` encode the parent ID,
+entries, after anchor, before anchor; create encodes name, description, segments.
 
 | Line | Content |
 | --- | --- |

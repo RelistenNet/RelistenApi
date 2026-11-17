@@ -1,6 +1,8 @@
 # Deliver playlists using v4 catalog identities
 
-Status: reviewed design; private-playlist contracts frozen 2026-11-16; implementation has not started. This plan owns
+Status: private-playlist API implemented and locally verified 2026-11-17;
+mobile integration and release qualification pending. Private-playlist contracts
+were frozen 2026-11-16. This plan owns
 the playlist contract and delivery work. It supersedes the playlist portions of
 the July 18 server architecture, server implementation, mobile architecture,
 mobile implementation, and mobile-first delivery documents. Those documents
@@ -32,6 +34,9 @@ Existing unrelated catalog and account endpoints retain their own contracts.
   [Private playlist contracts](2026-11-16-v4-playlist-contracts.md). Where the two
   disagree, the contracts document wins.
 - [ ] Implement and locally verify private playlists through the real mobile/API path.
+  - [x] (2026-11-17) Implement and locally verify the private User Service API,
+    persistence, library summaries, history generation and recovery command.
+  - [ ] Integrate and qualify the mobile consumer against this API.
 - [ ] Qualify and release private playlists; record the build and environment.
 - [ ] Implement publication, following and cloning with their public web consumer.
 - [ ] Implement collaboration after private editing has been exercised.
@@ -448,6 +453,21 @@ qualification separately. No deployment or publication is authorized by this pla
 
 ## Decision Log
 
+- 2026-11-17, implementation under Alec's authorization: complete the unspecified
+  private-contract details without changing its product scope. Names and
+  descriptions are trimmed and NFC-normalized before storage, equality or hashing;
+  lengths count Unicode scalar values after normalization. Empty descriptions
+  become null. NUL and invalid Unicode are rejected. Empty operation batches,
+  missing/negative/non-integer `after_revision`, and invalid `view` return
+  `422 invalid_playlist_operation`; malformed route IDs return the ordinary
+  `404 playlist_not_found`. Missing/deleted move targets take precedence over a
+  conflicting new destination ID; an insert into a missing destination reports
+  `parent_missing` before checking its created IDs. Domain and body-validation
+  problems carry current `history_generation`; framework authentication,
+  authorization, content-type and request-size failures may have no generation.
+  Frozen v1 hash field order remains explicit in `PlaylistHasher`, independent of
+  later C# refactoring. Rank fixtures pin `fractional-indexing@4.0.0` with default
+  base-62 digits and the classic A–Z/a–z integer heads.
 - 2026-11-06, Alec: support only v4 clients and typed IDs; no older-client or
   backwards-compatibility requirement for playlists.
 - 2026-11-06, Alec: retain User Service routes rather than moving playlists into
@@ -500,9 +520,21 @@ qualification separately. No deployment or publication is authorized by this pla
 
 ## Outcomes & Retrospective
 
-The review produced a replacement implementation plan. No playlist code, migration,
-runtime configuration or deployment was changed. Record implementation results,
-accepted product decisions and measurements here as each delivery completes.
+The private API is implemented in `RelistenUserService/Playlists/` and
+`PlaylistsController`. It includes all delivery-1 routes, authored structure and
+tombstones, whole-revision deltas, durable retries, final-state quotas, rank
+rebalancing, library discovery and restore generations. The catalog remains
+independent. Commits `ccd8ccf88` and `d0c7d3131` contain the contracts/ranks and
+the API implementation.
+
+Local verification on 2026-11-17: the solution built; all 223 User Service tests
+passed with no skips; the final focused API run passed after extending the
+last-entry move scenario. EF reported no pending model changes. Two independent
+review passes traced correctness and readability without remaining findings.
+See [private playlist operations](../../api/private-playlists.md) for capacity
+measurements, restore commands, and rollout/rollback constraints. No deployment
+or mobile implementation was performed; the real mobile/API qualification remains
+open.
 
 ## Review evidence
 
