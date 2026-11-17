@@ -536,6 +536,16 @@ measurements, restore commands, and rollout/rollback constraints. No deployment
 or mobile implementation was performed; the real mobile/API qualification remains
 open.
 
+The subsequent adversarial review found a request-size error hidden by the initial
+test host: Kestrel's `413` became `500` in the application exception handler. The
+fix preserves `413`; the HTTP fixture now starts `AccountsApplication` on real
+Kestrel and retains the production authorization policy. The size regression failed
+before the fix and passed afterward. Three serializer-only rejection cases were
+removed after moving their assertions to HTTP, and fixed hash vectors now protect
+the persisted v1 format. The revised User Service suite passed all 223 tests with
+no skips. The verification guide now distinguishes tested guarantees, observed
+measurements and release/recovery checks still requiring an operator or client.
+
 ## Review evidence
 
 The November 6 review read server checkout `4dbda9461` and mobile checkout

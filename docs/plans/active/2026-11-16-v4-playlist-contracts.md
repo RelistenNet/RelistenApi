@@ -640,9 +640,10 @@ Field lines are encoded as follows:
   lines, or `D:new_segment|<new_segment_id>`, followed by its two anchor lines.
 - `operation_id`, `command_id` and `base_revision` are excluded.
 
-Clients never compute or send hashes. Tests cover absent vs `null`, literal `A`,
-`N` and `V:` strings, embedded newlines, normalization, array order and every
-operation type.
+Clients never compute or send hashes. Fixed hash vectors pin create,
+`insert_entries` and archive serialization, including text normalization, escaping
+and array order. Patch tests distinguish absence from `null`; ordered HTTP batch
+tests exercise receipt replay for all seven operation types.
 
 ## Client model
 
