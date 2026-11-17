@@ -491,6 +491,9 @@ qualification separately. No deployment or publication is authorized by this pla
   held insert and cannot tombstone its destination first. Overlay pruning compares
   revisions only within one generation; restore recovery resubmits every
   operation still held locally, and makes no promise for edits already retired.
+- 2026-11-16, Alec: a paused outbox too large for one batch keeps its edits and
+  asks the user to contact team@relisten.net, rather than prompting them to
+  discard additions.
 - 2026-11-16, Alec: decision 3 follows favorites — hydrate only missing tracks, no
   proactive re-check; re-resolve a track when its playback fails. Removals are
   very rare.

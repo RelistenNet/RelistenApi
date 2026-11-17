@@ -446,8 +446,12 @@ splits it for quota:
   additions. There is no playlist delete in v1, so freeing space means deleting
   entries.
 - A paused outbox larger than one batch (500 operations or 2 MiB) cannot be
-  resent atomically. Mobile then asks the user to discard pending additions until
-  it fits. This needs hundreds of offline edits after hitting the limit.
+  resent atomically. This needs hundreds of offline edits after hitting the limit,
+  so it signals unusual use rather than a normal recovery path (Alec, 2026-11-16).
+  Mobile keeps every pending edit, does not prompt the user to discard anything,
+  and shows an alert asking them to contact team@relisten.net so the team can
+  review the use and decide whether to raise the limit. It also records a
+  diagnostic event so the team can see it happened.
 
 Test: on one device, insert X into a full playlist's single-entry segment S, get
 `quota_exceeded`, delete S's existing entry, and resend. X must apply into S and
