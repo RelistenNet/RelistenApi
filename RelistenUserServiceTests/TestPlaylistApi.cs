@@ -497,67 +497,57 @@ public sealed class TestPlaylistApi
     }
 
     [Test]
-    public async Task Entries_can_exchange_occupied_ranks_across_segments_in_one_batch()
+    public async Task One_batch_can_swap_the_first_entries_of_two_segments()
     {
         var create = await Create(2, 2);
-        var left = create.Segments[0];
-        var right = create.Segments[1];
-        var leftFirst = left.Entries[0].EntryId;
-        var leftSecond = left.Entries[1].EntryId;
-        var rightFirst = right.Entries[0].EntryId;
-        var rightSecond = right.Entries[1].EntryId;
+        var firstSegment = create.Segments[0];
+        var secondSegment = create.Segments[1];
+        var firstMoved = firstSegment.Entries[0].EntryId;
+        var secondMoved = secondSegment.Entries[0].EntryId;
+        var firstAnchor = firstSegment.Entries[1].EntryId;
+        var secondAnchor = secondSegment.Entries[1].EntryId;
 
-        // Move the first entry aside, then fill both vacated positions. The final rows
-        // exchange the two occupied (segment_id, rank) keys.
-        var result = await Apply(
-            create.PlaylistId,
-            new(
-                1,
-                [
-                    Op(
-                        "move_entry",
-                        new MovePlaylistEntry(
-                            leftFirst,
-                            new(SegmentId: right.SegmentId, AfterEntryId: rightSecond)
-                        )
-                    ),
-                    Op(
-                        "move_entry",
-                        new MovePlaylistEntry(
-                            rightFirst,
-                            new(SegmentId: left.SegmentId, BeforeEntryId: leftSecond)
-                        )
-                    ),
-                    Op(
-                        "move_entry",
-                        new MovePlaylistEntry(
-                            leftFirst,
-                            new(SegmentId: right.SegmentId, BeforeEntryId: rightSecond)
-                        )
-                    ),
-                ]
-            )
+        // Park the first entry at the end of the second segment, then fill the two
+        // vacated first positions. The final rows exchange unique (segment_id, rank) keys.
+        var parkFirst = new MovePlaylistEntry(
+            firstMoved,
+            new(SegmentId: secondSegment.SegmentId, AfterEntryId: secondAnchor)
         );
+        var placeSecond = new MovePlaylistEntry(
+            secondMoved,
+            new(SegmentId: firstSegment.SegmentId, BeforeEntryId: firstAnchor)
+        );
+        var placeFirst = new MovePlaylistEntry(
+            firstMoved,
+            new(SegmentId: secondSegment.SegmentId, BeforeEntryId: secondAnchor)
+        );
+        var batch = new PlaylistBatchRequest(
+            1,
+            [
+                Op("move_entry", parkFirst),
+                Op("move_entry", placeSecond),
+                Op("move_entry", placeFirst),
+            ]
+        );
+
+        var result = await Apply(create.PlaylistId, batch);
+        var snapshot = await Snapshot(create.PlaylistId);
 
         result
             .Results.Select(operation => operation.Status)
             .Should()
             .Equal("applied", "applied", "applied");
-        var snapshot = await Snapshot(create.PlaylistId);
         snapshot
-            .Segments.Select(segment => segment.SegmentId)
+            .Segments.SelectMany(segment =>
+                segment.Entries.Select(entry => (segment.SegmentId, entry.EntryId))
+            )
             .Should()
-            .Equal(left.SegmentId, right.SegmentId);
-        snapshot
-            .Segments[0]
-            .Entries.Select(entry => entry.EntryId)
-            .Should()
-            .Equal(rightFirst, leftSecond);
-        snapshot
-            .Segments[1]
-            .Entries.Select(entry => entry.EntryId)
-            .Should()
-            .Equal(leftFirst, rightSecond);
+            .Equal(
+                (firstSegment.SegmentId, secondMoved),
+                (firstSegment.SegmentId, firstAnchor),
+                (secondSegment.SegmentId, firstMoved),
+                (secondSegment.SegmentId, secondAnchor)
+            );
     }
 
     [Test]

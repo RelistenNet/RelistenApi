@@ -14,7 +14,8 @@ The API implementation is locally verified as of 2026-11-17. The plan's
 validation, error precedence and generation on problems. See
 [operations and recovery](../../api/private-playlists.md) before rollout.
 
-IDs in examples are illustrative TypeIDs (`<prefix>_<26 lowercase base32 chars>`).
+The endpoint examples follow one playlist. Generate fresh TypeIDs for writes
+against a shared service and use track IDs from your catalog.
 
 ## Conventions
 
@@ -31,8 +32,8 @@ These match the favorites contracts already served by `RelistenUserService`.
   is missing or owned by someone else.
 - Every ID is a complete typed string. Client-created domain IDs are UUIDv7 and
   globally unique. `track_id` is a catalog `TrackId`, validated only syntactically.
-- Every playlist and library response carries `history_generation` (see [History
-  generation](#history-generation)). Some examples omit it for brevity.
+- Playlist responses and library snapshot and changes responses carry
+  `history_generation`. See [History generation](#history-generation).
 - Receipts are scoped to the account that created them. Another account reusing an
   `operation_id` or `command_id` gets `409 idempotency_conflict`, never the stored
   result.
@@ -80,6 +81,16 @@ Unicode scalar values after normalization. Names need not be unique. An empty
 description is stored as `null`; NUL and invalid Unicode are rejected.
 
 ## Endpoints
+
+Start with a new account to reproduce the library revisions in these examples.
+
+1. Create the playlist and read its snapshot at revision 1.
+2. For the [mixed library feed example](#library-feed-additive-still-version-1),
+   read the library snapshot and save its `next_cursor`. Then favorite a track.
+3. [Apply the example insert](#apply-operations), then read playlist changes after
+   revision 1. If you saved a library cursor, read library changes from that
+   cursor. The list example shows the playlist after the insert.
+4. Archive the playlist after reading the changes.
 
 ### Create a playlist
 
@@ -140,13 +151,14 @@ feed instead.
 ```json
 {
   "contract_version": 1,
+  "history_generation": "019a0000-0000-7000-8000-000000000001",
   "playlists": [
     {
       "playlist_id": "playlist_01k8000000e008000000000001",
-      "name": "Cornell and friends",
-      "entry_count": 2,
+      "name": "Cornell + friends",
+      "entry_count": 3,
       "archived": false,
-      "revision": 43,
+      "revision": 2,
       "updated_at": "2026-11-16T19:40:03Z"
     }
   ]
@@ -164,8 +176,9 @@ The response is `Cache-Control: private, no-store`.
 ```json
 {
   "contract_version": 1,
+  "history_generation": "019a0000-0000-7000-8000-000000000001",
   "playlist_id": "playlist_01k8000000e008000000000001",
-  "revision": 41,
+  "revision": 1,
   "archived": false,
   "role": "owner",
   "metadata": { "name": "Cornell + friends", "description": null },
@@ -180,7 +193,7 @@ The response is `Cache-Control: private, no-store`.
     }
   ],
   "created_at": "2026-11-16T18:02:11Z",
-  "updated_at": "2026-11-16T19:40:03Z"
+  "updated_at": "2026-11-16T18:02:11Z"
 }
 ```
 
@@ -193,31 +206,33 @@ never from changes.
 
 ### Read changes
 
-`GET /v1/playlists/{playlist_id}/changes?after_revision=41`
+`GET /v1/playlists/{playlist_id}/changes?after_revision=1`
+
+After the example insert, the delta adds the third entry between the two entries
+in the snapshot.
 
 ```json
 {
   "contract_version": 1,
+  "history_generation": "019a0000-0000-7000-8000-000000000001",
   "playlist_id": "playlist_01k8000000e008000000000001",
-  "head_revision": 43,
+  "head_revision": 2,
   "revisions": [
     {
-      "revision": 42,
+      "revision": 2,
       "kind": "content",
       "changes": [
-        { "type": "entry_upserted", "entry_id": "playlist_entry_01k8000000e008000000000006", "segment_id": "playlist_segment_01k8000000e008000000000002", "track_id": "track_3k9w2m7q8x4p1n6r5t0v2y8z4c", "rank": "a0V" }
-      ]
-    },
-    {
-      "revision": 43,
-      "kind": "content",
-      "changes": [
-        { "type": "entry_deleted", "entry_id": "playlist_entry_01k8000000e008000000000004" },
-        { "type": "metadata_updated", "name": "Cornell and friends", "description": "Spring '77" }
+        {
+          "type": "entry_upserted",
+          "entry_id": "playlist_entry_01k8000000e008000000000006",
+          "segment_id": "playlist_segment_01k8000000e008000000000002",
+          "track_id": "track_3k9w2m7q8x4p1n6r5t0v2y8z4c",
+          "rank": "a0V"
+        }
       ]
     }
   ],
-  "next_after_revision": 43,
+  "next_after_revision": 2,
   "has_more": false
 }
 ```
@@ -244,11 +259,11 @@ Paging: a page holds whole revisions only, never part of one. It is capped at 50
 changes, except that a single revision larger than that is returned alone. Clients
 continue from `next_after_revision` while `has_more` is true.
 
-| `after_revision` (head is 43) | Result |
+| `after_revision` (head is 2) | Result |
 | --- | --- |
-| 41 | Revisions 42 and 43. |
-| 43 | `200` with empty `revisions`. |
-| 44 or more | `410 snapshot_required`. The server history is behind the client, for example after a backup restore. |
+| 1 | Revision 2. |
+| 2 | `200` with empty `revisions`. |
+| 3 or more | `410 snapshot_required`. The server history is behind the client, for example after a backup restore. |
 | 0 | `410 snapshot_required`. Revision 1 (create) has no change envelope; start from a snapshot. |
 
 `410 snapshot_required` is also returned if `after_revision` is older than retained
@@ -298,7 +313,7 @@ device must replace its base by snapshot even though the revisions compare equal
   "operations": [
     {
       "operation_id": "playlist_operation_01k8000000e00800000000000b",
-      "base_revision": 41,
+      "base_revision": 1,
       "operation_type": "insert_entries",
       "payload": {
         "segment_id": "playlist_segment_01k8000000e008000000000002",
@@ -322,9 +337,10 @@ Response `200`, one result per operation in request order:
 ```json
 {
   "contract_version": 1,
-  "head_revision": 42,
+  "history_generation": "019a0000-0000-7000-8000-000000000001",
+  "head_revision": 2,
   "results": [
-    { "operation_id": "playlist_operation_01k8000000e00800000000000b", "status": "applied", "revision": 42 }
+    { "operation_id": "playlist_operation_01k8000000e00800000000000b", "status": "applied", "revision": 2 }
   ]
 }
 ```
@@ -390,7 +406,8 @@ Then:
 | `move_entry` | `entry_id`, `destination` | Move one entry. See below. |
 | `delete_entry` | `entry_id` | Tombstone the entry. If it was its segment's last live entry, also tombstone the segment. |
 
-`move_entry` takes exactly one of two destinations:
+For `move_entry`, choose one of these payloads. The first moves an entry into
+an existing segment. The second creates a segment containing the moved entry.
 
 ```json
 {
@@ -412,10 +429,8 @@ Then:
 }
 ```
 
-The first moves into an existing segment. The second pulls the entry out into a
-new one-entry segment placed among the segments. If the entry leaves its old
-segment empty, that segment is tombstoned in the same operation, after anchors are
-resolved, so the old segment is still a valid anchor for the new one.
+If the entry leaves its old segment empty, the server tombstones that segment
+after resolving anchors. The old segment can still anchor the new one.
 
 A new segment is placed between whole segments. Splitting a block in place, with
 the pulled-out track landing between the two halves, is not expressible in v1; it
@@ -548,38 +563,62 @@ the favorite mutation endpoint are unchanged. `library_revision` is the existing
 per-user counter on `user_data.library_states`. Favorites are dev-alpha only;
 current alpha builds reject unknown change types and must update (see below).
 
-The snapshot gains a `playlists` array of summaries, active and archived:
+`GET /v1/library/snapshot` includes active and archived playlists. This example
+is from a new account just after the create request.
 
 ```json
 {
   "contract_version": 1,
-  "library_revision": 118,
+  "history_generation": "019a0000-0000-7000-8000-000000000001",
+  "library_revision": 1,
   "next_cursor": "opaque",
-  "favorites": [ "…unchanged…" ],
+  "favorites": [],
   "playlists": [
     {
       "playlist_id": "playlist_01k8000000e008000000000001",
-      "name": "Cornell and friends",
+      "name": "Cornell + friends",
       "entry_count": 2,
       "archived": false,
-      "revision": 43,
-      "updated_at": "2026-11-16T19:40:03Z"
+      "revision": 1,
+      "updated_at": "2026-11-16T18:02:11Z"
     }
   ]
 }
 ```
 
-Changes gain one `change_type`, `playlist_summary`, carrying a `playlist` object.
-Favorite changes keep their flat `favorite_id` and `target`; those two fields are
-absent on playlist changes:
+After favoriting a track and applying the example insert, call
+`GET /v1/library/changes?after=<next_cursor>` with the cursor returned by the
+library snapshot. The playlist change carries a `playlist` object. The favorite
+change carries `favorite_id` and `target`.
 
 ```json
 {
   "contract_version": 1,
-  "library_revision": 121,
+  "history_generation": "019a0000-0000-7000-8000-000000000001",
+  "library_revision": 3,
   "changes": [
-    { "change_id": "library_change_…", "revision": 120, "change_type": "favorite_added", "favorite_id": "favorite_…", "target": { "kind": "track", "id": "track_…" }, "changed_at": "…" },
-    { "change_id": "library_change_…", "revision": 121, "change_type": "playlist_summary", "playlist": { "playlist_id": "playlist_…", "name": "…", "entry_count": 3, "archived": false, "revision": 44, "updated_at": "…" }, "changed_at": "…" }
+    {
+      "change_id": "library_change_01k8000000e00800000000000d",
+      "revision": 2,
+      "change_type": "favorite_added",
+      "favorite_id": "favorite_01k8000000e00800000000000e",
+      "target": { "kind": "track", "id": "track_3k9w2m7q8x4p1n6r5t0v2y8z4a" },
+      "changed_at": "2026-11-16T19:35:00Z"
+    },
+    {
+      "change_id": "library_change_01k8000000e00800000000000f",
+      "revision": 3,
+      "change_type": "playlist_summary",
+      "playlist": {
+        "playlist_id": "playlist_01k8000000e008000000000001",
+        "name": "Cornell + friends",
+        "entry_count": 3,
+        "archived": false,
+        "revision": 2,
+        "updated_at": "2026-11-16T19:40:03Z"
+      },
+      "changed_at": "2026-11-16T19:40:03Z"
+    }
   ],
   "next_cursor": "opaque",
   "has_more": false
@@ -611,22 +650,24 @@ the favorites order (`FavoriteMutationService`):
    every ID the request would create, in sorted order. This turns concurrent reuse
    of an ID into a clean `idempotency_conflict` or `id_conflict` rather than a
    unique-key violation.
-2. The owner's `user_data.library_states` row, `FOR UPDATE`. This serializes quota
-   checks and assigns the library revision. Favorites take the same lock, so one
-   user's favorite and playlist writes serialize with each other.
-3. The playlist row, `FOR UPDATE` (not for create).
+2. The requesting account's `user_data.library_states` row, `FOR UPDATE`. This
+   serializes that account's quota checks and library revision updates. Favorites
+   take the same lock.
+3. For batch and archive requests, select the playlist by ID and owner and lock
+   the matching row with `FOR UPDATE`. A missing match returns
+   `404 playlist_not_found`.
 
-Then, in this order:
+An edit batch then follows these steps:
 
-1. Check access (`404`).
-2. Look up receipts. Conflicting reuse fails the batch with `409 idempotency_conflict`.
+1. Look up receipts. Conflicting reuse fails the batch with `409 idempotency_conflict`.
    If every operation is an exact replay, return the stored results now, even if the
    playlist is archived.
-3. Check archive state (`409 playlist_archived`).
-4. Run quota preflight.
-5. Apply the new operations in order, alongside replayed results.
-6. Write revision changes, receipts and one library summary change.
-7. Commit. An infrastructure failure rolls back the whole request.
+2. For a batch with new operations, check archive state (`409 playlist_archived`).
+3. Evaluate new operations in request order on a working copy and check quotas
+   against its final state.
+4. Write the final state, revision changes, receipts and one library summary change
+   for a changed playlist.
+5. Commit. An infrastructure failure rolls back the whole request.
 
 Collaboration later locks other members' library states after the playlist, in ID
 order. Account deletion later adds its fence ahead of the library state lock. Both
@@ -639,7 +680,7 @@ playlist, SHA-256 semantic hash and stored result. Receipts are kept for the
 playlist's lifetime.
 
 The hash is SHA-256 over UTF-8 lines joined by `\n`, like `FavoriteMutationHasher`.
-Because playlist payloads contain free text, every value line is tagged:
+Value lines use tags so free text stays distinct from absent and null fields.
 
 The v1 field order is explicit in `PlaylistHasher` and stays fixed if C# records
 are later reordered. `insert_segment` and `insert_entries` encode the parent ID,
@@ -651,7 +692,7 @@ entries, after anchor, before anchor; create encodes name, description, segments
 | 2 | Contract version |
 | 3 | Playlist ID |
 | 4 | `operation_type`, or `create` / `archive` for commands |
-| 5+ | One line per payload field, in the declaration order of the typed payload record |
+| 5+ | Encoded payload fields in the order defined by `PlaylistHasher` |
 
 Field lines are encoded as follows:
 
