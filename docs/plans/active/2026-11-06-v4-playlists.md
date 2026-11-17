@@ -103,9 +103,8 @@ The private delivery exposes:
 
 - `GET /v1/playlists?view=active|archived`: summaries for the current account;
   archived listings are owner-only.
-- `POST /v1/playlists`: `{contract_version, command_id, playlist_id, metadata,
-  initial_segments}`. Metadata contains name and optional description; initial
-  segments contain IDs, kind and ordered `{entry_id, track_id}` items.
+- `POST /v1/playlists`: creates a playlist with metadata and ordered segments.
+  See the [create request example](2026-11-16-v4-playlist-contracts.md#create-a-playlist).
 - `GET /v1/playlists/{playlist_id}/snapshot`: complete authorized authored
   structure, permissions and content revision. It carries no catalog data.
 - `GET /v1/playlists/{playlist_id}/changes?after_revision=...`: complete ordered

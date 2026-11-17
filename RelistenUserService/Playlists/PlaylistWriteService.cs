@@ -309,10 +309,15 @@ public sealed class PlaylistWriteService(
     {
         var playlist = await dbContext
             .Playlists.FromSqlInterpolated(
-                $"SELECT * FROM user_data.playlists WHERE id = {id.Value} FOR UPDATE"
+                $"""
+                SELECT *
+                FROM user_data.playlists
+                WHERE id = {id.Value} AND owner_id = {actor.Value}
+                FOR UPDATE
+                """
             )
             .SingleOrDefaultAsync(cancellationToken);
-        if (playlist is null || playlist.OwnerId != actor)
+        if (playlist is null)
         {
             throw new PlaylistException(404, "playlist_not_found", "Playlist not found.");
         }

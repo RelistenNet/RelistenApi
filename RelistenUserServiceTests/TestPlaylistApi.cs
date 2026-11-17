@@ -497,6 +497,70 @@ public sealed class TestPlaylistApi
     }
 
     [Test]
+    public async Task Entries_can_exchange_occupied_ranks_across_segments_in_one_batch()
+    {
+        var create = await Create(2, 2);
+        var left = create.Segments[0];
+        var right = create.Segments[1];
+        var leftFirst = left.Entries[0].EntryId;
+        var leftSecond = left.Entries[1].EntryId;
+        var rightFirst = right.Entries[0].EntryId;
+        var rightSecond = right.Entries[1].EntryId;
+
+        // Move the first entry aside, then fill both vacated positions. The final rows
+        // exchange the two occupied (segment_id, rank) keys.
+        var result = await Apply(
+            create.PlaylistId,
+            new(
+                1,
+                [
+                    Op(
+                        "move_entry",
+                        new MovePlaylistEntry(
+                            leftFirst,
+                            new(SegmentId: right.SegmentId, AfterEntryId: rightSecond)
+                        )
+                    ),
+                    Op(
+                        "move_entry",
+                        new MovePlaylistEntry(
+                            rightFirst,
+                            new(SegmentId: left.SegmentId, BeforeEntryId: leftSecond)
+                        )
+                    ),
+                    Op(
+                        "move_entry",
+                        new MovePlaylistEntry(
+                            leftFirst,
+                            new(SegmentId: right.SegmentId, BeforeEntryId: rightSecond)
+                        )
+                    ),
+                ]
+            )
+        );
+
+        result
+            .Results.Select(operation => operation.Status)
+            .Should()
+            .Equal("applied", "applied", "applied");
+        var snapshot = await Snapshot(create.PlaylistId);
+        snapshot
+            .Segments.Select(segment => segment.SegmentId)
+            .Should()
+            .Equal(left.SegmentId, right.SegmentId);
+        snapshot
+            .Segments[0]
+            .Entries.Select(entry => entry.EntryId)
+            .Should()
+            .Equal(rightFirst, leftSecond);
+        snapshot
+            .Segments[1]
+            .Entries.Select(entry => entry.EntryId)
+            .Should()
+            .Equal(leftFirst, rightSecond);
+    }
+
+    [Test]
     public async Task Restore_generation_detects_equal_revisions_and_wraps_surviving_receipts()
     {
         var create = await Create(1);

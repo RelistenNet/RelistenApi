@@ -31,8 +31,8 @@ These match the favorites contracts already served by `RelistenUserService`.
   is missing or owned by someone else.
 - Every ID is a complete typed string. Client-created domain IDs are UUIDv7 and
   globally unique. `track_id` is a catalog `TrackId`, validated only syntactically.
-- Every playlist and library response also carries `history_generation` (see
-  History generation). The examples below omit it for brevity.
+- Every playlist and library response carries `history_generation` (see [History
+  generation](#history-generation)). Some examples omit it for brevity.
 - Receipts are scoped to the account that created them. Another account reusing an
   `operation_id` or `command_id` gets `409 idempotency_conflict`, never the stored
   result.
@@ -88,15 +88,15 @@ description is stored as `null`; NUL and invalid Unicode are rejected.
 ```json
 {
   "contract_version": 1,
-  "command_id": "command_06ehx2v8q4f1k9m3t5w7z0r2yb",
-  "playlist_id": "playlist_06ehx2v8q3c8n2p4r6t8v0x2za",
+  "command_id": "command_01k8000000e00800000000000a",
+  "playlist_id": "playlist_01k8000000e008000000000001",
   "metadata": { "name": "Cornell + friends", "description": null },
   "segments": [
     {
-      "segment_id": "playlist_segment_06ehx2v8q5a1c3e5g7j9k1m3np",
+      "segment_id": "playlist_segment_01k8000000e008000000000002",
       "entries": [
-        { "entry_id": "playlist_entry_06ehx2v8q6b2d4f6h8k0m2p4rq", "track_id": "track_3k9w2m7q8x4p1n6r5t0v2y8z4a" },
-        { "entry_id": "playlist_entry_06ehx2v8q6c3e5g7j9m1p3r5ts", "track_id": "track_3k9w2m7q8x4p1n6r5t0v2y8z4b" }
+        { "entry_id": "playlist_entry_01k8000000e008000000000004", "track_id": "track_3k9w2m7q8x4p1n6r5t0v2y8z4a" },
+        { "entry_id": "playlist_entry_01k8000000e008000000000005", "track_id": "track_3k9w2m7q8x4p1n6r5t0v2y8z4b" }
       ]
     }
   ]
@@ -109,10 +109,15 @@ array order is the initial order. `description` may be omitted or `null`.
 Responses:
 
 - `201` on first success and `200` on an exact replay of the same `command_id`.
-  Both return the same body:
+  Both return the created playlist ID and revision with the current generation.
 
   ```json
-  { "contract_version": 1, "playlist_id": "playlist_06ehx2v8q3c8n2p4r6t8v0x2za", "revision": 1 }
+  {
+    "contract_version": 1,
+    "history_generation": "019a0000-0000-7000-8000-000000000001",
+    "playlist_id": "playlist_01k8000000e008000000000001",
+    "revision": 1
+  }
   ```
 
 - `409 idempotency_conflict` if `command_id` was used with a different payload.
@@ -137,7 +142,7 @@ feed instead.
   "contract_version": 1,
   "playlists": [
     {
-      "playlist_id": "playlist_06ehx2v8q3c8n2p4r6t8v0x2za",
+      "playlist_id": "playlist_01k8000000e008000000000001",
       "name": "Cornell and friends",
       "entry_count": 2,
       "archived": false,
@@ -159,18 +164,18 @@ The response is `Cache-Control: private, no-store`.
 ```json
 {
   "contract_version": 1,
-  "playlist_id": "playlist_06ehx2v8q3c8n2p4r6t8v0x2za",
+  "playlist_id": "playlist_01k8000000e008000000000001",
   "revision": 41,
   "archived": false,
   "role": "owner",
   "metadata": { "name": "Cornell + friends", "description": null },
   "segments": [
     {
-      "segment_id": "playlist_segment_06ehx2v8q5a1c3e5g7j9k1m3np",
+      "segment_id": "playlist_segment_01k8000000e008000000000002",
       "rank": "a0",
       "entries": [
-        { "entry_id": "playlist_entry_06ehx2v8q6b2d4f6h8k0m2p4rq", "track_id": "track_3k9w2m7q8x4p1n6r5t0v2y8z4a", "rank": "a0" },
-        { "entry_id": "playlist_entry_06ehx2v8q6c3e5g7j9m1p3r5ts", "track_id": "track_3k9w2m7q8x4p1n6r5t0v2y8z4b", "rank": "a1" }
+        { "entry_id": "playlist_entry_01k8000000e008000000000004", "track_id": "track_3k9w2m7q8x4p1n6r5t0v2y8z4a", "rank": "a0" },
+        { "entry_id": "playlist_entry_01k8000000e008000000000005", "track_id": "track_3k9w2m7q8x4p1n6r5t0v2y8z4b", "rank": "a1" }
       ]
     }
   ],
@@ -193,21 +198,21 @@ never from changes.
 ```json
 {
   "contract_version": 1,
-  "playlist_id": "playlist_06ehx2v8q3c8n2p4r6t8v0x2za",
+  "playlist_id": "playlist_01k8000000e008000000000001",
   "head_revision": 43,
   "revisions": [
     {
       "revision": 42,
       "kind": "content",
       "changes": [
-        { "type": "entry_upserted", "entry_id": "playlist_entry_06ehx2v8q9d4f6h8k0m2p4r6tv", "segment_id": "playlist_segment_06ehx2v8q5a1c3e5g7j9k1m3np", "track_id": "track_3k9w2m7q8x4p1n6r5t0v2y8z4c", "rank": "a0V" }
+        { "type": "entry_upserted", "entry_id": "playlist_entry_01k8000000e008000000000006", "segment_id": "playlist_segment_01k8000000e008000000000002", "track_id": "track_3k9w2m7q8x4p1n6r5t0v2y8z4c", "rank": "a0V" }
       ]
     },
     {
       "revision": 43,
       "kind": "content",
       "changes": [
-        { "type": "entry_deleted", "entry_id": "playlist_entry_06ehx2v8q6b2d4f6h8k0m2p4rq" },
+        { "type": "entry_deleted", "entry_id": "playlist_entry_01k8000000e008000000000004" },
         { "type": "metadata_updated", "name": "Cornell and friends", "description": "Spring '77" }
       ]
     }
@@ -292,15 +297,15 @@ device must replace its base by snapshot even though the revisions compare equal
   "contract_version": 1,
   "operations": [
     {
-      "operation_id": "playlist_operation_06ehx3a1b2c3d4e5f6g7h8j9ka",
+      "operation_id": "playlist_operation_01k8000000e00800000000000b",
       "base_revision": 41,
       "operation_type": "insert_entries",
       "payload": {
-        "segment_id": "playlist_segment_06ehx2v8q5a1c3e5g7j9k1m3np",
-        "after_entry_id": "playlist_entry_06ehx2v8q6b2d4f6h8k0m2p4rq",
-        "before_entry_id": "playlist_entry_06ehx2v8q6c3e5g7j9m1p3r5ts",
+        "segment_id": "playlist_segment_01k8000000e008000000000002",
+        "after_entry_id": "playlist_entry_01k8000000e008000000000004",
+        "before_entry_id": "playlist_entry_01k8000000e008000000000005",
         "entries": [
-          { "entry_id": "playlist_entry_06ehx2v8q9d4f6h8k0m2p4r6tv", "track_id": "track_3k9w2m7q8x4p1n6r5t0v2y8z4c" }
+          { "entry_id": "playlist_entry_01k8000000e008000000000006", "track_id": "track_3k9w2m7q8x4p1n6r5t0v2y8z4c" }
         ]
       }
     }
@@ -319,7 +324,7 @@ Response `200`, one result per operation in request order:
   "contract_version": 1,
   "head_revision": 42,
   "results": [
-    { "operation_id": "playlist_operation_06ehx3a1b2c3d4e5f6g7h8j9ka", "status": "applied", "revision": 42 }
+    { "operation_id": "playlist_operation_01k8000000e00800000000000b", "status": "applied", "revision": 42 }
   ]
 }
 ```
@@ -388,11 +393,23 @@ Then:
 `move_entry` takes exactly one of two destinations:
 
 ```json
-{ "entry_id": "playlist_entry_…", "destination": { "segment_id": "playlist_segment_…", "after_entry_id": "playlist_entry_…", "before_entry_id": null } }
+{
+  "entry_id": "playlist_entry_01k8000000e008000000000004",
+  "destination": {
+    "segment_id": "playlist_segment_01k8000000e008000000000002",
+    "after_entry_id": "playlist_entry_01k8000000e008000000000005"
+  }
+}
 ```
 
 ```json
-{ "entry_id": "playlist_entry_…", "destination": { "new_segment_id": "playlist_segment_…", "after_segment_id": "playlist_segment_…", "before_segment_id": null } }
+{
+  "entry_id": "playlist_entry_01k8000000e008000000000004",
+  "destination": {
+    "new_segment_id": "playlist_segment_01k8000000e008000000000003",
+    "after_segment_id": "playlist_segment_01k8000000e008000000000002"
+  }
+}
 ```
 
 The first moves into an existing segment. The second pulls the entry out into a
@@ -497,10 +514,20 @@ every key they generate.
 `PUT /v1/playlists/{playlist_id}/archive-state`
 
 ```json
-{ "contract_version": 1, "command_id": "command_06ehx4…", "archived": true }
+{ "contract_version": 1, "command_id": "command_01k8000000e00800000000000c", "archived": true }
 ```
 
-Response `200`: `{ "contract_version": 1, "playlist_id": "playlist_…", "archived": true, "changed": true }`.
+Response `200`:
+
+```json
+{
+  "contract_version": 1,
+  "history_generation": "019a0000-0000-7000-8000-000000000001",
+  "playlist_id": "playlist_01k8000000e008000000000001",
+  "archived": true,
+  "changed": true
+}
+```
 
 - An exact replay returns the stored result. Changed reuse of `command_id` is
   `409 idempotency_conflict`.
@@ -531,7 +558,7 @@ The snapshot gains a `playlists` array of summaries, active and archived:
   "favorites": [ "…unchanged…" ],
   "playlists": [
     {
-      "playlist_id": "playlist_06ehx2v8q3c8n2p4r6t8v0x2za",
+      "playlist_id": "playlist_01k8000000e008000000000001",
       "name": "Cornell and friends",
       "entry_count": 2,
       "archived": false,
