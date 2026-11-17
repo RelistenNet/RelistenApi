@@ -6,14 +6,12 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Formatters;
-using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NUnit.Framework;
@@ -21,11 +19,10 @@ using Relisten.Accounts.Contracts.Identifiers;
 using Relisten.Accounts.Contracts.Library;
 using Relisten.Accounts.Contracts.Playlists;
 using Relisten.Identifiers;
+using RelistenUserService;
 using RelistenUserService.Authentication;
 using RelistenUserService.Authentication.Authorization;
-using RelistenUserService.Controllers;
-using RelistenUserService.Http;
-using RelistenUserService.Library;
+using RelistenUserService.Identity.Entities;
 using RelistenUserService.Persistence;
 using RelistenUserService.Playlists;
 
@@ -36,6 +33,7 @@ namespace RelistenUserServiceTests;
 public sealed class TestPlaylistApi
 {
     private readonly PostgresIntegrationDatabase _database = new();
+    private string _directory = "";
     private WebApplication _app = null!;
     private HttpClient _client = null!;
     private UserId _user;
@@ -47,60 +45,46 @@ public sealed class TestPlaylistApi
     public async Task Start()
     {
         await _database.StartAsync();
+        _directory = Path.Combine(
+            Path.GetTempPath(),
+            $"relisten-playlist-proof-{Guid.NewGuid():N}"
+        );
+        Directory.CreateDirectory(_directory);
         var builder = WebApplication.CreateBuilder(
             new WebApplicationOptions
             {
-                ApplicationName = typeof(PlaylistsController).Assembly.FullName,
+                EnvironmentName = Environments.Development,
+                ContentRootPath = _directory,
+                ApplicationName = typeof(AccountsApplication).Assembly.GetName().Name,
             }
         );
         builder.Configuration.Sources.Clear();
+        builder.Configuration.AddInMemoryCollection(
+            new Dictionary<string, string?>
+            {
+                ["ACCOUNTS_DATABASE_URL"] = _database.ConnectionString,
+                ["ACCOUNTS_LOCK_DATABASE_URL"] = _database.ConnectionString,
+                ["AllowedHosts"] = "auth.relisten.net;accounts.relisten.net;relisten.net",
+                ["Accounts:Issuer"] = "https://auth.relisten.net/",
+                ["Accounts:WebClientSecret"] = "disposable-proof-secret",
+            }
+        );
         builder.Logging.ClearProviders();
-        builder.WebHost.UseTestServer();
-        builder.Services.AddDbContext<AccountsDbContext>(options =>
-            options.UseNpgsql(_database.ConnectionString)
-        );
-        builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
-        builder.Services.AddScoped<CurrentAccountContext>();
-        builder.Services.AddScoped<AdvisoryLockService>();
-        builder.Services.AddScoped<LibraryStateStore>();
-        builder.Services.AddScoped<PlaylistWriteService>();
-        builder.Services.AddScoped<PlaylistReadService>();
-        builder.Services.AddScoped<PlaylistHttpFilter>();
-        builder.Services.AddScoped<LibraryReadService>();
-        builder.Services.AddScoped<FavoriteMutationService>();
-        builder.Services.AddSingleton<IDataProtectionProvider>(
-            new EphemeralDataProtectionProvider()
-        );
-        builder.Services.AddSingleton<LibraryCursorProtector>();
+        builder.WebHost.UseKestrel().UseUrls("http://127.0.0.1:0");
         builder
-            .Services.AddAuthentication("proof")
+            .Services.AddAuthentication()
             .AddScheme<AuthenticationSchemeOptions, ProofAuthentication>("proof", _ => { });
-        builder.Services.AddAuthorization(options =>
-            options.AddPolicy(
-                AuthenticationConstants.LibraryAccessPolicy,
-                policy => policy.RequireAuthenticatedUser()
-            )
+        builder.Services.PostConfigure<PolicySchemeOptions>(
+            AuthenticationConstants.AccountCredentialScheme,
+            options => options.ForwardDefaultSelector = _ => "proof"
         );
-        builder
-            .Services.AddControllers()
-            .AddApplicationPart(typeof(PlaylistsController).Assembly)
-            .AddJsonOptions(options =>
-                options.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
-            );
-        builder.Services.Configure<ApiBehaviorOptions>(AccountApiBehavior.Configure);
-        builder
-            .Services.AddOptions<MvcOptions>()
-            .Configure<ILogger<SystemTextJsonInputFormatter>>(
-                (options, logger) =>
-                    options.InputFormatters.Insert(0, new PlaylistInputFormatter(logger))
-            );
-        _app = builder.Build();
-        _app.UseMiddleware<PrivateNoStoreMiddleware>();
-        _app.UseAuthentication();
-        _app.UseAuthorization();
-        _app.MapControllers();
+        _app = AccountsApplication.Build(builder);
+        await AccountsApplication.InitializeAsync(_app, CancellationToken.None);
         await _app.StartAsync();
-        _client = _app.GetTestClient();
+        _client = new HttpClient { BaseAddress = new Uri(_app.Urls.Single()) };
+        _client.DefaultRequestHeaders.Host = "accounts.relisten.net";
+        // Loopback stands in for the trusted ingress that terminates TLS.
+        _client.DefaultRequestHeaders.Add("X-Forwarded-Proto", "https");
     }
 
     [SetUp]
@@ -116,6 +100,30 @@ public sealed class TestPlaylistApi
             await _app.DisposeAsync();
         }
         await _database.StopAsync();
+        if (Directory.Exists(_directory))
+        {
+            Directory.Delete(_directory, recursive: true);
+        }
+    }
+
+    [Test]
+    public async Task Read_only_credentials_can_read_but_cannot_change_playlists()
+    {
+        var create = await Create(1);
+        (await Send(HttpMethod.Get, $"/v1/playlists/{create.PlaylistId}/snapshot", readOnly: true))
+            .StatusCode.Should()
+            .Be(HttpStatusCode.OK);
+        (
+            await Send(
+                HttpMethod.Put,
+                $"/v1/playlists/{create.PlaylistId}/archive-state",
+                new ArchivePlaylistRequest(1, CommandId.New(), true),
+                readOnly: true
+            )
+        )
+            .StatusCode.Should()
+            .Be(HttpStatusCode.Forbidden);
+        (await Snapshot(create.PlaylistId)).Archived.Should().BeFalse();
     }
 
     [Test]
@@ -510,6 +518,25 @@ public sealed class TestPlaylistApi
             422,
             "invalid_playlist_operation"
         );
+        var unknownPayloadField =
+            $$$"""{"contract_version":1,"operations":[{"operation_id":"{{{operationId}}}","base_revision":0,"operation_type":"update_metadata","payload":{"description":null,"extra":1}}]}""";
+        await Problem(
+            await Send(
+                HttpMethod.Post,
+                $"/v1/playlists/{create.PlaylistId}/operations:batch",
+                raw: unknownPayloadField
+            ),
+            422,
+            "invalid_playlist_operation"
+        );
+        var wrongIdPrefix = JsonSerializer
+            .Serialize(create, PlaylistJson.Options)
+            .Replace(create.PlaylistId.Value, create.CommandId.Value, StringComparison.Ordinal);
+        await Problem(
+            await Send(HttpMethod.Post, "/v1/playlists", raw: wrongIdPrefix),
+            422,
+            "invalid_playlist_operation"
+        );
         await Problem(
             await Send(
                 HttpMethod.Post,
@@ -520,6 +547,18 @@ public sealed class TestPlaylistApi
             "invalid_playlist_operation"
         );
         (await Snapshot(create.PlaylistId)).Revision.Should().Be(1);
+    }
+
+    [Test]
+    public async Task Oversized_requests_return_the_transport_size_limit()
+    {
+        var body =
+            JsonSerializer.Serialize(NewPlaylist(), PlaylistJson.Options)
+            + new string(' ', 2 * 1024 * 1024);
+        var response = await Send(HttpMethod.Post, "/v1/playlists", raw: body);
+        response
+            .StatusCode.Should()
+            .Be(HttpStatusCode.RequestEntityTooLarge, await response.Content.ReadAsStringAsync());
     }
 
     [Test]
@@ -559,7 +598,7 @@ public sealed class TestPlaylistApi
     }
 
     [Test]
-    public async Task Infrastructure_failure_rolls_back_staged_ranks_structure_receipts_and_library_state()
+    public async Task Persistence_failure_rolls_back_direct_rank_staging_and_leaves_no_effects()
     {
         var create = await Create(2);
         var before = await Snapshot(create.PlaylistId);
@@ -643,11 +682,16 @@ public sealed class TestPlaylistApi
         string url,
         object? body = null,
         string? raw = null,
-        UserId? actor = null
+        UserId? actor = null,
+        bool readOnly = false
     )
     {
         using var request = new HttpRequestMessage(method, url);
         request.Headers.Add("X-Proof-Account", (actor ?? _user).Value);
+        if (readOnly)
+        {
+            request.Headers.Add("X-Proof-Read-Only", "true");
+        }
         if (body is not null || raw is not null)
         {
             request.Content = new StringContent(
@@ -692,8 +736,8 @@ public sealed class TestPlaylistApi
         ) => throw new InvalidOperationException("Injected persistence failure");
     }
 
-    // Identity is the only substituted boundary. MVC, JSON, authorization requirement,
-    // ownership, services, migrations, PostgreSQL constraints and transactions all run normally.
+    // Substitute credential verification; retain production routing, method-aware authorization,
+    // middleware, JSON, services, migrations, PostgreSQL constraints and transactions.
     private sealed class ProofAuthentication(
         IOptionsMonitor<AuthenticationSchemeOptions> options,
         ILoggerFactory logger,
@@ -709,7 +753,11 @@ public sealed class TestPlaylistApi
                 return AuthenticateResult.NoResult();
             }
             var user = await db.Users.SingleAsync(row => row.Id == id);
-            account.SetNative(user, SessionId.New());
+            var capabilities =
+                Request.Headers["X-Proof-Read-Only"] == "true"
+                    ? IdentitySessionCapabilities.LibraryRead
+                    : IdentitySessionCapabilities.AllWeb;
+            account.SetWeb(user, SessionId.New(), "https://relisten.net", capabilities);
             return AuthenticateResult.Success(
                 new(
                     new ClaimsPrincipal(

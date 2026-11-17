@@ -64,7 +64,21 @@ public static class AccountsApplication
         // OpenIddict that the original request was HTTPS or select a public Relisten host.
         app.UseForwardedHeaders();
         app.UseMiddleware<PrivateNoStoreMiddleware>();
-        app.UseExceptionHandler();
+        app.UseExceptionHandler(
+            new ExceptionHandlerOptions
+            {
+                // Kestrel raises the body limit while MVC reads JSON. Preserve its client error
+                // instead of reporting a transient server failure that clients might retry.
+                StatusCodeSelector = exception =>
+                    exception
+                        is BadHttpRequestException
+                        {
+                            StatusCode: StatusCodes.Status413PayloadTooLarge,
+                        }
+                        ? StatusCodes.Status413PayloadTooLarge
+                        : StatusCodes.Status500InternalServerError,
+            }
+        );
         app.UseMiddleware<HostBoundaryMiddleware>();
         app.UseMiddleware<WebOriginRelayMiddleware>();
         app.UseMiddleware<AccountCredentialAmbiguityMiddleware>();

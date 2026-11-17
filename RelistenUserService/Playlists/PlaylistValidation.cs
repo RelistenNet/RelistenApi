@@ -192,7 +192,7 @@ public static class PlaylistValidation
                 entry is not null
                     && !entry.EntryId.IsEmpty
                     && TrackId.TryParse(entry.TrackId, out _),
-                "Entries require entry_ and track_ typed IDs."
+                "Entries require canonical playlist_entry_ and track_ IDs."
             );
             Unique(ids, entry!.EntryId.Value);
         }

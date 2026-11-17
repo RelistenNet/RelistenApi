@@ -79,29 +79,53 @@ public sealed class TestPlaylistContracts
             .Be(new OptionalText(true, null));
     }
 
-    [TestCase("{\"description\":null,\"extra\":1}")]
-    [TestCase("{\"name\":\"A\",\"name\":\"B\"}")]
-    public void Unknown_and_duplicate_payload_fields_are_rejected(string payload)
-    {
-        var read = () => Read(payload);
-        read.Should().Throw<JsonException>();
-    }
-
     [Test]
-    public void Missing_base_revision_and_wrong_account_ID_prefix_are_rejected()
+    public void Durable_v1_hashes_preserve_fixed_fields_and_array_order()
     {
-        var read = () =>
-            JsonSerializer.Deserialize<PlaylistOperation>(
-                $$$"""{"operation_id":"{{{PlaylistOperationId.New()}}}","operation_type":"update_metadata","payload":{}}""",
-                PlaylistJson.Options
-            );
-        read.Should().Throw<JsonException>();
-        var wrong = () =>
-            JsonSerializer.Deserialize<PlaylistId>(
-                JsonSerializer.Serialize(CommandId.New().Value),
-                PlaylistJson.Options
-            );
-        wrong.Should().Throw<JsonException>();
+        var id = PlaylistId.Parse("playlist_01k8000000e008000000000001");
+        var firstSegment = PlaylistSegmentId.Parse("playlist_segment_01k8000000e008000000000002");
+        var secondSegment = PlaylistSegmentId.Parse("playlist_segment_01k8000000e008000000000003");
+        PlaylistEntryInput first = new(
+            PlaylistEntryId.Parse("playlist_entry_01k8000000e008000000000004"),
+            "track_01k8000000e008000000000007"
+        );
+        PlaylistEntryInput second = new(
+            PlaylistEntryId.Parse("playlist_entry_01k8000000e008000000000005"),
+            "track_01k8000000e008000000000008"
+        );
+        PlaylistEntryInput third = new(
+            PlaylistEntryId.Parse("playlist_entry_01k8000000e008000000000006"),
+            "track_01k8000000e008000000000009"
+        );
+        var command = CommandId.New();
+        var create = PlaylistValidation.Normalize(
+            new CreatePlaylistRequest(
+                1,
+                command,
+                id,
+                new(" Cafe\u0301 ", "line\nA|N|V:"),
+                [new(secondSegment, [third]), new(firstSegment, [second, first])]
+            )
+        );
+        var insert = new PlaylistOperation(
+            PlaylistOperationId.New(),
+            0,
+            "insert_entries",
+            new InsertPlaylistEntries(secondSegment, [second, first], third.EntryId, first.EntryId)
+        );
+        // Independently calculated from the frozen UTF-8 line format, not another hasher call.
+        Convert
+            .ToHexString(PlaylistHasher.Hash(create))
+            .Should()
+            .Be("EB1F94DCF6D8008FAFF4CFB63FB0E76B3996F61FAD3C82512A6ECF78250F7022");
+        Convert
+            .ToHexString(PlaylistHasher.Hash(id, 1, insert))
+            .Should()
+            .Be("EC41BBFC55209D0A849A2AB96738C802FDC7CA0454FC5A81C67E975AFC4C9EC9");
+        Convert
+            .ToHexString(PlaylistHasher.Hash(id, new ArchivePlaylistRequest(1, command, true)))
+            .Should()
+            .Be("ED80EBBA8EDBD05DE7D868BAA6F8A48E7766B70A1AA6EB3904CEDF523B103B10");
     }
 
     private static PlaylistOperation Read(string payload)
