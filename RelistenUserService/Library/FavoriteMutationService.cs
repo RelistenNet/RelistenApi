@@ -86,12 +86,7 @@ public sealed class FavoriteMutationService(
         }
 
         var now = timeProvider.GetUtcNow();
-        var state = await stateStore.GetOrCreateAsync(
-            userId,
-            now,
-            LibraryStateLockMode.ExclusiveWrite,
-            cancellationToken
-        );
+        var state = await stateStore.GetOrCreateForUpdateAsync(userId, now, cancellationToken);
         var favorites = await dbContext
             .Favorites.Where(favorite => favorite.UserId == userId)
             .ToListAsync(cancellationToken);

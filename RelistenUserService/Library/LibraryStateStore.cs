@@ -4,18 +4,11 @@ using RelistenUserService.Persistence;
 
 namespace RelistenUserService.Library;
 
-public enum LibraryStateLockMode
-{
-    SharedRead,
-    ExclusiveWrite,
-}
-
 public sealed class LibraryStateStore(AccountsDbContext dbContext)
 {
-    public async Task<LibraryState> GetOrCreateAsync(
+    public async Task<LibraryState> GetOrCreateForUpdateAsync(
         UserId userId,
         DateTimeOffset now,
-        LibraryStateLockMode lockMode,
         CancellationToken cancellationToken
     )
     {
@@ -30,26 +23,15 @@ public sealed class LibraryStateStore(AccountsDbContext dbContext)
             cancellationToken
         );
 
-        return lockMode == LibraryStateLockMode.ExclusiveWrite
-            ? await dbContext
-                .LibraryStates.FromSqlInterpolated(
-                    $"""
-                        SELECT *
-                        FROM user_data.library_states
-                        WHERE user_id = {userId.Value}
-                        FOR UPDATE
-                    """
-                )
-                .SingleAsync(cancellationToken)
-            : await dbContext
-                .LibraryStates.FromSqlInterpolated(
-                    $"""
+        return await dbContext
+            .LibraryStates.FromSqlInterpolated(
+                $"""
                     SELECT *
                     FROM user_data.library_states
                     WHERE user_id = {userId.Value}
-                    FOR SHARE
-                    """
-                )
-                .SingleAsync(cancellationToken);
+                    FOR UPDATE
+                """
+            )
+            .SingleAsync(cancellationToken);
     }
 }

@@ -70,6 +70,8 @@ public sealed class PlaylistReadService(AccountsDbContext dbContext)
             .Where(row => row.PlaylistId == id && !row.Deleted)
             .OrderBy(row => row.Rank)
             .ToArrayAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
         var entriesBySegment = entries.ToLookup(row => row.SegmentId);
         var response = new PlaylistSnapshot(
             1,
@@ -95,7 +97,6 @@ public sealed class PlaylistReadService(AccountsDbContext dbContext)
             playlist.CreatedAt,
             playlist.UpdatedAt
         );
-        await transaction.CommitAsync(cancellationToken);
         return response;
     }
 
@@ -125,6 +126,12 @@ public sealed class PlaylistReadService(AccountsDbContext dbContext)
             throw SnapshotRequired();
         }
 
+        if (afterRevision == playlist.Revision)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return new(1, generation, id, playlist.Revision, [], afterRevision, false);
+        }
+
         // Decide the page from lightweight headers first. Fetching 501 full envelopes could
         // read hundreds of large rebalances even when only the first belongs in this page.
         var headers = await dbContext
@@ -149,7 +156,7 @@ public sealed class PlaylistReadService(AccountsDbContext dbContext)
             next = row.Revision;
             count += row.ChangeCount;
         }
-        if (afterRevision < playlist.Revision && next == afterRevision)
+        if (next == afterRevision)
         {
             throw SnapshotRequired();
         }
@@ -160,6 +167,8 @@ public sealed class PlaylistReadService(AccountsDbContext dbContext)
             )
             .OrderBy(row => row.Revision)
             .ToArrayAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
         var page = rows.Select(row => new PlaylistRevision(
                 row.Revision,
                 row.Kind,
@@ -169,7 +178,6 @@ public sealed class PlaylistReadService(AccountsDbContext dbContext)
                 )!
             ))
             .ToArray();
-        await transaction.CommitAsync(cancellationToken);
         return new(1, generation, id, playlist.Revision, page, next, next < playlist.Revision);
     }
 

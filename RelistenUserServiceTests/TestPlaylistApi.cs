@@ -139,6 +139,11 @@ public sealed class TestPlaylistApi
             .StatusCode.Should()
             .Be(HttpStatusCode.OK);
         var id = create.PlaylistId;
+        var initialChanges = await Changes(id, 1);
+        initialChanges.Revisions.Should().BeEmpty();
+        initialChanges.HeadRevision.Should().Be(1);
+        initialChanges.NextAfterRevision.Should().Be(1);
+        initialChanges.HasMore.Should().BeFalse();
         var a = create.Segments[0].Entries[0].EntryId;
         var b = create.Segments[0].Entries[1].EntryId;
         var c = create.Segments[1].Entries[0].EntryId;
@@ -196,11 +201,38 @@ public sealed class TestPlaylistApi
             .Distinct()
             .Should()
             .ContainSingle();
+        var lastSegment = snapshot.Segments[^1];
+        var alreadyLast = await Apply(
+            id,
+            new(
+                1,
+                [
+                    Op(
+                        "move_entry",
+                        new MovePlaylistEntry(
+                            lastSegment.Entries[^1].EntryId,
+                            new(SegmentId: lastSegment.SegmentId)
+                        )
+                    ),
+                    Op("move_segment", new MovePlaylistSegment(lastSegment.SegmentId)),
+                ]
+            )
+        );
+        alreadyLast
+            .Results.Should()
+            .OnlyContain(row => row.Status == "no_op" && row.Revision == null);
+        alreadyLast.HeadRevision.Should().Be(applied.HeadRevision);
+
         var changes = await Changes(id, 1);
         changes
             .Revisions.Select(revision => revision.Revision)
             .Should()
             .Equal(2, 3, 4, 5, 6, 7, 8, 9);
+        var currentChanges = await Changes(id, applied.HeadRevision);
+        currentChanges.Revisions.Should().BeEmpty();
+        currentChanges.HeadRevision.Should().Be(applied.HeadRevision);
+        currentChanges.NextAfterRevision.Should().Be(applied.HeadRevision);
+        currentChanges.HasMore.Should().BeFalse();
         changes
             .Revisions[^1]
             .Changes.Should()
@@ -257,6 +289,39 @@ public sealed class TestPlaylistApi
             .StatusCode.Should()
             .Be(HttpStatusCode.NotFound);
         first.Headers.CacheControl!.NoStore.Should().BeTrue();
+    }
+
+    [Test]
+    public async Task Metadata_edits_with_replayed_inserts_preserve_structure_and_entry_count()
+    {
+        var create = await Create(2, 1);
+        var id = create.PlaylistId;
+        var insert = Op(
+            "insert_entries",
+            new InsertPlaylistEntries(create.Segments[0].SegmentId, [Entry(), Entry()])
+        );
+        var inserted = await Apply(id, new(1, [insert]));
+        var before = await Snapshot(id);
+        var rename = Op("update_metadata", new UpdatePlaylistMetadata(new(true, "Renamed")));
+        var sameName = Op("update_metadata", new UpdatePlaylistMetadata(new(true, "Renamed")));
+        var batch = new PlaylistBatchRequest(1, [insert, rename, sameName]);
+
+        var result = await Apply(id, batch);
+        result.Results[0].Should().BeEquivalentTo(inserted.Results[0]);
+        result.Results.Select(row => row.Status).Should().Equal("applied", "applied", "no_op");
+        result.HeadRevision.Should().Be(3);
+
+        var snapshot = await Snapshot(id);
+        snapshot.Metadata.Name.Should().Be("Renamed");
+        snapshot
+            .Segments.Should()
+            .BeEquivalentTo(before.Segments, options => options.WithStrictOrdering());
+        var library = await Read<FavoriteLibrarySnapshot>(
+            await Send(HttpMethod.Get, "/v1/library/snapshot")
+        );
+        library.Playlists.Single().EntryCount.Should().Be(5);
+        library.Playlists.Single().Revision.Should().Be(3);
+        (await Apply(id, batch)).Should().BeEquivalentTo(result);
     }
 
     [Test]

@@ -20,7 +20,7 @@ internal sealed class PlaylistEditor(
     public Dictionary<PlaylistEntryId, PlaylistEntry> Entries { get; } =
         entries.ToDictionary(row => row.Id);
     public List<PlaylistRevision> Revisions { get; } = [];
-    public int LiveEntryCount => Entries.Values.Count(row => !row.Deleted);
+    public int LiveEntryCount => Playlist.EntryCount;
 
     public PlaylistOperationResult Apply(PlaylistOperation operation)
     {
@@ -97,6 +97,18 @@ internal sealed class PlaylistEditor(
             return targetStatus;
         }
         var target = Segments[move.SegmentId];
+        // Repeated append intents should not allocate and sort every sibling to prove a no-op.
+        if (
+            move.AfterSegmentId is null
+            && move.BeforeSegmentId is null
+            && !Segments.Values.Any(row =>
+                !row.Deleted && string.CompareOrdinal(row.Rank, target.Rank) > 0
+            )
+        )
+        {
+            return "no_op";
+        }
+
         var ordered = LiveSegments();
         var previousIndex = ordered.FindIndex(row => row.Id == target.Id);
         ordered.RemoveAt(previousIndex);
@@ -125,6 +137,7 @@ internal sealed class PlaylistEditor(
         {
             entry.Deleted = true;
             entry.Rank = null;
+            Playlist.EntryCount--;
         }
         TombstoneSegment(delete.SegmentId, changes);
         return "applied";
@@ -193,6 +206,21 @@ internal sealed class PlaylistEditor(
             {
                 return "parent_missing";
             }
+            // Keep this check before building ordered siblings for large offline batches.
+            if (
+                newParent == oldParent
+                && destination.AfterEntryId is null
+                && destination.BeforeEntryId is null
+                && !Entries.Values.Any(row =>
+                    !row.Deleted
+                    && row.SegmentId == newParent
+                    && string.CompareOrdinal(row.Rank, entry.Rank) > 0
+                )
+            )
+            {
+                return "no_op";
+            }
+
             var siblings = LiveEntries(newParent);
             var previousIndex = siblings.FindIndex(row => row.Id == entry.Id);
             siblings.RemoveAll(row => row.Id == entry.Id);
@@ -225,6 +253,7 @@ internal sealed class PlaylistEditor(
         var entry = Entries[delete.EntryId];
         entry.Deleted = true;
         entry.Rank = null;
+        Playlist.EntryCount--;
         changes.Add(new PlaylistEntryDeleted(entry.Id));
         DeleteEmptySegment(entry.SegmentId, changes);
         return "applied";
@@ -295,6 +324,7 @@ internal sealed class PlaylistEditor(
                 new PlaylistEntryUpserted(input.EntryId, parent, input.TrackId, ranks[index])
             );
         }
+        Playlist.EntryCount += entries.Count;
     }
 
     private void DeleteEmptySegment(PlaylistSegmentId parent, List<PlaylistChange> changes)

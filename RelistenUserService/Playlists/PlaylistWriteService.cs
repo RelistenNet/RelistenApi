@@ -173,7 +173,7 @@ public sealed class PlaylistWriteService(
         var newOperations = request
             .Operations.Where(operation => !receipts.ContainsKey(operation.OperationId.Value))
             .ToArray();
-        var editor = await LoadEditorAsync(playlist, newOperations, createdIds, cancellationToken);
+        var editor = await LoadEditorAsync(playlist, newOperations, cancellationToken);
         var results = new List<PlaylistOperationResult>();
         foreach (var operation in request.Operations)
         {
@@ -186,14 +186,20 @@ public sealed class PlaylistWriteService(
 
         // Intermediate states may exceed quotas. The ordered evaluator already resolved parent
         // deletion and semantic rejections; only the final state is admitted and persisted.
-        var ownedCount = await dbContext
-            .Playlists.Where(row => row.OwnerId == actor)
-            .SumAsync(row => row.EntryCount, cancellationToken);
-        CheckQuota(
-            0,
-            editor.LiveEntryCount,
-            ownedCount - playlist.EntryCount + editor.LiveEntryCount
-        );
+        CheckQuota(0, editor.LiveEntryCount, 0);
+        // All writes enforce the same owner quota while holding its library-state lock.
+        // Starting from that valid stored state, a non-increasing batch cannot exceed it.
+        if (editor.LiveEntryCount > playlist.EntryCount)
+        {
+            var ownedCount = await dbContext
+                .Playlists.Where(row => row.OwnerId == actor)
+                .SumAsync(row => row.EntryCount, cancellationToken);
+            CheckQuota(
+                0,
+                editor.LiveEntryCount,
+                ownedCount - playlist.EntryCount + editor.LiveEntryCount
+            );
+        }
         var now = timeProvider.GetUtcNow();
         PublishContent(playlist, editor, state, now);
         foreach (
@@ -288,10 +294,9 @@ public sealed class PlaylistWriteService(
                 .Concat(createdIds.Select(id => $"playlist-id:{id}")),
             cancellationToken
         );
-        return await stateStore.GetOrCreateAsync(
+        return await stateStore.GetOrCreateForUpdateAsync(
             actor,
             timeProvider.GetUtcNow(),
-            LibraryStateLockMode.ExclusiveWrite,
             cancellationToken
         );
     }
@@ -333,18 +338,27 @@ public sealed class PlaylistWriteService(
         var entries = ids.Where(id => id.StartsWith("playlist_entry_"))
             .Select(PlaylistEntryId.Parse)
             .ToArray();
-        var existingPlaylists = await dbContext
-            .Playlists.Where(row => playlists.Contains(row.Id))
-            .Select(row => row.Id)
-            .ToArrayAsync(cancellationToken);
-        var existingSegments = await dbContext
-            .PlaylistSegments.Where(row => segments.Contains(row.Id))
-            .Select(row => row.Id)
-            .ToArrayAsync(cancellationToken);
-        var existingEntries = await dbContext
-            .PlaylistEntries.Where(row => entries.Contains(row.Id))
-            .Select(row => row.Id)
-            .ToArrayAsync(cancellationToken);
+        var existingPlaylists =
+            playlists.Length == 0
+                ? []
+                : await dbContext
+                    .Playlists.Where(row => playlists.Contains(row.Id))
+                    .Select(row => row.Id)
+                    .ToArrayAsync(cancellationToken);
+        var existingSegments =
+            segments.Length == 0
+                ? []
+                : await dbContext
+                    .PlaylistSegments.Where(row => segments.Contains(row.Id))
+                    .Select(row => row.Id)
+                    .ToArrayAsync(cancellationToken);
+        var existingEntries =
+            entries.Length == 0
+                ? []
+                : await dbContext
+                    .PlaylistEntries.Where(row => entries.Contains(row.Id))
+                    .Select(row => row.Id)
+                    .ToArrayAsync(cancellationToken);
         return existingPlaylists
             .Select(id => id.Value)
             .Concat(existingSegments.Select(id => id.Value))
@@ -355,10 +369,15 @@ public sealed class PlaylistWriteService(
     private async Task<PlaylistEditor> LoadEditorAsync(
         Playlist playlist,
         IReadOnlyList<PlaylistOperation> operations,
-        string[] createdIds,
         CancellationToken cancellationToken
     )
     {
+        if (operations.All(operation => operation.Payload is UpdatePlaylistMetadata))
+        {
+            // Metadata changes retain the locked playlist's count without loading its structure.
+            return new(Copy(playlist), [], [], []);
+        }
+
         var segmentTargets = operations
             .Select(operation => operation.Payload)
             .SelectMany(payload =>
@@ -397,7 +416,10 @@ public sealed class PlaylistWriteService(
             Copy(playlist),
             segments.Select(Copy),
             entries.Select(Copy),
-            await ExistingIdsAsync(createdIds, cancellationToken)
+            await ExistingIdsAsync(
+                operations.SelectMany(PlaylistValidation.CreatedIds),
+                cancellationToken
+            )
         );
     }
 
@@ -415,7 +437,6 @@ public sealed class PlaylistWriteService(
         {
             return;
         }
-        editor.Playlist.EntryCount = editor.LiveEntryCount;
         editor.Playlist.UpdatedAt = now;
         ApplyWorkingState(playlist, editor);
         foreach (var revision in editor.Revisions)
