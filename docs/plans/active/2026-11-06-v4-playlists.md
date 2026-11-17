@@ -383,7 +383,8 @@ protect the same invariant; do not prescribe a test count or private call order.
   chunked resolver calls without full-show expansion or clearing richer cached
   children, and keep authored entries when a resolve chunk fails.
 - Realm sync: a restore that reuses revision numbers forces snapshot replacement;
-  a quota-held insert applies after a same-device deletion syncs; receipt 43 before
+  a quota-failed insert into a single-entry segment applies when resent with the
+  deletion of that entry; receipt 43 before
   delta 42 still pulls after 41; a lost-create
   response retries before children; snapshot fallback retains pending edits;
   late completions after scope change cannot apply or acknowledge them.
@@ -485,6 +486,11 @@ qualification separately. No deployment or publication is authorized by this pla
   `history_generation`, rotated by every database restore, forces snapshot
   replacement when restored revisions reuse numbers. During a quota pause,
   count-neutral and deleting operations still sync while additions are held.
+- 2026-11-16, review: replace that quota split. Limits now apply to a batch's
+  final counts, so a corrective delete travels in the same ordered batch as the
+  held insert and cannot tombstone its destination first. Overlay pruning compares
+  revisions only within one generation; restore recovery resubmits every
+  operation still held locally, and makes no promise for edits already retired.
 - 2026-11-16, Alec: decision 3 follows favorites — hydrate only missing tracks, no
   proactive re-check; re-resolve a track when its playback fails. Removals are
   very rare.

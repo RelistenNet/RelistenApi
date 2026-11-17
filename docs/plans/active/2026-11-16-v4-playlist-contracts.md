@@ -1,7 +1,7 @@
 # Private playlist contracts
 
 Status: frozen 2026-11-16 by Alec, after a fresh-reader review; restore and
-quota recovery amended the same day after a second review. Change it only
+quota recovery amended the same day after two further reviews. Change it only
 through the plan's Decision Log. This document freezes the wire contracts and
 server invariants for delivery 1 (private playlists) of
 [Deliver playlists using v4 catalog identities](2026-11-06-v4-playlists.md). The
@@ -331,7 +331,7 @@ Whole-batch failures apply nothing:
 | 409 | `idempotency_conflict` | An `operation_id` was used before with a different payload, playlist or account. Body lists `conflicting_operation_ids`. |
 | 422 | `invalid_contract_version` | Unsupported version. |
 | 422 | `invalid_playlist_operation` | Malformed envelope or payload, such as a wrong prefix, an unknown type or field, empty `entries`, or a duplicate `operation_id` or created ID within the request. |
-| 422 | `quota_exceeded` | Applying the batch would cross a limit (see Quota preflight). |
+| 422 | `quota_exceeded` | The state after the batch would exceed a limit (see Quota preflight). |
 | 422 | `limit_exceeded` | More than 500 operations. |
 
 ## Operations
@@ -421,31 +421,37 @@ need no notice.
 
 ### Quota preflight
 
-Before applying anything, the server dry-runs the batch's new operations in
-submitted order against the current state. Exact replays count nothing. Only
-operations that would apply count, and deletes earlier in the batch free room for
-later inserts. If the dry run crosses any limit, the whole batch fails with
-`422 quota_exceeded` and nothing is applied.
+Limits apply to the state a batch leaves behind, not to its intermediate steps
+(2026-11-16 review). Before applying anything, the server dry-runs the batch's new
+operations in submitted order against the current state, exactly as they would
+apply. Exact replays count nothing. It then compares the final live entry counts,
+for this playlist and for the account, with the limits. If either final count
+exceeds its limit, the whole batch fails with `422 quota_exceeded` and nothing is
+applied. A batch may pass through more than 5,000 entries on the way, because the
+whole batch commits atomically.
 
-Retrying an unchanged batch cannot clear a quota failure. Mobile then splits the
-playlist's outbox:
+This lets a correction travel with the edit it fixes. A full playlist has segment
+S holding only entry E; the user's pending insert of X into S failed quota, and the
+user then deletes E. Mobile appends `delete_entry E` to the outbox and resends
+`[insert X into S, delete E]`. The insert runs first, so S never empties and is not
+tombstoned, and the final count is back within the limit.
 
-- **Held:** operations that add entries (`insert_segment`, `insert_entries`), plus
-  any later operation that references an ID one of them creates.
-- **Free to send:** everything else, in their original order. This includes
-  `delete_entry`, `delete_segment`, moves of existing items and `update_metadata`.
-  None of these can cross a limit.
+Mobile therefore keeps one ordered outbox per playlist and never reorders or
+splits it for quota:
 
-Mobile keeps sending free operations, including deletions the user makes to fix
-the problem. It applies their canonical changes, rebuilds the overlay with the
-held additions still on top, and then retries the held additions. It also retries
-after any deletion in another playlist, since the account-wide limit is shared.
-The UI shows the limit until the additions land or the user discards them. There
-is no playlist delete in v1, so freeing space means deleting entries.
+- After `quota_exceeded`, mobile stops resending that playlist's outbox unchanged.
+  It resends the whole pending outbox, in order, when the user adds another edit
+  to it or when a deletion in another playlist syncs (the account limit is shared).
+- The UI shows the limit until a resend succeeds or the user discards pending
+  additions. There is no playlist delete in v1, so freeing space means deleting
+  entries.
+- A paused outbox larger than one batch (500 operations or 2 MiB) cannot be
+  resent atomically. Mobile then asks the user to discard pending additions until
+  it fits. This needs hundreds of offline edits after hitting the limit.
 
-Test: on one device, an insert fails quota, the user deletes an existing entry,
-the deletion syncs, and the original pending insert then applies without being
-re-authored.
+Test: on one device, insert X into a full playlist's single-entry segment S, get
+`quota_exceeded`, delete S's existing entry, and resend. X must apply into S and
+S must stay live.
 
 ## Ranks
 
@@ -632,19 +638,33 @@ they assume.
 - `applied_revision` advances only by applying changes. If a device at 41 gets
   result revision 43 for its own operation while another device made 42, it still
   pulls after 41.
-- An operation stays in the overlay until a pull reaches its result `revision`.
+- Every overlay operation records the `history_generation` of its result. Revision
+  numbers are compared only within one generation: a revision from another
+  generation proves nothing.
+- An operation stays in the overlay until a pull in the same generation reaches its
+  result `revision`.
   Operations that were accepted without a revision leave the overlay when their
   result arrives.
 - Each changes page, including its cursor, is applied in one Realm transaction.
-- After a snapshot at revision R, drop overlay operations whose result revision is
-  at most R; they are already in the snapshot. Keep the rest and replay them.
+- After a snapshot at revision R, drop overlay operations whose result is from the
+  snapshot's generation and whose result revision is at most R; they are already
+  in the snapshot. Keep the rest and replay them.
 - **Restore recovery** runs on a `history_generation` mismatch, or on a `410`
-  showing the client ahead of the server. Mobile discards the library cursor and
-  every playlist base, and fetches a fresh library snapshot and fresh playlist
-  snapshots. Acknowledged operations not reflected in the new snapshot may have
-  been lost with the server's receipts. Mobile moves them back to unsent and
-  resubmits them with their original `operation_id`s. A surviving receipt returns
-  its stored result; otherwise the operation applies fresh, and any IDs that
-  already exist return `id_conflict` and are dropped.
+  showing the client ahead of the server.
+  1. Discard the library cursor and every playlist base.
+  2. Mark every operation still in the overlay as unsent, including ones
+     acknowledged under the old generation. Do not prune any of them yet. A create
+     command still held locally is resubmitted first, because the restored server
+     may not have the playlist.
+  3. Resubmit them with their original `operation_id`s, in order. A receipt that
+     survived the restore returns its stored result. Otherwise the operation
+     applies fresh, and any IDs that already exist return `id_conflict` and are
+     dropped. Every result now carries the new generation.
+  4. Fetch a fresh library snapshot and fresh playlist snapshots, then prune with
+     the same-generation rule above.
+- Restore recovery covers only operations still in the local overlay. An edit
+  whose canonical change had already arrived was retired from the overlay, and
+  mobile keeps no journal to rebuild it. Edits newer than the restored backup that
+  no device still holds are lost; the backup's recovery point bounds that loss.
 - Tracks missing from Realm are hydrated through `POST /api/v4/catalog/resolve` in
   chunks of 500. Hydration never blocks applying changes and never deletes entries.
