@@ -28,28 +28,78 @@ public class TestArchiveOrgDeletionVerification
     }
 
     [Test]
-    public async Task OnlyExplicitDeletionAndSeparateConfirmedNoMp3PolicyReachTheDeletionList()
+    public async Task OnlyDeletedDarkAndConfirmedNoMp3ItemsReachTheDeletionList()
     {
         using var handler = new MetadataHandler(
             "{\"metadata\":{\"identifier\":\"present\"}}",
             "{\"errcode\":104}",
-            "{}"
+            "{}",
+            "{\"is_dark\":true}"
         );
         using var http = new HttpClient(handler);
         var log = new List<string>();
 
         var result = await ArchiveOrgImporter.VerifyDeletionCandidatesAsync(
-            ["present", "deleted", "unknown", "no-mp3"],
+            ["present", "deleted", "unknown", "no-mp3", "dark"],
             new HashSet<string> { "no-mp3" },
             http,
             log.Add
         );
 
         result.Guarded.Should().BeFalse();
-        result.Identifiers.Should().Equal("deleted", "no-mp3");
-        handler.Requests.Should().HaveCount(3);
-        log.Should().HaveCount(4);
+        result.Identifiers.Should().Equal("deleted", "no-mp3", "dark");
+        handler.Requests.Should().HaveCount(4);
+        log.Should().HaveCount(5);
         log.Should().Contain(message => message.Contains("unknown: Unknown"));
+    }
+
+    [TestCase("{\"is_dark\":false}")]
+    [TestCase("{\"is_dark\":\"true\"}")]
+    [TestCase("{\"is_dark\":true,\"metadata\":{\"identifier\":\"recording\"}}")]
+    [TestCase("{\"is_dark\":true,\"metadata\":{\"identifier\":\"other\"}}")]
+    public async Task DarkCleanupRequiresAnExplicitFlagWithoutConflictingMetadata(string metadata)
+    {
+        using var handler = new MetadataHandler(metadata);
+        using var http = new HttpClient(handler);
+
+        var result = await ArchiveOrgImporter.VerifyDeletionCandidatesAsync(
+            ["recording"],
+            new HashSet<string>(),
+            http,
+            _ => { }
+        );
+
+        result.Identifiers.Should().BeEmpty();
+    }
+
+    [TestCase(10, false)]
+    [TestCase(11, true)]
+    public async Task OverrideStillRequiresEvidenceAndBlocksAllCandidatesAboveItsLimit(
+        int candidateCount,
+        bool guarded
+    )
+    {
+        var candidates = Enumerable
+            .Range(0, candidateCount)
+            .Select(i => $"recording-{i}")
+            .ToArray();
+        // Keep one ambiguous item; the allowance never establishes deletion evidence.
+        using var handler = new MetadataHandler([
+            "{}",
+            .. Enumerable.Repeat("{\"errcode\":104}", candidateCount - 2),
+        ]);
+        using var http = new HttpClient(handler);
+        var result = await ArchiveOrgImporter.VerifyDeletionCandidatesAsync(
+            candidates,
+            new HashSet<string> { candidates[^1] },
+            http,
+            _ => { },
+            deletionLimit: 10
+        );
+
+        result.Guarded.Should().Be(guarded);
+        result.Identifiers.Should().BeEquivalentTo(guarded ? [] : candidates.Skip(1));
+        handler.Requests.Should().HaveCount(guarded ? 0 : candidateCount - 1);
     }
 
     [Test]

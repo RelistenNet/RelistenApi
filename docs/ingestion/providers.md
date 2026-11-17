@@ -43,27 +43,37 @@ identifiers. Item activities share metadata validation and date repair with
 Hangfire through [ArchiveOrgImporter.Item.cs](../../RelistenApi/Services/Importers/ArchiveOrgImporter.Item.cs).
 Skip reasons distinguish missing or invalid metadata, a dark item, an unrepaired
 date, and no VBR MP3 files. Dark items are upstream recordings unavailable to
-listeners; that status alone does not establish deletion.
+listeners. An explicit boolean `is_dark: true` from direct metadata verification
+authorizes catalog cleanup, while preserving track rows and playback events.
 
 A full refresh verifies deletion candidates after item processing. An apparently
 complete listing can still omit recordings, so absence alone never authorizes
 deletion. Preserve all of these checks:
 
-- Load current catalog candidates and apply the five-candidate guard. More than
-  five candidates prevents deletion.
+- Load current catalog candidates and apply the candidate-count guard. The default
+  limit is five. An explicit full-artist or Archive refresh can supply a nonnegative
+  `ArchiveDeletionLimit` for that execution only; scheduled imports keep the default.
+  More than the allowed number of candidates prevents all deletion, before upstream
+  verification. The allowance is not a request to delete the first N candidates.
 - For recordings absent from the listing, check upstream metadata directly.
-  Only Archive error code 104 establishes deletion. HTTP 404, an empty response,
-  or a dark flag leaves deletion unproved.
+  Archive error code 104 establishes upstream deletion; boolean `is_dark: true`
+  establishes public unavailability. Either allows catalog cleanup unless item
+  metadata is present or conflicting. HTTP 404 and empty responses remain unknown.
 - A successfully parsed item with no VBR MP3 can provide separate removal
   evidence, but only if that recording already exists in the catalog. New
   unplayable items do not consume the guard allowance. The workflow retains at
-  most six such identifiers because six already triggers the guard.
+  most one more than the run's candidate allowance, enough to trigger the guard.
 - Exhausted item failures cannot supply missing-MP3 or deletion evidence.
 
 Verification returns an allowed, guarded, or not-applicable plan. The deletion
 activity applies only the plan's fixed decisions in a transaction. A retry must
 not discover additional candidates. Its result describes the decisions and
 identifiers now absent, rather than claiming an exact first-attempt delete count.
+Cleanup removes source metadata, sets, reviews, and links. It retains track rows
+and playback events: source/set foreign keys become null instead of cascading
+track deletion. Reimporting a restored item with the same MP3 URLs reattaches the
+existing track rows and preserves their UUIDs and historical play references.
+
 Guard alerts are best effort and may repeat after retries; logs must retain the
 guard result even if the alert fails.
 

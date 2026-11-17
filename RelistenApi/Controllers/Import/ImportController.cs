@@ -1,236 +1,136 @@
-using System;
 using System.Threading.Tasks;
-using Hangfire;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Relisten.Api;
-using Relisten.Api.Models;
 using Relisten.Data;
-using Relisten.Import;
 using Relisten.Ingestion;
 
-namespace Relisten.Controllers
+namespace Relisten.Controllers;
+
+[Route("api/v2/import/")]
+[ApiExplorerSettings(IgnoreApi = true)]
+[ImportAdmissionErrors]
+public class ImportController(
+    RedisService redis,
+    DbService db,
+    ArtistService artistService,
+    IConfiguration configuration,
+    TemporalIngestionClient temporal
+) : RelistenBaseController(redis, db, artistService)
 {
-    [Route("api/v2/import/")]
-    [ApiExplorerSettings(IgnoreApi = true)]
-    [ImportAdmissionErrors]
-    public class ImportController : RelistenBaseController
+    [HttpPost("{idOrSlug}")]
+    [Authorize]
+    public async Task<IActionResult> Post(
+        string idOrSlug,
+        [FromQuery] bool deleteOldContent = false,
+        [FromQuery] int? archiveDeletionLimit = null
+    )
     {
-        public ImportController(
-            RedisService redis,
-            DbService db,
-            ArtistService artistService,
-            ImporterService importer,
-            ScheduledService scheduledService,
-            IConfiguration configuration,
-            TemporalIngestionClient temporal
-        )
-            : base(redis, db, artistService)
+        if (!ModelState.IsValid)
         {
-            _configuration = configuration;
-            _temporal = temporal;
-            _scheduledService = scheduledService;
-            _importer = importer;
+            return ValidationProblem(ModelState);
         }
 
-        private readonly TemporalIngestionClient _temporal;
-        private readonly ImporterService _importer;
-        private readonly ScheduledService _scheduledService;
-        private readonly IConfiguration _configuration;
-
-        [HttpPost("{idOrSlug}")]
-        [Authorize]
-        public async Task<IActionResult> Post(
-            string idOrSlug,
-            [FromQuery] bool deleteOldContent = false
-        )
+        if (deleteOldContent)
         {
-            var art = _temporal.Enabled
-                ? await _artistService.FindArtistForImport(idOrSlug)
-                : await _artistService.FindArtistWithIdOrSlug(idOrSlug);
-            if (art != null)
-            {
-                if (_temporal.Enabled && deleteOldContent)
-                {
-                    return Conflict(
-                        "Stop Temporal ingestion and select Hangfire before a destructive reimport."
-                    );
-                }
-
-                var jobId = _temporal.Enabled
-                    ? (
-                        await _temporal.RefreshAsync(new RefreshArtist(new ArtistId(art.uuid)))
-                    ).WorkflowId
-                    : BackgroundJob.Enqueue(() =>
-                        _scheduledService.RefreshArtist(idOrSlug, deleteOldContent, null)
-                    );
-
-                return StatusCode(201, $"Queued as job {jobId}!");
-            }
-
-            return JsonNotFound(false);
-        }
-
-        [HttpPost("{idOrSlug}/debug")]
-        [Authorize]
-        public async Task<IActionResult> PostDebug(
-            string idOrSlug,
-            [FromQuery] bool deleteOldContent = false
-        )
-        {
-            var art = _temporal.Enabled
-                ? await _artistService.FindArtistForImport(idOrSlug)
-                : await _artistService.FindArtistWithIdOrSlug(idOrSlug);
-            if (art != null)
-            {
-                if (_temporal.Enabled)
-                {
-                    return Conflict(
-                        "Stop Temporal ingestion and select Hangfire before a synchronous debug import."
-                    );
-                }
-
-                await _scheduledService.RefreshArtist(idOrSlug, deleteOldContent, null);
-
-                return StatusCode(201, "done!");
-            }
-
-            return JsonNotFound(false);
-        }
-
-        [HttpPost("phishin")]
-        public async Task<IActionResult> JustRefreshPhishin()
-        {
-            if (
-                !Request.Headers.TryGetValue("X-Relisten-Api-Key", out var key)
-                || key != _configuration["PANIC_KEY"]
-            )
-            {
-                return Unauthorized();
-            }
-
-            if (_temporal.Enabled)
-            {
-                var artist = await _artistService.FindArtistForImport("phish");
-                if (artist == null)
-                {
-                    return JsonNotFound(false);
-                }
-
-                return StatusCode(
-                    201,
-                    (
-                        await _temporal.RefreshAsync(
-                            new RefreshPhishInArtist(new ArtistId(artist.uuid))
-                        )
-                    ).WorkflowId
-                );
-            }
-
-            return StatusCode(
-                201,
-                BackgroundJob.Enqueue(() => _scheduledService.RefreshPhishFromPhishinOnly(null))
+            return Conflict(
+                "Destructive reimports are unsupported. Use archiveDeletionLimit for verified cleanup."
             );
         }
 
-        [HttpPost("all-years-and-shows")]
-        [Authorize]
-        public async Task<IActionResult> AllYearsAndShows()
+        var artist = await _artistService.FindArtistForImport(idOrSlug);
+        if (artist == null)
         {
-            return StatusCode(
-                201,
-                _temporal.Enabled
-                    ? (await _temporal.RebuildCatalogAsync(new RebuildCatalog())).WorkflowId
-                    : BackgroundJob.Enqueue(() => _scheduledService.RebuildAllArtists(null))
+            return JsonNotFound(false);
+        }
+
+        var handle = await temporal.RefreshAsync(
+            new RefreshArtist(new ArtistId(artist.uuid), archiveDeletionLimit)
+        );
+        Response.Headers.Location = temporal.ExecutionUrl(handle);
+        return StatusCode(201, $"Queued as job {handle.WorkflowId}!");
+    }
+
+    // Keep retired URLs explicit: old clients must not accidentally start a
+    // synchronous writer or have "debug" interpreted as an Archive identifier.
+    [HttpPost("{idOrSlug}/debug")]
+    [HttpPost("{idOrSlug}/{showIdentifier}/debug")]
+    [Authorize]
+    public IActionResult DebugImport() =>
+        Conflict(
+            "Synchronous debug imports are unsupported. Use the queued import endpoint and Temporal execution history."
+        );
+
+    [HttpPost("phishin")]
+    public async Task<IActionResult> JustRefreshPhishin()
+    {
+        if (
+            !Request.Headers.TryGetValue("X-Relisten-Api-Key", out var key)
+            || key != configuration["PANIC_KEY"]
+        )
+        {
+            return Unauthorized();
+        }
+
+        var artist = await _artistService.FindArtistForImport("phish");
+        if (artist == null)
+        {
+            return JsonNotFound(false);
+        }
+
+        var handle = await temporal.RefreshAsync(
+            new RefreshPhishInArtist(new ArtistId(artist.uuid))
+        );
+        Response.Headers.Location = temporal.ExecutionUrl(handle);
+        return StatusCode(201, handle.WorkflowId);
+    }
+
+    [HttpPost("all-years-and-shows")]
+    [Authorize]
+    public async Task<IActionResult> AllYearsAndShows()
+    {
+        var handle = await temporal.RebuildCatalogAsync(new RebuildCatalog());
+        Response.Headers.Location = temporal.ExecutionUrl(handle);
+        return StatusCode(201, handle.WorkflowId);
+    }
+
+    [HttpPost("{idOrSlug}/{showIdentifier}")]
+    [Authorize]
+    public async Task<IActionResult> PostShow(
+        string idOrSlug,
+        string showIdentifier,
+        [FromQuery] bool deleteOldContent = false,
+        [FromQuery] int? archiveDeletionLimit = null
+    )
+    {
+        if (!ModelState.IsValid)
+        {
+            return ValidationProblem(ModelState);
+        }
+
+        if (archiveDeletionLimit != null)
+        {
+            throw new InvalidImportRequest("Single-recording imports do not reconcile deletions.");
+        }
+
+        if (deleteOldContent)
+        {
+            return Conflict(
+                "Destructive reimports are unsupported. Use a full refresh for verified cleanup."
             );
         }
 
-        [HttpPost("{idOrSlug}/{showIdentifier}")]
-        [Authorize]
-        public async Task<IActionResult> PostShow(
-            string idOrSlug,
-            string showIdentifier,
-            [FromQuery] bool deleteOldContent = false
-        )
+        var artist = await _artistService.FindArtistForImport(idOrSlug);
+        if (artist == null)
         {
-            var art = _temporal.Enabled
-                ? await _artistService.FindArtistForImport(idOrSlug)
-                : await _artistService.FindArtistWithIdOrSlug(idOrSlug);
-            if (art != null)
-            {
-                if (_temporal.Enabled && deleteOldContent)
-                {
-                    return Conflict(
-                        "Stop Temporal ingestion and select Hangfire before a destructive reimport."
-                    );
-                }
-
-                var jobId = _temporal.Enabled
-                    ? (
-                        await _temporal.ImportArchiveItemAsync(
-                            new ImportArchiveItem(
-                                new ArtistId(art.uuid),
-                                new ArchiveItemId(showIdentifier)
-                            )
-                        )
-                    ).WorkflowId
-                    : BackgroundJob.Enqueue(() =>
-                        _scheduledService.RefreshArtist(
-                            idOrSlug,
-                            showIdentifier,
-                            deleteOldContent,
-                            null
-                        )
-                    );
-
-                return StatusCode(201, $"Queued as job {jobId}!");
-            }
-
             return JsonNotFound(false);
         }
 
-        [HttpPost("{idOrSlug}/{showIdentifier}/debug")]
-        [Authorize]
-        public async Task<IActionResult> PostShowDebug(
-            string idOrSlug,
-            string showIdentifier,
-            [FromQuery] bool deleteOldContent = false
-        )
-        {
-            var art = _temporal.Enabled
-                ? await _artistService.FindArtistForImport(idOrSlug)
-                : await _artistService.FindArtistWithIdOrSlug(idOrSlug);
-            if (art != null)
-            {
-                if (_temporal.Enabled)
-                {
-                    return Conflict(
-                        "Stop Temporal ingestion and select Hangfire before a synchronous debug import."
-                    );
-                }
-
-                await _scheduledService.RefreshArtist(
-                    idOrSlug,
-                    showIdentifier,
-                    deleteOldContent,
-                    null,
-                    null
-                );
-
-                return StatusCode(201, "done!");
-            }
-
-            return JsonNotFound(false);
-        }
-
-        // private void update()
-        // {
-        //     var updateDates = @"
-        //     update shows s set updatedat = COALESCE((select MAX(updatedat) from tracks t WHERE t.showid = s.id), s.createdat);
-        //     update years y set updatedat = COALESCE((select MAX(updatedat) from shows s WHERE s.year = y.year), y.createdat);
-        //     update artists a set updatedat = COALESCE((select MAX(updatedat) from years y WHERE y.artistid = a.id), a.createdat);
-        //     ";
-        // }
+        var handle = await temporal.ImportArchiveItemAsync(
+            new ImportArchiveItem(new ArtistId(artist.uuid), new ArchiveItemId(showIdentifier))
+        );
+        Response.Headers.Location = temporal.ExecutionUrl(handle);
+        return StatusCode(201, $"Queued as job {handle.WorkflowId}!");
     }
 }

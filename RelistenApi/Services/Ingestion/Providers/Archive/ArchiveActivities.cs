@@ -27,16 +27,31 @@ public sealed class ArchiveActivities(ProviderActivityRunner runner)
             (i, c) => i.ImportArchiveItemAsync(c, input)
         );
 
+    // Preserve the exact activity contract already recorded by running imports.
     [Activity("Archive.VerifyDeletionCandidates")]
     public Task<ArchiveDeletionPlan> VerifyDeletionCandidates(
         ProviderWorkflowContext context,
         ArchiveSelection selection,
         ArchiveItemId[] noMp3
     ) =>
+        VerifyDeletionCandidatesWithLimit(
+            context,
+            selection,
+            noMp3,
+            RefreshArchiveArtist.DefaultDeletionLimit
+        );
+
+    [Activity("Archive.VerifyDeletionCandidatesWithLimit")]
+    public Task<ArchiveDeletionPlan> VerifyDeletionCandidatesWithLimit(
+        ProviderWorkflowContext context,
+        ArchiveSelection selection,
+        ArchiveItemId[] noMp3,
+        int deletionLimit
+    ) =>
         runner.RunAsync<ArchiveOrgImporter, ArchiveDeletionPlan>(
             context,
             UpstreamProvider.ArchiveOrg,
-            (i, c) => i.VerifyDeletionsAsync(c, selection, noMp3)
+            (i, c) => i.VerifyDeletionsAsync(c, selection, noMp3, deletionLimit)
         );
 
     [Activity("Archive.ApplyVerifiedDeletions")]
