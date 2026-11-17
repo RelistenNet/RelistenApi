@@ -1,5 +1,7 @@
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 using Npgsql;
 using NUnit.Framework;
 using RelistenUserService.Persistence;
@@ -9,6 +11,73 @@ namespace RelistenUserServiceTests;
 [TestFixture]
 public sealed class TestDatabaseConnectionString
 {
+    [Test]
+    public void Pooler_override_changes_only_runtime_routing()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["ACCOUNTS_DATABASE_URL"] =
+                        "postgresql://accounts:p%40ss@primary.internal:5433/relisten?sslmode=require&application_name=relisten-users",
+                    ["PGBOUNCER_WRITE_HOST"] = "pooler.internal",
+                    ["ACCOUNTS_MIGRATION_DATABASE_URL"] =
+                        "postgresql://migrator:ddl@migration-primary.internal:5433/relisten?sslmode=require",
+                    ["ACCOUNTS_LOCK_DATABASE_URL"] =
+                        "postgresql://accounts:locks@lock-primary.internal:5433/relisten?sslmode=require",
+                }
+            )
+            .Build();
+        var runtime = new NpgsqlConnectionStringBuilder(
+            DatabaseConnectionString.Resolve(configuration)
+        );
+        runtime.Host.Should().Be("pooler.internal");
+        runtime.Port.Should().Be(5433);
+        runtime.Database.Should().Be("relisten");
+        runtime.Username.Should().Be("accounts");
+        runtime.Password.Should().Be("p@ss");
+        runtime.SslMode.Should().Be(SslMode.Require);
+        runtime.ApplicationName.Should().Be("relisten-users");
+
+        // Exercise the context used by startup migrations and EF/restore tools, not just the selector.
+        using var migration = AccountsDbContextFactory.CreateMigrationContext(configuration);
+        new NpgsqlConnectionStringBuilder(migration.Database.GetDbConnection().ConnectionString)
+            .Host.Should()
+            .Be("migration-primary.internal");
+        new NpgsqlConnectionStringBuilder(
+            DatabaseConnectionString.ResolveRefreshTokenLocks(configuration, null!)
+        )
+            .Host.Should()
+            .Be("lock-primary.internal");
+    }
+
+    [Test]
+    public void Direct_fallbacks_do_not_inherit_runtime_pooler_override()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["ACCOUNTS_DATABASE_URL"] =
+                        "postgresql://accounts:local@primary.internal/relisten",
+                    ["PGBOUNCER_WRITE_HOST"] = "pooler.internal",
+                }
+            )
+            .Build();
+        new NpgsqlConnectionStringBuilder(DatabaseConnectionString.ResolveMigrations(configuration))
+            .Host.Should()
+            .Be("primary.internal");
+        var environment = new Microsoft.Extensions.Hosting.Internal.HostingEnvironment
+        {
+            EnvironmentName = Environments.Development,
+        };
+        new NpgsqlConnectionStringBuilder(
+            DatabaseConnectionString.ResolveRefreshTokenLocks(configuration, environment)
+        )
+            .Host.Should()
+            .Be("primary.internal");
+    }
+
     [Test]
     public void PreservesSecurityAndPrimaryRoutingOptionsFromUri()
     {

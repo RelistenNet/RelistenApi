@@ -21,6 +21,28 @@ public static class DatabaseConnectionString
 
     public static string Resolve(IConfiguration configuration)
     {
+        var direct = ResolvePrimary(configuration);
+        var poolerHost = configuration["PGBOUNCER_WRITE_HOST"];
+        if (string.IsNullOrWhiteSpace(poolerHost))
+        {
+            return direct;
+        }
+
+        // Ordinary account traffic uses the transaction pooler. Keep the original database,
+        // credentials, TLS and client-pool options; only its routing host changes.
+        return new NpgsqlConnectionStringBuilder(direct) { Host = poolerHost }.ConnectionString;
+    }
+
+    public static string ResolveMigrations(IConfiguration configuration)
+    {
+        var configured = configuration["ACCOUNTS_MIGRATION_DATABASE_URL"];
+        return string.IsNullOrWhiteSpace(configured)
+            ? ResolvePrimary(configuration)
+            : Normalize(configured);
+    }
+
+    private static string ResolvePrimary(IConfiguration configuration)
+    {
         // Deployments provide ACCOUNTS_DATABASE_URL as a PostgreSQL URI. It must
         // outrank file-based defaults so a local setting can never shadow the
         // production Secret mounted by the deployment manifest.
@@ -51,7 +73,7 @@ public static class DatabaseConnectionString
         {
             if (environment.IsDevelopment())
             {
-                return Resolve(configuration);
+                return ResolvePrimary(configuration);
             }
 
             throw new InvalidOperationException(
