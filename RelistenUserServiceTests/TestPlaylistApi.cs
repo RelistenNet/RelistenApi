@@ -497,6 +497,60 @@ public sealed class TestPlaylistApi
     }
 
     [Test]
+    public async Task One_batch_can_swap_the_first_entries_of_two_segments()
+    {
+        var create = await Create(2, 2);
+        var firstSegment = create.Segments[0];
+        var secondSegment = create.Segments[1];
+        var firstMoved = firstSegment.Entries[0].EntryId;
+        var secondMoved = secondSegment.Entries[0].EntryId;
+        var firstAnchor = firstSegment.Entries[1].EntryId;
+        var secondAnchor = secondSegment.Entries[1].EntryId;
+
+        // Park the first entry at the end of the second segment, then fill the two
+        // vacated first positions. The final rows exchange unique (segment_id, rank) keys.
+        var parkFirst = new MovePlaylistEntry(
+            firstMoved,
+            new(SegmentId: secondSegment.SegmentId, AfterEntryId: secondAnchor)
+        );
+        var placeSecond = new MovePlaylistEntry(
+            secondMoved,
+            new(SegmentId: firstSegment.SegmentId, BeforeEntryId: firstAnchor)
+        );
+        var placeFirst = new MovePlaylistEntry(
+            firstMoved,
+            new(SegmentId: secondSegment.SegmentId, BeforeEntryId: secondAnchor)
+        );
+        var batch = new PlaylistBatchRequest(
+            1,
+            [
+                Op("move_entry", parkFirst),
+                Op("move_entry", placeSecond),
+                Op("move_entry", placeFirst),
+            ]
+        );
+
+        var result = await Apply(create.PlaylistId, batch);
+        var snapshot = await Snapshot(create.PlaylistId);
+
+        result
+            .Results.Select(operation => operation.Status)
+            .Should()
+            .Equal("applied", "applied", "applied");
+        snapshot
+            .Segments.SelectMany(segment =>
+                segment.Entries.Select(entry => (segment.SegmentId, entry.EntryId))
+            )
+            .Should()
+            .Equal(
+                (firstSegment.SegmentId, secondMoved),
+                (firstSegment.SegmentId, firstAnchor),
+                (secondSegment.SegmentId, firstMoved),
+                (secondSegment.SegmentId, secondAnchor)
+            );
+    }
+
+    [Test]
     public async Task Restore_generation_detects_equal_revisions_and_wraps_surviving_receipts()
     {
         var create = await Create(1);

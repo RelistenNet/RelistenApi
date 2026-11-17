@@ -128,7 +128,7 @@ public sealed class PlaylistWriteService(
             cancellationToken
         );
         var state = await LockOwnerAsync(actor, hashes.Keys, createdIds, cancellationToken);
-        var playlist = await LockPlaylistAsync(actor, id, cancellationToken);
+        var playlist = await LockOwnedPlaylistAsync(actor, id, cancellationToken);
         var generation = await GenerationAsync(cancellationToken);
 
         var receiptIds = hashes.Keys.ToArray();
@@ -241,7 +241,7 @@ public sealed class PlaylistWriteService(
             cancellationToken
         );
         var state = await LockOwnerAsync(actor, [request.CommandId.Value], [], cancellationToken);
-        var playlist = await LockPlaylistAsync(actor, id, cancellationToken);
+        var playlist = await LockOwnedPlaylistAsync(actor, id, cancellationToken);
         var generation = await GenerationAsync(cancellationToken);
         var receipt = await dbContext.PlaylistReceipts.FindAsync(
             [request.CommandId.Value],
@@ -301,21 +301,28 @@ public sealed class PlaylistWriteService(
         );
     }
 
-    private async Task<Playlist> LockPlaylistAsync(
-        UserId actor,
+    private async Task<Playlist> LockOwnedPlaylistAsync(
+        UserId ownerId,
         PlaylistId id,
         CancellationToken cancellationToken
     )
     {
         var playlist = await dbContext
             .Playlists.FromSqlInterpolated(
-                $"SELECT * FROM user_data.playlists WHERE id = {id.Value} FOR UPDATE"
+                $"""
+                SELECT *
+                FROM user_data.playlists
+                WHERE id = {id.Value} AND owner_id = {ownerId.Value}
+                FOR UPDATE
+                """
             )
             .SingleOrDefaultAsync(cancellationToken);
-        if (playlist is null || playlist.OwnerId != actor)
+
+        if (playlist is null)
         {
             throw new PlaylistException(404, "playlist_not_found", "Playlist not found.");
         }
+
         return playlist;
     }
 
