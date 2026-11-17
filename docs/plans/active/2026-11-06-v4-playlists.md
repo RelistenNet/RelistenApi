@@ -546,6 +546,18 @@ the persisted v1 format. The revised User Service suite passed all 223 tests wit
 no skips. The verification guide now distinguishes tested guarantees, observed
 measurements and release/recovery checks still requiring an operator or client.
 
+A production-aware performance review then verified the live database routing,
+PgBouncer limits and pod budgets with read-only checks. Commits `5981e5f44` and
+`11d3d5be3` separate pooled runtime traffic from direct migrations/refresh locks,
+remove read-side library row locks and initialization, reduce unchanged polls to
+one service SQL statement, and skip structure loading for metadata-only edits.
+Owner write locks still enforce quotas and revision ordering. All 229 User Service
+tests passed with no skips; deliberately replacing repeatable read with read
+committed failed the three interleaving regressions. Flux commit `d9b6830` on
+`codex/v4-playlist-perf` prepares matching routing, network policies and resource
+budgets from the current Flux main branch. No production change was applied;
+rollout requires a compatible built User Service image digest.
+
 ## Review evidence
 
 The November 6 review read server checkout `4dbda9461` and mobile checkout

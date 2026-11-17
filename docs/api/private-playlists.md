@@ -70,6 +70,59 @@ and [TestWebSessionAntiforgery](../../RelistenUserServiceTests/TestWebSessionAnt
 These checks do not exercise production ingress, a backup restore or mobile
 application state.
 
+## Connection routing and sync cost
+
+Ordinary account traffic uses `ACCOUNTS_DATABASE_URL`, with its host replaced by
+`PGBOUNCER_WRITE_HOST` when that override is set. Use the RW pooler for account
+reads as well as writes: the sync protocol needs a consistent current history,
+without replica lag making a client appear ahead of the server.
+
+Startup migrations, EF tools and restore generation rotation use
+`ACCOUNTS_MIGRATION_DATABASE_URL`, falling back to the direct accounts connection
+when absent. They do not inherit the runtime pooler override. Refresh-token
+replay locks use `ACCOUNTS_LOCK_DATABASE_URL` and retain their separate, direct
+two-connection pool. That pool does not limit playlist sync requests.
+
+The performance review removed work from the common sync paths:
+
+- An unchanged library poll executes one SQL statement for generation and user
+  revision, down from four service statements. This count excludes authentication
+  and transaction control. Reads no longer initialize library state or take a
+  row lock; one repeatable-read snapshot keeps the head and response coherent.
+- A metadata-only batch retains the playlist's count without loading its segments
+  and entries. At the 5,000-entry limit, this avoids up to 10,000 tracked structure
+  rows and their detached copies. Static control-flow counting gives six SQL
+  statements before persistence, down from twelve for a fresh metadata batch.
+- Empty ID families skip existence queries. Non-increasing entry counts skip the
+  account-wide sum, relying on the unchanged quotas and serialized valid starting
+  state. Growing final states still check the owner's aggregate quota.
+- A current-head playlist delta skips its history queries. Read transactions end
+  after row materialization, before change-envelope JSON is deserialized.
+- Repeated unanchored appends of an already-last entry or segment return a no-op
+  without allocating and sorting all siblings. Actual reorders retain their
+  existing evaluation path.
+
+Owner write locks still enforce shared quotas and contiguous library revisions;
+playlist and identity locks still serialize conflicting edits and ID reuse.
+They are keyed by owner, playlist or submitted ID, rather than a global sync lock.
+
+The 2026-11-17 live check found User Service connecting directly to PostgreSQL,
+with one pod capped at 1 CPU and 512Mi. Both production poolers used transaction
+mode with 30 backends per user/database pool and a 1,000-client limit;
+PostgreSQL allowed 100 connections. The matching Flux change, `d9b6830` on
+`codex/v4-playlist-perf` in `relisten-flux`, prepares the RW route and both network
+policy directions. It sets User Service requests to 500m/512Mi and limits to
+2 CPU/1Gi; each pooler requests 100m/128Mi with limits of 1 CPU/512Mi.
+The existing backend/client limits remain unchanged.
+On the 12-CPU, roughly 31Gi app/database node, the candidate requests total
+4.733 CPU and 22.37Gi memory including the other workloads. These are reservations,
+not measured demand.
+
+These resource values are initial budgets, not a throughput guarantee. Before
+applying the manifests, pin a compatible User Service image digest containing
+the routing support; the current manifest digest is intentionally unchanged.
+No production configuration was changed during this review.
+
 ## After restoring the User Service database
 
 A backup or point-in-time restore can reuse playlist and library revision numbers
@@ -134,8 +187,8 @@ database recovery checks must establish the backup's broader integrity.
 ### 2. Rotate through the published application
 
 Use the published User Service build intended for recovery. In its published
-directory, supply `ACCOUNTS_DATABASE_URL` through the operator runtime's Secret,
-pointing to the restored primary confirmed above, then run:
+directory, supply `ACCOUNTS_MIGRATION_DATABASE_URL` through the operator runtime's
+Secret, pointing to the restored primary confirmed above, then run:
 
 ```sh
 dotnet RelistenUserService.dll rotate-history-generation --traffic-stopped
@@ -153,10 +206,10 @@ operator prerequisite; the command cannot stop traffic.
 
 The command uses
 [AccountsDbContextFactory](../../RelistenUserService/Persistence/AccountsDbContextFactory.cs)
-and [DatabaseConnectionString.Resolve](../../RelistenUserService/Persistence/DatabaseConnectionString.cs):
-`ACCOUNTS_DATABASE_URL` takes precedence over `ConnectionStrings:Accounts`, then
-`DATABASE_URL`. The factory reads JSON settings relative to the working directory
-and environment variables. Supply the explicit runtime Secret so a file default
+and [DatabaseConnectionString.ResolveMigrations](../../RelistenUserService/Persistence/DatabaseConnectionString.cs):
+`ACCOUNTS_MIGRATION_DATABASE_URL` takes precedence over `ACCOUNTS_DATABASE_URL`,
+then `ConnectionStrings:Accounts`, then `DATABASE_URL`. The factory reads JSON
+settings relative to the working directory and environment variables. Supply the explicit runtime Secret so a file default
 cannot select another database. Keep credentials out of commands and recovery evidence.
 
 ### 3. Validate the recovered protocol before reopening traffic
@@ -164,7 +217,10 @@ cannot select another database. Keep credentials out of commands and recovery ev
 Start an isolated instance with the intended recovery build and recovered
 authentication configuration. Normal service startup initializes OAuth and may
 run migrations; only the rotation command bypasses that startup. Keep public
-access and ordinary writers blocked. With valid recovered account credentials,
+access and ordinary writers blocked. Verify that the runtime accounts connection
+and any `PGBOUNCER_WRITE_HOST` override also reach the restored database; do not
+inherit a pooler that still routes to the former primary. With valid recovered
+account credentials,
 first request `GET /v1/library/snapshot`: it must return `200` with the new
 generation confirmed in step 2. Where an owned playlist is available, its fresh
 snapshot must carry the same generation and the expected restored content.
@@ -224,8 +280,9 @@ Same-origin production browser calls through `relisten.net` also need exact
 `/v1/playlists` and segment-safe `/v1/playlists/` routes to the User Service,
 matching the existing library rules in
 [relisten-web.yaml](https://github.com/RelistenNet/relisten-flux/blob/main/clusters/relisten3-k3s/apps/relisten-web.yaml),
-before enabling a web playlist consumer. No Flux resources were changed or deployed
-for this delivery.
+before enabling a web playlist consumer. The separate Flux performance change
+prepares database routing and resource budgets; it does not enable that web route
+or deploy the playlist API.
 
 Once `playlist_summary` rows exist, keep a compatible playlist/library reader
 available for rollback and recovery. A favorite-only application cannot safely
@@ -236,6 +293,23 @@ would destroy user data and retry knowledge. Restoring an older backup has separ
 data-loss consequences and requires generation rotation.
 
 ## Recorded local evidence: 2026-11-17
+
+The production-aware performance changes passed all 229 User Service tests with
+zero skips. The read-interleaving assertions failed when temporarily changed to
+read committed, then passed after repeatable read was restored. Local PgBouncer
+accepted repeatable-read transactions and transaction-scoped advisory locks.
+The solution built and EF found no pending model changes. Flux manifests rendered
+and passed strict schema checks, including both Poolers against the installed CRD.
+These checks establish the changed behavior and configuration; they do not model
+thousands of concurrent clients or qualify production capacity.
+
+An editor-only Release comparison used 500 moves on 5,000 entries, with three
+samples after warmup. Already-last, unanchored no-ops fell from a 119.87 ms median
+and 86.17MiB allocated to 12.74 ms and 0.054MiB. Actual reorderings measured
+152.22 ms before and 157.67 ms after, with allocations essentially unchanged at
+105.5MiB. The guard helps the no-op case; this sample does not establish an
+improvement for real reorders. The temporary harness and raw results are not
+checked in, and the measurements exclude HTTP and database work.
 
 After adversarial-review fix `1b0459980`, the solution built, all 223 User Service
 tests passed with zero skips, and EF reported no pending model changes. The
