@@ -1,6 +1,7 @@
 # Private playlist contracts
 
-Status: frozen 2026-11-16 by Alec, after a fresh-reader review. Change it only
+Status: frozen 2026-11-16 by Alec, after a fresh-reader review; restore and
+quota recovery amended the same day after a second review. Change it only
 through the plan's Decision Log. This document freezes the wire contracts and
 server invariants for delivery 1 (private playlists) of
 [Deliver playlists using v4 catalog identities](2026-11-06-v4-playlists.md). The
@@ -25,6 +26,8 @@ These match the favorites contracts already served by `RelistenUserService`.
   is missing or owned by someone else.
 - Every ID is a complete typed string. Client-created domain IDs are UUIDv7 and
   globally unique. `track_id` is a catalog `TrackId`, validated only syntactically.
+- Every playlist and library response also carries `history_generation` (see
+  History generation). The examples below omit it for brevity.
 - Receipts are scoped to the account that created them. Another account reusing an
   `operation_id` or `command_id` gets `409 idempotency_conflict`, never the stored
   result.
@@ -242,6 +245,34 @@ history. Nothing is compacted in delivery 1, but clients must handle it (see Cli
 model). The plan's earlier `409 snapshot_required` is replaced by `410`, matching
 the library feed's `410 sync_cursor_expired`.
 
+### History generation
+
+Revision numbers alone cannot detect a restore. Suppose device A holds revision 43
+containing entry X, the server is restored to revision 40, and device B then makes
+three edits that bring the server back to 43. A would pull after 43, get an empty
+page, keep X and miss B's edits. Every later delta would apply to the wrong base.
+
+So the User Service keeps one server-wide **history generation**: an opaque string
+stored in a single-row `user_data.history_generation` table. It never changes in
+normal operation.
+
+- Every playlist response (create, snapshot, changes, batch, archive and list) and
+  every library response (snapshot and changes) includes `history_generation`.
+- Mobile stores the generation with each playlist base and with its library cursor.
+  Before applying any response, it compares the generation. On a mismatch it
+  applies nothing from that response and runs restore recovery (see Client model),
+  whatever the revision numbers say.
+- The library cursor also embeds the generation, so the server answers a cursor
+  from another generation with `410 sync_cursor_expired`. This also protects
+  favorites, which share the same revision-reuse problem.
+- **Restoring the User Service database from any backup or point in time must
+  rotate the generation** (write a new UUIDv7) before the service takes traffic.
+  This step belongs in the account recovery runbook. A restore that skips it is
+  unsafe for every syncing client.
+
+Test: revision reuse after a restore, before an offline device reconnects. The
+device must replace its base by snapshot even though the revisions compare equal.
+
 ### Apply operations
 
 `POST /v1/playlists/{playlist_id}/operations:batch`
@@ -396,9 +427,25 @@ operations that would apply count, and deletes earlier in the batch free room fo
 later inserts. If the dry run crosses any limit, the whole batch fails with
 `422 quota_exceeded` and nothing is applied.
 
-Retrying cannot clear a quota failure. Mobile pauses that playlist's outbox and
-shows the limit, and resumes only after the user removes entries or playlists or
-discards the pending edits.
+Retrying an unchanged batch cannot clear a quota failure. Mobile then splits the
+playlist's outbox:
+
+- **Held:** operations that add entries (`insert_segment`, `insert_entries`), plus
+  any later operation that references an ID one of them creates.
+- **Free to send:** everything else, in their original order. This includes
+  `delete_entry`, `delete_segment`, moves of existing items and `update_metadata`.
+  None of these can cross a limit.
+
+Mobile keeps sending free operations, including deletions the user makes to fix
+the problem. It applies their canonical changes, rebuilds the overlay with the
+held additions still on top, and then retries the held additions. It also retries
+after any deletion in another playlist, since the account-wide limit is shared.
+The UI shows the limit until the additions land or the user discards them. There
+is no playlist delete in v1, so freeing space means deleting entries.
+
+Test: on one device, an insert fails quota, the user deletes an existing entry,
+the deletion syncs, and the original pending insert then applies without being
+re-authored.
 
 ## Ranks
 
@@ -591,10 +638,13 @@ they assume.
 - Each changes page, including its cursor, is applied in one Realm transaction.
 - After a snapshot at revision R, drop overlay operations whose result revision is
   at most R; they are already in the snapshot. Keep the rest and replay them.
-- If the snapshot followed `410` because the client was ahead of the server (for
-  example, a restore), acknowledged operations with result revisions above R may
-  have been lost with the server's receipts. Mobile moves them back to unsent and
-  submits them again as new operations; any already-present IDs return `id_conflict`
-  and are dropped.
+- **Restore recovery** runs on a `history_generation` mismatch, or on a `410`
+  showing the client ahead of the server. Mobile discards the library cursor and
+  every playlist base, and fetches a fresh library snapshot and fresh playlist
+  snapshots. Acknowledged operations not reflected in the new snapshot may have
+  been lost with the server's receipts. Mobile moves them back to unsent and
+  resubmits them with their original `operation_id`s. A surviving receipt returns
+  its stored result; otherwise the operation applies fresh, and any IDs that
+  already exist return `id_conflict` and are dropped.
 - Tracks missing from Realm are hydrated through `POST /api/v4/catalog/resolve` in
   chunks of 500. Hydration never blocks applying changes and never deletes entries.

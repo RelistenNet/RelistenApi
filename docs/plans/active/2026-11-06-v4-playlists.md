@@ -382,7 +382,9 @@ protect the same invariant; do not prescribe a test count or private call order.
   prove playlist code touches no catalog schema; hydrate a large playlist through
   chunked resolver calls without full-show expansion or clearing richer cached
   children, and keep authored entries when a resolve chunk fails.
-- Realm sync: receipt 43 before delta 42 still pulls after 41; a lost-create
+- Realm sync: a restore that reuses revision numbers forces snapshot replacement;
+  a quota-held insert applies after a same-device deletion syncs; receipt 43 before
+  delta 42 still pulls after 41; a lost-create
   response retries before children; snapshot fallback retains pending edits;
   late completions after scope change cannot apply or acknowledge them.
 - Player: enqueue the same playlist twice, remove one duplicate, shuffle segments,
@@ -479,6 +481,10 @@ qualification separately. No deployment or publication is authorized by this pla
   (missing or wrong-parent anchors count as absent), `GET /v1/playlists` stays for
   non-syncing clients, the library feed is extended additively at version 1, and
   Realm may sort by rank (verified identical to byte order on Realm 20.2.0).
+- 2026-11-16, review: amend the frozen contracts. A server-wide
+  `history_generation`, rotated by every database restore, forces snapshot
+  replacement when restored revisions reuse numbers. During a quota pause,
+  count-neutral and deleting operations still sync while additions are held.
 - 2026-11-16, Alec: decision 3 follows favorites — hydrate only missing tracks, no
   proactive re-check; re-resolve a track when its playback fails. Removals are
   very rare.
