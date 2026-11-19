@@ -33,9 +33,9 @@ accepted for anonymous listening statistics.
     30 seconds. A failed *immediate* send doesn't arm that timer today, so the
     row waits for the next reconnect.
   - Today `/live/play` receives only the track ID.
-- **Two plays can come from one playback today.** The threshold check compares
-  the previous progress with the new one. Seeking back below the threshold and
-  crossing it again dispatches a second event with a new UUID.
+- **Every forward crossing of the threshold is a play.** The threshold check
+  compares the previous progress with the new one, so seeking back below the
+  threshold and crossing it again dispatches a second event with a new UUID.
 - The device setting `TrackListeningHistorySetting` stops new rows from being
   created. Reconnecting still drains rows that were already unsent.
 - `public.source_track_plays` is a compressed TimescaleDB hypertable with about
@@ -151,9 +151,9 @@ delay after measuring the rollout workload.
 
 ### 3. Mobile
 
-- **One play per playback.** Dispatch at most one play per playback: per queue
-  occurrence and `playbackStartedAt`. Seeking back below the threshold and
-  crossing it again must not create a second row.
+- **One play per forward crossing.** Each time progress crosses the threshold
+  going forward, record a new row, including after seeking back, Repeat One, or
+  restarting the track.
 - **Each row is bound to one destination when it is created.** Record the
   account signed in at that moment, or none. A row with an account is sent only
   to that account's batch endpoint, and only while that account is signed in.
@@ -200,7 +200,7 @@ delay after measuring the rollout workload.
   sent to `/live/play` or to B. It uploads when A signs in again.
 - Lose a batch response for account A, then switch to B and back. The retry
   returns `duplicate` and `source_track_plays` has one row.
-- Seek back below the threshold and cross it again. One row is created.
+- Seek back below the threshold and cross it again. A second row is created.
 - Return `503`, then recover the service, on a continuously connected device. The
   pending row uploads within 30 seconds.
 - Turn history off with an unsent row, then reconnect. Nothing uploads.
