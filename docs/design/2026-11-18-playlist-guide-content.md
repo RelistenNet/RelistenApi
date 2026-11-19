@@ -14,7 +14,7 @@ A playlist can double as a listening guide. A segment description introduces a g
 
 - Extend the local model and sync for the new snapshot and change payloads. Let users edit descriptions and add, move, or delete text blocks. Queue construction uses track entries and keeps the existing segment shuffle behavior.
 - A track's menu offers **Add Note**, which edits that track's description and moves with it. In edit mode, one **Add Text** control in each gap picks the rest of the storage: a segment's description at the top of a group, a text block between tracks, or a prose-only segment between groups. Authors never choose a storage type. The position only decides what moves with what.
-- Render paragraphs, bold, italics, lists, block quotes, HTTPS links, and `##` / `###` headings from a [CommonMark subset](https://spec.commonmark.org/0.31.2/). Treat the playlist name as the page title. Render everything else, including raw HTML and non-HTTPS links, as plain text. The public web page uses the same subset and sanitizing.
+- Render paragraphs, bold, italics, lists, block quotes, HTTPS links, and `##` / `###` headings from a [CommonMark subset](https://spec.commonmark.org/0.31.2/). Treat the playlist name as the page title. A single newline is a line break, since the mobile editor writes one for Return. Render everything else, including raw HTML and non-HTTPS links, as plain text. The public web page uses the same subset and sanitizing.
 
 ### Accepting and sanitizing descriptions
 
