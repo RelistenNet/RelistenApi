@@ -35,9 +35,9 @@ public sealed class AuthorizationController(
         var request =
             HttpContext.GetOpenIddictServerRequest()
             ?? throw new InvalidOperationException("The OpenIddict request is unavailable.");
-        var isMcp = request.ClientId == McpOAuth.ClientId;
+        var mcpClient = McpOAuth.FindClient(request.ClientId);
         var posted = HttpMethods.IsPost(Request.Method);
-        if (posted && !isMcp)
+        if (posted && mcpClient is null)
         {
             return StatusCode(StatusCodes.Status405MethodNotAllowed);
         }
@@ -63,15 +63,21 @@ public sealed class AuthorizationController(
             || !UserId.TryParse(authentication.Principal?.GetClaim(Claims.Subject), out var userId)
         )
         {
-            if (isMcp && (posted || request.HasPromptValue(PromptValues.None)))
+            if (mcpClient is not null && (posted || request.HasPromptValue(PromptValues.None)))
             {
                 return RejectMcpAuthorization(Errors.LoginRequired);
             }
             if (runtime.Options.EnableExternalProviders)
             {
-                if (isMcp && string.IsNullOrEmpty(request.GetParameter("provider").ToString()))
+                if (
+                    mcpClient is not null
+                    && string.IsNullOrEmpty(request.GetParameter("provider").ToString())
+                )
                 {
-                    return Content(mcpConsent.SignInPage(HttpContext), "text/html; charset=utf-8");
+                    return Content(
+                        mcpConsent.SignInPage(HttpContext, mcpClient),
+                        "text/html; charset=utf-8"
+                    );
                 }
                 return ChallengeExternalProvider(request);
             }
@@ -108,7 +114,7 @@ public sealed class AuthorizationController(
             return Forbid();
         }
 
-        if (isMcp)
+        if (mcpClient is not null)
         {
             if (runtime.Mcp is null)
             {
@@ -128,7 +134,13 @@ public sealed class AuthorizationController(
                 return request.HasPromptValue(PromptValues.None)
                     ? RejectMcpAuthorization(Errors.ConsentRequired)
                     : Content(
-                        mcpConsent.ConsentPage(HttpContext, user, authSsoSessionId, request),
+                        mcpConsent.ConsentPage(
+                            HttpContext,
+                            user,
+                            authSsoSessionId,
+                            request,
+                            mcpClient
+                        ),
                         "text/html; charset=utf-8"
                     );
             }

@@ -30,44 +30,58 @@ public sealed class ConnectedClientsController(
         var now = clock.GetUtcNow();
         var cutoff = now - AuthenticationConstants.NativeSessionInactivityLimit;
         var permitted = runtime.Mcp is not null;
-        var status = await (
+        var clientIds = McpOAuth.Clients.Select(client => client.ClientId).ToArray();
+        var statuses = await (
             from session in Sessions()
             join grant in database.Set<OpenIddictEntityFrameworkCoreAuthorization<Guid>>()
                 on session.AuthorizationId equals grant.Id
-            where grant.Status == Statuses.Valid
-            select permitted
-                && session.AbsoluteExpiresAt > now
-                && session.LastUsedAt > cutoff
-                && session.SecurityVersion == account.User.SecurityVersion
+            where grant.Status == Statuses.Valid && clientIds.Contains(session.ClientId)
+            select new
+            {
+                session.ClientId,
+                Active = permitted
+                    && session.AbsoluteExpiresAt > now
+                    && session.LastUsedAt > cutoff
+                    && session.SecurityVersion == account.User.SecurityVersion,
+            }
         )
-            .OrderByDescending(active => active)
-            .Select(active => (bool?)active)
-            .FirstOrDefaultAsync(cancellationToken);
+            .GroupBy(session => session.ClientId)
+            .Select(sessions => new
+            {
+                ClientId = sessions.Key,
+                Active = sessions.Any(session => session.Active),
+            })
+            .ToDictionaryAsync(
+                status => status.ClientId,
+                status => status.Active,
+                cancellationToken
+            );
 
         return Ok(
             new
             {
-                clients = status is { } active
-                    ? new[]
+                clients = McpOAuth
+                    .Clients.Where(client => statuses.ContainsKey(client.ClientId))
+                    .Select(client => new
                     {
-                        new
-                        {
-                            id = "chatgpt",
-                            name = "ChatGPT",
-                            // "expired": the session lapsed (idle, past its absolute
-                            // limit, or outlived a security change). The app must sign in
-                            // and be approved again; disconnecting revokes the old grant.
-                            state = active ? "connected" : "expired",
-                        },
-                    }
-                    : [],
+                        id = client.ConnectionId,
+                        name = client.DisplayName,
+                        // Expired sessions require fresh sign-in and consent.
+                        state = statuses[client.ClientId] ? "connected" : "expired",
+                    }),
             }
         );
     }
 
-    [HttpDelete("chatgpt")]
-    public async Task<IActionResult> Disconnect(CancellationToken cancellationToken)
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> Disconnect(string id, CancellationToken cancellationToken)
     {
+        var client = McpOAuth.Clients.FirstOrDefault(candidate => candidate.ConnectionId == id);
+        if (client is null)
+        {
+            return NotFound();
+        }
+
         await using var transaction = await database.Database.BeginTransactionAsync(
             cancellationToken
         );
@@ -84,7 +98,11 @@ public sealed class ConnectedClientsController(
         }
 
         var now = clock.GetUtcNow();
-        foreach (var session in await Sessions().ToListAsync(cancellationToken))
+        foreach (
+            var session in await Sessions()
+                .Where(session => session.ClientId == client.ClientId)
+                .ToListAsync(cancellationToken)
+        )
         {
             var grant = await authorizations.FindByIdAsync(
                 session.AuthorizationId.ToString("D"),
@@ -105,8 +123,6 @@ public sealed class ConnectedClientsController(
 
     private IQueryable<NativeSession> Sessions() =>
         database.NativeSessions.Where(session =>
-            session.UserId == account.User.Id
-            && session.ClientId == McpOAuth.ClientId
-            && session.RevokedAt == null
+            session.UserId == account.User.Id && session.RevokedAt == null
         );
 }

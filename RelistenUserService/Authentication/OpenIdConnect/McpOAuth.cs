@@ -6,10 +6,34 @@ using static OpenIddict.Server.OpenIddictServerEvents;
 
 namespace RelistenUserService.Authentication.OpenIdConnect;
 
+internal sealed record McpOAuthClient(
+    string ConnectionId,
+    string ClientId,
+    string DisplayName,
+    string RedirectUri
+);
+
 internal static class McpOAuth
 {
-    public const string ClientId = "https://chatgpt.com/oauth/client.json";
-    public const string Redirect = "https://chatgpt.com/connector_platform_oauth_redirect";
+    public static IReadOnlyList<McpOAuthClient> Clients { get; } =
+    [
+        new(
+            "chatgpt",
+            "https://chatgpt.com/oauth/client.json",
+            "ChatGPT",
+            "https://chatgpt.com/connector_platform_oauth_redirect"
+        ),
+        // Pin Codex's callback using mcp_oauth_callback_port=51057 in the local client.
+        new(
+            "codex",
+            "https://chatgpt.com/oauth/codex/client.json",
+            "Codex",
+            "http://127.0.0.1:51057/callback"
+        ),
+    ];
+
+    public static McpOAuthClient? FindClient(string? clientId) =>
+        Clients.FirstOrDefault(client => client.ClientId == clientId);
 
     private static readonly string[] ResourceScopes =
     [
@@ -44,7 +68,7 @@ internal static class McpOAuth
                     )
                     .UseInlineHandler(context =>
                     {
-                        // Only the client registered in InitializeAsync is accepted.
+                        // Only the pinned MCP client metadata IDs are accepted.
                         context.Metadata["client_id_metadata_document_supported"] = true;
                         // ChatGPT chooses its JWT assertion preference when advertised. The
                         // checked-in Relisten clients use PKCE or client secrets.
@@ -88,9 +112,14 @@ internal static class McpOAuth
 
     private static string? InvalidTarget(OpenIddictRequest request, McpConfiguration? mcp)
     {
-        if (request.ClientId != ClientId)
+        if (FindClient(request.ClientId) is null)
         {
-            return null;
+            // A client metadata URL is reserved for MCP. A registration that survives a
+            // rollback must never fall through to the first-party native account flow.
+            return
+                request.ClientId?.StartsWith("https://", StringComparison.OrdinalIgnoreCase) == true
+                ? Errors.UnauthorizedClient
+                : null;
         }
         if (mcp is null)
         {
@@ -114,13 +143,26 @@ internal static class McpOAuth
     {
         await using var scope = services.CreateAsyncScope();
         var manager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
+        foreach (var client in Clients)
+        {
+            await RegisterClientAsync(manager, client, mcp, cancellationToken);
+        }
+    }
+
+    private static async Task RegisterClientAsync(
+        IOpenIddictApplicationManager manager,
+        McpOAuthClient client,
+        McpConfiguration mcp,
+        CancellationToken cancellationToken
+    )
+    {
         var description = new OpenIddictApplicationDescriptor
         {
-            ClientId = ClientId,
+            ClientId = client.ClientId,
             ClientType = ClientTypes.Public,
             ConsentType = ConsentTypes.Explicit,
-            DisplayName = "ChatGPT",
-            RedirectUris = { new Uri(Redirect) },
+            DisplayName = client.DisplayName,
+            RedirectUris = { new Uri(client.RedirectUri) },
             Requirements = { Requirements.Features.ProofKeyForCodeExchange },
             Permissions =
             {
@@ -137,30 +179,31 @@ internal static class McpOAuth
         description.Permissions.UnionWith(
             ResourceScopes.Select(scope => Permissions.Prefixes.Scope + scope)
         );
-        var client = await manager.FindByClientIdAsync(ClientId, cancellationToken);
-        if (client is null)
+        var registered = await manager.FindByClientIdAsync(client.ClientId, cancellationToken);
+        if (registered is null)
         {
             await manager.CreateAsync(description, cancellationToken);
             return;
         }
 
         if (
-            await manager.GetClientTypeAsync(client, cancellationToken) != description.ClientType
-            || await manager.GetConsentTypeAsync(client, cancellationToken)
+            await manager.GetClientTypeAsync(registered, cancellationToken)
+                != description.ClientType
+            || await manager.GetConsentTypeAsync(registered, cancellationToken)
                 != description.ConsentType
             || !description.Permissions.SetEquals(
-                await manager.GetPermissionsAsync(client, cancellationToken)
+                await manager.GetPermissionsAsync(registered, cancellationToken)
             )
             || !description.Requirements.SetEquals(
-                await manager.GetRequirementsAsync(client, cancellationToken)
+                await manager.GetRequirementsAsync(registered, cancellationToken)
             )
             || !description
                 .RedirectUris.Select(uri => uri.AbsoluteUri)
-                .SequenceEqual(await manager.GetRedirectUrisAsync(client, cancellationToken))
+                .SequenceEqual(await manager.GetRedirectUrisAsync(registered, cancellationToken))
         )
         {
             throw new InvalidOperationException(
-                "The registered ChatGPT OAuth client does not match the MCP configuration."
+                $"The registered {client.DisplayName} OAuth client does not match the MCP configuration."
             );
         }
     }

@@ -9,7 +9,7 @@ using static OpenIddict.Abstractions.OpenIddictConstants;
 namespace RelistenUserService.Authentication.OpenIdConnect;
 
 /// <summary>
-/// Renders the sign-in and consent pages for the ChatGPT connector and verifies the
+/// Renders the sign-in and consent pages for MCP clients and verifies the
 /// listener's decision.
 /// </summary>
 /// <remarks>
@@ -21,7 +21,7 @@ namespace RelistenUserService.Authentication.OpenIdConnect;
 /// </remarks>
 public sealed class McpConsent(IAntiforgery antiforgery, AccountsOptions options)
 {
-    public string SignInPage(HttpContext context)
+    internal string SignInPage(HttpContext context, McpOAuthClient client)
     {
         var google = options.Google.Enabled
             ? "<button name=\"provider\" value=\"google\">Continue with Google</button>"
@@ -34,7 +34,7 @@ public sealed class McpConsent(IAntiforgery antiforgery, AccountsOptions options
             + (options.Apple.Enabled ? " https://appleid.apple.com" : "");
         return Page(
             context,
-            "Sign in to connect ChatGPT",
+            $"Sign in to connect {client.DisplayName}",
             destinations,
             $"""
             <form method="get" action="/connect/authorize">
@@ -46,24 +46,27 @@ public sealed class McpConsent(IAntiforgery antiforgery, AccountsOptions options
         );
     }
 
-    public string ConsentPage(
+    internal string ConsentPage(
         HttpContext context,
         User user,
         SessionId session,
-        OpenIddictRequest request
+        OpenIddictRequest request,
+        McpOAuthClient client
     )
     {
         BindBrowserSession(context, session);
+        var redirectOrigin = new Uri(client.RedirectUri).GetLeftPart(UriPartial.Authority);
+        var requester = Encode($"{client.DisplayName} at {redirectOrigin}");
         var token = antiforgery.GetAndStoreTokens(context);
         var scopes = string.Concat(
             request.GetScopes().Select(scope => $"<li>{Encode(ScopeDescription(scope))}</li>")
         );
         return Page(
             context,
-            "Connect ChatGPT to Relisten",
-            " " + new Uri(McpOAuth.Redirect).GetLeftPart(UriPartial.Authority),
+            $"Connect {client.DisplayName} to Relisten",
+            " " + redirectOrigin,
             $"""
-            <p>ChatGPT at chatgpt.com is requesting access to {Encode(user.Username)}.</p>
+            <p>{requester} is requesting access to {Encode(user.Username)}.</p>
             <ul>{scopes}</ul>
             <form method="post" action="/connect/authorize">
             {RequestFields(context)}
