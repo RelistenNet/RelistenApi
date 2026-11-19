@@ -17,6 +17,7 @@ public sealed class TokenController(
     NativePrincipalFactory principalFactory,
     WebBootstrapPrincipalFactory webPrincipalFactory,
     IdentitySessionLifecycle identitySessions,
+    McpAccountAuthorization mcpAuthorization,
     TimeProvider timeProvider
 ) : Controller
 {
@@ -95,6 +96,10 @@ public sealed class TokenController(
             || session.LastUsedAt + AuthenticationConstants.NativeSessionInactivityLimit <= now
             || session.ClientId != request.ClientId
             || session.SecurityVersion != user.SecurityVersion
+            || (
+                request.ClientId == McpOAuth.ClientId
+                && !await mcpAuthorization.HasGrantAsync(session, cancellationToken)
+            )
         )
         {
             return null;

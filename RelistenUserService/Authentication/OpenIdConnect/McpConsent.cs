@@ -1,0 +1,142 @@
+using System.Net;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Antiforgery;
+using OpenIddict.Abstractions;
+using RelistenUserService.Configuration;
+using RelistenUserService.Identity.Entities;
+using static OpenIddict.Abstractions.OpenIddictConstants;
+
+namespace RelistenUserService.Authentication.OpenIdConnect;
+
+public sealed class McpConsent(
+    IOpenIddictApplicationManager applications,
+    IOpenIddictAuthorizationManager authorizations,
+    IAntiforgery antiforgery,
+    AccountsOptions options
+)
+{
+    public async Task<bool> HasGrantAsync(
+        UserId user,
+        OpenIddictRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        var application =
+            await applications.FindByClientIdAsync(McpOAuth.ClientId, cancellationToken)
+            ?? throw new InvalidOperationException("The validated ChatGPT client is unavailable.");
+        var applicationId = await applications.GetIdAsync(application, cancellationToken);
+        await foreach (
+            var _ in authorizations.FindAsync(
+                user.Value,
+                applicationId,
+                Statuses.Valid,
+                AuthorizationTypes.Permanent,
+                request.GetScopes(),
+                cancellationToken
+            )
+        )
+        {
+            return true;
+        }
+        return false;
+    }
+
+    public string SignInPage(HttpContext context)
+    {
+        var google = options.Google.Enabled
+            ? "<button name=\"provider\" value=\"google\">Continue with Google</button>"
+            : "";
+        var apple = options.Apple.Enabled
+            ? "<button name=\"provider\" value=\"apple\">Continue with Apple</button>"
+            : "";
+        return Page(
+            context,
+            "Sign in to connect ChatGPT",
+            $"""
+            <form method="get" action="/connect/authorize">
+            {RequestFields(context)}
+            {google}
+            {apple}
+            </form>
+            """
+        );
+    }
+
+    public string ConsentPage(
+        HttpContext context,
+        User user,
+        SessionId session,
+        OpenIddictRequest request
+    )
+    {
+        BindBrowserSession(context, session);
+        var token = antiforgery.GetAndStoreTokens(context);
+        var scopes = string.Concat(
+            request.GetScopes().Select(scope => $"<li>{Encode(ScopeDescription(scope))}</li>")
+        );
+        return Page(
+            context,
+            "Connect ChatGPT to Relisten",
+            $"""
+            <p>ChatGPT at chatgpt.com is requesting access to {Encode(user.Username)}.</p>
+            <ul>{scopes}</ul>
+            <form method="post" action="/connect/authorize">
+            {RequestFields(context)}
+            {HiddenField(token.FormFieldName, token.RequestToken!)}
+            <button name="decision" value="allow">Allow</button>
+            <button name="decision" value="deny">Deny</button>
+            </form>
+            """
+        );
+    }
+
+    public async Task<bool> IsApprovedAsync(HttpContext context, SessionId session)
+    {
+        BindBrowserSession(context, session);
+        return await antiforgery.IsRequestValidAsync(context)
+            && (await context.Request.ReadFormAsync(context.RequestAborted))["decision"] == "allow";
+    }
+
+    private static void BindBrowserSession(HttpContext context, SessionId session) =>
+        context.User = new ClaimsPrincipal(
+            new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, session.Value)], "mcp-consent")
+        );
+
+    private static string RequestFields(HttpContext context) =>
+        string.Concat(
+            context
+                .Request.Query.Where(pair =>
+                    pair.Key is not ("decision" or "provider" or "__RequestVerificationToken")
+                )
+                .SelectMany(pair => pair.Value.Select(value => HiddenField(pair.Key, value ?? "")))
+        );
+
+    private static string ScopeDescription(string scope) =>
+        scope switch
+        {
+            RelistenScopes.UserRead => "Read your Relisten profile.",
+            RelistenScopes.LibraryRead => "Read your favorites and playlists.",
+            RelistenScopes.LibraryWrite => "Create or edit your playlists.",
+            Scopes.OpenId => "Identify your Relisten account.",
+            Scopes.Profile => "Read your display name.",
+            Scopes.OfflineAccess => "Stay connected until you disconnect.",
+            _ => scope,
+        };
+
+    private static string Page(HttpContext context, string title, string body)
+    {
+        context.Response.Headers.CacheControl = "private, no-store";
+        context.Response.Headers.ContentSecurityPolicy =
+            "default-src 'none'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'";
+        return $"""
+            <!doctype html>
+            <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+            <title>{Encode(title)}</title><main><h1>{Encode(title)}</h1>{body}</main></html>
+            """;
+    }
+
+    private static string HiddenField(string name, string value) =>
+        $"<input type=\"hidden\" name=\"{Encode(name)}\" value=\"{Encode(value)}\">";
+
+    private static string Encode(string value) => WebUtility.HtmlEncode(value);
+}

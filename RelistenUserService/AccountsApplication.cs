@@ -10,6 +10,7 @@ using RelistenUserService.Authentication.OpenIdConnect;
 using RelistenUserService.Configuration;
 using RelistenUserService.Http;
 using RelistenUserService.Identity.Deletion;
+using RelistenUserService.Mcp;
 using RelistenUserService.Persistence;
 using RelistenUserService.Playlists;
 using Temporalio.Extensions.Hosting;
@@ -67,6 +68,13 @@ public static class AccountsApplication
         builder.Services.AddScoped<AccountDeletionJobs>();
         builder.Services.AddSingleton<AccountDeletionStarter>();
 
+        if (runtime.Mcp is { } mcp)
+        {
+            // The SDK's trace logs contain complete JSON-RPC messages.
+            builder.Logging.AddFilter("ModelContextProtocol", LogLevel.Information);
+            builder.Services.AddMcpEndpoints(mcp);
+        }
+
         var app = builder.Build();
         app.UseMiddleware<PreviewControlMiddleware>();
         // TLS terminates at the cluster ingress. Only configured ingress networks may tell
@@ -96,6 +104,11 @@ public static class AccountsApplication
         app.UseAuthentication();
         app.UseAuthorization();
         app.UseMiddleware<BrowserMutationProtectionMiddleware>();
+
+        if (runtime.Mcp is not null)
+        {
+            app.UseMcpEndpoints(runtime);
+        }
 
         if (runtime.Options.EnableDevelopmentPersonas)
         {
@@ -134,6 +147,11 @@ public static class AccountsApplication
         await app
             .Services.GetRequiredService<WebClientApplicationInitializer>()
             .InitializeAsync(cancellationToken);
+
+        if (runtime.Mcp is { HasAccountTools: true } mcp)
+        {
+            await McpOAuth.InitializeAsync(app.Services, mcp, cancellationToken);
+        }
 
         if (runtime.IsLocalDevelopment)
         {

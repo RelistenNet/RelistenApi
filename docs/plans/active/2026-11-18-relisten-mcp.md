@@ -1,6 +1,6 @@
 # Relisten MCP server
 
-> Status: PR 1 implemented locally. PR 2 and PR 3 are planned. Production work
+> Status: PR 1 and PR 2 implemented locally. PR 3 is planned. Production work
 > waits for owner approval of each step below. The
 > [server roadmap](2026-11-18-server-roadmap.md) places this work among the
 > other planned server work.
@@ -273,7 +273,9 @@ Changes:
 2. **Public-client token authentication.** Advertise `none` in
    `token_endpoint_auth_methods_supported`; the live list has only
    `client_secret_post`, `private_key_jwt`, and `client_secret_basic`.
-   `private_key_jwt` with ChatGPT's published JWKS is a later hardening step.
+   When the ChatGPT client is enabled, discovery omits `private_key_jwt`.
+   ChatGPT prefers it if advertised, and the pinned public client has no keys
+   registered. Adding ChatGPT's published JWKS is a later hardening step.
 3. **Resource indicators (RFC 8707).** ChatGPT sends
    `resource=https://mcp.relisten.net/mcp` on authorization and token requests.
    `NativePrincipalFactory` stamps every token with the fixed
@@ -297,7 +299,9 @@ Changes:
    by step-up when a write tool is first called.
 2. **Mixed authentication.** Accept unauthenticated `initialize` and catalog calls.
    Declare per-tool `securitySchemes` in `_meta`: `{ "type": "noauth" }` on
-   catalog tools, `{ "type": "oauth2", "scopes": [...] }` on account tools. When
+   catalog tools, `{ "type": "oauth2", "scopes": [...] }` on account tools.
+   The two catalog tools with an optional library filter advertise both schemes
+   when account access is available. When
    an account tool runs without a valid token, return a tool error whose
    `_meta["mcp/www_authenticate"]` carries `error` and `error_description`.
    ChatGPT needs both the declaration and this error to show its linking UI.
@@ -358,6 +362,10 @@ In `clusters/relisten3-k3s/apps/relisten-user-service.yaml`:
 - On the `relisten-user-service` deployment, add `mcp.relisten.net` to
   `AllowedHosts` and set `Accounts__McpHost`, the MCP resource URI, and the
   catalog base URL for the catalog tools.
+- Configure `Catalog__ReviewSearchTrustedProxyNetworks__0` and any additional
+  trusted proxy CIDRs for the catalog API. Review search uses the connection
+  address until these are configured. Verify that external callers receive
+  independent limits through the real ingress chain, including Cloudflare.
 - Catalog tools can reach `https://api.relisten.net` through the existing
   egress rule for TCP 443. Calling `relistenapi` inside the cluster instead
   avoids the Cloudflare round trip and catalog rate limits, but needs a new
@@ -387,17 +395,21 @@ caching, allow long streamed responses, and add MCP rate limits for that host.
 5. Turn on `Accounts:McpAccountTools` for everyone once account deletion has
    shipped, then submit the app for review.
 
-## To verify before building
+## PR 2 verification
 
-- Whether OpenIddict 7.6 parses the `resource` parameter and validates it against
-  client permissions, or whether a custom event handler must do it.
-- How OpenIddict's discovery handler can add `client_id_metadata_document_supported`
-  and `none`.
-- Whether a TimescaleDB continuous aggregate built on another one can join
-  `shows`, which an anniversary-excluded column would need.
-- The current `ModelContextProtocol.AspNetCore` APIs for protected resource
-  metadata and per-tool `_meta`.
-- The `1y` refresh cost on the primary after the monthly rollup exists.
+- OpenIddict 7.6 parses resource indicators and checks configured resources and
+  client permissions. Relisten requires the exact MCP resource for the ChatGPT
+  client and sets it on the principal so OpenIddict issues the MCP audience.
+- A local HTTP probe confirmed that OpenIddict publishes CIMD discovery and
+  `none`. The MCP SDK 2.4.0 probe confirmed Streamable HTTP, tool metadata,
+  and tool-level OAuth challenges. Relisten serves protected-resource
+  metadata on its two explicit routes.
+- The User Service stores consent in OpenIddict authorizations. Disconnect
+  revokes the grants and native sessions. Account purge removes the same
+  authorization rows by subject.
+- Measure the yearly refresh on the primary and the cost of artist-wide
+  catalog searches before launch. Test the real ChatGPT connection and the
+  ingress configuration in PR 3. Optional sampling uses existing show listings.
 
 ## References
 

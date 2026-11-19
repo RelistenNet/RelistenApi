@@ -23,16 +23,24 @@ public sealed class AuthorizationController(
     IOpenIddictAuthorizationManager authorizationManager,
     NativePrincipalFactory principalFactory,
     WebBootstrapPrincipalFactory webPrincipalFactory,
+    McpConsent mcpConsent,
     SessionCookieManager cookies,
     TimeProvider timeProvider
 ) : Controller
 {
     [HttpGet("~/connect/authorize")]
+    [HttpPost("~/connect/authorize")]
     public async Task<IActionResult> Authorize(CancellationToken cancellationToken)
     {
         var request =
             HttpContext.GetOpenIddictServerRequest()
             ?? throw new InvalidOperationException("The OpenIddict request is unavailable.");
+        var isMcp = request.ClientId == McpOAuth.ClientId;
+        var posted = HttpMethods.IsPost(Request.Method);
+        if (posted && !isMcp)
+        {
+            return StatusCode(StatusCodes.Status405MethodNotAllowed);
+        }
         if (!runtime.Options.EnableDevelopmentPersonas && !runtime.Options.EnableExternalProviders)
         {
             // Keeping the service available with sign-in disabled is useful during a
@@ -55,8 +63,16 @@ public sealed class AuthorizationController(
             || !UserId.TryParse(authentication.Principal?.GetClaim(Claims.Subject), out var userId)
         )
         {
+            if (isMcp && (posted || request.HasPromptValue(PromptValues.None)))
+            {
+                return RejectMcpAuthorization(Errors.LoginRequired);
+            }
             if (runtime.Options.EnableExternalProviders)
             {
+                if (isMcp && string.IsNullOrEmpty(request.GetParameter("provider").ToString()))
+                {
+                    return Content(mcpConsent.SignInPage(HttpContext), "text/html; charset=utf-8");
+                }
                 return ChallengeExternalProvider(request);
             }
 
@@ -90,6 +106,33 @@ public sealed class AuthorizationController(
         {
             cookies.ClearAuthSso(Response);
             return Forbid();
+        }
+
+        if (isMcp)
+        {
+            if (runtime.Mcp?.Allows(userId) != true)
+            {
+                return RejectMcpAuthorization(Errors.AccessDenied);
+            }
+            if (posted)
+            {
+                if (!await mcpConsent.IsApprovedAsync(HttpContext, authSsoSessionId))
+                {
+                    return RejectMcpAuthorization(Errors.AccessDenied);
+                }
+            }
+            else if (
+                request.HasPromptValue(PromptValues.Consent)
+                || !await mcpConsent.HasGrantAsync(userId, request, cancellationToken)
+            )
+            {
+                return request.HasPromptValue(PromptValues.None)
+                    ? RejectMcpAuthorization(Errors.ConsentRequired)
+                    : Content(
+                        mcpConsent.ConsentPage(HttpContext, user, authSsoSessionId, request),
+                        "text/html; charset=utf-8"
+                    );
+            }
         }
 
         var principal =
@@ -198,6 +241,17 @@ public sealed class AuthorizationController(
 
         return Challenge(properties, scheme);
     }
+
+    private ForbidResult RejectMcpAuthorization(string error) =>
+        Forbid(
+            new AuthenticationProperties(
+                new Dictionary<string, string?>
+                {
+                    [OpenIddictServerAspNetCoreConstants.Properties.Error] = error,
+                }
+            ),
+            OpenIddictServerAspNetCoreDefaults.AuthenticationScheme
+        );
 
     private string AuthorizationReturnUrl(OpenIddictRequest request)
     {

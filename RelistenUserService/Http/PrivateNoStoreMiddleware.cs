@@ -10,6 +10,7 @@ public sealed class PrivateNoStoreMiddleware(RequestDelegate next)
         var path = context.Request.Path;
         var requiresPrivateNoStore =
             path.StartsWithSegments("/v1")
+            || path == "/mcp"
             || BrowserRouteBoundary.IsSessionLifecyclePath(path)
             || BrowserRouteBoundary.IsCsrfPath(path)
             || path.StartsWithSegments("/auth/sso");
