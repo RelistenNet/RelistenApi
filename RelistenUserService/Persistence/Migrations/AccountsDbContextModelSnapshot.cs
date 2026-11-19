@@ -1018,6 +1018,10 @@ namespace RelistenUserService.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("taken_down");
 
+                    b.Property<int>("TrackCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("track_count");
+
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
@@ -1174,7 +1178,7 @@ namespace RelistenUserService.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_playlist_receipts_id", "(id ~ '^command_[0-7][0-9a-hjkmnp-tv-z]{9}[ef][0-9a-hjkmnp-tv-z]{15}$') OR (id ~ '^playlist_operation_[0-7][0-9a-hjkmnp-tv-z]{9}[ef][0-9a-hjkmnp-tv-z]{15}$')");
 
-                            t.HasCheckConstraint("ck_playlist_receipts_kind", "kind IN ('create', 'archive', 'copy', 'publication', 'operation')");
+                            t.HasCheckConstraint("ck_playlist_receipts_kind", "kind IN ('create', 'archive', 'copy', 'operation')");
                         });
                 });
 

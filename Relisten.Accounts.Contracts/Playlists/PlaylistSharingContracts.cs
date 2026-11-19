@@ -3,9 +3,12 @@ using Relisten.Accounts.Contracts.Identifiers;
 
 namespace Relisten.Accounts.Contracts.Playlists;
 
+/// <summary>
+/// Sets the desired publication state. Repeating a request converges on the same state,
+/// so it carries no command ID or receipt.
+/// </summary>
 public sealed record SetPlaylistPublicationRequest(
     int ContractVersion,
-    CommandId CommandId,
     [property: JsonRequired] bool Published
 );
 

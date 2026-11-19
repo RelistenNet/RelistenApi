@@ -55,15 +55,14 @@ internal static class PlaylistModerationCommand
         )
         {
             await using var database = openDatabase();
-            var writes = new PlaylistWriteService(
+            var moderation = new PlaylistModerationService(
                 database,
-                new AdvisoryLockService(database),
                 new LibraryStateStore(database),
                 TimeProvider.System
             );
             try
             {
-                var changed = await writes.SetTakedownAsync(
+                var changed = await moderation.SetTakedownAsync(
                     playlistId,
                     args[0] == "take-down",
                     cancellationToken

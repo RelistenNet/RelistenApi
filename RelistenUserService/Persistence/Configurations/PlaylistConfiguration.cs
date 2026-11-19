@@ -156,7 +156,7 @@ public sealed class PlaylistConfiguration
                 );
                 table.HasCheckConstraint(
                     "ck_playlist_receipts_kind",
-                    "kind IN ('create', 'archive', 'copy', 'publication', 'operation')"
+                    "kind IN ('create', 'archive', 'copy', 'operation')"
                 );
             }
         );

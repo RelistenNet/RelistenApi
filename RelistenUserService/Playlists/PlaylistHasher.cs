@@ -33,13 +33,6 @@ public static class PlaylistHasher
         return Digest(lines);
     }
 
-    public static byte[] Hash(PlaylistId playlistId, SetPlaylistPublicationRequest request)
-    {
-        var lines = Header("publication", request.ContractVersion, playlistId, "publication");
-        Value(lines, request.Published);
-        return Digest(lines);
-    }
-
     public static byte[] Hash(string publicCode, CopyPublicPlaylistRequest request)
     {
         var lines = new List<string> { "relisten-playlist-copy-v1" };
@@ -48,6 +41,10 @@ public static class PlaylistHasher
         return Digest(lines);
     }
 
+    /// <summary>
+    /// The base revision is left out: it is a diagnostic, so a retry that read a newer
+    /// revision still replays its receipt instead of conflicting with it.
+    /// </summary>
     public static byte[] Hash(PlaylistId playlistId, int version, PlaylistOperation operation)
     {
         var lines = Header("operation", version, playlistId, operation.OperationType);

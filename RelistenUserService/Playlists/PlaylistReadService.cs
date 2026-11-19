@@ -33,21 +33,13 @@ public sealed class PlaylistReadService(AccountsDbContext dbContext)
             .Where(row => row.OwnerId == actor && row.Archived == (view == "archived"))
             .OrderByDescending(row => row.UpdatedAt)
             .ThenBy(row => row.Id);
-        var summaries = await Summaries(dbContext, playlists).ToArrayAsync(cancellationToken);
+        var summaries = await Summaries(playlists).ToArrayAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return new(1, generation, summaries);
     }
 
-    internal static IQueryable<PlaylistEntry> LiveTracks(AccountsDbContext dbContext) =>
-        dbContext.PlaylistEntries.Where(entry => !entry.Deleted && entry.TrackId != null);
-
-    internal static IQueryable<PlaylistSummary> Summaries(
-        AccountsDbContext dbContext,
-        IQueryable<Playlist> playlists
-    )
-    {
-        var tracks = LiveTracks(dbContext);
-        return playlists.Select(row => new PlaylistSummary(
+    internal static IQueryable<PlaylistSummary> Summaries(IQueryable<Playlist> playlists) =>
+        playlists.Select(row => new PlaylistSummary(
             row.Id,
             row.Name,
             row.EntryCount,
@@ -56,12 +48,11 @@ public sealed class PlaylistReadService(AccountsDbContext dbContext)
             row.UpdatedAt
         )
         {
-            TrackCount = tracks.Count(entry => entry.PlaylistId == row.Id),
+            TrackCount = row.TrackCount,
             PublicCode = row.PublicCode,
             Published = row.Published,
             TakenDown = row.TakenDown,
         });
-    }
 
     internal static Task<FollowedPlaylistHead[]> FollowedHeadsAsync(
         AccountsDbContext database,

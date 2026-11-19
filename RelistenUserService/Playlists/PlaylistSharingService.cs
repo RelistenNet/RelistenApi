@@ -83,6 +83,16 @@ public sealed class PlaylistSharingService(
             cancellationToken
         );
 
+        // The owner already has the playlist in `playlists`; a follow would list it twice.
+        if (source.OwnerId == actor)
+        {
+            throw new PlaylistException(
+                422,
+                "own_playlist",
+                "You cannot follow your own playlist."
+            );
+        }
+
         var follows = database.PlaylistFollows.Where(row => row.UserId == actor);
         if (!await follows.AnyAsync(row => row.PlaylistId == source.Id, cancellationToken))
         {
@@ -209,19 +219,14 @@ public sealed class PlaylistSharingService(
         PlaylistId playlistId,
         string changeType,
         DateTimeOffset now
-    )
-    {
-        state.Revision++;
-        state.UpdatedAt = now;
-        database.LibraryChanges.Add(
+    ) =>
+        stateStore.Append(
+            state,
             new()
             {
-                UserId = state.UserId,
-                Revision = state.Revision,
                 ChangeType = changeType,
                 FollowedPlaylistId = playlistId,
                 ChangedAt = now,
             }
         );
-    }
 }

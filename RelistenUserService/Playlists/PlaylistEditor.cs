@@ -21,8 +21,6 @@ internal sealed class PlaylistEditor(
         entries.ToDictionary(row => row.Id);
     public List<PlaylistRevision> Revisions { get; } = [];
     public int LiveEntryCount => Playlist.EntryCount;
-    public int LiveTrackCount =>
-        Entries.Values.Count(row => !row.Deleted && row.TrackId is not null);
 
     public void CheckGuideQuota()
     {
@@ -386,6 +384,7 @@ internal sealed class PlaylistEditor(
             changes.Add(Upsert(entry));
         }
         Playlist.EntryCount += entries.Count;
+        Playlist.TrackCount += entries.Count(entry => entry.TrackId is not null);
     }
 
     private void TombstoneEntry(PlaylistEntry entry)
@@ -393,6 +392,10 @@ internal sealed class PlaylistEditor(
         entry.Deleted = true;
         entry.Rank = null;
         Playlist.EntryCount--;
+        if (entry.TrackId is not null)
+        {
+            Playlist.TrackCount--;
+        }
     }
 
     private bool DeleteEmptySegment(PlaylistSegmentId id, List<PlaylistChange> changes)

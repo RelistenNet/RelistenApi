@@ -1,7 +1,9 @@
 # Deliver playlists using v4 catalog identities
 
-Status: private-playlist API implemented and locally verified 2026-11-17;
-mobile integration and release qualification pending. Private-playlist contracts
+Status: private-playlist API implemented and locally verified 2026-11-17. Guide
+content and the sharing, following, copy and moderation API implemented and
+locally verified 2026-11-18, not yet deployed. Mobile integration of guides and
+sharing, the public web page, and release qualification are pending. Private-playlist contracts
 were frozen 2026-11-16. This plan owns
 the playlist contract and delivery work. It supersedes the playlist portions of
 the July 18 server architecture, server implementation, mobile architecture,
@@ -45,7 +47,11 @@ Existing unrelated catalog and account endpoints retain their own contracts.
   environment. External availability waits for account deletion, per the
   [server roadmap](2026-11-18-server-roadmap.md).
 - [ ] Implement guide content: descriptions, text blocks and timestamp links.
+  - [x] (2026-11-18) Implement and locally verify the User Service API, storage
+    and Markdown refusal policy.
 - [ ] Implement publication, following and cloning with their public web consumer.
+  - [x] (2026-11-18) Implement and locally verify the User Service API, reports
+    and operator moderation. See [Playlist sharing API](../../api/playlist-sharing.md).
 - [ ] Implement collaboration after private editing has been exercised.
 
 ## Context and Orientation
@@ -150,10 +156,12 @@ Use one documented lock order for owner quota, playlist, affected account-librar
 states, and command receipts. Cardinality changes serialize on the owner boundary
 before the playlist; affected account states lock in stable ID order. Apply this
 same order to creation, archive, cloning, and later deletion/member operations.
-Account deletion is not implemented yet (`User.LifecycleGeneration` exists but is
-unread), and private playlists do not wait for it. When deletion lands, it adds its
-fence to this lock order and a purge handler for playlist rows; keep playlist
-writes behind one entrypoint so that fence has a single place to attach.
+Account deletion's fence is `PlaylistAccountLock`: each write first takes the
+actor's `identity.users` row `FOR SHARE` and requires an active account, ahead of
+the library state and playlist locks. Purge takes that row `FOR UPDATE`, so a write
+either commits first or sees the account gone. The
+[contracts](2026-11-16-v4-playlist-contracts.md#transactions-and-locks) give the
+full order.
 
 Authorize the entire request before mutation. Preflight malformed envelopes,
 unsupported versions, reused IDs with different payloads, and aggregate quota

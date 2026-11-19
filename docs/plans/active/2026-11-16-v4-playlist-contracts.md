@@ -81,7 +81,7 @@ and `initial_segments` name are dropped.
 | `name` | 1–100 characters after trimming | `422 invalid_playlist_operation` |
 | Playlist metadata `description` | 0–1,000 characters | `422 invalid_playlist_operation` |
 | Segment or entry `description` | 0–2,000 characters | `422 invalid_playlist_operation` |
-| Segment or entry `description` content | No images, no raw HTML, and only `https:`, `#entry=…&t=…` or `#t=…` link destinations | `422 invalid_playlist_operation` |
+| Any `description` content (playlist metadata, segment or entry) | No images, no raw HTML, and only `https:`, `#entry=…&t=…` or `#t=…` link destinations | `422 invalid_playlist_operation` |
 | Prose-only segments per playlist | 100 | `422 quota_exceeded` |
 | Total descriptions per playlist | 200,000 UTF-8 bytes | `422 quota_exceeded` |
 
@@ -89,7 +89,8 @@ Names and descriptions are trimmed and NFC-normalized. Character limits count
 Unicode scalar values after normalization. Names need not be unique. An empty
 description is stored as `null`; NUL and invalid Unicode are rejected.
 The content rule parses the description as CommonMark, so image or HTML syntax
-inside a code span is accepted. The server stores accepted text as sent and never
+inside a code span is accepted. It applies when a description is written;
+stored metadata descriptions that predate it stay readable. The server stores accepted text as sent and never
 rewrites it; clients sanitize before rendering. See the
 [guide content design](../../design/2026-11-18-playlist-guide-content.md#accepting-and-sanitizing-descriptions).
 The byte limit covers all live descriptions, including playlist metadata. The
@@ -680,9 +681,9 @@ change carries `favorite_id` and `target`.
   `favorite_id`/`target` and optional `playlist`, and the snapshot record gains
   `playlists`. The favorite types can be renamed to `Library*` in the same change.
 - `playlist_summary` is the full current summary (an upsert). Every committed
-  create, archive change or content batch that changes a playlist writes one
-  summary change for it in the same transaction: one per playlist per transaction,
-  not one per operation.
+  create, copy, archive change, publication change, takedown or lift, or content
+  batch that changes a playlist writes one summary change for it in the same
+  transaction: one per playlist per transaction, not one per operation.
 - Mobile compares a summary's `revision` with its local `applied_revision` for that
   playlist. An unknown playlist is fetched by snapshot; a known one that is behind
   pulls changes.
@@ -694,19 +695,28 @@ change carries `favorite_id` and `target`.
 
 ## Transactions and locks
 
-Every playlist write (create, batch, archive) runs in one transaction. Locks follow
-the favorites order (`FavoriteMutationService`):
+Every playlist write (create, copy, batch, archive, publication) runs in one
+transaction. Locks follow the favorites order (`FavoriteMutationService`):
 
 1. Transaction advisory locks on every submitted `operation_id` or `command_id` and
    every ID the request would create, in sorted order. This turns concurrent reuse
    of an ID into a clean `idempotency_conflict` or `id_conflict` rather than a
-   unique-key violation.
-2. The requesting account's `user_data.library_states` row, `FOR UPDATE`. This
+   unique-key violation. Publication carries no ID and takes none.
+2. The account-deletion fence, `PlaylistAccountLock`: the actor's
+   `identity.users` row `FOR SHARE`, requiring `status = 'active'`. Purge takes
+   the same row `FOR UPDATE`, so a write either commits before purge or returns
+   `401 unauthorized`. Follow, unfollow and report take the same fence.
+3. The requesting account's `user_data.library_states` row, `FOR UPDATE`. This
    serializes that account's quota checks and library revision updates. Favorites
    take the same lock.
-3. For batch and archive requests, select the playlist by ID and owner and lock
-   the matching row with `FOR UPDATE`. A missing match returns
-   `404 playlist_not_found`.
+4. For batch, archive and publication requests, select the playlist by ID and
+   owner and lock the matching row with `FOR UPDATE`. A missing match returns
+   `404 playlist_not_found`. Follow and copy instead lock the public source row
+   `FOR SHARE`, so it stays public and its structure stays stable until they
+   commit.
+
+The operator's takedown and lift take the owner's fence without requiring an
+active account, then the owner's library state and the playlist `FOR UPDATE`.
 
 An edit batch then follows these steps:
 
@@ -721,14 +731,15 @@ An edit batch then follows these steps:
 5. Commit. An infrastructure failure rolls back the whole request.
 
 Collaboration later locks other members' library states after the playlist, in ID
-order. Account deletion later adds its fence ahead of the library state lock. Both
-attach to this single write entrypoint.
+order, behind the same entrypoints.
 
 ## Receipts and hashing
 
-Each create command, archive command and operation stores a receipt: account, ID,
-playlist, SHA-256 semantic hash and stored result. Receipts are kept for the
-playlist's lifetime.
+Each create, copy and archive command and each operation stores a receipt:
+account, ID, playlist, SHA-256 semantic hash and stored result. Receipts are kept
+for the playlist's lifetime. A copy's receipt belongs to the new private copy, so
+a retry finds it after the source is taken down or purged. Publication sets a
+state and stores no receipt.
 
 The hash is SHA-256 over UTF-8 lines joined by `\n`, like `FavoriteMutationHasher`.
 Value lines use tags so free text stays distinct from absent and null fields.
@@ -739,11 +750,13 @@ entries, after anchor, before anchor; create encodes name, description, segments
 
 | Line | Content |
 | --- | --- |
-| 1 | Domain: `relisten-playlist-operation-v1`, `relisten-playlist-create-v1` or `relisten-playlist-archive-v1` |
+| 1 | Domain: `relisten-playlist-operation-v1`, `relisten-playlist-create-v1`, `relisten-playlist-archive-v1` or `relisten-playlist-copy-v1` |
 | 2 | Contract version |
 | 3 | Playlist ID |
 | 4 | `operation_type`, or `create` / `archive` for commands |
 | 5+ | Encoded payload fields in the order defined by `PlaylistHasher` |
+
+A copy hashes three lines: its domain, the contract version and the public code.
 
 Field lines are encoded as follows:
 

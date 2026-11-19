@@ -25,6 +25,8 @@ public static class PlaylistValidation
     public const int MaximumOperations = 500;
     private const int MaximumProseOnlySegments = 100;
     private const int MaximumDescriptionBytes = 200_000;
+    private const int MaximumMetadataDescriptionLength = 1_000;
+    private const int MaximumGuideDescriptionLength = 2_000;
 
     public static CreatePlaylistRequest Normalize(CreatePlaylistRequest request)
     {
@@ -60,7 +62,7 @@ public static class PlaylistValidation
         {
             Metadata = new(
                 Name(request.Metadata.Name),
-                Description(request.Metadata.Description, 1_000)
+                GuideDescription(request.Metadata.Description, MaximumMetadataDescriptionLength)
             ),
             Segments = segments,
         };
@@ -101,7 +103,13 @@ public static class PlaylistValidation
                             ? new(true, Name(metadata.Name.Value))
                             : default,
                         Description = metadata.Description.IsPresent
-                            ? new(true, Description(metadata.Description.Value, 1_000))
+                            ? new(
+                                true,
+                                GuideDescription(
+                                    metadata.Description.Value,
+                                    MaximumMetadataDescriptionLength
+                                )
+                            )
                             : default,
                     };
                     break;
@@ -212,6 +220,11 @@ public static class PlaylistValidation
         ValidateCommand(request.ContractVersion, request.CommandId);
     }
 
+    public static void Validate(SetPlaylistPublicationRequest request)
+    {
+        Version(request.ContractVersion);
+    }
+
     internal static void ValidateCommand(int version, CommandId commandId)
     {
         Version(version);
@@ -306,9 +319,15 @@ public static class PlaylistValidation
     private static OptionalText NormalizeGuidePatch(OptionalText patch) =>
         patch.IsPresent ? new(true, GuideDescription(patch.Value)) : default;
 
-    private static string? GuideDescription(string? text)
+    // The playlist description is public and copied with rewritten entry links, so it follows
+    // the same Markdown policy as segment and entry prose. Only writes are checked; stored
+    // rows that predate the policy stay readable.
+    private static string? GuideDescription(
+        string? text,
+        int maximumLength = MaximumGuideDescriptionLength
+    )
     {
-        var description = Description(text, 2_000);
+        var description = Description(text, maximumLength);
         if (description is not null && GuideMarkdownPolicy.Violation(description) is { } violation)
         {
             throw Invalid(violation);

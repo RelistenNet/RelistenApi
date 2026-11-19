@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -10,6 +9,7 @@ using Relisten.Accounts.Contracts.Library;
 using Relisten.Accounts.Contracts.Playlists;
 using Relisten.Identifiers;
 using RelistenIngestionWorker.AccountDeletion;
+using RelistenUserService.Identity.Entities;
 using RelistenUserService.Playlists;
 using RelistenUserService.Playlists.Entities;
 
@@ -22,22 +22,18 @@ public sealed partial class TestPlaylistApi
     {
         var playlist = await Create(1);
         var listener = await NewSharingListener();
-        var firstPublish = new SetPlaylistPublicationRequest(1, CommandId.New(), true);
+        var publish = new SetPlaylistPublicationRequest(1, true);
         var route = $"/v1/playlists/{playlist.PlaylistId}/publication";
 
         var privatePlaylist = await Snapshot(playlist.PlaylistId);
         privatePlaylist.Published.Should().BeFalse();
         privatePlaylist.PublicCode.Should().BeNull();
         await Problem(
-            await Send(HttpMethod.Put, route, firstPublish, actor: listener),
+            await Send(HttpMethod.Put, route, publish, actor: listener),
             404,
             "playlist_not_found"
         );
-        var published = await ReadResponse<PlaylistPublication>(
-            HttpMethod.Put,
-            route,
-            firstPublish
-        );
+        var published = await ReadResponse<PlaylistPublication>(HttpMethod.Put, route, publish);
         var publicUrl = $"/v1/public-playlists/{published.PublicCode}";
 
         using var anonymous = await _client.GetAsync(publicUrl);
@@ -71,11 +67,7 @@ public sealed partial class TestPlaylistApi
             .BeEquivalentTo("id", "username");
 
         await Problem(
-            await Send(
-                HttpMethod.Put,
-                route,
-                raw: $$"""{"contract_version":1,"command_id":"{{CommandId.New()}}"}"""
-            ),
+            await Send(HttpMethod.Put, route, raw: """{"contract_version":1}"""),
             422,
             "invalid_playlist_operation"
         );
@@ -90,19 +82,15 @@ public sealed partial class TestPlaylistApi
         await ReadResponse<PlaylistPublication>(
             HttpMethod.Put,
             route,
-            new SetPlaylistPublicationRequest(1, CommandId.New(), false)
+            new SetPlaylistPublicationRequest(1, false)
         );
         using var unpublished = await _client.GetAsync(publicUrl);
         unpublished.StatusCode.Should().Be(HttpStatusCode.NotFound);
         AssertNoStore(unpublished);
-        // Replay acknowledges the old publish without changing current publication.
-        (await ReadResponse<PlaylistPublication>(HttpMethod.Put, route, firstPublish))
-            .Should()
-            .Be(published);
-        (await _client.GetAsync(publicUrl)).StatusCode.Should().Be(HttpStatusCode.NotFound);
 
         var republished = await Publish(playlist.PlaylistId);
         republished.PublicCode.Should().Be(published.PublicCode);
+        (await Publish(playlist.PlaylistId)).Should().Be(republished with { Changed = false });
         await ReadResponse<PlaylistArchived>(
             HttpMethod.Put,
             $"/v1/playlists/{playlist.PlaylistId}/archive-state",
@@ -225,7 +213,7 @@ public sealed partial class TestPlaylistApi
             await Send(
                 HttpMethod.Put,
                 $"/v1/playlists/{source.PlaylistId}/publication",
-                new SetPlaylistPublicationRequest(1, CommandId.New(), true)
+                new SetPlaylistPublicationRequest(1, true)
             ),
             409,
             "playlist_taken_down"
@@ -361,7 +349,7 @@ public sealed partial class TestPlaylistApi
         await ReadResponse<PlaylistPublication>(
             HttpMethod.Put,
             $"/v1/playlists/{playlist.PlaylistId}/publication",
-            new SetPlaylistPublicationRequest(1, CommandId.New(), false)
+            new SetPlaylistPublicationRequest(1, false)
         );
         await AssertHiddenFollow(playlist.PlaylistId, listener);
         var unfollow = $"/v1/playlists/{playlist.PlaylistId}/follow";
@@ -468,21 +456,49 @@ public sealed partial class TestPlaylistApi
             "quota_exceeded"
         );
 
-        var cursor = (await PullSharingLibrary(listener, snapshot.NextCursor)).NextCursor;
-        var durations = new List<double>();
-        for (var sample = 0; sample < 5; sample++)
-        {
-            var start = Stopwatch.GetTimestamp();
-            var page = await PullSharingLibrary(listener, cursor);
-            durations.Add(Stopwatch.GetElapsedTime(start).TotalMilliseconds);
-            page.HasMore.Should().BeFalse();
-            page.Changes.Should().BeEmpty();
-            page.FollowedPlaylists.Should().BeEquivalentTo(snapshot.FollowedPlaylists);
-        }
-        durations.Sort();
-        TestContext.Progress.WriteLine(
-            $"Unchanged HTTP library poll with 500 follows (5 warmed samples): {durations[2]:F1} ms median."
+        var unchanged = await PullSharingLibrary(listener, snapshot.NextCursor);
+        unchanged.HasMore.Should().BeFalse();
+        unchanged.Changes.Should().BeEmpty();
+        unchanged.FollowedPlaylists.Should().BeEquivalentTo(snapshot.FollowedPlaylists);
+    }
+
+    [Test]
+    public async Task Owner_cannot_follow_their_own_playlist()
+    {
+        var playlist = await Create(1);
+        var published = await Publish(playlist.PlaylistId);
+
+        await Problem(
+            await Send(HttpMethod.Put, $"/v1/public-playlists/{published.PublicCode}/follow"),
+            422,
+            "own_playlist"
         );
+        (await SharingLibrary(_user)).FollowedPlaylists.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task Owner_pending_deletion_hides_the_public_playlist_and_its_follows()
+    {
+        var playlist = await Create(1);
+        var published = await Publish(playlist.PlaylistId);
+        var publicUrl = $"/v1/public-playlists/{published.PublicCode}";
+        var listener = await NewSharingListener();
+        (await Send(HttpMethod.Put, $"{publicUrl}/follow", actor: listener))
+            .StatusCode.Should()
+            .Be(HttpStatusCode.NoContent);
+
+        // The owner row and playlist stay until the purge runs; only the status changes.
+        await using (var database = _database.CreateContext())
+        {
+            await database
+                .Users.Where(row => row.Id == _user)
+                .ExecuteUpdateAsync(update =>
+                    update.SetProperty(row => row.Status, UserStatuses.Deleting)
+                );
+        }
+
+        (await _client.GetAsync(publicUrl)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        await AssertHiddenFollow(playlist.PlaylistId, listener);
     }
 
     private Task<UserId> NewSharingListener() =>
@@ -493,7 +509,7 @@ public sealed partial class TestPlaylistApi
             await Send(
                 HttpMethod.Put,
                 $"/v1/playlists/{id}/publication",
-                new SetPlaylistPublicationRequest(1, CommandId.New(), true),
+                new SetPlaylistPublicationRequest(1, true),
                 actor: actor
             )
         );

@@ -70,15 +70,14 @@ public sealed class TestGuideMarkdownPolicy
     }
 
     [Test]
-    public void Refuses_HTML_in_a_description_update()
+    public void Refuses_HTML_in_a_playlist_description_update()
     {
         var update = new PlaylistOperation(
             PlaylistOperationId.New(),
             1,
-            "update_entry",
-            new UpdatePlaylistEntry(
-                PlaylistEntryId.Parse("playlist_entry_01k8000000e008000000000004"),
-                new(true, "Hello <img src=\"https://tracker.example/p.gif\">")
+            "update_metadata",
+            new UpdatePlaylistMetadata(
+                Description: new(true, "Hello <img src=\"https://tracker.example/p.gif\">")
             )
         );
 

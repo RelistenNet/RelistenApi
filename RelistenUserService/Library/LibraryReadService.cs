@@ -51,7 +51,7 @@ public sealed class LibraryReadService(
             .OrderByDescending(row => row.UpdatedAt)
             .ThenBy(row => row.Id);
         var playlists = await PlaylistReadService
-            .Summaries(dbContext, ownedPlaylists)
+            .Summaries(ownedPlaylists)
             .ToArrayAsync(cancellationToken);
         var followedPlaylists = await ReadFollowedHeadsAsync(head, userId, cancellationToken);
         await transaction.CommitAsync(cancellationToken);

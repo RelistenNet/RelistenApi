@@ -15,6 +15,9 @@ public sealed class Playlist
     public User Owner { get; set; } = null!;
     public long Revision { get; set; }
     public int EntryCount { get; set; }
+
+    // Live entries with a track, maintained beside EntryCount so summaries need no entry scan.
+    public int TrackCount { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }

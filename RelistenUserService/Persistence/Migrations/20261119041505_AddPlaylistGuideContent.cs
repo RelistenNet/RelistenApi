@@ -53,8 +53,10 @@ namespace RelistenUserService.Persistence.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            // Text blocks have no track and stored revisions carry descriptions, so neither fits
+            // the earlier schema. Guide writes have no off switch: fix forward instead.
             throw new NotSupportedException(
-                "Playlist guide content and its revisions must be preserved. Disable guide writes and keep the guide-capable schema."
+                "Playlist guide content and its revisions must be preserved. Roll forward; see docs/api/playlist-sharing.md#rollout-and-recovery."
             );
         }
     }

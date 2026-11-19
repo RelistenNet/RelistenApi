@@ -154,7 +154,7 @@ namespace RelistenUserService.Persistence.Migrations
                 name: "ck_playlist_receipts_kind",
                 schema: "user_data",
                 table: "playlist_receipts",
-                sql: "kind IN ('create', 'archive', 'copy', 'publication', 'operation')"
+                sql: "kind IN ('create', 'archive', 'copy', 'operation')"
             );
 
             migrationBuilder.AddCheckConstraint(
