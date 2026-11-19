@@ -122,15 +122,16 @@ an explicit step to this activity. The schema test below fails until it does.
 
 ### 3. Deployment
 
-One `relisten-flux` change, deployed before deletion is turned on:
+Deploy these `relisten-flux` changes before the User Service build that serves
+account deletion:
 
 - Allow egress from `relisten-user-service` to `app: relisten-temporal` on TCP
   7233.
 - Add `relisten-user-service` to Temporal's ingress allowlist.
 - Bind `ACCOUNTS_DATABASE_URL` on `relistenapi-ingestion-worker`.
 
-Enable the endpoint with `Accounts__EnableAccountDeletion=true` after the flux
-change is live. The switch defaults to off.
+Verify the worker is polling the `user-data` queue and the User Service can
+reach Temporal before rolling out the endpoint.
 
 ### 4. Mobile and web
 

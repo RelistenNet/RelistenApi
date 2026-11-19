@@ -4,7 +4,6 @@ using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Relisten.Accounts.Contracts.Deletion;
 using RelistenUserService.Authentication;
 using RelistenUserService.Authentication.Authorization;
-using RelistenUserService.Configuration;
 using RelistenUserService.Identity.Deletion;
 using Temporalio.Exceptions;
 
@@ -14,7 +13,6 @@ namespace RelistenUserService.Controllers;
 [Route("v1/account-deletions")]
 [Authorize(Policy = AuthenticationConstants.AccountManagePolicy)]
 public sealed class AccountDeletionsController(
-    AccountsOptions options,
     CurrentAccountContext currentAccount,
     AccountDeletionJobs jobs,
     AccountDeletionStarter starter,
@@ -28,11 +26,6 @@ public sealed class AccountDeletionsController(
         CancellationToken cancellationToken
     )
     {
-        if (!options.EnableAccountDeletion)
-        {
-            return NotFound();
-        }
-
         var userId = currentAccount.User.Id;
         var jobId = await jobs.RequestAsync(userId, cancellationToken);
         if (jobId is null)

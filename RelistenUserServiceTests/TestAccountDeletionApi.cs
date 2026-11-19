@@ -312,19 +312,7 @@ public sealed class TestAccountDeletionApi
         records.Should().Be(0);
     }
 
-    [Test]
-    public async Task DeletionIsOffByDefault()
-    {
-        await StartAppAsync(enableDeletion: false);
-        await SignInAsync();
-        using var response = await _accounts.PostAsync("/v1/account-deletions", null);
-        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
-        await using var database = _database.CreateContext();
-        (await database.AccountDeletionJobs.CountAsync()).Should().Be(0);
-        _starts.RequestedIds.Should().BeEmpty();
-    }
-
-    private async Task StartAppAsync(bool enableDeletion = true)
+    private async Task StartAppAsync()
     {
         var caPath = Path.Combine(_directory, "test-ca.pem");
         using var key = RSA.Create(2048);
@@ -362,7 +350,6 @@ public sealed class TestAccountDeletionApi
                 ["Accounts:WebClientSecret"] = "account-deletion-test-secret",
                 ["Accounts:DevelopmentCertificateAuthorityPath"] = caPath,
                 ["Accounts:EnableDevelopmentPersonas"] = "true",
-                ["Accounts:EnableAccountDeletion"] = enableDeletion ? "true" : null,
                 ["Temporal:Address"] = _temporal.Client.Connection.Options.TargetHost,
             }
         );
