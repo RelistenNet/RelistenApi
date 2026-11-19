@@ -18,7 +18,8 @@ public static class PlayRollupReader
         IDbConnection connection,
         Guid[] ids,
         DateOnly? through = null,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        IDbTransaction? transaction = null
     )
     {
         var buckets = through.HasValue
@@ -42,6 +43,7 @@ public static class PlayRollupReader
                 FROM plays GROUP BY 1
                 """,
                 Parameters(through, ids: ids),
+                transaction: transaction,
                 cancellationToken: cancellationToken
             )
         );
@@ -52,7 +54,8 @@ public static class PlayRollupReader
         IDbConnection connection,
         Guid[] ids,
         DateOnly? through = null,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        IDbTransaction? transaction = null
     ) =>
         connection.QueryAsync<PlayRollupTotals>(
             new CommandDefinition(
@@ -65,6 +68,7 @@ public static class PlayRollupReader
                 GROUP BY 1
                 """,
                 Parameters(through, ids: ids),
+                transaction: transaction,
                 cancellationToken: cancellationToken
             )
         );

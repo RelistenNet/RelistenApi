@@ -1,5 +1,7 @@
 using System;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.OpenApi;
@@ -22,6 +24,40 @@ public static class V4CatalogRegistration
             catalog => catalog.UseCors(CorsPolicy)
         );
 
+    // Use the socket peer unless the deployment explicitly trusts the forwarding chain.
+    public static void UseReviewSearchForwardedClient(
+        this IApplicationBuilder app,
+        IConfiguration configuration
+    )
+    {
+        var networks =
+            configuration.GetSection("Catalog:ReviewSearchTrustedProxyNetworks").Get<string[]>()
+            ?? [];
+        if (networks.Length == 0)
+        {
+            return;
+        }
+
+        var options = new ForwardedHeadersOptions
+        {
+            ForwardedHeaders = ForwardedHeaders.XForwardedFor,
+            ForwardLimit = null,
+        };
+        foreach (var network in networks)
+        {
+            options.KnownIPNetworks.Add(System.Net.IPNetwork.Parse(network));
+        }
+
+        app.UseWhen(
+            context =>
+                context.Request.Path.StartsWithSegments("/api/v4/artists")
+                && context
+                    .Request.Path.Value!.TrimEnd('/')
+                    .EndsWith("/reviews/search", StringComparison.OrdinalIgnoreCase),
+            review => review.UseForwardedHeaders(options)
+        );
+    }
+
     public static IServiceCollection AddV4Catalog(this IServiceCollection services)
     {
         services.AddScoped<PopularityRefreshRequest>();
@@ -33,6 +69,9 @@ public static class V4CatalogRegistration
         services.AddTransient<CatalogLiveSummaryReader>();
         services.TryAddScoped<Relisten.Data.SourceTrackPlaysService>();
         services.AddTransient<CatalogSourceReviewReader>();
+        services.AddTransient<CatalogReviewSearch>();
+        services.AddTransient<CatalogPerformances>();
+        services.AddSingleton<ReviewSearchRateLimit>();
         services.AddTransient<CatalogReferenceLookup>();
         services.AddTransient<CatalogResolverHydrator>();
         services.AddTransient<CatalogResolver>();

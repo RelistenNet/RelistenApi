@@ -55,6 +55,7 @@ public sealed partial class TestV4CatalogHttp
             NullLogger<DbService>.Instance
         );
         var builder = WebApplication.CreateBuilder();
+        builder.Configuration["Catalog:ReviewSearchTrustedProxyNetworks:0"] = "127.0.0.1/32";
         builder.WebHost.ConfigureKestrel(server => server.Listen(IPAddress.Loopback, 0));
         builder.Services.AddSingleton(db);
         builder.Services.AddTransient<
@@ -88,6 +89,7 @@ public sealed partial class TestV4CatalogHttp
         app = builder.Build();
         app.UseDeveloperExceptionPage();
         app.UseResponseCompression();
+        app.UseReviewSearchForwardedClient(app.Configuration);
         app.UseRouting();
         app.UseV4CatalogCors();
         app.UseCors(policy =>
