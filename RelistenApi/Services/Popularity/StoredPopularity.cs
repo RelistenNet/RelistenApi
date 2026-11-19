@@ -10,6 +10,15 @@ namespace Relisten.Services.Popularity;
 /// </summary>
 public sealed class StoredPopularity
 {
+    // A prepared reader keeps this result shape when a migration adds columns.
+    // The read queries alias the popularity table as p.
+    internal const string MetricColumns = """
+        p.uuid, p.plays_30d, p.hours_30d, p.hot_score_30d,
+        p.plays_7d, p.hours_7d, p.hot_score_7d,
+        p.plays_48h, p.hours_48h, p.hot_score_48h,
+        p.trend_ratio, p.momentum_score
+        """;
+
     public Guid uuid { get; set; }
     public Guid artist_uuid { get; set; }
     public long plays_30d { get; set; }

@@ -84,6 +84,69 @@ public sealed class TestPopularityStore
     }
 
     [Test]
+    public async Task Prepared_show_metadata_read_survives_an_added_column()
+    {
+        var metrics = PopularityService.CreateMetrics(12, 0, 0, 0, 12, 120, 0, 0);
+        metrics.momentum_score = 0.5;
+        await store.ReplaceArtistShows(
+            artist,
+            new Dictionary<Guid, CachedShowPopularity>
+            {
+                [show] = CachedShowPopularityMapper.FromPopularityMetrics(metrics),
+            },
+            DateTime.UtcNow
+        );
+
+        try
+        {
+            // Use one physical connection with the application's auto-prepare settings.
+            // The other connection applies DDL as a deployment would.
+            await using var reader = db.CreateConnection(longTimeout: false, readOnly: true);
+            await reader.OpenAsync();
+            var settings = new NpgsqlConnectionStringBuilder(reader.ConnectionString);
+            for (var i = 0; i <= settings.AutoPrepareMinUsages; i++)
+            {
+                await PopularityStore.ReadArtistLocalShowMetrics(reader, [show]);
+            }
+            (await HasPreparedPopularityRead(reader)).Should().BeTrue();
+
+            await connection.ExecuteAsync(
+                "ALTER TABLE show_popularity ADD COLUMN projection_probe bigint"
+            );
+            try
+            {
+                var after = await PopularityStore.ReadArtistLocalShowMetrics(reader, [show]);
+                after[show].windows.days_30d.plays.Should().Be(12);
+                after[show].momentum_score.Should().Be(0.5);
+            }
+            finally
+            {
+                await connection.ExecuteAsync(
+                    "ALTER TABLE show_popularity DROP COLUMN projection_probe"
+                );
+            }
+        }
+        finally
+        {
+            await connection.ExecuteAsync(
+                "DELETE FROM show_popularity WHERE uuid=@show AND NOT is_global",
+                new { show }
+            );
+        }
+    }
+
+    private static Task<bool> HasPreparedPopularityRead(NpgsqlConnection reader) =>
+        reader.QuerySingleAsync<bool>(
+            """
+            SELECT EXISTS (
+                SELECT FROM pg_prepared_statements
+                WHERE statement ILIKE '%show_popularity%'
+                    AND parameter_types = ARRAY['uuid[]'::regtype]
+            )
+            """
+        );
+
+    [Test]
     public async Task Replacement_preserves_other_populations_and_rejects_a_late_old_calculation()
     {
         var time = DateTime.UtcNow;

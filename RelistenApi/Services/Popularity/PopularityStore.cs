@@ -29,8 +29,8 @@ public sealed class PopularityStore(DbService db)
     {
         var rows = await connection.QueryAsync<StoredPopularity>(
             new CommandDefinition(
-                """
-                SELECT p.* FROM show_popularity p
+                $"""
+                SELECT {StoredPopularity.MetricColumns} FROM show_popularity p
                 JOIN shows s ON s.uuid=p.uuid JOIN artists a ON a.id=s.artist_id
                 WHERE NOT p.is_global AND p.uuid=ANY(@ids) AND p.artist_uuid=a.uuid AND p.momentum_score IS NOT NULL
                 """,
