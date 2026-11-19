@@ -22,6 +22,19 @@ namespace RelistenUserService.Persistence.Migrations
             // A constant default makes the new column a catalog-only change, and servers still
             // running the previous build keep inserting rows that omit it. Backfill only
             // playlists that have live tracks, from one grouped pass over their entries.
+            //
+            // Old servers also edit entries without updating the count, so once the rollout
+            // finishes, recompute every playlist, zeroing those left with no tracks:
+            //
+            //   UPDATE user_data.playlists AS playlist
+            //   SET track_count = (
+            //       SELECT count(*) FROM user_data.playlist_entries AS entry
+            //       WHERE entry.playlist_id = playlist.id
+            //         AND NOT entry.deleted AND entry.track_id IS NOT NULL)
+            //   WHERE track_count IS DISTINCT FROM (
+            //       SELECT count(*) FROM user_data.playlist_entries AS entry
+            //       WHERE entry.playlist_id = playlist.id
+            //         AND NOT entry.deleted AND entry.track_id IS NOT NULL);
             migrationBuilder.Sql(
                 """
                 UPDATE user_data.playlists AS playlist
