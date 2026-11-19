@@ -10,7 +10,14 @@ public sealed record PlaylistSummary(
     bool Archived,
     long Revision,
     DateTimeOffset UpdatedAt
-);
+)
+{
+    // Library changes stored before guide content have only track entries.
+    public int TrackCount { get; init; } = EntryCount;
+    public string? PublicCode { get; init; }
+    public bool Published { get; init; }
+    public bool TakenDown { get; init; }
+}
 
 public sealed record PlaylistList(
     int ContractVersion,
@@ -33,12 +40,18 @@ public sealed record PlaylistArchived(
     bool Changed
 );
 
-public sealed record PlaylistEntrySnapshot(PlaylistEntryId EntryId, string TrackId, string Rank);
+public sealed record PlaylistEntrySnapshot(
+    PlaylistEntryId EntryId,
+    string? TrackId,
+    string Rank,
+    string? Description = null
+);
 
 public sealed record PlaylistSegmentSnapshot(
     PlaylistSegmentId SegmentId,
     string Rank,
-    IReadOnlyList<PlaylistEntrySnapshot> Entries
+    IReadOnlyList<PlaylistEntrySnapshot> Entries,
+    string? Description = null
 );
 
 public sealed record PlaylistSnapshot(
@@ -52,7 +65,12 @@ public sealed record PlaylistSnapshot(
     IReadOnlyList<PlaylistSegmentSnapshot> Segments,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt
-);
+)
+{
+    public string? PublicCode { get; init; }
+    public bool Published { get; init; }
+    public bool TakenDown { get; init; }
+}
 
 public sealed record PlaylistOperationResult(
     PlaylistOperationId OperationId,
@@ -93,16 +111,20 @@ public abstract record PlaylistChange;
 
 public sealed record PlaylistMetadataUpdated(string Name, string? Description) : PlaylistChange;
 
-public sealed record PlaylistSegmentUpserted(PlaylistSegmentId SegmentId, string Rank)
-    : PlaylistChange;
+public sealed record PlaylistSegmentUpserted(
+    PlaylistSegmentId SegmentId,
+    string Rank,
+    string? Description = null
+) : PlaylistChange;
 
 public sealed record PlaylistSegmentDeleted(PlaylistSegmentId SegmentId) : PlaylistChange;
 
 public sealed record PlaylistEntryUpserted(
     PlaylistEntryId EntryId,
     PlaylistSegmentId SegmentId,
-    string TrackId,
-    string Rank
+    string? TrackId,
+    string Rank,
+    string? Description = null
 ) : PlaylistChange;
 
 public sealed record PlaylistEntryDeleted(PlaylistEntryId EntryId) : PlaylistChange;

@@ -20,8 +20,22 @@ public sealed class NativeSessionAuthenticator(
 {
     public async Task<AuthenticatedNativeSession?> AuthenticateAsync(ClaimsPrincipal principal)
     {
+        var session = await ReadActiveSessionAsync(
+            principal,
+            runtime.Options.Audience,
+            CancellationToken.None
+        );
+        return session is null ? null : new AuthenticatedNativeSession(session.User, session.Id);
+    }
+
+    internal async Task<NativeSession?> ReadActiveSessionAsync(
+        ClaimsPrincipal principal,
+        string audience,
+        CancellationToken cancellationToken
+    )
+    {
         if (
-            !principal.HasAudience(runtime.Options.Audience)
+            !principal.HasAudience(audience)
             || !UserId.TryParse(principal.GetClaim(Claims.Subject), out var userId)
             || !SessionId.TryParse(principal.GetClaim(RelistenClaims.SessionId), out var sessionId)
             || !int.TryParse(
@@ -37,7 +51,10 @@ public sealed class NativeSessionAuthenticator(
 
         var session = await dbContext
             .NativeSessions.Include(item => item.User)
-            .SingleOrDefaultAsync(item => item.Id == sessionId && item.UserId == userId);
+            .SingleOrDefaultAsync(
+                item => item.Id == sessionId && item.UserId == userId,
+                cancellationToken
+            );
         var now = timeProvider.GetUtcNow();
         if (
             session is null
@@ -51,7 +68,7 @@ public sealed class NativeSessionAuthenticator(
             return null;
         }
 
-        return new AuthenticatedNativeSession(session.User, session.Id);
+        return session;
     }
 }
 

@@ -231,8 +231,10 @@ public sealed class CatalogRankingReader(
         var selected = (
             await session.Connection.QueryAsync<StoredPopularity>(
                 session.Command(
-                    """
-                    SELECT * FROM show_popularity WHERE NOT is_global AND artist_uuid=ANY(@artists) AND momentum_score IS NOT NULL
+                    $"""
+                    SELECT {StoredPopularity.ReadColumns}, p.artist_uuid, p.organic_momentum_score
+                    FROM show_popularity p
+                    WHERE NOT is_global AND artist_uuid=ANY(@artists) AND momentum_score IS NOT NULL
                     ORDER BY COALESCE(organic_momentum_score,momentum_score) DESC,momentum_score DESC,
                              hot_score_30d DESC,plays_30d DESC,uuid
                     LIMIT @limit
@@ -298,7 +300,11 @@ public sealed class CatalogRankingReader(
         return (
             await session.Connection.QueryAsync<StoredPopularity>(
                 session.Command(
-                    $"SELECT * FROM {kind}_popularity WHERE {population} AND momentum_score IS NOT NULL{threshold} ORDER BY {order} LIMIT @limit",
+                    $"""
+                    SELECT {StoredPopularity.ReadColumns} FROM {kind}_popularity p
+                    WHERE {population} AND momentum_score IS NOT NULL{threshold}
+                    ORDER BY {order} LIMIT @limit
+                    """,
                     new
                     {
                         recentFloor,

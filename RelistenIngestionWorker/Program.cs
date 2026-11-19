@@ -5,22 +5,48 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Relisten;
+using Relisten.Accounts.Contracts.Deletion;
+using Relisten.Accounts.Contracts.Identifiers;
 using Relisten.Api.Models;
 using Relisten.Data;
 using Relisten.Ingestion;
+using Relisten.Persistence;
 using RelistenIngestionWorker;
+using RelistenIngestionWorker.AccountDeletion;
 using Sentry;
 using SimpleMigrations;
 using SimpleMigrations.DatabaseProvider;
+using Temporalio.Extensions.Hosting;
 
 // This host owns workers and operator commands. It deliberately does not construct
 // Startup's HTTP server, authentication middleware, Hangfire server, or migrations.
+var purgeAccount = args.FirstOrDefault() == "purge-account";
+UserId purgeUser = default;
+if (purgeAccount && (args is not [_, "--user", var user] || !UserId.TryParse(user, out purgeUser)))
+{
+    Console.Error.WriteLine("Usage: purge-account --user <user_id>");
+    Environment.ExitCode = 1;
+    return;
+}
+
 var registerSchedules = args.Contains("--register-schedules");
 var migrate = args.Contains("--migrate");
-var builder = CreateWorkerBuilder(args);
+var builder = CreateWorkerBuilder(purgeAccount ? [] : args);
 var sentryOptions = WorkerLogging.Configure(builder);
 using var sentry = sentryOptions == null ? null : SentrySdk.Init(sentryOptions);
 using var host = builder.Build();
+
+if (purgeAccount)
+{
+    var purge =
+        host.Services.GetService<AccountPurge>()
+        ?? throw new InvalidOperationException(
+            "ACCOUNTS_DATABASE_URL is required for purge-account."
+        );
+    await purge.RunForUserAsync(purgeUser.ToString(), CancellationToken.None);
+    Console.WriteLine("Account purge completed.");
+    return;
+}
 
 var operations = new[]
 {
@@ -63,6 +89,17 @@ try
 {
     if (operations.Length == 0)
     {
+        if (host.Services.GetService<AccountPurge>() is null)
+        {
+            // The User Service still accepts deletion requests; they wait in Temporal
+            // until a worker with the accounts database polls this queue.
+            host.Services.GetRequiredService<ILogger<AccountDeletionWorkflow>>()
+                .LogWarning(
+                    "ACCOUNTS_DATABASE_URL is not set; not polling the {TaskQueue} task queue. Account deletions will not run.",
+                    AccountDeletionInput.TaskQueue
+                );
+        }
+
         await host.RunAsync();
         return;
     }
@@ -123,6 +160,16 @@ static HostApplicationBuilder CreateWorkerBuilder(string[] arguments)
     builder.Services.AddRelistenCatalogServices();
     builder.Services.AddTemporalIngestionWorkers(builder.Configuration);
     builder.Services.AddScoped<IngestionOperatorCommands>();
+    if (builder.Configuration["ACCOUNTS_DATABASE_URL"] is { Length: > 0 } accountsUrl)
+    {
+        builder.Services.AddSingleton(_ => new AccountPurge(
+            PostgresConnectionString.Normalize(accountsUrl)
+        ));
+        builder
+            .Services.AddHostedTemporalWorker(AccountDeletionInput.TaskQueue)
+            .AddWorkflow<AccountDeletionWorkflow>()
+            .AddScopedActivities<AccountDeletionActivities>();
+    }
 
     return builder;
 }

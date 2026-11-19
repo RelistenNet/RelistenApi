@@ -311,6 +311,37 @@ namespace RelistenUserService.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("RelistenUserService.Identity.Entities.AccountDeletionJob", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
+                    b.Property<DateTimeOffset>("RequestedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("requested_at");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .IsUnique();
+
+                    b.ToTable("account_deletion_jobs", "identity", t =>
+                        {
+                            t.HasCheckConstraint("ck_account_deletion_jobs_id_uuid_v7", "uuid_extract_version(id) IS NOT DISTINCT FROM 7");
+                        });
+                });
+
             modelBuilder.Entity("RelistenUserService.Identity.Entities.ExternalIdentity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -841,6 +872,10 @@ namespace RelistenUserService.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("favorite_id");
 
+                    b.Property<string>("FollowedPlaylistId")
+                        .HasColumnType("text")
+                        .HasColumnName("followed_playlist_id");
+
                     b.Property<string>("PlaylistJson")
                         .HasColumnType("jsonb")
                         .HasColumnName("playlist_json");
@@ -867,9 +902,11 @@ namespace RelistenUserService.Persistence.Migrations
                         {
                             t.HasCheckConstraint("ck_library_changes_catalog_type", "catalog_type IN ('artist', 'show', 'source', 'track', 'imported_song', 'imported_venue', 'song', 'tour', 'venue')");
 
-                            t.HasCheckConstraint("ck_library_changes_change_type", "(change_type IN ('favorite_added', 'favorite_removed') AND favorite_id IS NOT NULL AND catalog_type IS NOT NULL AND catalog_id IS NOT NULL AND playlist_json IS NULL) OR (change_type = 'playlist_summary' AND favorite_id IS NULL AND catalog_type IS NULL AND catalog_id IS NULL AND playlist_json IS NOT NULL)");
+                            t.HasCheckConstraint("ck_library_changes_change_type", "(change_type IN ('favorite_added', 'favorite_removed') AND favorite_id IS NOT NULL\n    AND catalog_type IS NOT NULL AND catalog_id IS NOT NULL AND playlist_json IS NULL AND followed_playlist_id IS NULL)\nOR (change_type = 'playlist_summary' AND favorite_id IS NULL\n    AND catalog_type IS NULL AND catalog_id IS NULL AND playlist_json IS NOT NULL AND followed_playlist_id IS NULL)\nOR (change_type IN ('playlist_followed', 'playlist_unfollowed') AND favorite_id IS NULL\n    AND catalog_type IS NULL AND catalog_id IS NULL AND playlist_json IS NULL AND followed_playlist_id IS NOT NULL)");
 
                             t.HasCheckConstraint("ck_library_changes_favorite_id_typed_id", "favorite_id ~ '^favorite_[0-7][0-9a-hjkmnp-tv-z]{9}[ef][0-9a-hjkmnp-tv-z]{15}$'");
+
+                            t.HasCheckConstraint("ck_library_changes_followed_playlist_id", "followed_playlist_id ~ '^playlist_[0-7][0-9a-hjkmnp-tv-z]{9}[ef][0-9a-hjkmnp-tv-z]{15}$'");
 
                             t.HasCheckConstraint("ck_library_changes_id_typed_id", "id ~ '^library_change_[0-7][0-9a-hjkmnp-tv-z]{9}[ef][0-9a-hjkmnp-tv-z]{15}$'");
 
@@ -965,9 +1002,25 @@ namespace RelistenUserService.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("owner_id");
 
+                    b.Property<string>("PublicCode")
+                        .HasColumnType("text")
+                        .HasColumnName("public_code");
+
+                    b.Property<bool>("Published")
+                        .HasColumnType("boolean")
+                        .HasColumnName("published");
+
                     b.Property<long>("Revision")
                         .HasColumnType("bigint")
                         .HasColumnName("revision");
+
+                    b.Property<bool>("TakenDown")
+                        .HasColumnType("boolean")
+                        .HasColumnName("taken_down");
+
+                    b.Property<int>("TrackCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("track_count");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -975,11 +1028,16 @@ namespace RelistenUserService.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("PublicCode")
+                        .IsUnique();
+
                     b.HasIndex("OwnerId", "Archived", "UpdatedAt");
 
                     b.ToTable("playlists", "user_data", t =>
                         {
                             t.HasCheckConstraint("ck_playlists_id", "id ~ '^playlist_[0-7][0-9a-hjkmnp-tv-z]{9}[ef][0-9a-hjkmnp-tv-z]{15}$'");
+
+                            t.HasCheckConstraint("ck_playlists_publication", "(NOT published OR public_code IS NOT NULL) AND (public_code IS NULL OR public_code ~ '^[0-9a-f]{32}$')");
 
                             t.HasCheckConstraint("ck_playlists_state", "revision >= 1 AND entry_count >= 0 AND char_length(name) BETWEEN 1 AND 100 AND (description IS NULL OR char_length(description) <= 1000)");
                         });
@@ -994,6 +1052,10 @@ namespace RelistenUserService.Persistence.Migrations
                     b.Property<bool>("Deleted")
                         .HasColumnType("boolean")
                         .HasColumnName("deleted");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text")
+                        .HasColumnName("description");
 
                     b.Property<string>("PlaylistId")
                         .IsRequired()
@@ -1011,7 +1073,6 @@ namespace RelistenUserService.Persistence.Migrations
                         .HasColumnName("segment_id");
 
                     b.Property<string>("TrackId")
-                        .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("track_id");
 
@@ -1031,7 +1092,31 @@ namespace RelistenUserService.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_playlist_entries_rank", "rank IS NULL OR rank ~ '^[0-9A-Za-z]{1,48}$'");
 
-                            t.HasCheckConstraint("ck_playlist_entries_track", "track_id ~ '^track_[0-7][0-9a-hjkmnp-tv-z]{25}$'");
+                            t.HasCheckConstraint("ck_playlist_entries_track", "CASE WHEN track_id IS NULL THEN description IS NOT NULL AND description ~ '[^[:space:]]' ELSE track_id ~ '^track_[0-7][0-9a-hjkmnp-tv-z]{25}$' END");
+                        });
+                });
+
+            modelBuilder.Entity("RelistenUserService.Playlists.Entities.PlaylistFollow", b =>
+                {
+                    b.Property<string>("UserId")
+                        .HasColumnType("text")
+                        .HasColumnName("user_id");
+
+                    b.Property<string>("PlaylistId")
+                        .HasColumnType("text")
+                        .HasColumnName("playlist_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.HasKey("UserId", "PlaylistId");
+
+                    b.HasIndex("PlaylistId");
+
+                    b.ToTable("playlist_follows", "user_data", t =>
+                        {
+                            t.HasCheckConstraint("ck_playlist_follows_playlist_id", "playlist_id ~ '^playlist_[0-7][0-9a-hjkmnp-tv-z]{9}[ef][0-9a-hjkmnp-tv-z]{15}$'");
                         });
                 });
 
@@ -1093,7 +1178,54 @@ namespace RelistenUserService.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_playlist_receipts_id", "(id ~ '^command_[0-7][0-9a-hjkmnp-tv-z]{9}[ef][0-9a-hjkmnp-tv-z]{15}$') OR (id ~ '^playlist_operation_[0-7][0-9a-hjkmnp-tv-z]{9}[ef][0-9a-hjkmnp-tv-z]{15}$')");
 
-                            t.HasCheckConstraint("ck_playlist_receipts_kind", "kind IN ('create', 'archive', 'operation')");
+                            t.HasCheckConstraint("ck_playlist_receipts_kind", "kind IN ('create', 'archive', 'copy', 'operation')");
+                        });
+                });
+
+            modelBuilder.Entity("RelistenUserService.Playlists.Entities.PlaylistReport", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("text")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("ClosedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("closed_at");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("PlaylistId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("playlist_id");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("reason");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PlaylistId");
+
+                    b.HasIndex("UserId", "CreatedAt");
+
+                    b.HasIndex("UserId", "PlaylistId")
+                        .IsUnique()
+                        .HasFilter("closed_at IS NULL");
+
+                    b.ToTable("playlist_reports", "user_data", t =>
+                        {
+                            t.HasCheckConstraint("ck_playlist_reports_id", "id ~ '^playlist_report_[0-7][0-9a-hjkmnp-tv-z]{9}[ef][0-9a-hjkmnp-tv-z]{15}$'");
+
+                            t.HasCheckConstraint("ck_playlist_reports_reason", "char_length(reason) BETWEEN 1 AND 300");
                         });
                 });
 
@@ -1138,6 +1270,10 @@ namespace RelistenUserService.Persistence.Migrations
                     b.Property<bool>("Deleted")
                         .HasColumnType("boolean")
                         .HasColumnName("deleted");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text")
+                        .HasColumnName("description");
 
                     b.Property<string>("PlaylistId")
                         .IsRequired()
@@ -1290,11 +1426,13 @@ namespace RelistenUserService.Persistence.Migrations
 
             modelBuilder.Entity("RelistenUserService.Playlists.Entities.Playlist", b =>
                 {
-                    b.HasOne("RelistenUserService.Identity.Entities.User", null)
+                    b.HasOne("RelistenUserService.Identity.Entities.User", "Owner")
                         .WithMany()
                         .HasForeignKey("OwnerId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("Owner");
                 });
 
             modelBuilder.Entity("RelistenUserService.Playlists.Entities.PlaylistEntry", b =>
@@ -1303,6 +1441,15 @@ namespace RelistenUserService.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("PlaylistId", "SegmentId")
                         .HasPrincipalKey("PlaylistId", "Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("RelistenUserService.Playlists.Entities.PlaylistFollow", b =>
+                {
+                    b.HasOne("RelistenUserService.Identity.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
@@ -1318,6 +1465,21 @@ namespace RelistenUserService.Persistence.Migrations
                     b.HasOne("RelistenUserService.Playlists.Entities.Playlist", null)
                         .WithMany()
                         .HasForeignKey("PlaylistId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("RelistenUserService.Playlists.Entities.PlaylistReport", b =>
+                {
+                    b.HasOne("RelistenUserService.Playlists.Entities.Playlist", null)
+                        .WithMany()
+                        .HasForeignKey("PlaylistId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("RelistenUserService.Identity.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

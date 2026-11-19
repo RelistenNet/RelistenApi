@@ -341,6 +341,10 @@ namespace Relisten
                 };
             });
 
+            Relisten.Controllers.V4.V4CatalogRegistration.UseReviewSearchForwardedClient(
+                app,
+                Configuration
+            );
             app.UseRouting();
 
             // Legacy global CORS handles preflight before MVC sees controller attributes.

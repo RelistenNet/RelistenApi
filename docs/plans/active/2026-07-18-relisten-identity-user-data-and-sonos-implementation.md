@@ -5,6 +5,12 @@
 > examples, availability-clock assumptions and the proposed Queue V2 rewrite.
 > Playlists remain unimplemented; other feature sections retain their own scope.
 
+> Deletion and history guidance: [Let listeners delete their account](2026-11-18-account-deletion.md)
+> supersedes the account-deletion design in Milestones 1 and 2, including the outbox,
+> impact endpoint, tombstone and restore replay. [Save signed-in plays to the listener's
+> account](2026-11-18-cloud-play-history.md) supersedes Milestone 5 and the qualified-listen,
+> receipt, history-state, clear and generation decisions below.
+
 > Scope: this dated document includes work beyond the current account release.
 > The [current account contract](../../api/accounts.md) supersedes its UUID identity,
 > favorite payload and alpha-cutover details. Unimplemented playlist/history/Sonos

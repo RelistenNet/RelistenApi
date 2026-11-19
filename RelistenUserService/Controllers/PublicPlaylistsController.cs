@@ -1,0 +1,72 @@
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Relisten.Accounts.Contracts.Playlists;
+using RelistenUserService.Authentication;
+using RelistenUserService.Authentication.Authorization;
+using RelistenUserService.Http;
+using RelistenUserService.Playlists;
+
+namespace RelistenUserService.Controllers;
+
+[ApiController]
+[Route("v1/public-playlists/{publicCode}")]
+public sealed class PublicPlaylistsController(
+    CurrentAccountContext account,
+    PlaylistSharingService sharing,
+    PlaylistWriteService writes
+) : ControllerBase
+{
+    [HttpGet]
+    [AllowAnonymous]
+    [PublicPlaylistCache]
+    public async Task<ActionResult<PublicPlaylistSnapshot>> Snapshot(
+        string publicCode,
+        CancellationToken cancellationToken
+    )
+    {
+        var snapshot = await sharing.SnapshotAsync(publicCode, cancellationToken);
+        return snapshot is null ? NotFound() : Ok(snapshot);
+    }
+
+    [HttpPut("follow")]
+    [Authorize(Policy = AuthenticationConstants.LibraryAccessPolicy)]
+    [ServiceFilter(typeof(PlaylistHttpFilter))]
+    public async Task<IActionResult> Follow(string publicCode, CancellationToken cancellationToken)
+    {
+        await sharing.FollowAsync(account.User.Id, publicCode, cancellationToken);
+        return NoContent();
+    }
+
+    [HttpPost("copy")]
+    [Authorize(Policy = AuthenticationConstants.LibraryAccessPolicy)]
+    [ServiceFilter(typeof(PlaylistHttpFilter))]
+    [RequestSizeLimit(4 * 1024)]
+    public async Task<ActionResult<PlaylistCreated>> Copy(
+        string publicCode,
+        [FromBody] CopyPublicPlaylistRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        var result = await writes.CopyAsync(
+            account.User.Id,
+            publicCode,
+            request,
+            cancellationToken
+        );
+        return StatusCode(result.Replayed ? 200 : 201, result.Response);
+    }
+
+    [HttpPost("reports")]
+    [Authorize(Policy = AuthenticationConstants.LibraryAccessPolicy)]
+    [ServiceFilter(typeof(PlaylistHttpFilter))]
+    [RequestSizeLimit(4 * 1024)]
+    public async Task<IActionResult> Report(
+        string publicCode,
+        [FromBody] ReportPublicPlaylistRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        await sharing.ReportAsync(account.User.Id, publicCode, request.Reason, cancellationToken);
+        return NoContent();
+    }
+}

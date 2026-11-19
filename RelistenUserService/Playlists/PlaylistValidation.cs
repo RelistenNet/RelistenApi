@@ -23,6 +23,10 @@ public static class PlaylistValidation
     public const int MaximumEntries = 5_000;
     public const int MaximumOwnedEntries = 25_000;
     public const int MaximumOperations = 500;
+    private const int MaximumProseOnlySegments = 100;
+    private const int MaximumDescriptionBytes = 200_000;
+    private const int MaximumMetadataDescriptionLength = 1_000;
+    private const int MaximumGuideDescriptionLength = 2_000;
 
     public static CreatePlaylistRequest Normalize(CreatePlaylistRequest request)
     {
@@ -36,21 +40,41 @@ public static class PlaylistValidation
             "Metadata and segments are required."
         );
         var ids = new HashSet<string>(StringComparer.Ordinal) { request.PlaylistId.Value };
+        var segments = new List<PlaylistSegmentInput>(request.Segments.Count);
         foreach (var segment in request.Segments)
         {
             Require(segment is not null && !segment.SegmentId.IsEmpty, "A segment ID is required.");
             Unique(ids, segment.SegmentId.Value);
-            Entries(segment.Entries, ids);
+            var description = GuideDescription(segment.Description);
+            segments.Add(
+                segment with
+                {
+                    Description = description,
+                    Entries = NormalizeEntries(
+                        segment.Entries,
+                        ids,
+                        allowEmpty: description is not null
+                    ),
+                }
+            );
         }
         return request with
         {
-            Metadata = new(Name(request.Metadata.Name), Description(request.Metadata.Description)),
+            Metadata = new(
+                Name(request.Metadata.Name),
+                GuideDescription(request.Metadata.Description, MaximumMetadataDescriptionLength)
+            ),
+            Segments = segments,
         };
     }
 
     public static PlaylistBatchRequest Normalize(PlaylistBatchRequest request)
     {
         Version(request.ContractVersion);
+        Require(
+            request.ExpectedRevision is null or >= 0,
+            "expected_revision must be non-negative."
+        );
         Require(request.Operations is { Count: > 0 }, "operations must contain at least one item.");
         if (request.Operations.Count > MaximumOperations)
         {
@@ -83,7 +107,13 @@ public static class PlaylistValidation
                             ? new(true, Name(metadata.Name.Value))
                             : default,
                         Description = metadata.Description.IsPresent
-                            ? new(true, Description(metadata.Description.Value))
+                            ? new(
+                                true,
+                                GuideDescription(
+                                    metadata.Description.Value,
+                                    MaximumMetadataDescriptionLength
+                                )
+                            )
                             : default,
                     };
                     break;
@@ -95,11 +125,37 @@ public static class PlaylistValidation
                             && insert.BeforeSegmentId != insert.SegmentId,
                         "A segment cannot anchor itself."
                     );
-                    Entries(insert.Entries, createdIds);
+                    var description = GuideDescription(insert.Description);
+                    normalized = insert with
+                    {
+                        Description = description,
+                        Entries = NormalizeEntries(
+                            insert.Entries,
+                            createdIds,
+                            allowEmpty: description is not null
+                        ),
+                    };
+                    break;
+                case UpdatePlaylistSegment update:
+                    Require(!update.SegmentId.IsEmpty, "segment_id is required.");
+                    normalized = update with
+                    {
+                        Description = NormalizeGuidePatch(update.Description),
+                    };
                     break;
                 case InsertPlaylistEntries insert:
                     Require(!insert.SegmentId.IsEmpty, "segment_id is required.");
-                    Entries(insert.Entries, createdIds);
+                    normalized = insert with
+                    {
+                        Entries = NormalizeEntries(insert.Entries, createdIds),
+                    };
+                    break;
+                case UpdatePlaylistEntry update:
+                    Require(!update.EntryId.IsEmpty, "entry_id is required.");
+                    normalized = update with
+                    {
+                        Description = NormalizeGuidePatch(update.Description),
+                    };
                     break;
                 case MovePlaylistSegment move:
                     Require(
@@ -165,8 +221,28 @@ public static class PlaylistValidation
 
     public static void Validate(ArchivePlaylistRequest request)
     {
+        ValidateCommand(request.ContractVersion, request.CommandId);
+    }
+
+    public static void Validate(SetPlaylistPublicationRequest request)
+    {
         Version(request.ContractVersion);
-        Require(!request.CommandId.IsEmpty, "command_id is required.");
+    }
+
+    internal static void ValidateCommand(int version, CommandId commandId)
+    {
+        Version(version);
+        Require(!commandId.IsEmpty, "command_id is required.");
+    }
+
+    internal static string NormalizeReportReason(string reason)
+    {
+        var normalized = NormalizeText(reason);
+        Require(
+            normalized.EnumerateRunes().Count() is >= 1 and <= 300,
+            "reason must be between 1 and 300 characters."
+        );
+        return normalized;
     }
 
     public static IEnumerable<string> CreatedIds(PlaylistOperation operation) =>
@@ -180,22 +256,57 @@ public static class PlaylistValidation
             _ => [],
         };
 
-    private static void Entries(IReadOnlyList<PlaylistEntryInput>? entries, HashSet<string> ids)
+    public static void CheckGuideQuota(int proseOnlySegments, IEnumerable<string?> descriptions)
+    {
+        if (proseOnlySegments > MaximumProseOnlySegments)
+        {
+            throw new PlaylistException(
+                422,
+                "quota_exceeded",
+                "At most 100 prose-only segments are allowed."
+            );
+        }
+        var descriptionBytes = descriptions
+            .Where(text => text is not null)
+            .Sum(text => Encoding.UTF8.GetByteCount(text!));
+        if (descriptionBytes > MaximumDescriptionBytes)
+        {
+            throw new PlaylistException(
+                422,
+                "quota_exceeded",
+                "Descriptions may use at most 200,000 UTF-8 bytes per playlist."
+            );
+        }
+    }
+
+    private static IReadOnlyList<PlaylistEntryInput> NormalizeEntries(
+        IReadOnlyList<PlaylistEntryInput>? entries,
+        HashSet<string> ids,
+        bool allowEmpty = false
+    )
     {
         Require(
-            entries is { Count: > 0 and <= MaximumEntries },
-            "entries must contain 1–5,000 items."
+            entries is { Count: <= MaximumEntries } && (allowEmpty || entries.Count > 0),
+            "entries must contain 1–5,000 items unless the segment has a description."
         );
-        foreach (var entry in entries!)
+        var normalized = new List<PlaylistEntryInput>(entries.Count);
+        foreach (var entry in entries)
         {
-            Require(
-                entry is not null
-                    && !entry.EntryId.IsEmpty
-                    && TrackId.TryParse(entry.TrackId, out _),
-                "Entries require canonical playlist_entry_ and track_ IDs."
-            );
-            Unique(ids, entry!.EntryId.Value);
+            Require(entry is not null && !entry.EntryId.IsEmpty, "entry_id is required.");
+            var description = GuideDescription(entry.Description);
+            if (entry.TrackId is null)
+            {
+                Require(description is not null, "A text entry requires a nonblank description.");
+            }
+            else
+            {
+                Require(TrackId.TryParse(entry.TrackId, out _), "Invalid track_id.");
+            }
+
+            Unique(ids, entry.EntryId.Value);
+            normalized.Add(entry with { Description = description });
         }
+        return normalized;
     }
 
     private static string Name(string? text)
@@ -209,12 +320,32 @@ public static class PlaylistValidation
         return value;
     }
 
-    private static string? Description(string? text)
+    private static OptionalText NormalizeGuidePatch(OptionalText patch) =>
+        patch.IsPresent ? new(true, GuideDescription(patch.Value)) : default;
+
+    // The playlist description is public and copied with rewritten entry links, so it follows
+    // the same Markdown policy as segment and entry prose. Only writes are checked; stored
+    // rows that predate the policy stay readable.
+    private static string? GuideDescription(
+        string? text,
+        int maximumLength = MaximumGuideDescriptionLength
+    )
+    {
+        var description = Description(text, maximumLength);
+        if (description is not null && GuideMarkdownPolicy.Violation(description) is { } violation)
+        {
+            throw Invalid(violation);
+        }
+
+        return description;
+    }
+
+    private static string? Description(string? text, int maximumLength)
     {
         var value = text is null ? null : NormalizeText(text);
         Require(
-            value is null || value.EnumerateRunes().Count() <= 1_000,
-            "description may contain at most 1,000 characters."
+            value is null || value.EnumerateRunes().Count() <= maximumLength,
+            $"description may contain at most {maximumLength} characters."
         );
         return string.IsNullOrEmpty(value) ? null : value;
     }
@@ -255,6 +386,6 @@ public static class PlaylistValidation
         }
     }
 
-    private static PlaylistException Invalid(string detail) =>
+    internal static PlaylistException Invalid(string detail) =>
         new(422, "invalid_playlist_operation", detail);
 }

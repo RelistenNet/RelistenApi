@@ -32,6 +32,10 @@ namespace Relisten.Api.Models
         [JsonProperty("30d")]
         [V3JsonOnly]
         public PopularityWindowMetrics days_30d { get; set; } = new();
+
+        // V4 projects this stored window. The legacy DTO and Redis shape omit it.
+        [JsonIgnore]
+        public PopularityWindowMetrics? Year { get; set; }
     }
 
     public class PopularityMetrics

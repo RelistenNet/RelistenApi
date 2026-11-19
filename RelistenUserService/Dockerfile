@@ -9,6 +9,7 @@ RUN dotnet restore RelistenUserService/RelistenUserService.csproj
 
 COPY Relisten.Accounts.Contracts/ Relisten.Accounts.Contracts/
 COPY Relisten.Identifiers/ Relisten.Identifiers/
+COPY Shared/PostgresConnectionString.cs Shared/
 COPY RelistenUserService/ RelistenUserService/
 RUN dotnet publish RelistenUserService/RelistenUserService.csproj \
     -c Release \

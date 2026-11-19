@@ -928,50 +928,59 @@ public class TestIngestionPersistence
                 app_type = SourceTrackPlayAppType.iOS,
             }
         );
-
-        Task<string[]> Tracks() =>
-            db.WithWriteConnection(async connection =>
-                (
-                    await connection.QueryAsync<string>(
-                        """
-                        SELECT jsonb_build_array(id,uuid,title,mp3_url,artist_id)::text
-                        FROM source_tracks WHERE artist_id=@artistId ORDER BY id
-                        """,
-                        new { artistId }
+        try
+        {
+            Task<string[]> Tracks() =>
+                db.WithWriteConnection(async connection =>
+                    (
+                        await connection.QueryAsync<string>(
+                            """
+                            SELECT jsonb_build_array(id,uuid,title,mp3_url,artist_id)::text
+                            FROM source_tracks WHERE artist_id=@artistId ORDER BY id
+                            """,
+                            new { artistId }
+                        )
+                    ).ToArray()
+                );
+            Task<SourceTrackPlay> RecordedPlay() =>
+                db.WithWriteConnection(connection =>
+                    connection.QuerySingleAsync<SourceTrackPlay>(
+                        "SELECT * FROM source_track_plays WHERE id=@id AND source_track_uuid=@source_track_uuid",
+                        play
                     )
-                ).ToArray()
-            );
-        Task<SourceTrackPlay> RecordedPlay() =>
-            db.WithWriteConnection(connection =>
-                connection.QuerySingleAsync<SourceTrackPlay>(
-                    "SELECT * FROM source_track_plays WHERE id=@id AND source_track_uuid=@source_track_uuid",
-                    play
+                );
+            var originalTracks = await Tracks();
+            upstream.Respond = uri =>
+                uri.AbsolutePath.StartsWith("/metadata/") ? "{\"is_dark\":true}" : EmptyListing;
+
+            var result = await Import(deletionLimit: 1);
+
+            result.Status.Should().Be(ImportStatus.Completed);
+            (await Catalog()).Should().BeEmpty();
+            (await Tracks()).Should().Equal(originalTracks);
+            (await RecordedPlay()).Should().BeEquivalentTo(play);
+            var detached = await db.WithWriteConnection(connection =>
+                connection.QuerySingleAsync<bool>(
+                    "SELECT source_id IS NULL AND source_set_id IS NULL FROM source_tracks WHERE uuid=@track_uuid",
+                    original
                 )
             );
-        var originalTracks = await Tracks();
-        upstream.Respond = uri =>
-            uri.AbsolutePath.StartsWith("/metadata/") ? "{\"is_dark\":true}" : EmptyListing;
+            detached.Should().BeTrue();
 
-        var result = await Import(deletionLimit: 1);
-
-        result.Status.Should().Be(ImportStatus.Completed);
-        (await Catalog()).Should().BeEmpty();
-        (await Tracks()).Should().Equal(originalTracks);
-        (await RecordedPlay()).Should().BeEquivalentTo(play);
-        var detached = await db.WithWriteConnection(connection =>
-            connection.QuerySingleAsync<bool>(
-                "SELECT source_id IS NULL AND source_set_id IS NULL FROM source_tracks WHERE uuid=@track_uuid",
-                original
-            )
-        );
-        detached.Should().BeTrue();
-
-        upstream.Respond = uri =>
-            uri.AbsolutePath.StartsWith("/metadata/") ? Metadata("First title") : Listing;
-        (await Import()).Status.Should().Be(ImportStatus.Completed);
-        (await Catalog()).Should().ContainSingle().Which.Should().BeEquivalentTo(original);
-        (await Tracks()).Should().Equal(originalTracks);
-        (await RecordedPlay()).Should().BeEquivalentTo(play);
+            upstream.Respond = uri =>
+                uri.AbsolutePath.StartsWith("/metadata/") ? Metadata("First title") : Listing;
+            (await Import()).Status.Should().Be(ImportStatus.Completed);
+            (await Catalog()).Should().ContainSingle().Which.Should().BeEquivalentTo(original);
+            (await Tracks()).Should().Equal(originalTracks);
+            (await RecordedPlay()).Should().BeEquivalentTo(play);
+        }
+        finally
+        {
+            // Live history and summary read every recorded play. Leave none behind.
+            await db.WithWriteConnection(connection =>
+                connection.ExecuteAsync("DELETE FROM source_track_plays WHERE id=@id", play)
+            );
+        }
     }
 
     [Test]

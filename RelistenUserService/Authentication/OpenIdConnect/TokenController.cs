@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Mvc;
@@ -16,6 +17,7 @@ public sealed class TokenController(
     NativePrincipalFactory principalFactory,
     WebBootstrapPrincipalFactory webPrincipalFactory,
     IdentitySessionLifecycle identitySessions,
+    McpAccountAuthorization mcpAuthorization,
     TimeProvider timeProvider
 ) : Controller
 {
@@ -35,24 +37,57 @@ public sealed class TokenController(
             OpenIddictServerAspNetCoreDefaults.AuthenticationScheme
         );
         var source = authentication.Principal;
-        if (!authentication.Succeeded || source is null)
+        if (
+            !authentication.Succeeded
+            || source is null
+            || !UserId.TryParse(source.GetClaim(Claims.Subject), out var userId)
+        )
         {
             return InvalidGrant("The authorization code or refresh token is invalid.");
         }
 
-        if (request.ClientId == AuthenticationConstants.WebClientId)
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(
+            cancellationToken
+        );
+        var user = await OAuthIssuance.LockActiveUserAsync(dbContext, userId, cancellationToken);
+        if (user is null)
         {
-            return await ExchangeWebAsync(request, source, cancellationToken);
+            return InvalidGrant("The account is no longer active.");
         }
 
+        var principal =
+            request.ClientId == AuthenticationConstants.WebClientId
+                ? await CreateWebPrincipalAsync(request, source, userId, cancellationToken)
+                : await CreateNativePrincipalAsync(request, source, user, cancellationToken);
+        if (principal is null)
+        {
+            return InvalidGrant("The session is no longer active.");
+        }
+
+        // OpenIddict commits issuance before writing the response, still inside the user lock.
+        await HttpContext.SignInAsync(
+            OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
+            principal
+        );
+        return new EmptyResult();
+    }
+
+    private async Task<ClaimsPrincipal?> CreateNativePrincipalAsync(
+        OpenIddictRequest request,
+        ClaimsPrincipal source,
+        User user,
+        CancellationToken cancellationToken
+    )
+    {
         if (!SessionId.TryParse(source.GetClaim(RelistenClaims.SessionId), out var sessionId))
         {
-            return InvalidGrant("The authorization code or refresh token is invalid.");
+            return null;
         }
 
-        var session = await dbContext
-            .NativeSessions.Include(item => item.User)
-            .SingleOrDefaultAsync(item => item.Id == sessionId, cancellationToken);
+        var session = await dbContext.NativeSessions.SingleOrDefaultAsync(
+            item => item.Id == sessionId && item.UserId == user.Id,
+            cancellationToken
+        );
         var now = timeProvider.GetUtcNow();
         if (
             session is null
@@ -60,37 +95,39 @@ public sealed class TokenController(
             || session.AbsoluteExpiresAt <= now
             || session.LastUsedAt + AuthenticationConstants.NativeSessionInactivityLimit <= now
             || session.ClientId != request.ClientId
-            || session.User.Status != UserStatuses.Active
-            || session.SecurityVersion != session.User.SecurityVersion
+            || session.SecurityVersion != user.SecurityVersion
+            || (
+                request.ClientId == McpOAuth.ClientId
+                && !await mcpAuthorization.HasGrantAsync(session, cancellationToken)
+            )
         )
         {
-            return InvalidGrant("The native session is no longer active.");
+            return null;
         }
 
         session.LastUsedAt = now;
         session.UpdatedAt = now;
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        var principal = principalFactory.Create(session.User, session, source.GetScopes());
-        return SignIn(principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+        return principalFactory.Create(user, session, source.GetScopes());
     }
 
-    private async Task<IActionResult> ExchangeWebAsync(
+    private async Task<ClaimsPrincipal?> CreateWebPrincipalAsync(
         OpenIddictRequest request,
-        System.Security.Claims.ClaimsPrincipal source,
+        ClaimsPrincipal source,
+        UserId userId,
         CancellationToken cancellationToken
     )
     {
         if (
             !request.IsAuthorizationCodeGrantType()
-            || !UserId.TryParse(source.GetClaim(Claims.Subject), out var userId)
             || !SessionId.TryParse(
                 source.GetClaim(RelistenClaims.SessionId),
                 out var authSsoSessionId
             )
         )
         {
-            return InvalidGrant("The web authorization code is invalid.");
+            return null;
         }
 
         var authSso = await identitySessions.ValidateAuthSsoBootstrapAsync(
@@ -100,15 +137,10 @@ public sealed class TokenController(
         );
         if (authSso is null)
         {
-            return InvalidGrant("The web authentication session is no longer active.");
+            return null;
         }
 
-        var principal = webPrincipalFactory.Create(
-            authSso.User,
-            authSso.SessionId,
-            source.GetScopes()
-        );
-        return SignIn(principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+        return webPrincipalFactory.Create(authSso.User, authSso.SessionId, source.GetScopes());
     }
 
     private ForbidResult InvalidGrant(string description) =>

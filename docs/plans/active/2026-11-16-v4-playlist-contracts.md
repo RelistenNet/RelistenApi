@@ -13,6 +13,7 @@ The API implementation is locally verified as of 2026-11-17. The plan's
 2026-11-17 Decision Log entry records implementation clarifications for text,
 validation, error precedence and generation on problems. See
 [operations and recovery](../../api/private-playlists.md) before rollout.
+The guide content amendment adds the fields and operations below at version 1.
 
 The endpoint examples follow one playlist. Generate fresh TypeIDs for writes
 against a shared service and use track IDs from your catalog.
@@ -55,8 +56,12 @@ one-track segment. An entry is one authored position: the same `track_id` may
 appear in many entries. Segments have no `kind`; the plan's earlier `kind` field
 and `initial_segments` name are dropped.
 
-- An empty playlist is valid. An empty live segment is not: removing or moving a
-  segment's last entry deletes that segment in the same operation.
+- An empty playlist is valid. A live segment needs a description, entries, or
+  both. When an operation leaves it with neither, it tombstones the segment.
+- A text block is an entry with no track ID and a nonblank description. Text
+  blocks and tracks share ranks and entry quotas. Summary `entry_count` counts
+  both, and `track_count` counts only entries that have a track ID.
+- A prose-only segment has a description and zero live entries.
 - Segments and entries keep their IDs across moves. An entry's `track_id` never
   changes; replacing a track is delete plus insert.
 - Deleted segments and entries remain as tombstones for the playlist's lifetime. An
@@ -74,11 +79,23 @@ and `initial_segments` name are dropped.
 | Operations per batch | 500 | `422 limit_exceeded` |
 | Request body (batch or create) | 2 MiB | `413` |
 | `name` | 1–100 characters after trimming | `422 invalid_playlist_operation` |
-| `description` | 0–1,000 characters | `422 invalid_playlist_operation` |
+| Playlist metadata `description` | 0–1,000 characters | `422 invalid_playlist_operation` |
+| Segment or entry `description` | 0–2,000 characters | `422 invalid_playlist_operation` |
+| Any `description` content (playlist metadata, segment or entry) | No images, no raw HTML, and only `https:`, `#entry=…&t=…` or `#t=…` link destinations | `422 invalid_playlist_operation` |
+| Prose-only segments per playlist | 100 | `422 quota_exceeded` |
+| Total descriptions per playlist | 200,000 UTF-8 bytes | `422 quota_exceeded` |
 
 Names and descriptions are trimmed and NFC-normalized. Character limits count
 Unicode scalar values after normalization. Names need not be unique. An empty
 description is stored as `null`; NUL and invalid Unicode are rejected.
+The content rule parses the description as CommonMark, so image or HTML syntax
+inside a code span is accepted. It applies when a description is written;
+stored metadata descriptions that predate it stay readable. The server stores accepted text as sent and never
+rewrites it; clients sanitize before rendering. See the
+[guide content design](../../design/2026-11-18-playlist-guide-content.md#accepting-and-sanitizing-descriptions).
+The byte limit covers all live descriptions, including playlist metadata. The
+2 MiB request limit applies independently to the encoded JSON. Descriptions
+that require heavy JSON escaping can still exceed the request limit.
 
 ## Endpoints
 
@@ -114,8 +131,32 @@ Start with a new account to reproduce the library revisions in these examples.
 }
 ```
 
-`segments` may be empty. Each listed segment needs at least one entry, and the
-array order is the initial order. `description` may be omitted or `null`.
+`segments` may be empty. Array order determines initial rank order. A segment
+with a nonblank `description` may send `entries: []`. Each entry accepts an
+optional `description`. Omit `track_id` or send it as `null` to create a text block.
+
+A segment can contain both tracks and text, for example:
+
+```json
+{
+  "segment_id": "playlist_segment_01k8000000e008000000000002",
+  "description": "## The opening run",
+  "entries": [
+    {
+      "entry_id": "playlist_entry_01k8000000e008000000000004",
+      "track_id": "track_3k9w2m7q8x4p1n6r5t0v2y8z4a",
+      "description": "Listen at 2:00."
+    },
+    {
+      "entry_id": "playlist_entry_01k8000000e008000000000005",
+      "description": "[Hear the transition](#entry=playlist_entry_01k8000000e008000000000004&t=2:00)"
+    }
+  ]
+}
+```
+
+The server stores Markdown source. Clients resolve timestamp links using the
+entry IDs and track durations.
 
 Responses:
 
@@ -134,7 +175,7 @@ Responses:
 - `409 idempotency_conflict` if `command_id` was used with a different payload.
 - `409 id_conflict` if the playlist, segment or entry IDs already exist. The body
   lists `conflicting_ids`.
-- `422 quota_exceeded`, `422 invalid_playlist_operation`, `422 invalid_contract_version`.
+- `422 quota_exceeded`, `422 invalid_playlist_operation`, or `422 invalid_contract_version`.
 
 Creating a playlist produces revision `1`. Mobile sends dependent operations only
 after this command is acknowledged; a lost response is retried with the identical
@@ -157,6 +198,7 @@ feed instead.
       "playlist_id": "playlist_01k8000000e008000000000001",
       "name": "Cornell + friends",
       "entry_count": 3,
+      "track_count": 3,
       "archived": false,
       "revision": 2,
       "updated_at": "2026-11-16T19:40:03Z"
@@ -200,6 +242,8 @@ The response is `Cache-Control: private, no-store`.
 Arrays are in rank order. The snapshot contains only live segments and entries,
 and no catalog data. `role` is always `owner` in delivery 1. The owner can read an
 archived playlist's snapshot. The response is `Cache-Control: private, no-store`.
+Segments and entries carry nullable `description`, and text blocks return
+`track_id: null`.
 
 A device that has no local copy of a playlist always starts from its snapshot,
 never from changes.
@@ -243,14 +287,15 @@ operation semantics:
 | `type` | Fields | Meaning |
 | --- | --- | --- |
 | `metadata_updated` | `name`, `description` | Full current metadata. |
-| `segment_upserted` | `segment_id`, `rank` | The segment exists at this rank (insert, move or rebalance). |
+| `segment_upserted` | `segment_id`, `rank`, `description` | Full current segment state at this rank. |
 | `segment_deleted` | `segment_id` | The segment and every entry still in it are gone. No separate `entry_deleted` is emitted for those entries. |
-| `entry_upserted` | `entry_id`, `segment_id`, `track_id`, `rank` | The entry exists here (insert, move or rebalance). |
+| `entry_upserted` | `entry_id`, `segment_id`, `track_id`, `rank`, `description` | Full current entry state. A text block has a null track ID. |
 | `entry_deleted` | `entry_id` | The entry is gone. |
 
 Within a revision, changes are listed in apply order: `segment_upserted` before
 any `entry_upserted` that names that segment, and an entry's move out of a segment
 before that segment's `segment_deleted`. Clients apply them in array order.
+An absent or null `description` in an upsert means there is no description.
 
 `kind` is `content` for edits and `rebalance` for server rank rewrites. A rebalance
 changes only ranks and is complete on its own.
@@ -332,6 +377,14 @@ device must replace its base by snapshot even though the revisions compare equal
 diagnostic only. It records the revision the client had when it authored the
 operation, and the server never rejects or reorders by it.
 
+A client editing the current snapshot can also send `expected_revision` as a
+non-negative integer at the top level of the batch. The server checks it under the
+playlist write lock before applying new operations. If the playlist has moved,
+the request returns `409 revision_conflict` and applies nothing. Refetch the
+snapshot before deciding whether to reapply the edit. A batch consisting entirely
+of matching receipts still replays after the revision changes. Omitting
+`expected_revision` keeps the existing behavior for clients with an outbox.
+
 Response `200`, one result per operation in request order:
 
 ```json
@@ -350,8 +403,8 @@ Response `200`, one result per operation in request order:
 - `head_revision` is the playlist's head after the request. It may exceed every
   result `revision` because of rebalances or other devices' edits. For a batch made
   entirely of replays, it is the current head.
-- Results never carry structure. Clients learn the canonical state by pulling
-  changes.
+- The response carries operation results. Fetch the snapshot for the current
+  structure or pull changes from a known revision.
 
 Whole-batch failures apply nothing:
 
@@ -359,6 +412,7 @@ Whole-batch failures apply nothing:
 | --- | --- | --- |
 | 404 | `playlist_not_found` | Missing or not accessible. |
 | 409 | `playlist_archived` | The playlist is archived. Every operation type is refused, including `update_metadata`. Replays are still answered (see Transactions). |
+| 409 | `revision_conflict` | The batch contains new operations and `expected_revision` differs from the current playlist revision. |
 | 409 | `idempotency_conflict` | An `operation_id` was used before with a different payload, playlist or account. Body lists `conflicting_operation_ids`. |
 | 422 | `invalid_contract_version` | Unsupported version. |
 | 422 | `invalid_playlist_operation` | Malformed envelope or payload, such as a wrong prefix, an unknown type or field, empty `entries`, or a duplicate `operation_id` or created ID within the request. |
@@ -366,8 +420,6 @@ Whole-batch failures apply nothing:
 | 422 | `limit_exceeded` | More than 500 operations. |
 
 ## Operations
-
-Seven operation types.
 
 ### Placement anchors
 
@@ -399,12 +451,17 @@ Then:
 | `operation_type` | Payload | Effect |
 | --- | --- | --- |
 | `update_metadata` | `name?`, `description?` | Absent = unchanged. `description: null` clears it. `name` cannot be null. |
-| `insert_segment` | `segment_id`, `after_segment_id?`, `before_segment_id?`, `entries` (1–5,000 `{entry_id, track_id}`) | New segment with entries in array order. Covers "add a track" (one entry) and "add these tracks from a show". |
+| `insert_segment` | `segment_id`, `after_segment_id?`, `before_segment_id?`, `description?`, `entries` | New segment with entries in array order. Entries can be empty if the description is nonblank. |
+| `update_segment` | `segment_id`, `description?` | Absent leaves it alone. Null or blank clears it. Clearing a prose-only segment emits `segment_deleted`. |
 | `move_segment` | `segment_id`, `after_segment_id?`, `before_segment_id?` | Reposition a segment with its entries. |
 | `delete_segment` | `segment_id` | Tombstone the segment and all its live entries. |
 | `insert_entries` | `segment_id`, `after_entry_id?`, `before_entry_id?`, `entries` (1–5,000) | Add entries into an existing segment, contiguous, in array order. |
+| `update_entry` | `entry_id`, `description?` | Absent leaves it alone. Null or blank clears it on a track and returns `422 invalid_playlist_operation` on a text block. |
 | `move_entry` | `entry_id`, `destination` | Move one entry. See below. |
-| `delete_entry` | `entry_id` | Tombstone the entry. If it was its segment's last live entry, also tombstone the segment. |
+| `delete_entry` | `entry_id` | Tombstone the entry. If the segment has neither live entries nor a description, also tombstone the segment. |
+
+Both insert operations take the same `{entry_id, track_id?, description?}` entry
+shape as create.
 
 For `move_entry`, choose one of these payloads. The first moves an entry into
 an existing segment. The second creates a segment containing the moved entry.
@@ -429,8 +486,9 @@ an existing segment. The second creates a segment containing the moved entry.
 }
 ```
 
-If the entry leaves its old segment empty, the server tombstones that segment
-after resolving anchors. The old segment can still anchor the new one.
+If the entry leaves its old segment with neither entries nor a description,
+the server tombstones that segment after resolving anchors. The old segment can
+still anchor the new one.
 
 A new segment is placed between whole segments. Splitting a block in place, with
 the pulled-out track landing between the two halves, is not expressible in v1; it
@@ -447,9 +505,10 @@ would need a later `split_segment` operation.
 | `parent_missing` | no | The destination segment is missing or tombstoned. The server never recreates it. |
 | `id_conflict` | no | A created ID already exists, live or tombstoned, anywhere. |
 
-Rejected operations do not stop the batch. Later operations run against the state
-left by earlier ones, in request order. Each applied operation produces exactly one
-content revision; accepted no-ops and rejections produce none.
+A per-operation rejection such as `parent_missing` leaves later operations
+free to run. A whole-batch error such as clearing a text block's description
+commits nothing. Each applied operation produces exactly one content revision.
+Accepted no-ops and per-operation rejections produce none.
 
 An exact replay of an `operation_id` returns its original stored result and
 `revision`, even when it arrives inside a batch with new operations.
@@ -466,11 +525,11 @@ need no notice.
 Limits apply to the state a batch leaves behind, not to its intermediate steps
 (2026-11-16 review). Before applying anything, the server dry-runs the batch's new
 operations in submitted order against the current state, exactly as they would
-apply. Exact replays count nothing. It then compares the final live entry counts,
-for this playlist and for the account, with the limits. If either final count
-exceeds its limit, the whole batch fails with `422 quota_exceeded` and nothing is
-applied. A batch may pass through more than 5,000 entries on the way, because the
-whole batch commits atomically.
+apply. Exact replays count nothing. The server checks the final live entry
+counts, the number of prose-only segments, and the description bytes against
+their limits. If any limit is exceeded, the whole batch fails with
+`422 quota_exceeded`. Intermediate states may exceed a limit because the batch
+commits atomically.
 
 This lets a correction travel with the edit it fixes. A full playlist has segment
 S holding only entry E; the user's pending insert of X into S failed quota, and the
@@ -578,6 +637,7 @@ is from a new account just after the create request.
       "playlist_id": "playlist_01k8000000e008000000000001",
       "name": "Cornell + friends",
       "entry_count": 2,
+      "track_count": 2,
       "archived": false,
       "revision": 1,
       "updated_at": "2026-11-16T18:02:11Z"
@@ -613,6 +673,7 @@ change carries `favorite_id` and `target`.
         "playlist_id": "playlist_01k8000000e008000000000001",
         "name": "Cornell + friends",
         "entry_count": 3,
+        "track_count": 3,
         "archived": false,
         "revision": 2,
         "updated_at": "2026-11-16T19:40:03Z"
@@ -629,9 +690,9 @@ change carries `favorite_id` and `target`.
   `favorite_id`/`target` and optional `playlist`, and the snapshot record gains
   `playlists`. The favorite types can be renamed to `Library*` in the same change.
 - `playlist_summary` is the full current summary (an upsert). Every committed
-  create, archive change or content batch that changes a playlist writes one
-  summary change for it in the same transaction: one per playlist per transaction,
-  not one per operation.
+  create, copy, archive change, publication change, takedown or lift, or content
+  batch that changes a playlist writes one summary change for it in the same
+  transaction: one per playlist per transaction, not one per operation.
 - Mobile compares a summary's `revision` with its local `applied_revision` for that
   playlist. An unknown playlist is fetched by snapshot; a known one that is behind
   pulls changes.
@@ -643,19 +704,28 @@ change carries `favorite_id` and `target`.
 
 ## Transactions and locks
 
-Every playlist write (create, batch, archive) runs in one transaction. Locks follow
-the favorites order (`FavoriteMutationService`):
+Every playlist write (create, copy, batch, archive, publication) runs in one
+transaction. Locks follow the favorites order (`FavoriteMutationService`):
 
 1. Transaction advisory locks on every submitted `operation_id` or `command_id` and
    every ID the request would create, in sorted order. This turns concurrent reuse
    of an ID into a clean `idempotency_conflict` or `id_conflict` rather than a
-   unique-key violation.
-2. The requesting account's `user_data.library_states` row, `FOR UPDATE`. This
+   unique-key violation. Publication carries no ID and takes none.
+2. The account-deletion fence, `PlaylistAccountLock`: the actor's
+   `identity.users` row `FOR SHARE`, requiring `status = 'active'`. Purge takes
+   the same row `FOR UPDATE`, so a write either commits before purge or returns
+   `401 unauthorized`. Follow, unfollow and report take the same fence.
+3. The requesting account's `user_data.library_states` row, `FOR UPDATE`. This
    serializes that account's quota checks and library revision updates. Favorites
    take the same lock.
-3. For batch and archive requests, select the playlist by ID and owner and lock
-   the matching row with `FOR UPDATE`. A missing match returns
-   `404 playlist_not_found`.
+4. For batch, archive and publication requests, select the playlist by ID and
+   owner and lock the matching row with `FOR UPDATE`. A missing match returns
+   `404 playlist_not_found`. Follow and copy instead lock the public source row
+   `FOR SHARE`, so it stays public and its structure stays stable until they
+   commit.
+
+The operator's takedown and lift take the owner's fence without requiring an
+active account, then the owner's library state and the playlist `FOR UPDATE`.
 
 An edit batch then follows these steps:
 
@@ -670,14 +740,15 @@ An edit batch then follows these steps:
 5. Commit. An infrastructure failure rolls back the whole request.
 
 Collaboration later locks other members' library states after the playlist, in ID
-order. Account deletion later adds its fence ahead of the library state lock. Both
-attach to this single write entrypoint.
+order, behind the same entrypoints.
 
 ## Receipts and hashing
 
-Each create command, archive command and operation stores a receipt: account, ID,
-playlist, SHA-256 semantic hash and stored result. Receipts are kept for the
-playlist's lifetime.
+Each create, copy and archive command and each operation stores a receipt:
+account, ID, playlist, SHA-256 semantic hash and stored result. Receipts are kept
+for the playlist's lifetime. A copy's receipt belongs to the new private copy, so
+a retry finds it after the source is taken down or purged. Publication sets a
+state and stores no receipt.
 
 The hash is SHA-256 over UTF-8 lines joined by `\n`, like `FavoriteMutationHasher`.
 Value lines use tags so free text stays distinct from absent and null fields.
@@ -688,11 +759,13 @@ entries, after anchor, before anchor; create encodes name, description, segments
 
 | Line | Content |
 | --- | --- |
-| 1 | Domain: `relisten-playlist-operation-v1`, `relisten-playlist-create-v1` or `relisten-playlist-archive-v1` |
+| 1 | Domain: `relisten-playlist-operation-v1`, `relisten-playlist-create-v1`, `relisten-playlist-archive-v1` or `relisten-playlist-copy-v1` |
 | 2 | Contract version |
 | 3 | Playlist ID |
 | 4 | `operation_type`, or `create` / `archive` for commands |
 | 5+ | Encoded payload fields in the order defined by `PlaylistHasher` |
+
+A copy hashes three lines: its domain, the contract version and the public code.
 
 Field lines are encoded as follows:
 
@@ -701,17 +774,25 @@ Field lines are encoded as follows:
 - A value is written `V:` followed by its JSON encoding. Strings are first trimmed
   and NFC-normalized exactly as stored, then encoded as JSON string literals, so
   embedded newlines and `|` are escaped.
-- An array is written as a line `L:<count>`, then one line per element. An
-  `{entry_id, track_id}` element is `entry_id|track_id`. A create segment is
-  `S:<segment_id>|<entry count>`, followed by its entries.
+- An array is written as a line `L:<count>`, then its elements. An entry starts
+  with `entry_id|track_id`, or `entry_id|N` for a text block. A create segment
+  starts with `S:<segment_id>|<entry count>`, then its description (if present),
+  then its entries.
+- In create and insert requests, a present normalized entry description adds a
+  `V:` line immediately after its entry. In `insert_segment`, a present
+  normalized segment description adds `segment_description:<JSON string>`
+  after the anchors. The distinct tag keeps a segment description from hashing
+  like an anchor when the last entry also takes a description. An absent
+  description adds no line, so track-only request hashes stay the same.
+- `update_segment` and `update_entry` encode the target ID, then the description
+  patch using the `A`, `N`, and `V:` field encoding.
 - A `move_entry` destination is `D:segment|<segment_id>`, followed by its two anchor
   lines, or `D:new_segment|<new_segment_id>`, followed by its two anchor lines.
 - `operation_id`, `command_id` and `base_revision` are excluded.
 
-Clients never compute or send hashes. Fixed hash vectors pin create,
-`insert_entries` and archive serialization, including text normalization, escaping
-and array order. Patch tests distinguish absence from `null`; ordered HTTP batch
-tests exercise receipt replay for all seven operation types.
+Clients never compute or send hashes. Fixed vectors cover the original create,
+`insert_entries` and archive hashes and the new guide payloads. HTTP batch tests
+exercise receipt replay, including both description updates.
 
 ## Client model
 

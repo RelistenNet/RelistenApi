@@ -10,10 +10,10 @@ using RelistenUserService.Playlists.Entities;
 namespace RelistenUserService.Playlists;
 
 /// <summary>
-/// Owns every private-playlist transaction. Identity locks precede the owner's library-state
-/// lock, then the playlist lock. A future account-deletion fence attaches before library state.
+/// Owns playlist creation, editing, and publication. Receipt locks precede the
+/// active-account deletion fence, then the actor's library state and the playlist.
 /// </summary>
-public sealed class PlaylistWriteService(
+public sealed partial class PlaylistWriteService(
     AccountsDbContext dbContext,
     AdvisoryLockService advisoryLocks,
     LibraryStateStore stateStore,
@@ -40,7 +40,7 @@ public sealed class PlaylistWriteService(
         await using var transaction = await dbContext.Database.BeginTransactionAsync(
             cancellationToken
         );
-        var state = await LockOwnerAsync(
+        var state = await LockActorLibraryAsync(
             actor,
             [request.CommandId.Value],
             createdIds,
@@ -68,6 +68,28 @@ public sealed class PlaylistWriteService(
                 conflicts.Order(StringComparer.Ordinal).ToArray()
             );
         }
+        var created = await AddPlaylistAsync(
+            actor,
+            state,
+            request,
+            "create",
+            hash,
+            cancellationToken
+        );
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return (new(1, generation, created.Id, created.Revision), false);
+    }
+
+    private async Task<Playlist> AddPlaylistAsync(
+        UserId actor,
+        LibraryState state,
+        CreatePlaylistRequest request,
+        string receiptKind,
+        byte[] hash,
+        CancellationToken cancellationToken
+    )
+    {
         var ownerPlaylists = await dbContext
             .Playlists.Where(row => row.OwnerId == actor)
             .ToArrayAsync(cancellationToken);
@@ -76,6 +98,14 @@ public sealed class PlaylistWriteService(
             ownerPlaylists.Length + 1,
             count,
             ownerPlaylists.Sum(row => row.EntryCount) + count
+        );
+        var entries = request.Segments.SelectMany(segment => segment.Entries);
+        PlaylistValidation.CheckGuideQuota(
+            request.Segments.Count(segment => segment.Entries.Count == 0),
+            request
+                .Segments.Select(segment => segment.Description)
+                .Concat(entries.Select(entry => entry.Description))
+                .Append(request.Metadata.Description)
         );
 
         var now = timeProvider.GetUtcNow();
@@ -87,6 +117,7 @@ public sealed class PlaylistWriteService(
             Description = request.Metadata.Description,
             Revision = 1,
             EntryCount = count,
+            TrackCount = entries.Count(entry => entry.TrackId is not null),
             CreatedAt = now,
             UpdatedAt = now,
         };
@@ -98,57 +129,36 @@ public sealed class PlaylistWriteService(
                 Id = request.CommandId.Value,
                 ActorId = actor,
                 PlaylistId = playlist.Id,
-                Kind = "create",
+                Kind = receiptKind,
                 PayloadHash = hash,
                 Revision = 1,
                 Changed = true,
                 CreatedAt = now,
             }
         );
-        AppendLibrarySummary(state, playlist, now);
-        await dbContext.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        return (new(1, generation, playlist.Id, 1), false);
+        stateStore.Append(state, SummaryChange(playlist, now));
+        return playlist;
     }
 
     public async Task<PlaylistBatchResponse> ApplyAsync(
         UserId actor,
         PlaylistId id,
         PlaylistBatchRequest request,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        bool replayWholeBatch = false
     )
     {
         request = PlaylistValidation.Normalize(request);
-        var hashes = request.Operations.ToDictionary(
-            operation => operation.OperationId.Value,
-            operation => PlaylistHasher.Hash(id, request.ContractVersion, operation)
-        );
+        var hashes = PlaylistHasher.ReceiptHashes(id, request, replayWholeBatch);
         var createdIds = request.Operations.SelectMany(PlaylistValidation.CreatedIds).ToArray();
         await using var transaction = await dbContext.Database.BeginTransactionAsync(
             cancellationToken
         );
-        var state = await LockOwnerAsync(actor, hashes.Keys, createdIds, cancellationToken);
-        var playlist = await LockOwnedPlaylistAsync(actor, id, cancellationToken);
+        var state = await LockActorLibraryAsync(actor, hashes.Keys, createdIds, cancellationToken);
+        var playlist = await LockOwnedPlaylistAsync(dbContext, actor, id, cancellationToken);
         var generation = await GenerationAsync(cancellationToken);
 
-        var receiptIds = hashes.Keys.ToArray();
-        var receipts = await dbContext
-            .PlaylistReceipts.Where(row => receiptIds.Contains(row.Id))
-            .ToDictionaryAsync(row => row.Id, cancellationToken);
-        var conflicts = receipts
-            .Values.Where(receipt => !Matches(receipt, actor, id, hashes[receipt.Id]))
-            .Select(receipt => receipt.Id)
-            .Order(StringComparer.Ordinal)
-            .ToArray();
-        if (conflicts.Length > 0)
-        {
-            throw new PlaylistException(
-                409,
-                "idempotency_conflict",
-                "An operation ID was reused with another actor, playlist or payload.",
-                conflicts
-            );
-        }
+        var receipts = await ReadMatchingReceiptsAsync(actor, id, hashes, cancellationToken);
         if (receipts.Count == request.Operations.Count)
         {
             await transaction.CommitAsync(cancellationToken);
@@ -159,6 +169,18 @@ public sealed class PlaylistWriteService(
                 request
                     .Operations.Select(operation => Result(receipts[operation.OperationId.Value]))
                     .ToArray()
+            );
+        }
+        // Checked under the playlist lock, after a full replay, so a retry of a batch
+        // that already applied replays instead of conflicting with its own result.
+        // A batch that replays some operations and adds others is a new edit, so it
+        // is held to the expected revision like any other.
+        if (request.ExpectedRevision is { } expected && playlist.Revision != expected)
+        {
+            throw new PlaylistException(
+                409,
+                "revision_conflict",
+                $"The playlist is at revision {playlist.Revision}, not {expected}. Read it again, then reapply your changes."
             );
         }
         if (playlist.Archived)
@@ -173,7 +195,13 @@ public sealed class PlaylistWriteService(
         var newOperations = request
             .Operations.Where(operation => !receipts.ContainsKey(operation.OperationId.Value))
             .ToArray();
-        var editor = await LoadEditorAsync(playlist, newOperations, cancellationToken);
+        // Name edits cannot affect entry counts or the description budget.
+        var editsOnlyName = newOperations.All(operation =>
+            operation.Payload is UpdatePlaylistMetadata { Description.IsPresent: false }
+        );
+        var editor = editsOnlyName
+            ? new PlaylistEditor(Copy(playlist), [], [], [])
+            : await LoadEditorAsync(playlist, newOperations, cancellationToken);
         var results = new List<PlaylistOperationResult>();
         foreach (var operation in request.Operations)
         {
@@ -186,41 +214,23 @@ public sealed class PlaylistWriteService(
 
         // Intermediate states may exceed quotas. The ordered evaluator already resolved parent
         // deletion and semantic rejections; only the final state is admitted and persisted.
-        CheckQuota(0, editor.LiveEntryCount, 0);
-        // All writes enforce the same owner quota while holding its library-state lock.
-        // Starting from that valid stored state, a non-increasing batch cannot exceed it.
-        if (editor.LiveEntryCount > playlist.EntryCount)
+        if (!editsOnlyName)
         {
-            var ownedCount = await dbContext
-                .Playlists.Where(row => row.OwnerId == actor)
-                .SumAsync(row => row.EntryCount, cancellationToken);
-            CheckQuota(
-                0,
-                editor.LiveEntryCount,
-                ownedCount - playlist.EntryCount + editor.LiveEntryCount
-            );
+            await CheckEditedQuotaAsync(playlist, editor, cancellationToken);
         }
+
         var now = timeProvider.GetUtcNow();
-        PublishContent(playlist, editor, state, now);
-        foreach (
-            var result in results.Where(result => !receipts.ContainsKey(result.OperationId.Value))
-        )
+        if (editor.Revisions.Count > 0)
         {
-            dbContext.PlaylistReceipts.Add(
-                new()
-                {
-                    Id = result.OperationId.Value,
-                    ActorId = actor,
-                    PlaylistId = id,
-                    Kind = "operation",
-                    PayloadHash = hashes[result.OperationId.Value],
-                    Status = result.Status,
-                    Revision = result.Revision,
-                    Changed = result.Revision is not null,
-                    CreatedAt = now,
-                }
-            );
+            PublishContent(playlist, editor, state, now);
         }
+        AddReceipts(
+            actor,
+            id,
+            hashes,
+            results.Where(result => !receipts.ContainsKey(result.OperationId.Value)),
+            now
+        );
 
         await ReleaseChangedRanksAsync(cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -240,8 +250,13 @@ public sealed class PlaylistWriteService(
         await using var transaction = await dbContext.Database.BeginTransactionAsync(
             cancellationToken
         );
-        var state = await LockOwnerAsync(actor, [request.CommandId.Value], [], cancellationToken);
-        var playlist = await LockOwnedPlaylistAsync(actor, id, cancellationToken);
+        var state = await LockActorLibraryAsync(
+            actor,
+            [request.CommandId.Value],
+            [],
+            cancellationToken
+        );
+        var playlist = await LockOwnedPlaylistAsync(dbContext, actor, id, cancellationToken);
         var generation = await GenerationAsync(cancellationToken);
         var receipt = await dbContext.PlaylistReceipts.FindAsync(
             [request.CommandId.Value],
@@ -260,7 +275,7 @@ public sealed class PlaylistWriteService(
         {
             playlist.Archived = request.Archived;
             playlist.UpdatedAt = now;
-            AppendLibrarySummary(state, playlist, now);
+            stateStore.Append(state, SummaryChange(playlist, now));
         }
         dbContext.PlaylistReceipts.Add(
             new()
@@ -280,7 +295,7 @@ public sealed class PlaylistWriteService(
         return new(1, generation, id, request.Archived, changed);
     }
 
-    private async Task<LibraryState> LockOwnerAsync(
+    private async Task<LibraryState> LockActorLibraryAsync(
         UserId actor,
         IEnumerable<string> receipts,
         IEnumerable<string> createdIds,
@@ -294,6 +309,7 @@ public sealed class PlaylistWriteService(
                 .Concat(createdIds.Select(id => $"playlist-id:{id}")),
             cancellationToken
         );
+        await PlaylistAccountLock.RequireActiveAsync(dbContext, actor, cancellationToken);
         return await stateStore.GetOrCreateForUpdateAsync(
             actor,
             timeProvider.GetUtcNow(),
@@ -301,13 +317,14 @@ public sealed class PlaylistWriteService(
         );
     }
 
-    private async Task<Playlist> LockOwnedPlaylistAsync(
+    internal static async Task<Playlist> LockOwnedPlaylistAsync(
+        AccountsDbContext database,
         UserId ownerId,
         PlaylistId id,
         CancellationToken cancellationToken
     )
     {
-        var playlist = await dbContext
+        var playlist = await database
             .Playlists.FromSqlInterpolated(
                 $"""
                 SELECT *
@@ -379,12 +396,6 @@ public sealed class PlaylistWriteService(
         CancellationToken cancellationToken
     )
     {
-        if (operations.All(operation => operation.Payload is UpdatePlaylistMetadata))
-        {
-            // Metadata changes retain the locked playlist's count without loading its structure.
-            return new(Copy(playlist), [], [], []);
-        }
-
         var segmentTargets = operations
             .Select(operation => operation.Payload)
             .SelectMany(payload =>
@@ -392,6 +403,7 @@ public sealed class PlaylistWriteService(
                 {
                     MovePlaylistSegment move => new[] { move.SegmentId },
                     DeletePlaylistSegment delete => [delete.SegmentId],
+                    UpdatePlaylistSegment update => [update.SegmentId],
                     _ => Array.Empty<PlaylistSegmentId>(),
                 }
             )
@@ -403,6 +415,7 @@ public sealed class PlaylistWriteService(
                 {
                     MovePlaylistEntry move => new[] { move.EntryId },
                     DeletePlaylistEntry delete => [delete.EntryId],
+                    UpdatePlaylistEntry update => [update.EntryId],
                     _ => Array.Empty<PlaylistEntryId>(),
                 }
             )
@@ -433,6 +446,31 @@ public sealed class PlaylistWriteService(
     private T Copy<T>(T tracked)
         where T : class => (T)dbContext.Entry(tracked).CurrentValues.ToObject();
 
+    private async Task CheckEditedQuotaAsync(
+        Playlist before,
+        PlaylistEditor editor,
+        CancellationToken cancellationToken
+    )
+    {
+        CheckQuota(0, editor.LiveEntryCount, 0);
+        editor.CheckGuideQuota();
+
+        // The owner lock protects the previously admitted count. Only growth needs a new sum.
+        if (editor.LiveEntryCount <= before.EntryCount)
+        {
+            return;
+        }
+
+        var ownedCount = await dbContext
+            .Playlists.Where(row => row.OwnerId == before.OwnerId)
+            .SumAsync(row => row.EntryCount, cancellationToken);
+        CheckQuota(
+            0,
+            editor.LiveEntryCount,
+            ownedCount - before.EntryCount + editor.LiveEntryCount
+        );
+    }
+
     private void PublishContent(
         Playlist playlist,
         PlaylistEditor editor,
@@ -440,10 +478,6 @@ public sealed class PlaylistWriteService(
         DateTimeOffset now
     )
     {
-        if (editor.Revisions.Count == 0)
-        {
-            return;
-        }
         editor.Playlist.UpdatedAt = now;
         ApplyWorkingState(playlist, editor);
         foreach (var revision in editor.Revisions)
@@ -455,11 +489,14 @@ public sealed class PlaylistWriteService(
                     Revision = revision.Revision,
                     Kind = revision.Kind,
                     ChangeCount = revision.Changes.Count,
-                    ChangesJson = JsonSerializer.Serialize(revision.Changes, PlaylistJson.Options),
+                    ChangesJson = JsonSerializer.Serialize(
+                        revision.Changes,
+                        PlaylistJson.StoredOptions
+                    ),
                 }
             );
         }
-        AppendLibrarySummary(state, playlist, now);
+        stateStore.Append(state, SummaryChange(playlist, now));
     }
 
     private void ApplyWorkingState(Playlist playlist, PlaylistEditor editor)
@@ -499,11 +536,14 @@ public sealed class PlaylistWriteService(
         dbContext.ChangeTracker.DetectChanges();
         var segments = dbContext
             .ChangeTracker.Entries<PlaylistSegment>()
-            .Where(entry => entry.State == EntityState.Modified)
+            .Where(entry => entry.Property(row => row.Rank).IsModified)
             .ToArray();
         var entries = dbContext
             .ChangeTracker.Entries<PlaylistEntry>()
-            .Where(entry => entry.State == EntityState.Modified)
+            .Where(entry =>
+                entry.Property(row => row.Rank).IsModified
+                || entry.Property(row => row.SegmentId).IsModified
+            )
             .ToArray();
         if (segments.Length > 0)
         {
@@ -542,6 +582,7 @@ public sealed class PlaylistWriteService(
                 {
                     Id = segment.SegmentId,
                     PlaylistId = request.PlaylistId,
+                    Description = segment.Description,
                     Rank = ranks[index],
                 }
             );
@@ -556,6 +597,7 @@ public sealed class PlaylistWriteService(
                         PlaylistId = request.PlaylistId,
                         SegmentId = segment.SegmentId,
                         TrackId = entry.TrackId,
+                        Description = entry.Description,
                         Rank = entryRanks[entryIndex],
                     }
                 );
@@ -563,30 +605,91 @@ public sealed class PlaylistWriteService(
         }
     }
 
-    private void AppendLibrarySummary(LibraryState state, Playlist playlist, DateTimeOffset now)
+    /// <summary>The full current summary that every summary-changing write records.</summary>
+    internal static LibraryChange SummaryChange(Playlist playlist, DateTimeOffset now) =>
+        new()
+        {
+            ChangeType = "playlist_summary",
+            ChangedAt = now,
+            PlaylistJson = JsonSerializer.Serialize(
+                new PlaylistSummary(
+                    playlist.Id,
+                    playlist.Name,
+                    playlist.EntryCount,
+                    playlist.Archived,
+                    playlist.Revision,
+                    playlist.UpdatedAt
+                )
+                {
+                    TrackCount = playlist.TrackCount,
+                    PublicCode = playlist.PublicCode,
+                    Published = playlist.Published,
+                    TakenDown = playlist.TakenDown,
+                },
+                PlaylistJson.StoredOptions
+            ),
+        };
+
+    /// <summary>
+    /// The receipts already stored for this batch's operation IDs. An ID stored for
+    /// another actor, playlist or payload refuses the whole batch.
+    /// </summary>
+    private async Task<Dictionary<string, PlaylistReceipt>> ReadMatchingReceiptsAsync(
+        UserId actor,
+        PlaylistId id,
+        IReadOnlyDictionary<string, byte[]> hashes,
+        CancellationToken cancellationToken
+    )
     {
-        state.Revision++;
-        state.UpdatedAt = now;
-        dbContext.LibraryChanges.Add(
-            new()
-            {
-                UserId = playlist.OwnerId,
-                Revision = state.Revision,
-                ChangeType = "playlist_summary",
-                ChangedAt = now,
-                PlaylistJson = JsonSerializer.Serialize(
-                    new PlaylistSummary(
-                        playlist.Id,
-                        playlist.Name,
-                        playlist.EntryCount,
-                        playlist.Archived,
-                        playlist.Revision,
-                        playlist.UpdatedAt
-                    ),
-                    PlaylistJson.Options
-                ),
-            }
-        );
+        var receiptIds = hashes.Keys.ToArray();
+        var receipts = await dbContext
+            .PlaylistReceipts.Where(row => receiptIds.Contains(row.Id))
+            .ToDictionaryAsync(row => row.Id, cancellationToken);
+
+        var conflicts = receipts
+            .Values.Where(receipt => !Matches(receipt, actor, id, hashes[receipt.Id]))
+            .Select(receipt => receipt.Id)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        if (conflicts.Length > 0)
+        {
+            throw new PlaylistException(
+                409,
+                "idempotency_conflict",
+                "An operation ID was reused with another actor, playlist or payload.",
+                conflicts
+            );
+        }
+
+        return receipts;
+    }
+
+    /// <summary>Records each new result so a retry of its operation replays it.</summary>
+    private void AddReceipts(
+        UserId actor,
+        PlaylistId id,
+        IReadOnlyDictionary<string, byte[]> hashes,
+        IEnumerable<PlaylistOperationResult> results,
+        DateTimeOffset now
+    )
+    {
+        foreach (var result in results)
+        {
+            dbContext.PlaylistReceipts.Add(
+                new()
+                {
+                    Id = result.OperationId.Value,
+                    ActorId = actor,
+                    PlaylistId = id,
+                    Kind = "operation",
+                    PayloadHash = hashes[result.OperationId.Value],
+                    Status = result.Status,
+                    Revision = result.Revision,
+                    Changed = result.Revision is not null,
+                    CreatedAt = now,
+                }
+            );
+        }
     }
 
     private Task<string> GenerationAsync(CancellationToken cancellationToken) =>

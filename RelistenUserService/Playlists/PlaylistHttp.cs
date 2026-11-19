@@ -21,8 +21,10 @@ public sealed class PlaylistInputFormatter : SystemTextJsonInputFormatter
     }
 
     public override bool CanRead(InputFormatterContext context) =>
-        context.HttpContext.Request.Path.StartsWithSegments("/v1/playlists")
-        && base.CanRead(context);
+        (
+            context.HttpContext.Request.Path.StartsWithSegments("/v1/playlists")
+            || context.HttpContext.Request.Path.StartsWithSegments("/v1/public-playlists")
+        ) && base.CanRead(context);
 }
 
 /// <summary>Maps domain and body-validation problems to the same generation-aware wire envelope.</summary>

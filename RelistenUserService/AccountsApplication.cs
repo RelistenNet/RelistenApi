@@ -9,8 +9,11 @@ using RelistenUserService.Authentication.Development;
 using RelistenUserService.Authentication.OpenIdConnect;
 using RelistenUserService.Configuration;
 using RelistenUserService.Http;
+using RelistenUserService.Identity.Deletion;
+using RelistenUserService.Mcp;
 using RelistenUserService.Persistence;
 using RelistenUserService.Playlists;
+using Temporalio.Extensions.Hosting;
 
 namespace RelistenUserService;
 
@@ -58,6 +61,28 @@ public static class AccountsApplication
             });
         }
 
+        var (temporalAddress, temporalNamespace) = ReadTemporalSettings(builder);
+        builder.Services.AddTemporalClient(temporalAddress, temporalNamespace);
+        builder.Services.AddScoped<AccountDeletionJobs>();
+        builder.Services.AddSingleton<AccountDeletionStarter>();
+        builder
+            .Services.AddHttpClient<AppleTokenRevocation>()
+            .RemoveAllLoggers()
+            .ConfigurePrimaryHttpMessageHandler(() =>
+                new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false }
+            );
+
+        if (runtime.Mcp is { } mcp)
+        {
+            // The SDK's trace logs contain complete JSON-RPC messages.
+            builder.Logging.AddFilter("ModelContextProtocol", LogLevel.Information);
+            builder.Services.AddMcpEndpoints(
+                mcp,
+                builder.Configuration["MCP_REVIEW_SEARCH_KEY"],
+                builder.Configuration["MCP_WRITE_ID_KEY"]
+            );
+        }
+
         var app = builder.Build();
         app.UseMiddleware<PreviewControlMiddleware>();
         // TLS terminates at the cluster ingress. Only configured ingress networks may tell
@@ -87,6 +112,11 @@ public static class AccountsApplication
         app.UseAuthentication();
         app.UseAuthorization();
         app.UseMiddleware<BrowserMutationProtectionMiddleware>();
+
+        if (runtime.Mcp is not null)
+        {
+            app.UseMcpEndpoints(runtime);
+        }
 
         if (runtime.Options.EnableDevelopmentPersonas)
         {
@@ -126,6 +156,11 @@ public static class AccountsApplication
             .Services.GetRequiredService<WebClientApplicationInitializer>()
             .InitializeAsync(cancellationToken);
 
+        if (runtime.Mcp is { } mcp)
+        {
+            await McpOAuth.InitializeAsync(app.Services, mcp, cancellationToken);
+        }
+
         if (runtime.IsLocalDevelopment)
         {
             // Finish local client setup before Data Protection's hosted service tries to
@@ -134,5 +169,26 @@ public static class AccountsApplication
                 .Services.GetRequiredService<DevelopmentDatabaseInitializer>()
                 .InitializeAsync(cancellationToken);
         }
+    }
+
+    // The client connects lazily, so a wrong default would surface only as a 503 on
+    // every deletion request. Production must name its Temporal service explicitly.
+    private static (string Address, string Namespace) ReadTemporalSettings(
+        WebApplicationBuilder builder
+    )
+    {
+        var address = builder.Configuration["Temporal:Address"];
+        var temporalNamespace = builder.Configuration["Temporal:Namespace"];
+        if (
+            builder.Environment.IsProduction()
+            && (string.IsNullOrWhiteSpace(address) || string.IsNullOrWhiteSpace(temporalNamespace))
+        )
+        {
+            throw new InvalidOperationException(
+                "Temporal__Address and Temporal__Namespace are required in Production to start account deletions."
+            );
+        }
+
+        return (address ?? "localhost:7233", temporalNamespace ?? "default");
     }
 }

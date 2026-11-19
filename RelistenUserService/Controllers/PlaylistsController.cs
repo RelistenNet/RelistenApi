@@ -14,7 +14,8 @@ namespace RelistenUserService.Controllers;
 public sealed class PlaylistsController(
     CurrentAccountContext account,
     PlaylistWriteService writes,
-    PlaylistReadService reads
+    PlaylistReadService reads,
+    PlaylistSharingService sharing
 ) : ControllerBase
 {
     [HttpPost]
@@ -95,6 +96,32 @@ public sealed class PlaylistsController(
                 cancellationToken
             )
         );
+
+    [HttpPut("{playlistId}/publication")]
+    [RequestSizeLimit(4 * 1024)]
+    public async Task<ActionResult<PlaylistPublication>> SetPublication(
+        string playlistId,
+        [FromBody] SetPlaylistPublicationRequest request,
+        CancellationToken cancellationToken
+    ) =>
+        Ok(
+            await writes.SetPublicationAsync(
+                account.User.Id,
+                ParseId(playlistId),
+                request,
+                cancellationToken
+            )
+        );
+
+    [HttpDelete("{playlistId}/follow")]
+    public async Task<IActionResult> Unfollow(
+        string playlistId,
+        CancellationToken cancellationToken
+    )
+    {
+        await sharing.UnfollowAsync(account.User.Id, ParseId(playlistId), cancellationToken);
+        return NoContent();
+    }
 
     private static PlaylistId ParseId(string value) =>
         PlaylistId.TryParse(value, out var id)

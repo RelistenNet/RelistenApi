@@ -11,6 +11,37 @@ namespace RelistenUserService.Playlists;
 /// </summary>
 public static class PlaylistHasher
 {
+    internal static Dictionary<string, byte[]> ReceiptHashes(
+        PlaylistId playlist,
+        PlaylistBatchRequest request,
+        bool replayWholeBatch
+    )
+    {
+        var operations = request.Operations;
+        var hashes = operations.ToDictionary(
+            operation => operation.OperationId.Value,
+            operation => Hash(playlist, request.ContractVersion, operation)
+        );
+        if (!replayWholeBatch)
+        {
+            return hashes;
+        }
+
+        // Keyed MCP calls always derive the same first operation ID. Give every receipt
+        // the whole edit's hash so even that first receipt rejects a shorter, longer or
+        // reordered edit. Mobile can still replay arbitrary subsets of its operations.
+        var lines = Header("edit-batch", request.ContractVersion, playlist, "edit");
+        Value(lines, request.ExpectedRevision);
+        foreach (var operation in operations)
+        {
+            var id = operation.OperationId.Value;
+            lines.Add($"{id}|{Convert.ToHexString(hashes[id])}");
+        }
+
+        var batchHash = Digest(lines);
+        return operations.ToDictionary(operation => operation.OperationId.Value, _ => batchHash);
+    }
+
     public static byte[] Hash(CreatePlaylistRequest request)
     {
         var lines = Header("create", request.ContractVersion, request.PlaylistId, "create");
@@ -20,10 +51,8 @@ public static class PlaylistHasher
         foreach (var segment in request.Segments)
         {
             lines.Add($"S:{segment.SegmentId}|{segment.Entries.Count}");
-            foreach (var entry in segment.Entries)
-            {
-                lines.Add($"{entry.EntryId}|{entry.TrackId}");
-            }
+            Description(lines, segment.Description);
+            EntryLines(lines, segment.Entries);
         }
         return Digest(lines);
     }
@@ -35,6 +64,18 @@ public static class PlaylistHasher
         return Digest(lines);
     }
 
+    public static byte[] Hash(string publicCode, CopyPublicPlaylistRequest request)
+    {
+        var lines = new List<string> { "relisten-playlist-copy-v1" };
+        Value(lines, request.ContractVersion);
+        Value(lines, publicCode);
+        return Digest(lines);
+    }
+
+    /// <summary>
+    /// The base revision is left out: it is a diagnostic, so a retry that read a newer
+    /// revision still replays its receipt instead of conflicting with it.
+    /// </summary>
     public static byte[] Hash(PlaylistId playlistId, int version, PlaylistOperation operation)
     {
         var lines = Header("operation", version, playlistId, operation.OperationType);
@@ -49,6 +90,17 @@ public static class PlaylistHasher
                 Entries(lines, insert.Entries);
                 Value(lines, insert.AfterSegmentId?.Value);
                 Value(lines, insert.BeforeSegmentId?.Value);
+                if (insert.Description is not null)
+                {
+                    // A plain value here could be mistaken for an anchor after a described entry.
+                    lines.Add(
+                        "segment_description:" + JsonSerializer.Serialize(insert.Description)
+                    );
+                }
+                break;
+            case UpdatePlaylistSegment update:
+                Value(lines, update.SegmentId.Value);
+                Optional(lines, update.Description);
                 break;
             case MovePlaylistSegment move:
                 Value(lines, move.SegmentId.Value);
@@ -86,6 +138,10 @@ public static class PlaylistHasher
             case DeletePlaylistEntry delete:
                 Value(lines, delete.EntryId.Value);
                 break;
+            case UpdatePlaylistEntry update:
+                Value(lines, update.EntryId.Value);
+                Optional(lines, update.Description);
+                break;
             default:
                 throw new InvalidOperationException("Unknown playlist operation.");
         }
@@ -118,7 +174,25 @@ public static class PlaylistHasher
     private static void Entries(List<string> lines, IReadOnlyList<PlaylistEntryInput> entries)
     {
         lines.Add($"L:{entries.Count}");
-        lines.AddRange(entries.Select(entry => $"{entry.EntryId}|{entry.TrackId}"));
+        EntryLines(lines, entries);
+    }
+
+    private static void EntryLines(List<string> lines, IReadOnlyList<PlaylistEntryInput> entries)
+    {
+        foreach (var entry in entries)
+        {
+            lines.Add($"{entry.EntryId}|{entry.TrackId ?? "N"}");
+            Description(lines, entry.Description);
+        }
+    }
+
+    private static void Description(List<string> lines, string? description)
+    {
+        // Omit the whole line so pre-rollout create and insert receipts keep their hash.
+        if (description is not null)
+        {
+            Value(lines, description);
+        }
     }
 
     private static byte[] Digest(List<string> lines) =>

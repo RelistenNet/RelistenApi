@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Relisten.Accounts.Contracts.Library;
 using RelistenUserService.Library.Entities;
 using RelistenUserService.Persistence;
+using RelistenUserService.Playlists;
 
 namespace RelistenUserService.Library;
 
@@ -85,6 +86,10 @@ public sealed class FavoriteMutationService(
             return FavoriteMutationExecution.Failed(favoriteIdentityFailure);
         }
 
+        // Account purge locks the user row and then cascades into library_states. Taking
+        // the user lock first, in the playlist write order, means a write either commits
+        // before purge or sees the account gone; it cannot deadlock with the cascade.
+        await PlaylistAccountLock.RequireActiveAsync(dbContext, userId, cancellationToken);
         var now = timeProvider.GetUtcNow();
         var state = await stateStore.GetOrCreateForUpdateAsync(userId, now, cancellationToken);
         var favorites = await dbContext

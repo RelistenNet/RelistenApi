@@ -70,6 +70,13 @@ and [TestWebSessionAntiforgery](../../RelistenUserServiceTests/TestWebSessionAnt
 These checks do not exercise production ingress, a backup restore or mobile
 application state.
 
+## Deploy guide content
+
+Ship a mobile build that reads text entries and raise the minimum OTA version
+so TestFlight 6055 updates. Then deploy the guide-capable User Service with its
+accounts migration. Once text entries exist, recovery builds must still read
+their snapshots, deltas and receipts.
+
 ## Connection routing and sync cost
 
 Ordinary account traffic uses `ACCOUNTS_DATABASE_URL`, with its host replaced by
@@ -98,10 +105,9 @@ The performance review removed work from the common sync paths:
   revision, down from four service statements. This count excludes authentication
   and transaction control. Reads no longer initialize library state or take a
   row lock; one repeatable-read snapshot keeps the head and response coherent.
-- A metadata-only batch retains the playlist's count without loading its segments
-  and entries. At the 5,000-entry limit, this avoids up to 10,000 tracked structure
-  rows and their detached copies. Static control-flow counting gives six SQL
-  statements before persistence, down from twelve for a fresh metadata batch.
+- A name-only batch can skip loading the playlist structure. It counts live
+  tracks only when it publishes a changed summary. A playlist description edit
+  loads the live structure to check the total description byte limit.
 - Empty ID families skip existence queries. Non-increasing entry counts skip the
   account-wide sum, relying on the unchanged quotas and serialized valid starting
   state. Growing final states still check the owner's aggregate quota.

@@ -13,6 +13,7 @@ public sealed record FavoriteLibrarySnapshot(
 {
     public string HistoryGeneration { get; init; } = "";
     public IReadOnlyList<PlaylistSummary> Playlists { get; init; } = [];
+    public IReadOnlyList<FollowedPlaylistHead> FollowedPlaylists { get; init; } = [];
 }
 
 public sealed record FavoriteSnapshotItem(
@@ -31,6 +32,9 @@ public sealed record FavoriteLibraryChanges(
 )
 {
     public string HistoryGeneration { get; init; } = "";
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<FollowedPlaylistHead>? FollowedPlaylists { get; init; }
 }
 
 public sealed record FavoriteLibraryChange(
@@ -41,5 +45,7 @@ public sealed record FavoriteLibraryChange(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] FavoriteTarget? Target,
     DateTimeOffset ChangedAt,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        PlaylistSummary? Playlist = null
+        PlaylistSummary? Playlist = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        PlaylistId? FollowedPlaylistId = null
 );

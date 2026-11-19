@@ -2,13 +2,16 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging.Abstractions;
 using NUnit.Framework;
 using OpenIddict.Abstractions;
 using Relisten.Accounts.Contracts.Accounts;
 using RelistenUserService.Authentication;
 using RelistenUserService.Authentication.Authorization;
 using RelistenUserService.Authentication.OpenIdConnect;
+using RelistenUserService.Configuration;
 using RelistenUserService.Controllers;
+using RelistenUserService.Identity.Deletion;
 using RelistenUserService.Identity.Entities;
 using static OpenIddict.Abstractions.OpenIddictConstants;
 
@@ -18,14 +21,14 @@ namespace RelistenUserServiceTests;
 public sealed class TestBrowserFacadeBoundary
 {
     [Test]
-    public void Native_me_response_includes_the_native_session_id()
+    public async Task Native_me_response_includes_the_native_session_id()
     {
         var user = User();
         var nativeSessionId = SessionId.New();
         var currentAccount = new CurrentAccountContext();
         currentAccount.SetNative(user, nativeSessionId);
 
-        var json = SerializeMe(currentAccount);
+        var json = await SerializeMe(currentAccount);
 
         using var document = JsonDocument.Parse(json);
         document
@@ -36,7 +39,7 @@ public sealed class TestBrowserFacadeBoundary
     }
 
     [Test]
-    public void Web_me_response_omits_the_native_session_id()
+    public async Task Web_me_response_omits_the_native_session_id()
     {
         var currentAccount = new CurrentAccountContext();
         currentAccount.SetWeb(
@@ -46,7 +49,7 @@ public sealed class TestBrowserFacadeBoundary
             IdentitySessionCapabilities.AllWeb
         );
 
-        var json = SerializeMe(currentAccount);
+        var json = await SerializeMe(currentAccount);
 
         using var document = JsonDocument.Parse(json);
         document.RootElement.TryGetProperty("native_session_id", out _).Should().BeFalse();
@@ -80,14 +83,26 @@ public sealed class TestBrowserFacadeBoundary
             .Equal(Destinations.IdentityToken);
     }
 
-    private static string SerializeMe(CurrentAccountContext currentAccount)
+    private static async Task<string> SerializeMe(CurrentAccountContext currentAccount)
     {
         var context = new DefaultHttpContext();
-        var controller = new MeController(currentAccount, null!)
+        var apple = new AppleTokenRevocation(
+            null!,
+            null!,
+            new AccountsRuntimeConfiguration(
+                new AccountsOptions(),
+                new Uri("https://example.test"),
+                []
+            ),
+            TimeProvider.System,
+            NullLogger<AppleTokenRevocation>.Instance
+        );
+        var controller = new MeController(currentAccount, null!, apple)
         {
             ControllerContext = new ControllerContext { HttpContext = context },
         };
-        var result = controller.Get().Result.Should().BeOfType<OkObjectResult>().Subject;
+        var profile = await controller.Get(CancellationToken.None);
+        var result = profile.Result.Should().BeOfType<OkObjectResult>().Subject;
         return JsonSerializer.Serialize(
             result.Value,
             new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower }

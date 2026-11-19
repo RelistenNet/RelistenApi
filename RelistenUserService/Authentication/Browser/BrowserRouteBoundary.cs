@@ -10,7 +10,13 @@ public static class BrowserRouteBoundary
         IsSessionLifecyclePath(path) || IsCsrfPath(path) || IsSharedResourcePath(path);
 
     public static bool IsSharedResourcePath(PathString path) =>
-        path == "/v1/me" || IsLibraryPath(path) || IsPlaylistPath(path);
+        path == "/v1/me"
+        || IsLibraryPath(path)
+        || IsPlaylistPath(path)
+        || IsPublicPlaylistPath(path);
+
+    internal static bool IsPublicPlaylistPath(PathString path) =>
+        path.StartsWithSegments("/v1/public-playlists");
 
     public static bool IsPlaylistPath(PathString path) => path.StartsWithSegments("/v1/playlists");
 

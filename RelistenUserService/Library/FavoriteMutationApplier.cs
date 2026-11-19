@@ -9,6 +9,8 @@ namespace RelistenUserService.Library;
 // idempotency, quota enforcement, and account-level serialization remain in FavoriteMutationService.
 internal sealed class FavoriteMutationApplier(AccountsDbContext dbContext)
 {
+    private readonly LibraryStateStore _stateStore = new(dbContext);
+
     public FavoriteMutationResult Apply(
         UserId userId,
         FavoriteMutationCommand mutation,
@@ -97,14 +99,11 @@ internal sealed class FavoriteMutationApplier(AccountsDbContext dbContext)
         Favorite favorite,
         string changeType,
         DateTimeOffset now
-    )
-    {
-        state.Revision++;
-        dbContext.LibraryChanges.Add(
+    ) =>
+        _stateStore.Append(
+            state,
             new()
             {
-                UserId = favorite.UserId,
-                Revision = state.Revision,
                 ChangeType = changeType,
                 FavoriteId = favorite.Id,
                 CatalogType = favorite.CatalogType,
@@ -112,5 +111,4 @@ internal sealed class FavoriteMutationApplier(AccountsDbContext dbContext)
                 ChangedAt = now,
             }
         );
-    }
 }

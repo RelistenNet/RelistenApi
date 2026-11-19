@@ -13,4 +13,9 @@ public sealed record AccountProfileResponse(
     DateTimeOffset? UsernameChangeAvailableAt,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         SessionId? NativeSessionId
-);
+)
+{
+    /// <summary>True when the iOS deletion flow can ask this account to reauthorize with Apple.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool AppleNativeRevocationAvailable { get; init; }
+}

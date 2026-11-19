@@ -59,6 +59,7 @@ public sealed class TestAuthorizationAccountSelection
             null!,
             null!,
             null!,
+            null!,
             TimeProvider.System
         )
         {
@@ -112,6 +113,7 @@ public sealed class TestAuthorizationAccountSelection
                 new Uri("https://auth.relisten.localhost:5443"),
                 []
             ),
+            null!,
             null!,
             null!,
             null!,

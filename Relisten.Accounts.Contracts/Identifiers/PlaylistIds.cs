@@ -131,3 +131,36 @@ public readonly record struct PlaylistOperationId : IAccountId<PlaylistOperation
 
     public override string ToString() => Value;
 }
+
+[JsonConverter(typeof(AccountIdJsonConverter<PlaylistReportId>))]
+public readonly record struct PlaylistReportId : IAccountId<PlaylistReportId>
+{
+    private readonly string? _value;
+    public string Value =>
+        _value
+        ?? throw new InvalidOperationException(
+            "An uninitialized playlist_report_ ID has no value."
+        );
+    public bool IsEmpty => _value is null;
+    public static string Prefix => "playlist_report";
+
+    private PlaylistReportId(string value) => _value = value;
+
+    public static PlaylistReportId Parse(string value) =>
+        TryParse(value, out var id)
+            ? id
+            : throw new FormatException("Expected a canonical playlist_report_ UUIDv7 ID.");
+
+    public static bool TryParse(string? value, out PlaylistReportId id)
+    {
+        var valid = AccountIdValidation.IsValid(value, Prefix);
+        id = valid ? new(value!) : default;
+        return valid;
+    }
+
+    public static PlaylistReportId FromUuid(Guid value) => Parse(UuidTypeId.Format(Prefix, value));
+
+    public static PlaylistReportId New() => FromUuid(Guid.CreateVersion7());
+
+    public override string ToString() => Value;
+}

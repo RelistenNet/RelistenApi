@@ -34,4 +34,18 @@ public sealed class LibraryStateStore(AccountsDbContext dbContext)
             )
             .SingleAsync(cancellationToken);
     }
+
+    /// <summary>
+    /// Advances the account's library revision and records <paramref name="change"/> at it.
+    /// The caller holds the state row lock from <see cref="GetOrCreateForUpdateAsync"/> and
+    /// saves both in the same transaction, so revisions stay gapless per account.
+    /// </summary>
+    public void Append(LibraryState state, LibraryChange change)
+    {
+        state.Revision++;
+        state.UpdatedAt = change.ChangedAt;
+        change.UserId = state.UserId;
+        change.Revision = state.Revision;
+        dbContext.LibraryChanges.Add(change);
+    }
 }

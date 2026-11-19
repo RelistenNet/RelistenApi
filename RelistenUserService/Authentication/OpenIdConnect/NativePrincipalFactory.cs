@@ -29,7 +29,12 @@ public sealed class NativePrincipalFactory(Configuration.AccountsRuntimeConfigur
 
         var principal = new ClaimsPrincipal(identity);
         principal.SetScopes(scopes);
-        principal.SetResources(runtime.Options.Audience);
+        principal.SetResources(
+            session.ClientId == McpOAuth.ClientId
+                ? runtime.Mcp?.Resource.AbsoluteUri
+                    ?? throw new InvalidOperationException("MCP capability has no resource.")
+                : runtime.Options.Audience
+        );
         principal.SetAuthorizationId(session.AuthorizationId.ToString("D"));
         principal.SetDestinations(claim =>
             claim.Type switch

@@ -22,6 +22,20 @@ internal sealed class PlaylistEditor(
     public List<PlaylistRevision> Revisions { get; } = [];
     public int LiveEntryCount => Playlist.EntryCount;
 
+    public void CheckGuideQuota()
+    {
+        var segments = Segments.Values.Where(row => !row.Deleted).ToArray();
+        var entries = Entries.Values.Where(row => !row.Deleted).ToArray();
+        var occupiedSegments = entries.Select(row => row.SegmentId).ToHashSet();
+        PlaylistValidation.CheckGuideQuota(
+            segments.Count(row => !occupiedSegments.Contains(row.Id)),
+            segments
+                .Select(row => row.Description)
+                .Concat(entries.Select(row => row.Description))
+                .Append(Playlist.Description)
+        );
+    }
+
     public PlaylistOperationResult Apply(PlaylistOperation operation)
     {
         var changes = new List<PlaylistChange>();
@@ -29,9 +43,11 @@ internal sealed class PlaylistEditor(
         {
             UpdatePlaylistMetadata metadata => UpdateMetadata(metadata, changes),
             InsertPlaylistSegment insert => InsertSegment(insert, changes),
+            UpdatePlaylistSegment update => UpdateSegment(update, changes),
             MovePlaylistSegment move => MoveSegment(move, changes),
             DeletePlaylistSegment delete => DeleteSegment(delete, changes),
             InsertPlaylistEntries insert => InsertEntries(insert, changes),
+            UpdatePlaylistEntry update => UpdateEntry(update, changes),
             MovePlaylistEntry move => MoveEntry(move, changes),
             DeletePlaylistEntry delete => DeleteEntry(delete, changes),
             _ => throw new InvalidOperationException("Unknown operation payload."),
@@ -79,13 +95,36 @@ internal sealed class PlaylistEditor(
             insert.BeforeSegmentId
         );
         var rank = SegmentRanks(siblings, index, 1)[0];
-        AddSegment(insert.SegmentId, rank, changes);
+        AddSegment(insert.SegmentId, rank, insert.Description, changes);
         AddEntries(
             insert.SegmentId,
             insert.Entries,
             PlaylistRanks.Between(null, null, insert.Entries.Count),
             changes
         );
+        return "applied";
+    }
+
+    private string UpdateSegment(UpdatePlaylistSegment update, List<PlaylistChange> changes)
+    {
+        var status = SegmentStatus(update.SegmentId);
+        if (status is not null)
+        {
+            return status;
+        }
+
+        var segment = Segments[update.SegmentId];
+        if (!update.Description.IsPresent || segment.Description == update.Description.Value)
+        {
+            return "no_op";
+        }
+
+        segment.Description = update.Description.Value;
+        if (!DeleteEmptySegment(segment.Id, changes))
+        {
+            changes.Add(Upsert(segment));
+        }
+
         return "applied";
     }
 
@@ -122,7 +161,7 @@ internal sealed class PlaylistEditor(
             return "no_op";
         }
         target.Rank = SegmentRanks(ordered, index, 1)[0];
-        changes.Add(new PlaylistSegmentUpserted(target.Id, target.Rank));
+        changes.Add(Upsert(target));
         return "applied";
     }
 
@@ -135,11 +174,32 @@ internal sealed class PlaylistEditor(
         }
         foreach (var entry in LiveEntries(delete.SegmentId))
         {
-            entry.Deleted = true;
-            entry.Rank = null;
-            Playlist.EntryCount--;
+            TombstoneEntry(entry);
         }
         TombstoneSegment(delete.SegmentId, changes);
+        return "applied";
+    }
+
+    private string UpdateEntry(UpdatePlaylistEntry update, List<PlaylistChange> changes)
+    {
+        var status = EntryStatus(update.EntryId);
+        if (status is not null)
+        {
+            return status;
+        }
+
+        var entry = Entries[update.EntryId];
+        if (!update.Description.IsPresent || entry.Description == update.Description.Value)
+        {
+            return "no_op";
+        }
+        if (entry.TrackId is null && update.Description.Value is null)
+        {
+            throw PlaylistValidation.Invalid("Delete a text entry to remove its description.");
+        }
+
+        entry.Description = update.Description.Value;
+        changes.Add(Upsert(entry));
         return "applied";
     }
 
@@ -195,7 +255,7 @@ internal sealed class PlaylistEditor(
                 destination.BeforeSegmentId
             );
             var segmentRank = SegmentRanks(segments, index, 1)[0];
-            AddSegment(newId, segmentRank, changes);
+            AddSegment(newId, segmentRank, null, changes);
             newParent = newId;
             rank = "a0";
         }
@@ -238,7 +298,7 @@ internal sealed class PlaylistEditor(
 
         entry.SegmentId = newParent;
         entry.Rank = rank;
-        changes.Add(new PlaylistEntryUpserted(entry.Id, newParent, entry.TrackId, rank));
+        changes.Add(Upsert(entry));
         DeleteEmptySegment(oldParent, changes);
         return "applied";
     }
@@ -251,9 +311,7 @@ internal sealed class PlaylistEditor(
             return status;
         }
         var entry = Entries[delete.EntryId];
-        entry.Deleted = true;
-        entry.Rank = null;
-        Playlist.EntryCount--;
+        TombstoneEntry(entry);
         changes.Add(new PlaylistEntryDeleted(entry.Id));
         DeleteEmptySegment(entry.SegmentId, changes);
         return "applied";
@@ -283,19 +341,23 @@ internal sealed class PlaylistEditor(
             .OrderBy(row => row.Rank, StringComparer.Ordinal)
             .ToList();
 
-    private void AddSegment(PlaylistSegmentId id, string rank, List<PlaylistChange> changes)
+    private void AddSegment(
+        PlaylistSegmentId id,
+        string rank,
+        string? description,
+        List<PlaylistChange> changes
+    )
     {
-        Segments.Add(
-            id,
-            new()
-            {
-                Id = id,
-                PlaylistId = Playlist.Id,
-                Rank = rank,
-            }
-        );
+        var segment = new PlaylistSegment
+        {
+            Id = id,
+            PlaylistId = Playlist.Id,
+            Description = description,
+            Rank = rank,
+        };
+        Segments.Add(id, segment);
         existingCreatedIds.Add(id.Value);
-        changes.Add(new PlaylistSegmentUpserted(id, rank));
+        changes.Add(Upsert(segment));
     }
 
     private void AddEntries(
@@ -308,31 +370,46 @@ internal sealed class PlaylistEditor(
         for (var index = 0; index < entries.Count; index++)
         {
             var input = entries[index];
-            Entries.Add(
-                input.EntryId,
-                new()
-                {
-                    Id = input.EntryId,
-                    PlaylistId = Playlist.Id,
-                    SegmentId = parent,
-                    TrackId = input.TrackId,
-                    Rank = ranks[index],
-                }
-            );
+            var entry = new PlaylistEntry
+            {
+                Id = input.EntryId,
+                PlaylistId = Playlist.Id,
+                SegmentId = parent,
+                TrackId = input.TrackId,
+                Description = input.Description,
+                Rank = ranks[index],
+            };
+            Entries.Add(entry.Id, entry);
             existingCreatedIds.Add(input.EntryId.Value);
-            changes.Add(
-                new PlaylistEntryUpserted(input.EntryId, parent, input.TrackId, ranks[index])
-            );
+            changes.Add(Upsert(entry));
         }
         Playlist.EntryCount += entries.Count;
+        Playlist.TrackCount += entries.Count(entry => entry.TrackId is not null);
     }
 
-    private void DeleteEmptySegment(PlaylistSegmentId parent, List<PlaylistChange> changes)
+    private void TombstoneEntry(PlaylistEntry entry)
     {
-        if (!Entries.Values.Any(row => row.SegmentId == parent && !row.Deleted))
+        entry.Deleted = true;
+        entry.Rank = null;
+        Playlist.EntryCount--;
+        if (entry.TrackId is not null)
         {
-            TombstoneSegment(parent, changes);
+            Playlist.TrackCount--;
         }
+    }
+
+    private bool DeleteEmptySegment(PlaylistSegmentId id, List<PlaylistChange> changes)
+    {
+        if (
+            Segments[id].Description is not null
+            || Entries.Values.Any(row => row.SegmentId == id && !row.Deleted)
+        )
+        {
+            return false;
+        }
+
+        TombstoneSegment(id, changes);
+        return true;
     }
 
     private void TombstoneSegment(PlaylistSegmentId id, List<PlaylistChange> changes)
@@ -353,7 +430,7 @@ internal sealed class PlaylistEditor(
             for (var i = 0; i < live.Count; i++)
             {
                 live[i].Rank = balanced[i];
-                changes.Add(new PlaylistSegmentUpserted(live[i].Id, balanced[i]));
+                changes.Add(Upsert(live[i]));
             }
             Publish("rebalance", changes);
             ranks = Allocate(siblings.Select(row => row.Rank!).ToList(), index, count);
@@ -377,9 +454,7 @@ internal sealed class PlaylistEditor(
             for (var i = 0; i < live.Count; i++)
             {
                 live[i].Rank = balanced[i];
-                changes.Add(
-                    new PlaylistEntryUpserted(live[i].Id, parent, live[i].TrackId, balanced[i])
-                );
+                changes.Add(Upsert(live[i]));
             }
             Publish("rebalance", changes);
             ranks = Allocate(siblings.Select(row => row.Rank!).ToList(), index, count);
@@ -389,6 +464,12 @@ internal sealed class PlaylistEditor(
 
     private void Publish(string kind, List<PlaylistChange> changes) =>
         Revisions.Add(new(++Playlist.Revision, kind, changes));
+
+    private static PlaylistSegmentUpserted Upsert(PlaylistSegment segment) =>
+        new(segment.Id, segment.Rank!, segment.Description);
+
+    private static PlaylistEntryUpserted Upsert(PlaylistEntry entry) =>
+        new(entry.Id, entry.SegmentId, entry.TrackId, entry.Rank!, entry.Description);
 
     private static string[] Allocate(List<string> ranks, int index, int count) =>
         PlaylistRanks.Between(

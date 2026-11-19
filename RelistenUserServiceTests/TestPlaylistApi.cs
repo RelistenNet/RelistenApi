@@ -30,7 +30,7 @@ namespace RelistenUserServiceTests;
 
 [TestFixture]
 [NonParallelizable]
-public sealed class TestPlaylistApi
+public sealed partial class TestPlaylistApi
 {
     private readonly PostgresIntegrationDatabase _database = new();
     private string _directory = "";
@@ -50,6 +50,12 @@ public sealed class TestPlaylistApi
             $"relisten-playlist-proof-{Guid.NewGuid():N}"
         );
         Directory.CreateDirectory(_directory);
+        _app = await StartApp();
+        _client = CreateClient(_app);
+    }
+
+    private async Task<WebApplication> StartApp()
+    {
         var builder = WebApplication.CreateBuilder(
             new WebApplicationOptions
             {
@@ -78,13 +84,19 @@ public sealed class TestPlaylistApi
             AuthenticationConstants.AccountCredentialScheme,
             options => options.ForwardDefaultSelector = _ => "proof"
         );
-        _app = AccountsApplication.Build(builder);
-        await AccountsApplication.InitializeAsync(_app, CancellationToken.None);
-        await _app.StartAsync();
-        _client = new HttpClient { BaseAddress = new Uri(_app.Urls.Single()) };
-        _client.DefaultRequestHeaders.Host = "accounts.relisten.net";
+        var app = AccountsApplication.Build(builder);
+        await AccountsApplication.InitializeAsync(app, CancellationToken.None);
+        await app.StartAsync();
+        return app;
+    }
+
+    private static HttpClient CreateClient(WebApplication app)
+    {
+        var client = new HttpClient { BaseAddress = new Uri(app.Urls.Single()) };
+        client.DefaultRequestHeaders.Host = "accounts.relisten.net";
         // Loopback stands in for the trusted ingress that terminates TLS.
-        _client.DefaultRequestHeaders.Add("X-Forwarded-Proto", "https");
+        client.DefaultRequestHeaders.Add("X-Forwarded-Proto", "https");
+        return client;
     }
 
     [SetUp]
@@ -292,6 +304,44 @@ public sealed class TestPlaylistApi
     }
 
     [Test]
+    public async Task Guarded_batches_reject_stale_edits_and_replay_committed_operations()
+    {
+        var created = await Create(1);
+        var original = await Snapshot(created.PlaylistId);
+        PlaylistBatchRequest Rename(string name) =>
+            new(1, [Op("update_metadata", new UpdatePlaylistMetadata(new(true, name)))])
+            {
+                ExpectedRevision = original.Revision,
+            };
+        var first = Rename("First edit");
+        var stale = Rename("Second edit");
+
+        var applied = await Apply(created.PlaylistId, first);
+        applied.Results.Single().Status.Should().Be("applied");
+
+        using var conflict = await Send(
+            HttpMethod.Post,
+            $"/v1/playlists/{created.PlaylistId}/operations:batch",
+            stale
+        );
+        await Problem(conflict, 409, "revision_conflict");
+        (await Apply(created.PlaylistId, first)).Should().BeEquivalentTo(applied);
+
+        var current = await Snapshot(created.PlaylistId);
+        current.Revision.Should().Be(applied.HeadRevision);
+        current.Metadata.Name.Should().Be("First edit");
+        var refreshed = await Apply(
+            created.PlaylistId,
+            stale with
+            {
+                ExpectedRevision = current.Revision,
+            }
+        );
+        refreshed.Results.Single().Status.Should().Be("applied");
+        (await Snapshot(created.PlaylistId)).Metadata.Name.Should().Be("Second edit");
+    }
+
+    [Test]
     public async Task Metadata_edits_with_replayed_inserts_preserve_structure_and_entry_count()
     {
         var create = await Create(2, 1);
@@ -322,6 +372,279 @@ public sealed class TestPlaylistApi
         library.Playlists.Single().EntryCount.Should().Be(5);
         library.Playlists.Single().Revision.Should().Be(3);
         (await Apply(id, batch)).Should().BeEquivalentTo(result);
+    }
+
+    [Test]
+    public async Task Guide_sync_preserves_text_order_and_prose_after_the_last_track_leaves()
+    {
+        var movedTrack = Entry() with { Description = "Listen at 2:00" };
+        var deletedTrack = Entry();
+        var targetTrack = Entry();
+        var intro = new PlaylistSegmentInput(PlaylistSegmentId.New(), [movedTrack], "Introduction");
+        var outro = new PlaylistSegmentInput(PlaylistSegmentId.New(), [deletedTrack], "Afterword");
+        var target = new PlaylistSegmentInput(PlaylistSegmentId.New(), [targetTrack]);
+        var create = NewPlaylist() with { Segments = [intro, outro, target] };
+        var id = create.PlaylistId;
+        var libraryBefore = await ReadResponse<FavoriteLibrarySnapshot>(
+            HttpMethod.Get,
+            "/v1/library/snapshot"
+        );
+        (await Send(HttpMethod.Post, "/v1/playlists", create))
+            .StatusCode.Should()
+            .Be(HttpStatusCode.Created);
+        var baseline = await Snapshot(id);
+
+        var block = new PlaylistEntryInput(PlaylistEntryId.New(), Description: "Between tracks");
+        var link = $"[Hear the transition](#entry={movedTrack.EntryId}&t=2:00)";
+        var interlude = PlaylistSegmentId.New();
+        var segmentEdit = Op(
+            "update_segment",
+            new UpdatePlaylistSegment(intro.SegmentId, new(true, "Start here"))
+        );
+        var entryEdit = Op(
+            "update_entry",
+            new UpdatePlaylistEntry(block.EntryId, new(true, $"  {link}  "))
+        );
+        var batch = new PlaylistBatchRequest(
+            1,
+            [
+                Op(
+                    "insert_segment",
+                    new InsertPlaylistSegment(interlude, [], Description: "Interlude")
+                ),
+                Op(
+                    "insert_entries",
+                    new InsertPlaylistEntries(
+                        target.SegmentId,
+                        [block],
+                        BeforeEntryId: targetTrack.EntryId
+                    )
+                ),
+                segmentEdit,
+                entryEdit,
+                Op(
+                    "move_entry",
+                    new MovePlaylistEntry(
+                        movedTrack.EntryId,
+                        new(SegmentId: target.SegmentId, AfterEntryId: block.EntryId)
+                    )
+                ),
+                Op("delete_entry", new DeletePlaylistEntry(deletedTrack.EntryId)),
+            ]
+        );
+        var applied = await Apply(id, batch);
+        applied
+            .Results.Select(result => result.Status)
+            .Should()
+            .OnlyContain(status => status == "applied");
+        var afterMove = await Snapshot(id);
+        afterMove
+            .Segments.Single(segment => segment.SegmentId == intro.SegmentId)
+            .Should()
+            .BeEquivalentTo(
+                new { Description = "Start here", Entries = Array.Empty<PlaylistEntrySnapshot>() }
+            );
+        afterMove
+            .Segments.Single(segment => segment.SegmentId == outro.SegmentId)
+            .Should()
+            .BeEquivalentTo(
+                new { Description = "Afterword", Entries = Array.Empty<PlaylistEntrySnapshot>() }
+            );
+        var ordered = afterMove
+            .Segments.Single(segment => segment.SegmentId == target.SegmentId)
+            .Entries;
+        ordered
+            .Select(entry => entry.EntryId)
+            .Should()
+            .Equal(block.EntryId, movedTrack.EntryId, targetTrack.EntryId);
+        ordered[0].TrackId.Should().BeNull();
+        ordered[0].Description.Should().Be(link);
+        ordered[1].Description.Should().Be("Listen at 2:00");
+
+        var replay = await Apply(id, new(1, [segmentEdit, entryEdit]));
+        replay.Results.Should().Equal(applied.Results[2], applied.Results[3]);
+        var changed = entryEdit with
+        {
+            Payload = new UpdatePlaylistEntry(block.EntryId, new(true, "Different text")),
+        };
+        await Problem(
+            await Send(
+                HttpMethod.Post,
+                $"/v1/playlists/{id}/operations:batch",
+                new PlaylistBatchRequest(1, [changed])
+            ),
+            409,
+            "idempotency_conflict"
+        );
+
+        await Apply(
+            id,
+            new(
+                1,
+                [
+                    Op(
+                        "update_segment",
+                        new UpdatePlaylistSegment(intro.SegmentId, new(true, null))
+                    ),
+                    Op(
+                        "update_entry",
+                        new UpdatePlaylistEntry(movedTrack.EntryId, new(true, null))
+                    ),
+                ]
+            )
+        );
+        var final = await Snapshot(id);
+        final
+            .Segments.Select(segment => segment.SegmentId)
+            .Should()
+            .Equal(outro.SegmentId, target.SegmentId, interlude);
+        var changes = await Changes(id, 1);
+        changes.Revisions[^2].Changes.Should().Equal(new PlaylistSegmentDeleted(intro.SegmentId));
+        ReplayStructure(baseline, changes)
+            .Should()
+            .BeEquivalentTo(final.Segments, options => options.WithStrictOrdering());
+
+        var library = await ReadResponse<FavoriteLibrarySnapshot>(
+            HttpMethod.Get,
+            "/v1/library/snapshot"
+        );
+        var summary = library.Playlists.Single();
+        summary.EntryCount.Should().Be(3);
+        summary.TrackCount.Should().Be(2);
+        var list = await ReadResponse<PlaylistList>(HttpMethod.Get, "/v1/playlists");
+        list.Playlists.Single().Should().BeEquivalentTo(summary);
+        var feed = await ReadResponse<FavoriteLibraryChanges>(
+            HttpMethod.Get,
+            $"/v1/library/changes?after={libraryBefore.NextCursor}"
+        );
+        feed.Changes.Last().Playlist.Should().BeEquivalentTo(summary);
+    }
+
+    [Test]
+    public async Task Segment_insert_retry_distinguishes_descriptions_from_anchors()
+    {
+        var create = await Create(1, 1, 1);
+        var left = create.Segments[0].SegmentId;
+        var middle = create.Segments[1].SegmentId;
+        var right = create.Segments[2].SegmentId;
+        var track = Entry();
+        // These are the same three strings in different fields of the same insert.
+        var insert = new InsertPlaylistSegment(
+            PlaylistSegmentId.New(),
+            [track with { Description = left.Value }],
+            AfterSegmentId: middle,
+            BeforeSegmentId: right
+        );
+        var operation = Op("insert_segment", insert);
+        var first = await Apply(create.PlaylistId, new(1, [operation]));
+        first.Results.Single().Status.Should().Be("applied");
+
+        var changed = operation with
+        {
+            Payload = insert with
+            {
+                Entries = [track],
+                AfterSegmentId = left,
+                BeforeSegmentId = middle,
+                Description = right.Value,
+            },
+        };
+        await Problem(
+            await Send(
+                HttpMethod.Post,
+                $"/v1/playlists/{create.PlaylistId}/operations:batch",
+                new PlaylistBatchRequest(1, [changed])
+            ),
+            409,
+            "idempotency_conflict"
+        );
+    }
+
+    [TestCase(null)]
+    [TestCase("  ")]
+    public async Task Clearing_a_text_block_refuses_the_batch_and_allows_a_corrected_retry(
+        string? text
+    )
+    {
+        var entry = new PlaylistEntryInput(PlaylistEntryId.New(), Description: "Text");
+        var segment = new PlaylistSegmentInput(PlaylistSegmentId.New(), [entry]);
+        var create = NewPlaylist() with { Segments = [segment] };
+        (await Send(HttpMethod.Post, "/v1/playlists", create))
+            .StatusCode.Should()
+            .Be(HttpStatusCode.Created);
+        var id = create.PlaylistId;
+        var rename = Op("update_metadata", new UpdatePlaylistMetadata(new(true, "Renamed")));
+        var update = Op("update_entry", new UpdatePlaylistEntry(entry.EntryId, new(true, text)));
+        await Problem(
+            await Send(
+                HttpMethod.Post,
+                $"/v1/playlists/{id}/operations:batch",
+                new PlaylistBatchRequest(1, [rename, update])
+            ),
+            422,
+            "invalid_playlist_operation"
+        );
+        (await Snapshot(id)).Revision.Should().Be(1);
+
+        var corrected = update with
+        {
+            Payload = new UpdatePlaylistEntry(entry.EntryId, new(true, "Replacement")),
+        };
+        var applied = await Apply(id, new(1, [rename, corrected]));
+        applied.Results.Select(result => result.Status).Should().Equal("applied", "applied");
+        (await Snapshot(id))
+            .Segments.Single()
+            .Entries.Single()
+            .Description.Should()
+            .Be("Replacement");
+    }
+
+    [Test]
+    public async Task Guide_quotas_check_the_final_state_and_count_normalized_utf8_bytes()
+    {
+        // Fifty descriptions of 2,000 two-byte characters exactly fill 200,000 UTF-8 bytes.
+        var longDescription = new string('é', 2_000);
+        var segments = Enumerable
+            .Range(0, 50)
+            .Select(_ => new PlaylistSegmentInput(PlaylistSegmentId.New(), [], longDescription))
+            .ToArray();
+        var create = NewPlaylist() with { Segments = segments };
+        (await Send(HttpMethod.Post, "/v1/playlists", create))
+            .StatusCode.Should()
+            .Be(HttpStatusCode.Created);
+        var id = create.PlaylistId;
+        var addition = Op(
+            "insert_segment",
+            new InsertPlaylistSegment(PlaylistSegmentId.New(), [], Description: "x")
+        );
+        await Problem(
+            await Send(
+                HttpMethod.Post,
+                $"/v1/playlists/{id}/operations:batch",
+                new PlaylistBatchRequest(1, [addition])
+            ),
+            422,
+            "quota_exceeded"
+        );
+        var result = await Apply(
+            id,
+            new(
+                1,
+                [addition, Op("delete_segment", new DeletePlaylistSegment(segments[0].SegmentId))]
+            )
+        );
+        result.Results.Select(row => row.Status).Should().Equal("applied", "applied");
+
+        var prose = Enumerable
+            .Range(0, 101)
+            .Select(_ => new PlaylistSegmentInput(PlaylistSegmentId.New(), [], "Text"))
+            .ToArray();
+        var tooMany = NewPlaylist() with { Segments = prose };
+        await Problem(await Send(HttpMethod.Post, "/v1/playlists", tooMany), 422, "quota_exceeded");
+        var exact = tooMany with { Segments = prose[..100] };
+        (await Send(HttpMethod.Post, "/v1/playlists", exact))
+            .StatusCode.Should()
+            .Be(HttpStatusCode.Created);
     }
 
     [Test]
@@ -773,6 +1096,78 @@ public sealed class TestPlaylistApi
         );
 
     private static PlaylistEntryInput Entry() => new(PlaylistEntryId.New(), Track);
+
+    private static PlaylistSegmentSnapshot[] ReplayStructure(
+        PlaylistSnapshot baseline,
+        PlaylistChanges changes
+    )
+    {
+        var segments = baseline.Segments.ToDictionary(
+            segment => segment.SegmentId,
+            segment => new PlaylistSegmentUpserted(
+                segment.SegmentId,
+                segment.Rank,
+                segment.Description
+            )
+        );
+        var entries = baseline
+            .Segments.SelectMany(segment =>
+                segment.Entries.Select(entry => new PlaylistEntryUpserted(
+                    entry.EntryId,
+                    segment.SegmentId,
+                    entry.TrackId,
+                    entry.Rank,
+                    entry.Description
+                ))
+            )
+            .ToDictionary(entry => entry.EntryId);
+
+        foreach (var change in changes.Revisions.SelectMany(revision => revision.Changes))
+        {
+            switch (change)
+            {
+                case PlaylistSegmentUpserted segment:
+                    segments[segment.SegmentId] = segment;
+                    break;
+                case PlaylistSegmentDeleted segment:
+                    segments.Remove(segment.SegmentId);
+                    foreach (
+                        var entry in entries
+                            .Values.Where(entry => entry.SegmentId == segment.SegmentId)
+                            .ToArray()
+                    )
+                    {
+                        entries.Remove(entry.EntryId);
+                    }
+                    break;
+                case PlaylistEntryUpserted entry:
+                    entries[entry.EntryId] = entry;
+                    break;
+                case PlaylistEntryDeleted entry:
+                    entries.Remove(entry.EntryId);
+                    break;
+            }
+        }
+
+        return segments
+            .Values.OrderBy(segment => segment.Rank, StringComparer.Ordinal)
+            .Select(segment => new PlaylistSegmentSnapshot(
+                segment.SegmentId,
+                segment.Rank,
+                entries
+                    .Values.Where(entry => entry.SegmentId == segment.SegmentId)
+                    .OrderBy(entry => entry.Rank, StringComparer.Ordinal)
+                    .Select(entry => new PlaylistEntrySnapshot(
+                        entry.EntryId,
+                        entry.TrackId,
+                        entry.Rank,
+                        entry.Description
+                    ))
+                    .ToArray(),
+                segment.Description
+            ))
+            .ToArray();
+    }
 
     private static PlaylistOperation Op(string type, PlaylistOperationPayload payload) =>
         new(PlaylistOperationId.New(), 0, type, payload);

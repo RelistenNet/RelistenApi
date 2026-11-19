@@ -1,7 +1,9 @@
 # Deliver playlists using v4 catalog identities
 
-Status: private-playlist API implemented and locally verified 2026-11-17;
-mobile integration and release qualification pending. Private-playlist contracts
+Status: private-playlist API implemented and locally verified 2026-11-17. Guide
+content and the sharing, following, copy and moderation API implemented and
+locally verified 2026-11-18, not yet deployed. Mobile integration of guides and
+sharing, the public web page, and release qualification are pending. Private-playlist contracts
 were frozen 2026-11-16. This plan owns
 the playlist contract and delivery work. It supersedes the playlist portions of
 the July 18 server architecture, server implementation, mobile architecture,
@@ -36,9 +38,20 @@ Existing unrelated catalog and account endpoints retain their own contracts.
 - [ ] Implement and locally verify private playlists through the real mobile/API path.
   - [x] (2026-11-17) Implement and locally verify the private User Service API,
     persistence, library summaries, history generation and recovery command.
-  - [ ] Integrate and qualify the mobile consumer against this API.
-- [ ] Qualify and release private playlists; record the build and environment.
+  - [x] (2026-11-17) Integrate the mobile consumer against this API. Milestones 1
+    and 2 of the
+    [mobile playlist plan](../../../../relisten-mobile/docs/plans/active/2026-11-16-local-first-playlists.md)
+    shipped by OTA to TestFlight 6055. The Android Auto list was cut
+    (Alec, 2026-11-18).
+- [ ] Qualify private playlists for internal TestFlight; record the build and
+  environment. External availability waits for account deletion, per the
+  [server roadmap](2026-11-18-server-roadmap.md).
+- [ ] Implement guide content: descriptions, text blocks and timestamp links.
+  - [x] (2026-11-18) Implement and locally verify the User Service API, storage
+    and Markdown refusal policy.
 - [ ] Implement publication, following and cloning with their public web consumer.
+  - [x] (2026-11-18) Implement and locally verify the User Service API, reports
+    and operator moderation. See [Playlist sharing API](../../api/playlist-sharing.md).
 - [ ] Implement collaboration after private editing has been exercised.
 
 ## Context and Orientation
@@ -63,8 +76,8 @@ models and duplicate HTTP membership lists are not needed.
 
 This plan describes intended behavior, not deployed capability. History, Timescale,
 Sonos, a generic sync engine, and a player replacement are not technical
-prerequisites. The existing delivery order puts history first; changing that
-release priority requires Alec's decision, not an invented code dependency.
+prerequisites. The [server roadmap](2026-11-18-server-roadmap.md) sets the
+order of this work relative to history, deletion and MCP.
 
 ## Interfaces and Dependencies
 
@@ -143,10 +156,12 @@ Use one documented lock order for owner quota, playlist, affected account-librar
 states, and command receipts. Cardinality changes serialize on the owner boundary
 before the playlist; affected account states lock in stable ID order. Apply this
 same order to creation, archive, cloning, and later deletion/member operations.
-Account deletion is not implemented yet (`User.LifecycleGeneration` exists but is
-unread), and private playlists do not wait for it. When deletion lands, it adds its
-fence to this lock order and a purge handler for playlist rows; keep playlist
-writes behind one entrypoint so that fence has a single place to attach.
+Account deletion's fence is `PlaylistAccountLock`: each write first takes the
+actor's `identity.users` row `FOR SHARE` and requires an active account, ahead of
+the library state and playlist locks. Purge takes that row `FOR UPDATE`, so a write
+either commits first or sees the account gone. The
+[contracts](2026-11-16-v4-playlist-contracts.md#transactions-and-locks) give the
+full order.
 
 Authorize the entire request before mutation. Preflight malformed envelopes,
 unsupported versions, reused IDs with different payloads, and aggregate quota
@@ -228,8 +243,9 @@ Hydration is best-effort and separate from sync: a failed or partial resolve nev
 blocks applying a playlist revision and never deletes authored entries.
 
 Keep authored track references when the catalog cannot currently resolve them.
-Member views show resolver-reported unavailable entries as unavailable; public
-projections (delivery 2) omit those entries and empty rendered segments. Do not
+Member and public views both show resolver-reported unavailable entries as
+unavailable. Public reads and copies (delivery 3) return authored structure too,
+with no server-side filtering (Alec, 2026-11-18). Do not
 infer licensing removal from missing metadata or mobile browse soft-pruning. The
 current orphan filter is not a comprehensive licensing/stream-authorization system.
 Label precise reasons only when an authoritative catalog state supports them.
@@ -238,9 +254,6 @@ The July global `availability_revision` does not exist. A playlist content revis
 never validates catalog metadata or availability; those come only from the catalog
 resolver. Mobile resolves only missing tracks and re-resolves on playback
 failure (decision 3).
-Server-side public reads and clone (delivery 2) need current availability without
-reading catalog schemas; choose between a server-to-catalog resolve call and
-client/web-side filtering when that delivery is designed.
 
 Playlist rows store typed track references with no foreign key into catalog
 schemas, so new authored references survive later catalog absence. Neither missing
@@ -302,23 +315,190 @@ coordinator, editor and player integration. Reuse existing catalog repositories
 and live wrappers. Deliver the real API-to-mobile path before adding publication
 or dormant collaboration schema.
 
-### 2. Publish, follow and clone
+### 2. Guide content
 
-Add stable public codes and publication, anonymous snapshot, follow/unfollow and
-idempotent clone routes. A private playlist is the default. Public reads return
-the same 404 for missing, private and archived playlists. A public URL is not a
-secret. Follow state binds to playlist ID and survives unpublish/republish; no
-per-edit follower fan-out. Clone copies the current available order into a private
-aggregate with fresh segment/entry IDs, never permissions or history.
+Build what [Playlist guide content](../../design/2026-11-18-playlist-guide-content.md)
+specifies. It is the source of truth for behavior; this section is the order of
+work. Playlists are pre-launch, so revise the frozen
+[contracts](2026-11-16-v4-playlist-contracts.md) in place and record each change
+there.
 
-Build the minimal public web page using the same hydrated projection. Keep public
-responses free of private structure, receipts and actor data. Archive hides all
-normal reads but preserves publication/follows; unarchive restores them. Account
-deletion purges owned playlists and leaves an unavailable follow record without a
-foreign key to the deleted aggregate. Add no credentialed web editing facade
-without a consuming screen and explicit browser policy.
+**Storage.** One migration adds nullable `description` to `playlist_segments` and
+`playlist_entries`, makes `track_id` nullable, and replaces
+`ck_playlist_entries_track` with a check that requires a valid `track_id` or a
+nonblank description. Make `TrackId` nullable in `PlaylistEntry` and the
+contracts, and fix every caller the compiler flags. Also review array
+assumptions the compiler can't flag, such as code that takes a segment's last
+entry.
 
-### 3. Collaboration
+**Create and operations.** The create command and the operations share the
+same shapes:
+
+- An entry input becomes `{entry_id, track_id?, description?}`. An entry with no
+  `track_id` is a text block and needs a description.
+- A segment in the create command or in `insert_segment` takes an optional
+  `description`, and may have zero entries when that description is present.
+  That makes a prose-only segment. Mobile sends unowned playlists through the
+  create command when the listener signs in, so the create command must accept
+  everything the operations can produce.
+- Add `update_segment {segment_id, description}` and
+  `update_entry {entry_id, description}`, using `OptionalText`. `null` clears the
+  description of a segment or track entry. It is `invalid_playlist_operation` on
+  a text block, which is removed with `delete_entry`.
+- `delete_entry` and `move_entry` no longer tombstone a segment that still has a
+  description. A segment left with neither entries nor a description is
+  tombstoned in the same operation, and the change feed emits `segment_deleted`
+  for it, not an upsert. That includes `update_segment` clearing the
+  description of an empty segment.
+- **Limits.** A description is at most 2,000 characters after trimming. A
+  playlist has at most 100 prose-only segments. All of a playlist's
+  descriptions together are at most 200 KB of UTF-8. Mobile enforces the same
+  limits locally. The 2 MiB create request limit applies to encoded JSON.
+  At the combined entry and description limits, heavy JSON escaping can make
+  a create exceed the request limit.
+
+**Everywhere else.**
+- **Feeds.** Snapshots carry descriptions and text entries. In the change feed,
+  `segment_upserted` and `entry_upserted` gain `description`, and `track_id`
+  may be null. A description edit emits the matching upsert, except when it
+  removes the segment.
+- **Hashes.** `PlaylistHasher` adds description lines only when a description
+  is present, so every track-only create and insert keeps its exact current
+  bytes. A request committed before rollout whose response was lost still
+  replays. The new lines are:
+  - a create segment: `S:<segment_id>|<entry count>`, then `V:<description>`
+    when present;
+  - `insert_segment`: a `segment_description:<JSON string>` line after its
+    existing field lines, only when a description is present. The distinct tag
+    prevents collisions between entry descriptions, anchors and segment
+    descriptions. Omitting the line preserves track-only hashes;
+  - an entry element: `entry_id|track_id` as today, `entry_id|N` for a text
+    block, then `V:<description>` when present. This applies to creates,
+    `insert_segment` and `insert_entries`.
+
+  The two update operations use the existing field encoding: `A` for absent, `N`
+  for null, `V:` for a value. Add fixed hash vectors for every changed shape,
+  plus one proving that an old track-only create hashes the same.
+- **Counts.** Text blocks count toward the entry quota. The library summary's
+  track count excludes them.
+
+**Order with mobile.** TestFlight 6055 already syncs playlists, and its client
+writes every entry's track into a required Realm string. A background sync of
+one text entry from an updated device would fail there. So:
+1. Ship the mobile build that reads text entries.
+2. Raise the minimum OTA version so 6055 updates.
+3. Deploy the User Service build that accepts guide writes.
+
+**Tests.** The rollout checks in the design doc, plus:
+- receipt replay for both new operations;
+- the fixed hash vectors;
+- a fresh snapshot compared with a device that pulled a delete, a move of the
+  last entry, and a description clear.
+
+### 3. Publish, follow and clone
+
+Build what [Playlist sharing](../../design/2026-11-18-playlist-sharing.md)
+specifies, including how public guides show descriptions and text blocks
+([Playlist guide content](../../design/2026-11-18-playlist-guide-content.md#public-guides)).
+This section is the order of work and the constraints that come from the
+existing code.
+
+**Prerequisites.** [Account deletion](2026-11-18-account-deletion.md) must ship
+before any playlist can be public. Reporting and takedown ship first in this
+delivery:
+
+- A signed-in `POST` reports a public playlist with a short reason. A report
+  only stores a row for an operator to review. It never changes the playlist,
+  however many reports arrive. Allow one open report per account and playlist,
+  and rate-limit reports per account. Anonymous reporting waits until it is
+  needed.
+- Only an operator can take a playlist down or lift a takedown, through a
+  command like the ingestion worker's operator commands. There is no admin UI.
+- The owner's snapshot and library summary carry a `taken_down` flag, so mobile
+  can explain why the playlist can't be shared.
+
+**Publication.**
+- An owner-only publish/unpublish command assigns a random, unguessable
+  `public_code` on first publish and reuses it after that. It is unguessable but
+  not a secret once shared.
+- A private playlist is the default.
+- A takedown is its own state. It blocks public reads, follows, copies and
+  republishing until an operator lifts it.
+
+**Public reads.**
+- An anonymous snapshot endpoint, `GET /v1/public-playlists/{public_code}`,
+  returns the same `404` for missing, private, archived and taken-down
+  playlists.
+- It returns the authored structure with no catalog filtering. Readers' apps
+  check tracks through the catalog resolver, as for their own playlists.
+- Public responses carry no private structure, receipts or actor data. They
+  do name the owner as `owner {id, username}`; both are already public.
+- **Caching.** Send `CDN-Cache-Control: max-age=60` so Cloudflare holds the
+  snapshot for a minute, and `Cache-Control: no-cache` so browsers and apps
+  always revalidate. Nothing is purged. An edit, unpublish, archive, takedown or
+  owner deletion reaches every reader within 60 seconds. `PrivateNoStoreMiddleware`
+  overwrites cache headers on `/v1`, so exempt only a successful `200` from this
+  endpoint. Every `404` and every authenticated response stays `no-store`.
+
+**Follow.**
+- One subscription per account and playlist, bound to the playlist ID, with no
+  per-edit fan-out. An account can follow at most 500 playlists.
+- It survives unpublish, republish, archive and takedown. It also survives the
+  owner's account deletion, which turns it into an unavailable follow record.
+- Store follows in `user_data.playlist_follows (user_id, playlist_id,
+  created_at)`, unique on the pair, with an index on `playlist_id`. The
+  `playlist_id` has no foreign key, so a follow outlives its playlist.
+- **Membership.** The follower's library feed carries membership as ordinary
+  changes, `playlist_followed` and `playlist_unfollowed`, written when the
+  follower acts and committed with the page cursor like any other change. An
+  owner's edit writes nothing for followers. A library snapshot lists every
+  follow. A snapshot, an expired cursor or a new `history_generation` replaces
+  the device's follow list.
+- **Heads.** A library snapshot, and the last page of a changes pull, also carry
+  `followed_playlists`. This is the current head of every followed playlist,
+  computed at read time with one left join from follows to playlists. Its cost
+  depends on how many playlists the listener follows, at most 500, never on how
+  many followers a playlist has. Heads update the metadata of follows the device
+  already has. They never add or remove a follow. If the pull stops before the
+  last page, the device keeps the heads from its previous pull.
+  - A public head has the playlist ID, `public_code`, name, `owner {id,
+    username}` and revision.
+  - Any other head, including one whose playlist is gone, has only the playlist
+    ID and `available: false`. An unpublished playlist's later title, edits and
+    owner aren't visible to its followers.
+- Mobile fetches a followed playlist's public snapshot when the head's revision
+  differs from the one it stored, or when the generation changed. It never polls
+  otherwise.
+- Archive hides all normal reads but keeps publication and follows; unarchive
+  restores them.
+
+**Copy.**
+- An idempotent command builds a private playlist from one public snapshot, with
+  fresh segment and entry IDs. It never copies permissions or history.
+- The client supplies the command ID and persists it until it knows the
+  outcome. A retry with the same ID returns the original copy, even after a
+  restart, or after the source has gone private or been taken down. The receipt
+  check happens before the source is read.
+- It rewrites timestamp links by replacing each exact `#entry=<old-id>&t=`
+  prefix with the new ID, as a plain text replace. Bare IDs stay as they are.
+- It counts against the recipient's playlist and entry quotas. Every copied
+  entry counts, including text blocks and unavailable tracks.
+- It copies every entry, including currently unavailable tracks, and makes no
+  catalog call.
+
+**Account deletion.** This delivery adds purge steps for reports and follows.
+Deleting a follower removes their follows. Deleting an owner leaves other
+accounts' follows of that owner's playlists in place, and their heads read as
+unavailable. The deletion schema test must cover both tables.
+
+**Web.** The relisten.net page is built separately in `relisten-web`. This plan
+only provides the public snapshot it reads.
+
+**Tests.** The rollout checks in the sharing design doc, plus a library pull
+whose first page has a follow and whose second page has the unfollow, and the
+unchanged poll measured at 500 follows.
+
+### 4. Collaboration
 
 Add viewer/editor/manager roles and separate one-time collaborator invitations.
 Owner alone archives; editors change content; managers also publish and manage
@@ -334,6 +514,13 @@ pending operations and their batch to the grant under which they were authored.
 Compare that grant with the current membership on the server, so removal then
 re-invitation cannot silently upload intent from the prior grant. Freeze how a
 client acknowledges/discards that old branch before resuming under the new grant.
+Before implementing this section, freeze that transition: which response
+identifies edits made under the old grant, what the user can recover or discard,
+and when edits under the new grant may start syncing.
+A member's library learns about other members' edits the same way a follower
+does, from heads computed when the member syncs. Library changes for other
+members are written only when membership changes, not on every edit. Amend the
+contracts' note on locking other members' library states to match.
 Archive is temporary unavailability, not revocation: preserve pending edits and
 resume after unarchive. Demotion refreshes permissions without pretending all
 access was revoked. Only explicit acknowledgement of permanent revocation discards
@@ -452,6 +639,14 @@ qualification separately. No deployment or publication is authorized by this pla
 
 ## Decision Log
 
+- 2026-11-18, guide content server contract: add segment and entry Markdown
+  descriptions, text blocks, and description updates at version 1. Keep
+  `entry_count` for all entries and add `track_count` to summaries for playback
+  counts. Apply the description byte limit to all live descriptions, including
+  playlist metadata, which retains its existing 1,000-character limit. Deploy
+  guide writes after supported clients can read text entries.
+  The [private playlist contract](2026-11-16-v4-playlist-contracts.md) records
+  the wire changes and receipt encoding.
 - 2026-11-17, implementation under Alec's authorization: complete the unspecified
   private-contract details without changing its product scope. Names and
   descriptions are trimmed and NFC-normalized before storage, equality or hashing;
@@ -516,6 +711,14 @@ qualification separately. No deployment or publication is authorized by this pla
 - 2026-11-16, Alec: decision 3 follows favorites — hydrate only missing tracks, no
   proactive re-check; re-resolve a track when its playback fails. Removals are
   very rare.
+- 2026-11-18, Alec: public reads and copies don't filter by catalog
+  availability. The User Service keeps its rule of never reading catalog
+  schemas, and clients mark unavailable tracks through the resolver.
+- 2026-11-18, Alec: guide content (descriptions, text blocks, timestamp links)
+  and sharing have their own design docs, linked from sections 2 and 3. Guide
+  content becomes section 2, ahead of sharing. Account deletion
+  now has its own plan and must ship before public playlists. Plays record
+  `playlist_uuid` and `playlist_entry_uuid` under the cloud play history plan.
 
 ## Outcomes & Retrospective
 

@@ -28,6 +28,21 @@ public sealed class HostBoundaryMiddleware(
     {
         var path = request.Path;
         var actual = request.Host;
+        var mcpPath =
+            path == "/mcp"
+            || path == "/.well-known/oauth-protected-resource"
+            || path == "/.well-known/oauth-protected-resource/mcp";
+        var mcpHost =
+            runtime.Mcp is { } mcp && Matches(actual, HostString.FromUriComponent(mcp.Resource));
+        if (
+            mcpHost
+            || path.StartsWithSegments("/mcp")
+            || path.StartsWithSegments("/.well-known/oauth-protected-resource")
+        )
+        {
+            return mcpPath && mcpHost;
+        }
+
         if (BrowserRouteBoundary.CanRelay(path))
         {
             return MatchesAccountsOrWeb(actual);

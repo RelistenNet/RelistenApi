@@ -23,6 +23,7 @@ public sealed record AccountsRuntimeConfiguration(
     public IReadOnlyList<string> WebOrigins => BrowserOrigins.Origins;
 
     public bool IsLocalDevelopment { get; init; }
+    public McpConfiguration? Mcp { get; init; }
 
     public static AccountsRuntimeConfiguration Create(
         AccountsOptions options,
@@ -119,6 +120,7 @@ public sealed record AccountsRuntimeConfiguration(
         return new AccountsRuntimeConfiguration(options, issuer, trustedProxyNetworks)
         {
             IsLocalDevelopment = isLocalDevelopmentProfile,
+            Mcp = McpConfiguration.Create(options, environment),
         };
     }
 

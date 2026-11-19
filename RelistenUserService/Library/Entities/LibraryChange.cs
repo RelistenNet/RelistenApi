@@ -9,6 +9,7 @@ public sealed class LibraryChange
     public FavoriteId? FavoriteId { get; set; }
     public string? CatalogType { get; set; }
     public string? CatalogId { get; set; }
+    public PlaylistId? FollowedPlaylistId { get; set; }
     public string? PlaylistJson { get; set; }
     public DateTimeOffset ChangedAt { get; set; }
 }

@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
@@ -65,10 +64,16 @@ public static class AuthenticationServiceCollectionExtensions
         services.Configure<ForwardedHeadersOptions>(options =>
         {
             options.ForwardedHeaders =
-                ForwardedHeaders.XForwardedHost | ForwardedHeaders.XForwardedProto;
+                ForwardedHeaders.XForwardedHost
+                | ForwardedHeaders.XForwardedProto
+                | (runtime.Mcp is null ? ForwardedHeaders.None : ForwardedHeaders.XForwardedFor);
             options.ForwardLimit = 1;
             options.AllowedHosts.Add(new HostString(runtime.Options.AuthHost).Host);
             options.AllowedHosts.Add(new HostString(runtime.Options.AccountsHost).Host);
+            if (runtime.Mcp is { } mcp)
+            {
+                options.AllowedHosts.Add(mcp.Resource.Host);
+            }
             foreach (var origin in runtime.WebOrigins.Select(value => new Uri(value)))
             {
                 options.AllowedHosts.Add(origin.Host);
@@ -114,7 +119,12 @@ public static class AuthenticationServiceCollectionExtensions
                     .UseDbContext<AccountsDbContext>()
                     .ReplaceDefaultEntities<Guid>()
             )
-            .AddServer(options => ConfigureServer(options, environment, runtime))
+            .AddServer(options =>
+            {
+                ConfigureServer(options, environment, runtime);
+                OAuthIssuance.Configure(options);
+                McpOAuth.Configure(options, runtime.Mcp);
+            })
             .AddValidation(options =>
             {
                 options.UseLocalServer();
@@ -220,11 +230,15 @@ public static class AuthenticationServiceCollectionExtensions
         services.AddScoped<UsernameCommandService>();
         services.AddScoped<ExternalIdentityCompletionService>();
         services.AddScoped<NativePrincipalFactory>();
+        services.AddScoped<McpConsent>();
+        services.AddScoped<McpAccountAuthorization>();
         services.AddSingleton<WebBootstrapPrincipalFactory>();
         services.AddScoped<FavoriteMutationService>();
         services.AddScoped<RelistenUserService.Playlists.PlaylistWriteService>();
+        services.AddScoped<RelistenUserService.Playlists.PlaylistSharingService>();
         services.AddScoped<RelistenUserService.Playlists.PlaylistReadService>();
         services.AddScoped<RelistenUserService.Playlists.PlaylistHttpFilter>();
+        services.AddScoped<RelistenUserService.History.PlayHistoryUploads>();
         services.AddScoped<LibraryStateStore>();
         services.AddScoped<LibraryReadService>();
         services.AddSingleton<LibraryCursorProtector>();
@@ -392,36 +406,12 @@ public static class AuthenticationServiceCollectionExtensions
                     apple
                         .SetClientId(runtime.Options.Apple.ClientId)
                         .SetTeamId(runtime.Options.Apple.TeamId)
-                        .SetSigningKey(LoadAppleSigningKey(runtime.Options.Apple))
+                        .SetSigningKey(AppleSigningKey.Load(runtime.Options.Apple))
                         .SetRegistrationId(AuthenticationConstants.AppleProvider)
                         .SetRedirectUri(AuthenticationConstants.AppleCallbackPath)
                         .AddScopes(Scopes.Email)
                 );
             }
-        }
-    }
-
-    private static ECDsaSecurityKey LoadAppleSigningKey(AppleProviderOptions options)
-    {
-        if (!File.Exists(options.PrivateKeyPath))
-        {
-            throw new InvalidOperationException(
-                $"The Apple private key file '{options.PrivateKeyPath}' does not exist."
-            );
-        }
-
-        var algorithm = ECDsa.Create();
-        try
-        {
-            // Apple's .p8 is a PEM-encoded PKCS#8 key. Importing it directly keeps the
-            // provider credential out of certificate stores and the macOS login Keychain.
-            algorithm.ImportFromPem(File.ReadAllText(options.PrivateKeyPath));
-            return new ECDsaSecurityKey(algorithm) { KeyId = options.KeyId };
-        }
-        catch
-        {
-            algorithm.Dispose();
-            throw;
         }
     }
 

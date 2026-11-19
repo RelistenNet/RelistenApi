@@ -16,9 +16,19 @@
 
   <ItemGroup>
     <ProjectReference Include="..\RelistenUserService\RelistenUserService.csproj" />
+    <ProjectReference Include="../RelistenIngestionWorker/RelistenIngestionWorker.csproj" />
   </ItemGroup>
   <ItemGroup>
     <None Update="Fixtures/pre-typed-accounts.sql" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures/playlists/ranks.json" CopyToOutputDirectory="PreserveNewest" />
+    <None
+      Update="Fixtures/playlists/guide-markdown-vectors.json"
+      CopyToOutputDirectory="PreserveNewest"
+    />
+    <None
+      Include="../local-dev/seed/schema.sql"
+      Link="Fixtures/catalog-schema.sql"
+      CopyToOutputDirectory="PreserveNewest"
+    />
   </ItemGroup>
 </Project>

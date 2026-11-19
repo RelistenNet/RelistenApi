@@ -28,7 +28,7 @@ public sealed class CatalogPopularityMetadataReader(PopularityRefreshRequest ref
         refresh.Require(PopularityPopulationKind.Artist);
         var rows = await session.Connection.QueryAsync<StoredPopularity>(
             session.Command(
-                "SELECT * FROM artist_popularity WHERE uuid=ANY(@ids) AND momentum_score IS NOT NULL",
+                $"SELECT {StoredPopularity.ReadColumns} FROM artist_popularity p WHERE p.uuid=ANY(@ids) AND {StoredPopularity.MetadataFilter}",
                 new { ids = artists.Select(artist => artist.uuid).ToArray() },
                 cancellationToken
             )
@@ -57,11 +57,11 @@ public sealed class CatalogPopularityMetadataReader(PopularityRefreshRequest ref
         }
         var rows = await session.Connection.QueryAsync<StoredPopularity>(
             session.Command(
-                """
-                SELECT p.* FROM year_popularity p
+                $"""
+                SELECT {StoredPopularity.ReadColumns} FROM year_popularity p
                 JOIN years y ON y.uuid=p.uuid JOIN artists a ON a.id=y.artist_id
                 WHERE NOT p.is_global AND p.uuid=ANY(@ids)
-                  AND p.artist_uuid=a.uuid AND p.momentum_score IS NOT NULL
+                  AND p.artist_uuid=a.uuid AND {StoredPopularity.MetadataFilter}
                 """,
                 new { ids = years.Select(year => year.uuid).ToArray() },
                 cancellationToken
