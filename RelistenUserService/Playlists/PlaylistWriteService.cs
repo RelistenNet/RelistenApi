@@ -140,22 +140,16 @@ public sealed partial class PlaylistWriteService(
         return playlist;
     }
 
-    /// <param name="expectedRevision">
-    /// Refuses the batch when the playlist has moved past this revision. The
-    /// mobile outbox leaves it null and rebases instead; a caller that edits what
-    /// it last read, such as the MCP edit tool, passes it.
-    /// </param>
     public async Task<PlaylistBatchResponse> ApplyAsync(
         UserId actor,
         PlaylistId id,
         PlaylistBatchRequest request,
         CancellationToken cancellationToken,
-        long? expectedRevision = null,
         bool replayWholeBatch = false
     )
     {
         request = PlaylistValidation.Normalize(request);
-        var hashes = PlaylistHasher.ReceiptHashes(id, request, expectedRevision, replayWholeBatch);
+        var hashes = PlaylistHasher.ReceiptHashes(id, request, replayWholeBatch);
         var createdIds = request.Operations.SelectMany(PlaylistValidation.CreatedIds).ToArray();
         await using var transaction = await dbContext.Database.BeginTransactionAsync(
             cancellationToken
@@ -181,7 +175,7 @@ public sealed partial class PlaylistWriteService(
         // that already applied replays instead of conflicting with its own result.
         // A batch that replays some operations and adds others is a new edit, so it
         // is held to the expected revision like any other.
-        if (expectedRevision is { } expected && playlist.Revision != expected)
+        if (request.ExpectedRevision is { } expected && playlist.Revision != expected)
         {
             throw new PlaylistException(
                 409,

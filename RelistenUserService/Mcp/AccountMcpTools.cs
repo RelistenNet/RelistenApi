@@ -248,9 +248,8 @@ internal sealed class AccountMcpTools(
                 return await writes.ApplyAsync(
                     actor,
                     playlist,
-                    new(1, operations),
+                    new(1, operations) { ExpectedRevision = expected_revision },
                     cancellationToken,
-                    expected_revision,
                     replayWholeBatch: idempotency_key is not null
                 );
             }

@@ -377,6 +377,14 @@ device must replace its base by snapshot even though the revisions compare equal
 diagnostic only. It records the revision the client had when it authored the
 operation, and the server never rejects or reorders by it.
 
+A client editing the current snapshot can also send `expected_revision` as a
+non-negative integer at the top level of the batch. The server checks it under the
+playlist write lock before applying new operations. If the playlist has moved,
+the request returns `409 revision_conflict` and applies nothing. Refetch the
+snapshot before deciding whether to reapply the edit. A batch consisting entirely
+of matching receipts still replays after the revision changes. Omitting
+`expected_revision` keeps the existing behavior for clients with an outbox.
+
 Response `200`, one result per operation in request order:
 
 ```json
@@ -395,8 +403,8 @@ Response `200`, one result per operation in request order:
 - `head_revision` is the playlist's head after the request. It may exceed every
   result `revision` because of rebalances or other devices' edits. For a batch made
   entirely of replays, it is the current head.
-- Results never carry structure. Clients learn the canonical state by pulling
-  changes.
+- The response carries operation results. Fetch the snapshot for the current
+  structure or pull changes from a known revision.
 
 Whole-batch failures apply nothing:
 
@@ -404,6 +412,7 @@ Whole-batch failures apply nothing:
 | --- | --- | --- |
 | 404 | `playlist_not_found` | Missing or not accessible. |
 | 409 | `playlist_archived` | The playlist is archived. Every operation type is refused, including `update_metadata`. Replays are still answered (see Transactions). |
+| 409 | `revision_conflict` | The batch contains new operations and `expected_revision` differs from the current playlist revision. |
 | 409 | `idempotency_conflict` | An `operation_id` was used before with a different payload, playlist or account. Body lists `conflicting_operation_ids`. |
 | 422 | `invalid_contract_version` | Unsupported version. |
 | 422 | `invalid_playlist_operation` | Malformed envelope or payload, such as a wrong prefix, an unknown type or field, empty `entries`, or a duplicate `operation_id` or created ID within the request. |

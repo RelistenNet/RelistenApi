@@ -62,7 +62,12 @@ public sealed record ArchivePlaylistRequest(
 public sealed record PlaylistBatchRequest(
     int ContractVersion,
     IReadOnlyList<PlaylistOperation> Operations
-);
+)
+{
+    /// <summary>Requires this playlist revision before applying any new operations.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public long? ExpectedRevision { get; init; }
+}
 
 // The discriminator and typed payload are read together; arbitrary JSON never reaches the domain.
 [JsonConverter(typeof(PlaylistOperationConverter))]

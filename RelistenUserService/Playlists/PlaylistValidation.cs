@@ -71,6 +71,10 @@ public static class PlaylistValidation
     public static PlaylistBatchRequest Normalize(PlaylistBatchRequest request)
     {
         Version(request.ContractVersion);
+        Require(
+            request.ExpectedRevision is null or >= 0,
+            "expected_revision must be non-negative."
+        );
         Require(request.Operations is { Count: > 0 }, "operations must contain at least one item.");
         if (request.Operations.Count > MaximumOperations)
         {

@@ -14,7 +14,6 @@ public static class PlaylistHasher
     internal static Dictionary<string, byte[]> ReceiptHashes(
         PlaylistId playlist,
         PlaylistBatchRequest request,
-        long? expectedRevision,
         bool replayWholeBatch
     )
     {
@@ -32,7 +31,7 @@ public static class PlaylistHasher
         // the whole edit's hash so even that first receipt rejects a shorter, longer or
         // reordered edit. Mobile can still replay arbitrary subsets of its operations.
         var lines = Header("edit-batch", request.ContractVersion, playlist, "edit");
-        Value(lines, expectedRevision);
+        Value(lines, request.ExpectedRevision);
         foreach (var operation in operations)
         {
             var id = operation.OperationId.Value;

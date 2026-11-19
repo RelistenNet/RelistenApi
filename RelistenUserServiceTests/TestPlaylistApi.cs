@@ -304,6 +304,44 @@ public sealed partial class TestPlaylistApi
     }
 
     [Test]
+    public async Task Guarded_batches_reject_stale_edits_and_replay_committed_operations()
+    {
+        var created = await Create(1);
+        var original = await Snapshot(created.PlaylistId);
+        PlaylistBatchRequest Rename(string name) =>
+            new(1, [Op("update_metadata", new UpdatePlaylistMetadata(new(true, name)))])
+            {
+                ExpectedRevision = original.Revision,
+            };
+        var first = Rename("First edit");
+        var stale = Rename("Second edit");
+
+        var applied = await Apply(created.PlaylistId, first);
+        applied.Results.Single().Status.Should().Be("applied");
+
+        using var conflict = await Send(
+            HttpMethod.Post,
+            $"/v1/playlists/{created.PlaylistId}/operations:batch",
+            stale
+        );
+        await Problem(conflict, 409, "revision_conflict");
+        (await Apply(created.PlaylistId, first)).Should().BeEquivalentTo(applied);
+
+        var current = await Snapshot(created.PlaylistId);
+        current.Revision.Should().Be(applied.HeadRevision);
+        current.Metadata.Name.Should().Be("First edit");
+        var refreshed = await Apply(
+            created.PlaylistId,
+            stale with
+            {
+                ExpectedRevision = current.Revision,
+            }
+        );
+        refreshed.Results.Single().Status.Should().Be("applied");
+        (await Snapshot(created.PlaylistId)).Metadata.Name.Should().Be("Second edit");
+    }
+
+    [Test]
     public async Task Metadata_edits_with_replayed_inserts_preserve_structure_and_entry_count()
     {
         var create = await Create(2, 1);
