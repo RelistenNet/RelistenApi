@@ -95,7 +95,7 @@ SELECT add_job(
 -- would queue behind it, so fail after five seconds instead. The migration runs
 -- in one transaction: a timeout rolls back everything above and records
 -- nothing. The operator reruns `--migrate`, and an API pod starting meanwhile
--- retries it too (docs/popularity/README.md, step 2).
+-- retries it too (see the yearly window rollout in docs/popularity/README.md).
 SET LOCAL lock_timeout = '5s';
 
 -- NULL means the yearly window has not been published.

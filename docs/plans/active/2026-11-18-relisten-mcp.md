@@ -448,15 +448,16 @@ caching, allow long streamed responses, and add MCP rate limits for that host.
 
 ### Order and checks
 
-1. Apply and backfill PR 1's rollups, then deploy its catalog and popularity
-   images. Ship account deletion and guide content before the MCP host goes live.
-2. Before the PR 2 catalog image, prebuild and verify the review-search index.
-   Test the User Service locally with the MCP Inspector and ChatGPT developer
-   mode against a temporary public HTTPS URL.
-3. Provision the shared review-search Secret and the User Service write-ID
-   Secret. Roll the Catalog API with the review-search Secret before the User
-   Service starts serving MCP. Add the Cloudflare DNS
-   and cache and rate-limit rules, then deploy PR 3's User Service manifests.
+1. Provision the shared review-search Secret and the User Service write-ID
+   Secret before applying manifests that reference them.
+2. Follow the [yearly popularity rollout](../../popularity/README.md#yearly-window-rollout).
+   Deploy the Catalog compatibility build before migrating, then backfill and
+   verify both rollups before deploying the final Catalog image. Roll the
+   Catalog API with the review-search Secret before the User Service.
+3. Test the User Service locally with the MCP Inspector and ChatGPT developer
+   mode against a temporary public HTTPS URL. Ship account deletion and guide
+   content before the MCP host goes live. Add the MCP ingress and the
+   Cloudflare DNS, cache, and rate-limit rules after verifying account deletion.
    The configured hostname exposes anonymous and signed-in tools together.
 4. In ChatGPT developer mode, call an anonymous catalog tool, then test
    sign-in, consent, a library read, step-up to `library.write`, and playlist

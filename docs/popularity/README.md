@@ -149,7 +149,13 @@ fails, the job fails for retry and the previous publication stays in place.
 
 Run these steps in order. Run SQL on the primary unless a step says otherwise.
 
-1. Check ownership. Timescale runs each job as the role that registers it and
+1. Deploy the compatibility Catalog build before migrating. Run the `api`
+   workflow with `deploy=true` on `codex/popularity-explicit-projections`
+   at `75b3bf436`. Wait for both `relistenapi` and `relistenapi-worker` to
+   finish rolling. This build selects explicit columns, so prepared queries
+   keep the same result shape when migration 21 adds the yearly columns.
+
+2. Check ownership. Timescale runs each job as the role that registers it and
    requires that role to own the aggregates it refreshes. As the role the
    migration connects with, this query must return `true`:
 
@@ -159,30 +165,34 @@ Run these steps in order. Run SQL on the primary unless a step says otherwise.
    WHERE view_name = 'source_track_plays_daily';
    ```
 
-2. Migrate. Run the ingestion worker image built from this branch with
-   `--migrate`. Migration 21 runs in one transaction and sets
-   `lock_timeout = '5s'` before adding the popularity columns. If it fails with
-   a lock timeout, nothing was recorded; run `--migrate` again. Then roll out
-   the API pods, including those with `ENABLE_HANGFIRE_SERVER`, from the same
-   image. API startup also applies pending migrations, so a pod that starts
-   before `--migrate` succeeds retries it the same way. Outside Development, an
-   image without migration 21 fails at startup against the migrated database,
-   so fix problems by rolling forward.
-   Confirm the standby has the migration before relying on replica reads. On
-   the replica, this returns `22`:
+3. Migrate. [Verify the prebuilt review-search index](../plans/active/2026-11-18-relisten-mcp.md#1-review-search)
+   and publish the `api` and `ingestion-worker` images from the same merged
+   release revision with `deploy=false`. Record both digests. Run the published
+   ingestion worker image once with `--migrate`.
+   Give the one-shot process a `DATABASE_URL` that points to the primary and
+   leave `PGBOUNCER_WRITE_HOST` and `PGBOUNCER_READ_ONLY_HOST` unset. Migration
+   21 sets `lock_timeout = '5s'` before adding the popularity columns. A lock
+   timeout rolls back migration 21. Run `--migrate` again if that happens.
+   Confirm version `22` on the primary and standby with the query below.
 
    ```sql
    SELECT max(version) FROM versioninfo;
    ```
 
-   Until the backfill finishes, yearly scans compute unmaterialized buckets
-   from the daily aggregate. They are correct but slow, and a scan that times
-   out keeps the previous publication.
+   Running compatibility pods can serve during the backfill. After migration
+   21, that image fails schema validation on startup. If a pod exits, roll the
+   affected Deployment to the recorded final `api` digest and confirm it is
+   ready before resuming. If that Deployment serves HTTP, check a normal v4
+   read. Until the backfill finishes, yearly scans on the final image are
+   correct but slow, and a timeout keeps the previous publication. Keep both
+   refresh jobs disabled until verification passes.
 
-3. Backfill. Use `psql`: `\gexec` runs each generated `CALL` as its own
-   statement, and the refresh procedure cannot run inside a transaction block.
-   Production data takes about 10–25 minutes in total. `force => true` makes
-   each range idempotent, so after an interruption, rerun the same commands.
+4. Backfill. Use `psql -v ON_ERROR_STOP=1` so a failed refresh stops the batch.
+   `\gexec` runs each generated `CALL` as its own statement because the
+   refresh procedure requires it. Production data takes about 10–25 minutes
+   in total. Completed calls stay committed if a later call fails. Fix the
+   failure and rerun the same commands. `force => true` makes each upper
+   rollup refresh safe to repeat.
 
    First bring the daily track aggregate up to date, because each upper refresh
    reads only what daily has materialized. Without `force`, this processes only
@@ -243,7 +253,7 @@ Run these steps in order. Run SQL on the primary unless a step says otherwise.
    \gexec
    ```
 
-4. Verify the backfill on the primary before enabling the jobs. This query must
+5. Verify the backfill on the primary before enabling the jobs. This query must
    report `true` for both rollups. Each watermark must pass the last day with
    eligible input. Comparing against a day with plays lets the check pass when
    the latest completed month or day was empty. Checking the watermarks catches
@@ -315,7 +325,8 @@ Run these steps in order. Run SQL on the primary unless a step says otherwise.
    WHERE tracks.plays IS DISTINCT FROM sources.plays;
    ```
 
-5. Enable both jobs.
+6. Enable both jobs after both rollups pass verification. If a check fails,
+   rerun the affected backfill and repeat its checks first.
 
    ```sql
    SELECT alter_job(job_id, scheduled => true, next_start => now())
@@ -324,7 +335,9 @@ Run these steps in order. Run SQL on the primary unless a step says otherwise.
      AND proc_name IN ('refresh_source_track_plays_monthly', 'refresh_source_plays_daily');
    ```
 
-6. Verify publication.
+7. Run the `api` release workflow from the same release revision with
+   `deploy=true`. It rolls `relistenapi` and `relistenapi-worker`, including
+   the Hangfire server. Verify publication after the rollout.
    - Both jobs report `scheduled = true`, and after their first run
      `timescaledb_information.job_stats.last_run_status` is `Success`.
    - Run `PopularityJobs.RefreshReadModel`. Ordinary v4 reads expose
