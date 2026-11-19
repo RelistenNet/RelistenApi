@@ -243,7 +243,79 @@ Run these steps in order. Run SQL on the primary unless a step says otherwise.
    \gexec
    ```
 
-4. Enable both jobs.
+4. Verify the backfill on the primary before enabling the jobs. This query must
+   report `true` for both rollups. Each watermark must pass the last day with
+   eligible input. Comparing against a day with plays lets the check pass when
+   the latest completed month or day was empty. Checking the watermarks catches
+   a backfill that left real-time reads to compute recent buckets.
+
+   ```sql
+   WITH watermarks AS (
+       SELECT user_view_name AS name, _timescaledb_functions.to_timestamp(
+           _timescaledb_functions.cagg_watermark(mat_hypertable_id)
+       ) AS through
+       FROM _timescaledb_catalog.continuous_agg
+       WHERE user_view_schema = 'public'
+   ), expected(name, last_input_day) AS (
+       SELECT 'source_track_plays_monthly', max(play_day)
+       FROM source_track_plays_daily
+       WHERE play_day < date_trunc('month', now(), 'UTC')
+       UNION ALL
+       SELECT 'source_plays_daily', max(play_day)
+       FROM source_track_plays_daily
+       WHERE play_day < (SELECT through FROM watermarks WHERE name = 'source_track_plays_daily')
+   )
+   SELECT expected.name, w.through AS materialized_through, expected.last_input_day,
+          w.name IS NOT NULL
+              AND (expected.last_input_day IS NULL OR coalesce(w.through > expected.last_input_day, false)) AS complete
+   FROM expected LEFT JOIN watermarks w USING (name);
+   ```
+
+   Check play counts against the daily track input. Both queries must return no
+   rows. The full joins flag missing buckets in either direction as well as
+   buckets with different totals.
+
+   ```sql
+   WITH daily AS (
+       SELECT time_bucket(INTERVAL '1 month', play_day) AS play_month,
+              sum(plays) AS plays
+       FROM source_track_plays_daily
+       WHERE play_day < date_trunc('month', now(), 'UTC')
+       GROUP BY 1
+   ), monthly AS (
+       SELECT play_month, sum(plays) AS plays
+       FROM source_track_plays_monthly
+       WHERE play_month < date_trunc('month', now(), 'UTC')
+       GROUP BY 1
+   )
+   SELECT play_month, daily.plays AS daily_plays, monthly.plays AS monthly_plays
+   FROM daily FULL JOIN monthly USING (play_month)
+   WHERE daily.plays IS DISTINCT FROM monthly.plays;
+   ```
+
+   ```sql
+   WITH bound AS (
+       SELECT _timescaledb_functions.to_timestamp(
+           _timescaledb_functions.cagg_watermark(mat_hypertable_id)
+       ) AS through
+       FROM _timescaledb_catalog.continuous_agg
+       WHERE user_view_schema = 'public' AND user_view_name = 'source_track_plays_daily'
+   ), tracks AS (
+       SELECT source_uuid, play_day, sum(plays) AS plays
+       FROM source_track_plays_daily
+       WHERE play_day < (SELECT through FROM bound)
+       GROUP BY source_uuid, play_day
+   ), sources AS (
+       SELECT source_uuid, play_day, plays
+       FROM source_plays_daily
+       WHERE play_day < (SELECT through FROM bound)
+   )
+   SELECT source_uuid, play_day, tracks.plays AS track_plays, sources.plays AS source_plays
+   FROM tracks FULL JOIN sources USING (source_uuid, play_day)
+   WHERE tracks.plays IS DISTINCT FROM sources.plays;
+   ```
+
+5. Enable both jobs.
 
    ```sql
    SELECT alter_job(job_id, scheduled => true, next_start => now())
@@ -252,19 +324,9 @@ Run these steps in order. Run SQL on the primary unless a step says otherwise.
      AND proc_name IN ('refresh_source_track_plays_monthly', 'refresh_source_plays_daily');
    ```
 
-5. Verify.
+6. Verify publication.
    - Both jobs report `scheduled = true`, and after their first run
      `timescaledb_information.job_stats.last_run_status` is `Success`.
-   - Monthly totals match the daily aggregate. On the replica, this query
-     returns no rows:
-
-     ```sql
-     SELECT play_month, sum(plays) FROM source_track_plays_monthly GROUP BY 1
-     EXCEPT
-     SELECT time_bucket(INTERVAL '1 month', play_day), sum(plays)
-     FROM source_track_plays_daily GROUP BY 1;
-     ```
-
    - Run `PopularityJobs.RefreshReadModel`. Ordinary v4 reads expose
      `windows.1y`. A legacy read on a cold Redis cache completes; cache misses
      use the same writer and wait for the yearly scan.
