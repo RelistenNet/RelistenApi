@@ -189,9 +189,16 @@ Server scope: explicit UUIDv7 favorite rows, desired-state mutation receipts, li
 
 ### Slice 3: qualified history
 
+> Superseded on 2026-11-18 by [Save signed-in plays to the listener's account](2026-11-18-cloud-play-history.md),
+> and for order by the [server roadmap](2026-11-18-server-roadmap.md). The
+> history state, generations, receipts, server-side clear and `legacy_import`
+> below are no longer planned.
+
 Server scope: history state/generation, qualified-listen receipt and Timescale fact, list, clear, and a bounded `legacy_import` origin on the same batch endpoint. Mobile scope: one persistent playback-instance qualification record, local history/outbox, the typed cloud-history control, Recently Played, and CarPlay history. Per-event receipts resume an interrupted legacy upload; do not create a second import resource. Do not migrate the whole queue. Introduce Queue V2 later if playlist playback or Sonos needs stable queue occurrences beyond the current player model.
 
 ### Slice 4: private single-user playlists
+
+> Superseded by the [v4 playlist plan](2026-11-06-v4-playlists.md).
 
 Server scope: playlist, explicit segment, occurrence, fractional ranks, archive state, idempotent commands, snapshot/change feed, and automatic catalog hydration. Mobile scope: list/detail/editor/archived screens, offline command outbox, normalized snapshot ingestion, and queue loading. Start owner-only. Use the same UUID and command shapes intended for collaboration, but do not implement invitation, membership, or multi-user conflict UI here.
 
