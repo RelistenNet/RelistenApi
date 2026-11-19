@@ -39,7 +39,8 @@ Existing unrelated catalog and account endpoints retain their own contracts.
   - [x] (2026-11-17) Integrate the mobile consumer against this API. Milestones 1
     and 2 of the
     [mobile playlist plan](../../../../relisten-mobile/docs/plans/active/2026-11-16-local-first-playlists.md)
-    shipped by OTA to TestFlight 6055. The Android Auto list is still open there.
+    shipped by OTA to TestFlight 6055. The Android Auto list was cut
+    (Alec, 2026-11-18).
 - [ ] Qualify private playlists for internal TestFlight; record the build and
   environment. External availability waits for account deletion, per the
   [server roadmap](2026-11-18-server-roadmap.md).

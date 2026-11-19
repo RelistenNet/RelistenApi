@@ -10,7 +10,7 @@ wins.
 
 | # | Work | Plan | Waits on |
 |---|---|---|---|
-| 1 | Private playlists: qualify for internal TestFlight | [v4 playlists](2026-11-06-v4-playlists.md) §1, mobile milestones 1–2 | Android Auto list on mobile |
+| 1 | Private playlists: qualify for internal TestFlight | [v4 playlists](2026-11-06-v4-playlists.md) §1, mobile milestones 1–2 | Nothing. The Android Auto list was cut (Alec, 2026-11-18) |
 | 2 | Account deletion, with its `relisten-flux` network change | [Account deletion](2026-11-18-account-deletion.md) | Nothing |
 | 3 | MCP PR 1: monthly play rollup and `1y` popularity | [Relisten MCP](2026-11-18-relisten-mcp.md) | Nothing. The daily backfill reached 2018-10-19 |
 | 4 | Guide content: descriptions, text blocks, timestamp links | [v4 playlists](2026-11-06-v4-playlists.md) §2, mobile milestone 3 | #1. API and mobile ship together |
