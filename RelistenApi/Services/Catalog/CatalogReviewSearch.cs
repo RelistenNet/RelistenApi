@@ -63,11 +63,12 @@ public sealed class CatalogReviewSearch(DbService db, CatalogSongMetadataReader 
 
         var rows = await session.Connection.QueryAsync<ReviewRow>(
             session.Command(
-                SearchSql,
+                SearchSql(query.Text is not null, pattern is not null),
                 new
                 {
                     Artist = artist.Id,
                     query.Text,
+                    Literal = query.Text is { } text ? LiteralPattern(text) : null,
                     pattern,
                     query.ShowUuid,
                     query.Years,
@@ -131,34 +132,51 @@ public sealed class CatalogReviewSearch(DbService db, CatalogSongMetadataReader 
             + @")\M";
     }
 
-    private const string SearchSql = """
-        WITH hits AS MATERIALIZED (
-            SELECT r.uuid, r.rating, r.source_id, sh.uuid AS show_uuid, sh.display_date,
-                   coalesce(r.title || ' — ', '') || r.review AS body,
-                   CASE WHEN @pattern::text IS NOT NULL THEN
-                     regexp_instr(coalesce(r.title || ' — ', '') || r.review,@pattern,1,1,0,'i')
-                   WHEN @text::text IS NOT NULL THEN
-                     strpos(lower(coalesce(r.title || ' — ', '') || r.review),lower(@text))
-                   ELSE 1 END AS match_at
-            FROM shows sh JOIN sources s ON s.show_id=sh.id
-            JOIN source_reviews r ON r.source_id=s.id
-            WHERE sh.artist_id=@artist AND (@showUuid::uuid IS NULL OR sh.uuid=@showUuid)
-              AND (@years::int[] IS NULL OR extract(year from sh.date)::int=ANY(@years))
-        ), page AS (
-            SELECT * FROM hits WHERE match_at>0
-            ORDER BY rating DESC NULLS LAST, length(body) DESC, uuid LIMIT @limit
-        )
-        SELECT p.uuid, p.show_uuid AS ShowUuid, s.uuid AS SourceUuid, a.slug AS ArtistSlug,
-               p.display_date AS DisplayDate, p.rating,
-               (CASE WHEN p.match_at>81 THEN '…' ELSE '' END) ||
-                 substring(body,greatest(1,p.match_at-80),300) ||
-                 (CASE WHEN length(body)>=greatest(1,p.match_at-80)+300 THEN '…' ELSE '' END) AS Excerpt,
-               ARRAY(SELECT t.uuid FROM source_tracks t JOIN source_sets sets ON sets.id=t.source_set_id
-                     WHERE t.source_id=s.id AND NOT t.is_orphaned AND (t.mp3_url IS NOT NULL OR t.flac_url IS NOT NULL)
-                     ORDER BY sets.index,t.track_position,t.uuid LIMIT 100) AS TrackUuids
-        FROM page p JOIN sources s ON s.id=p.source_id JOIN artists a ON a.id=s.artist_id
-        ORDER BY p.rating DESC NULLS LAST, length(p.body) DESC, p.uuid
-        """;
+    // Match the expression in migration 22. Use an indexable predicate for
+    // candidate selection, then find the precise excerpt offset only for the page.
+    private const string ReviewBody = "coalesce(r.title || ' — ', '') || r.review";
+
+    private static string LiteralPattern(string text) =>
+        "%" + text.Replace("!", "!!").Replace("%", "!%").Replace("_", "!_") + "%";
+
+    private static string SearchSql(bool hasText, bool hasPattern)
+    {
+        var filter =
+            hasPattern ? $"AND ({ReviewBody}) ~* @pattern"
+            : hasText ? $"AND ({ReviewBody}) ILIKE @literal ESCAPE '!'"
+            : "";
+
+        return $"""
+            WITH matching AS (
+                SELECT r.uuid, r.rating, r.source_id, sh.uuid AS show_uuid, sh.display_date,
+                       {ReviewBody} AS body
+                FROM shows sh JOIN sources s ON s.show_id=sh.id
+                JOIN source_reviews r ON r.source_id=s.id
+                WHERE sh.artist_id=@artist AND (@showUuid::uuid IS NULL OR sh.uuid=@showUuid)
+                  AND (@years::int[] IS NULL OR extract(year from sh.date)::int=ANY(@years))
+                  {filter}
+            ), page AS MATERIALIZED (
+                SELECT * FROM matching
+                ORDER BY rating DESC NULLS LAST, length(body) DESC, uuid LIMIT @limit
+            ), excerpts AS (
+                SELECT p.*,
+                       CASE WHEN @pattern::text IS NOT NULL THEN regexp_instr(body,@pattern,1,1,0,'i')
+                            WHEN @text::text IS NOT NULL THEN strpos(lower(body),lower(@text))
+                            ELSE 1 END AS match_at
+                FROM page p
+            )
+            SELECT p.uuid, p.show_uuid AS ShowUuid, s.uuid AS SourceUuid, a.slug AS ArtistSlug,
+                   p.display_date AS DisplayDate, p.rating,
+                   (CASE WHEN p.match_at>81 THEN '…' ELSE '' END) ||
+                     substring(body,greatest(1,p.match_at-80),300) ||
+                     (CASE WHEN length(body)>=greatest(1,p.match_at-80)+300 THEN '…' ELSE '' END) AS Excerpt,
+                   ARRAY(SELECT t.uuid FROM source_tracks t JOIN source_sets sets ON sets.id=t.source_set_id
+                         WHERE t.source_id=s.id AND NOT t.is_orphaned AND (t.mp3_url IS NOT NULL OR t.flac_url IS NOT NULL)
+                         ORDER BY sets.index,t.track_position,t.uuid LIMIT 100) AS TrackUuids
+            FROM excerpts p JOIN sources s ON s.id=p.source_id JOIN artists a ON a.id=s.artist_id
+            ORDER BY p.rating DESC NULLS LAST, length(p.body) DESC, p.uuid
+            """;
+    }
 
     private sealed record ReviewArtist(int Id, bool Approved);
 

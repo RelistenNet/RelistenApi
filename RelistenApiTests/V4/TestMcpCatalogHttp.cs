@@ -121,18 +121,28 @@ public sealed partial class TestV4CatalogHttp
     {
         await using var connection = await MigratedTestDatabase.OpenAsync();
         var reviewId = Guid.NewGuid();
-        var literal = "Rare [marker] Scarlet Begonias";
+        var decoyId = Guid.NewGuid();
+        var literal = "Rare [marker]!%_ Scarlet Begonias";
+        var decoy = "Rare [marker]!XY Scarlet Begonias";
         await connection.ExecuteAsync(
             """
             INSERT INTO source_reviews (uuid, source_id, rating, review, updated_at)
-            VALUES (@reviewId, 910004, 9, @literal, now())
+            VALUES (@reviewId, 910004, 9, @literal, now()),
+                   (@decoyId, 910004, 9, @decoy, now())
             """,
-            new { reviewId, literal }
+            new
+            {
+                reviewId,
+                literal,
+                decoyId,
+                decoy,
+            }
         );
         try
         {
             var path = McpArtistPath("/reviews/search");
-            var found = (await GetJson(path + "?q=%5Bmarker%5D&years=1995"))
+            var query = Uri.EscapeDataString("[MARKER]!%_");
+            var found = (await GetJson(path + "?q=" + query + "&years=1995"))
                 .AsArray()
                 .Should()
                 .ContainSingle()
@@ -160,14 +170,14 @@ public sealed partial class TestV4CatalogHttp
                 .GetValue<string>()
                 .Should()
                 .Be("invalid_review_pattern");
-            var noMatches = (await GetJson(path + "?q=%5Bmarker%5D&years=1994")).AsArray();
+            var noMatches = (await GetJson(path + "?q=" + query + "&years=1994")).AsArray();
             noMatches.Should().BeEmpty();
         }
         finally
         {
             await connection.ExecuteAsync(
-                "DELETE FROM source_reviews WHERE uuid=@reviewId",
-                new { reviewId }
+                "DELETE FROM source_reviews WHERE uuid IN (@reviewId,@decoyId)",
+                new { reviewId, decoyId }
             );
         }
     }

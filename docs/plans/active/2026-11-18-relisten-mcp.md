@@ -112,10 +112,29 @@ signal for a future show-page "fan favorite" badge.
 - The limits live on the catalog route itself, because the route is public
   even with MCP disabled. Rate-limit it per client IP, separately from cheap
   catalog reads, starting at 10 searches a minute.
-- Before launch, measure artist-wide searches at that rate limit and expected
-  concurrency. Add `pg_trgm` (available, version 1.6, not installed) and a GIN
-  index on `coalesce(title,'') || ' ' || review` only if the measurement needs
-  it. Patterns with no extractable trigrams still scan the index.
+- Migration 22 installs `pg_trgm` and creates a GIN index on the same
+  title-and-review expression the search uses. Literal search escapes LIKE
+  wildcards. Regex search uses the indexable match operator. Compute excerpt
+  offsets after selecting the page. Short literals and regex patterns with no
+  extractable trigrams can still require a broad scan.
+- Before deploying the catalog build in production, run
+  `CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public`, then run
+  [the concurrent index statement](../../../RelistenApi/Migrations/Sql/022_review_search_index.sql)
+  on the writer as a standalone statement and analyze `public.source_reviews`.
+  Check the build on the writer with:
+
+  ```sql
+  SELECT indisready, indisvalid, pg_get_indexdef(indexrelid)
+  FROM pg_index
+  WHERE indexrelid = to_regclass('public.source_reviews_search_trgm_idx');
+  ```
+
+  Both flags should be true, and the definition should match the statement above.
+  A failed concurrent build can leave an invalid index. Drop that invalid
+  index concurrently before retrying. The migration reuses the expected prebuilt
+  index and builds it concurrently in a fresh database.
+- Before widening access, measure artist-wide searches at the configured
+  limits and expected concurrency.
 - Return excerpts ranked by rating, then length.
 
 ### 2. Monthly play rollup and the `1y` window
