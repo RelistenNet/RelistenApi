@@ -114,10 +114,22 @@ a second formula specification in documentation.
 ## Yearly window rollout
 
 Migration 21 creates `source_track_plays_monthly` and `source_plays_daily`
-without an initial backfill. Both derive from `source_track_plays_daily` and
-receive daily refresh policies. The track rollup stores month totals and the
-count of daily rows per track. The source rollup groups by source and UTC day,
-so two tracks from one source played on the same day contribute one source-day.
+without an initial backfill. Both derive from `source_track_plays_daily`.
+The track rollup stores month totals and the count of daily rows per track.
+The source rollup groups by source and UTC day, so two tracks from one source
+played on the same day contribute one source-day.
+
+The Timescale job `Refresh monthly track plays` runs daily and refreshes the
+three latest UTC months that have been closed for at least one day. It refreshes
+daily track buckets for that range first. After that call succeeds, it refreshes
+the monthly track buckets for the same range. A failed attempt starts over with
+daily on retry. The regular daily track and source-day policies still handle
+recent activity.
+
+Before applying migration 21, verify that its database role owns the existing
+`source_track_plays_daily` aggregate or inherits its owner role. Timescale runs
+the job as the role that registers it and requires ownership to refresh the
+aggregate.
 
 The yearly window covers 365 UTC dates through the calculation date. Complete
 months come from the monthly rollup. The partial month at each edge comes
@@ -146,7 +158,9 @@ own freshness still bounds what these reads can see.
 
    For the source-day rollup, also refresh the current month through the
    daily aggregate's last completed day. This fills any earlier days in the
-   current month before the real-time tail takes over.
+   current month before the real-time tail takes over. To repair a historical
+   month with changed raw plays, refresh its daily track buckets first, then
+   refresh the monthly track and daily source buckets for that month.
 
 2. Compare yearly totals with a daily-only calculation across both edge
    months. Measure the yearly scan and complete popularity refresh on

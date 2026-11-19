@@ -411,6 +411,68 @@ public sealed class TestPopularityStore
     }
 
     [Test]
+    public async Task Monthly_job_refreshes_the_last_day_before_publishing_a_closed_month()
+    {
+        var trackId = Guid.NewGuid();
+        var cutoff = DateTime.UtcNow.AddDays(-1);
+        var end = new DateTime(cutoff.Year, cutoff.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+        var start = end.AddMonths(-1);
+        var lastDay = end.AddDays(-1);
+        var from = start.ToString("yyyy-MM-dd") + " 00:00Z";
+        var to = end.ToString("yyyy-MM-dd") + " 00:00Z";
+        var beforeLastDay = lastDay.ToString("yyyy-MM-dd") + " 00:00Z";
+        try
+        {
+            await connection.ExecuteAsync(
+                """
+                INSERT INTO source_tracks(uuid,artist_id,source_id,track_position,title,slug,mp3_url,duration,updated_at)
+                SELECT @trackId,artist_id,source_id,3,'Monthly rollover','monthly-rollover','https://example.test/rollover.mp3',120,now()
+                FROM source_tracks WHERE uuid=@track;
+                INSERT INTO source_track_plays(created_at,source_track_uuid,app_type)
+                VALUES (@firstPlay,@trackId,0),(@lastPlay,@trackId,0);
+                """,
+                new
+                {
+                    trackId,
+                    track,
+                    firstPlay = start.AddHours(12),
+                    lastPlay = lastDay.AddHours(12),
+                }
+            );
+
+            // Materialize the month before its final day has reached the daily rollup.
+            await RefreshRollup("source_track_plays_daily", from, beforeLastDay);
+            await RefreshRollup("source_track_plays_monthly", from, to);
+            var through = DateOnly.FromDateTime(lastDay);
+            var before = await PlayRollupReader.ReadTracks(connection, [trackId], through);
+            before.Should().Equal(new PlayRollupTotals(trackId, 1, 120, 1));
+
+            var jobId = await connection.QuerySingleAsync<int>(
+                """
+                SELECT job_id FROM timescaledb_information.jobs
+                WHERE proc_schema='public' AND proc_name='refresh_source_track_plays_monthly'
+                """
+            );
+            await connection.ExecuteAsync("CALL run_job(@jobId)", new { jobId });
+
+            var after = await PlayRollupReader.ReadTracks(connection, [trackId], through);
+            after.Should().Equal(new PlayRollupTotals(trackId, 2, 240, 2));
+        }
+        finally
+        {
+            await connection.ExecuteAsync(
+                """
+                DELETE FROM source_track_plays WHERE source_track_uuid=@trackId;
+                DELETE FROM source_tracks WHERE uuid=@trackId;
+                """,
+                new { trackId }
+            );
+            await RefreshRollup("source_track_plays_daily", from, to);
+            await RefreshRollup("source_track_plays_monthly", from, to);
+        }
+    }
+
+    [Test]
     public async Task YearlyRollupSplitsUtcMonthEdgesAndCountsSourceDaysOnce()
     {
         var source = Guid.NewGuid();

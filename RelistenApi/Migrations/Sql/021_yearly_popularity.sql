@@ -33,12 +33,31 @@ FROM source_track_plays_daily
 GROUP BY 1, 2
 WITH NO DATA;
 
-SELECT add_continuous_aggregate_policy(
-    'source_track_plays_monthly',
-    start_offset => INTERVAL '3 months',
-    end_offset => INTERVAL '1 day',
+-- Close whole UTC months after the same one-day delay as the daily policy.
+-- Refresh the daily input explicitly before monthly advances its watermark.
+-- Each CALL may commit batches. An error stops this attempt and the next
+-- attempt starts with daily again.
+CREATE PROCEDURE public.refresh_source_track_plays_monthly(job_id integer, config jsonb)
+LANGUAGE plpgsql AS $$
+DECLARE
+    month_end timestamp := date_trunc('month', (now() AT TIME ZONE 'UTC') - INTERVAL '1 day');
+    window_start timestamptz := (month_end - INTERVAL '3 months') AT TIME ZONE 'UTC';
+    window_end timestamptz := month_end AT TIME ZONE 'UTC';
+BEGIN
+    CALL public.refresh_continuous_aggregate(
+        'public.source_track_plays_daily', window_start, window_end
+    );
+    CALL public.refresh_continuous_aggregate(
+        'public.source_track_plays_monthly', window_start, window_end
+    );
+END;
+$$;
+
+SELECT add_job(
+    'public.refresh_source_track_plays_monthly',
     schedule_interval => INTERVAL '1 day',
-    initial_start => now() + INTERVAL '1 day'
+    initial_start => now() + INTERVAL '1 day',
+    job_name => 'Refresh monthly track plays'
 );
 
 SELECT add_continuous_aggregate_policy(
