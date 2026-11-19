@@ -4,7 +4,6 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
-using Microsoft.Extensions.Configuration;
 using Relisten.Api.Models;
 using Relisten.Services.Popularity;
 
@@ -20,8 +19,7 @@ public sealed class CatalogShowMetadataReader(
     CatalogArtistVenueMetadataReader artistVenueMetadata,
     CatalogTourMetadataReader tourMetadata,
     CatalogPopularityMetadataReader popularityMetadata,
-    PopularityRefreshRequest refresh,
-    IConfiguration configuration
+    PopularityRefreshRequest refresh
 )
 {
     /// <summary>
@@ -123,7 +121,6 @@ public sealed class CatalogShowMetadataReader(
             map = await PopularityStore.ReadArtistLocalShowMetrics(
                 session.Connection,
                 shows.Select(show => show.uuid).ToArray(),
-                configuration.GetYearlyPopularityEnabled(),
                 session.Transaction,
                 cancellationToken
             );

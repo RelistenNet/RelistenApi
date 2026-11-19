@@ -1,7 +1,6 @@
 using Dapper;
 using FluentAssertions;
 using Hangfire;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Hosting.Internal;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -107,11 +106,7 @@ public sealed class TestPopularityStore
             var settings = new NpgsqlConnectionStringBuilder(reader.ConnectionString);
             for (var i = 0; i <= settings.AutoPrepareMinUsages; i++)
             {
-                await PopularityStore.ReadArtistLocalShowMetrics(
-                    reader,
-                    [show],
-                    includeYearlyWindow: false
-                );
+                await PopularityStore.ReadArtistLocalShowMetrics(reader, [show]);
             }
             (await HasPreparedPopularityRead(reader)).Should().BeTrue();
 
@@ -120,11 +115,7 @@ public sealed class TestPopularityStore
             );
             try
             {
-                var after = await PopularityStore.ReadArtistLocalShowMetrics(
-                    reader,
-                    [show],
-                    includeYearlyWindow: false
-                );
+                var after = await PopularityStore.ReadArtistLocalShowMetrics(reader, [show]);
                 after[show].windows.days_30d.plays.Should().Be(12);
                 after[show].momentum_score.Should().Be(0.5);
             }
@@ -211,7 +202,7 @@ public sealed class TestPopularityStore
             new { show }
         );
         inactive.plays_30d.Should().Be(0);
-        inactive.ToMetrics().Should().BeNull();
+        inactive.organic_momentum_score.Should().BeNull();
         await connection.ExecuteAsync("DELETE FROM show_popularity WHERE uuid=@show", new { show });
     }
 
@@ -649,15 +640,7 @@ public sealed class TestPopularityStore
                 db,
                 cache,
                 jobs,
-                NullLogger<PopularityService>.Instance,
-                new ConfigurationBuilder()
-                    .AddInMemoryCollection(
-                        new Dictionary<string, string?>
-                        {
-                            ["Popularity:EnableYearlyWindow"] = "true",
-                        }
-                    )
-                    .Build()
+                NullLogger<PopularityService>.Instance
             );
             await service.RefreshReadModel();
             await AssertYearlyRowsAsync(oldShow, oldYear);

@@ -4,7 +4,6 @@ using System.Linq;
 using System.Threading.Tasks;
 using Dapper;
 using Hangfire;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Relisten.Api.Models;
 using Relisten.Api.Models.Api;
@@ -39,12 +38,11 @@ namespace Relisten.Services.Popularity
             DbService db,
             PopularityCacheService cache,
             IBackgroundJobClient backgroundJobs,
-            ILogger<PopularityService> logger,
-            IConfiguration? configuration = null
+            ILogger<PopularityService> logger
         )
         {
             this.db = db;
-            store = new PopularityStore(db, configuration.GetYearlyPopularityEnabled());
+            store = new PopularityStore(db);
             this.cache = cache;
             this.backgroundJobs = backgroundJobs;
             this.logger = logger;

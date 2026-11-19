@@ -17,7 +17,7 @@ Each metrics table has plays, hours, and hot score for 48 hours, seven days,
 organic momentum. Each row has `generated_at`. Yearly counters are null until
 they have been calculated once.
 
-With the yearly window enabled, ordinary v4 metadata includes `popularity`
+Ordinary v4 metadata includes `popularity`
 when any window has plays. Rows without 30-day activity have null stored
 momentum and return numeric zero for momentum and trend ratio. Rankings require
 a stored momentum score. The v4 population compares 30-day-active rows only,
@@ -137,9 +137,13 @@ from the daily rollup. At month turnover, the real-time monthly view reads the
 daily aggregate for buckets it has yet to materialize. The daily aggregate's
 own freshness still bounds what these reads can see.
 
-1. Deploy the explicit popularity read projections before migration 21.
-   Wait for the previous API instances to drain. Apply migration 21 with
-   `Popularity__EnableYearlyWindow` off. Backfill both new rollups from the
+1. Deploy the explicit popularity read projections and let older instances
+   drain. Build the API, popularity job runners, and ingestion worker from the
+   commit that adds migration 21 and the rollups, before the yearly reader and
+   writer changes. Run that ingestion worker image with `--migrate`. Roll out
+   the matching API and job runners before starting the backfill. The previous
+   binaries can keep running across the schema change, but only binaries that
+   include migration 21 can restart against it. Backfill both new rollups from the
    earliest available daily bucket, moving forward in bounded UTC month ranges. Use the start of the current UTC month as the
    exclusive end of the monthly backfill. Force each range so it fills any gaps
    left by an earlier refresh. Run each call as its own statement on the
@@ -167,15 +171,13 @@ own freshness still bounds what these reads can see.
    production data, including global shows and the largest artist. Check
    legacy reads on a cold Redis cache too. Their cache-miss calculations use
    the same writer and wait for the yearly query.
-3. Verify the migration has reached the standby and enable
-   `Popularity__EnableYearlyWindow=true` on the catalog API and its popularity
-   job runners. Wait for all writers to use the new setting before running
-   `PopularityJobs.RefreshReadModel`. Confirm ordinary reads expose
-   `windows.1y` and yearly-only rows stay out of rankings.
+3. Verify the migration has reached the standby, then deploy the catalog API
+   and popularity job runners that calculate the yearly window. Wait for all
+   popularity writers to roll before running `PopularityJobs.RefreshReadModel`.
+   Confirm ordinary reads expose `windows.1y` and yearly-only rows stay out of
+   rankings.
 
-Every enabled refresh calculates the yearly window before the existing atomic
-upsert. The yearly scan uses the same database read path as the recent windows.
-If the scan fails, the job keeps the previous publication for retry. Turning
-off the switch hides yearly metadata immediately. Subsequent refreshes resume
-the previous scoring population and preserve the stored yearly values.
-After migration 21, recovery images must recognize that schema version.
+Each refresh calculates the yearly window before the existing atomic upsert.
+The yearly scan uses the same database read path as the recent windows. If the
+scan fails, the job keeps the previous publication for retry. After migration 21,
+recovery images must recognize that schema version.

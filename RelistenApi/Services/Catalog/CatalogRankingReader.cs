@@ -4,7 +4,6 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
-using Microsoft.Extensions.Configuration;
 using Relisten.Api.Models;
 using Relisten.Services.Popularity;
 
@@ -28,12 +27,9 @@ public sealed class CatalogRankingReader(
     CatalogBrowseReader browse,
     CatalogShowMetadataReader metadata,
     CatalogPopularityMetadataReader popularity,
-    PopularityRefreshRequest refresh,
-    IConfiguration configuration
+    PopularityRefreshRequest refresh
 )
 {
-    private readonly bool includeYearlyWindow = configuration.GetYearlyPopularityEnabled();
-
     public async Task<IReadOnlyList<CatalogRanked<CatalogArtist>>> ReadArtists(
         bool trending,
         int limit,
@@ -58,10 +54,7 @@ public sealed class CatalogRankingReader(
         ).ToDictionary(artist => artist.uuid);
         return scores
             .Where(row => artists.ContainsKey(row.uuid))
-            .Select(row => new CatalogRanked<CatalogArtist>(
-                artists[row.uuid],
-                row.ToMetrics(includeYearlyWindow: includeYearlyWindow)!
-            ))
+            .Select(row => new CatalogRanked<CatalogArtist>(artists[row.uuid], row.ToMetrics()!))
             .ToArray();
     }
 
@@ -92,10 +85,7 @@ public sealed class CatalogRankingReader(
         await popularity.ApplyYears(session, years.Values.ToArray(), cancellationToken);
         return scores
             .Where(row => years.ContainsKey(row.uuid))
-            .Select(row => new CatalogRanked<CatalogYear>(
-                years[row.uuid],
-                row.ToMetrics(includeYearlyWindow: includeYearlyWindow)!
-            ))
+            .Select(row => new CatalogRanked<CatalogYear>(years[row.uuid], row.ToMetrics()!))
             .ToArray();
     }
 
@@ -120,10 +110,7 @@ public sealed class CatalogRankingReader(
             scores.Select(row => row.uuid).ToArray(),
             cancellationToken
         );
-        var map = scores.ToDictionary(
-            row => row.uuid,
-            row => row.ToMetrics(includeYearlyWindow: includeYearlyWindow)!
-        );
+        var map = scores.ToDictionary(row => row.uuid, row => row.ToMetrics()!);
         await metadata.Apply(session, shows, cancellationToken);
         var byId = shows.ToDictionary(show => show.uuid);
         return scores
@@ -245,9 +232,7 @@ public sealed class CatalogRankingReader(
             await session.Connection.QueryAsync<StoredPopularity>(
                 session.Command(
                     $"""
-                    SELECT {StoredPopularity.ReadColumns(
-                        includeYearlyWindow
-                    )}, p.artist_uuid, p.organic_momentum_score
+                    SELECT {StoredPopularity.ReadColumns}, p.artist_uuid, p.organic_momentum_score
                     FROM show_popularity p
                     WHERE NOT is_global AND artist_uuid=ANY(@artists) AND momentum_score IS NOT NULL
                     ORDER BY COALESCE(organic_momentum_score,momentum_score) DESC,momentum_score DESC,
@@ -272,7 +257,7 @@ public sealed class CatalogRankingReader(
         return owned
             .Select(row => new CatalogRanked<CatalogShow>(
                 shows[row.uuid],
-                row.ToMetrics(organic: true, includeYearlyWindow: includeYearlyWindow)!
+                row.ToMetrics(organic: true)!
             ))
             .ToArray();
     }
@@ -316,9 +301,7 @@ public sealed class CatalogRankingReader(
             await session.Connection.QueryAsync<StoredPopularity>(
                 session.Command(
                     $"""
-                    SELECT {StoredPopularity.ReadColumns(
-                        includeYearlyWindow
-                    )} FROM {kind}_popularity p
+                    SELECT {StoredPopularity.ReadColumns} FROM {kind}_popularity p
                     WHERE {population} AND momentum_score IS NOT NULL{threshold}
                     ORDER BY {order} LIMIT @limit
                     """,

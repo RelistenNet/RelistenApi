@@ -374,12 +374,13 @@ public sealed partial class TestV4CatalogHttp
                 .AsObject()
                 .Select(field => field.Key)
                 .Should()
-                .BeEquivalentTo(returnedWindows.Select(field => field.Key).Append("1y"));
+                .BeEquivalentTo(returnedWindows.Select(field => field.Key));
+            // Yearly data can be absent until the first refresh publishes it.
             windowsSchema["required"]!
                 .AsArray()
                 .Select(field => field!.GetValue<string>())
                 .Should()
-                .BeEquivalentTo(returnedWindows.Select(field => field.Key));
+                .BeEquivalentTo("48h", "7d", "30d");
             AssertSchemaFields(
                 document,
                 "PopularityWindowResource",

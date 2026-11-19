@@ -3,7 +3,6 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
-using Microsoft.Extensions.Configuration;
 using Relisten.Services.Popularity;
 
 namespace Relisten.Catalog;
@@ -13,13 +12,8 @@ namespace Relisten.Catalog;
 /// Artists use global scores; years use their artist's population, like ordinary shows.
 /// Missing or inactive scores remain null. Refreshes use the existing stale-read queue.
 /// </summary>
-public sealed class CatalogPopularityMetadataReader(
-    PopularityRefreshRequest refresh,
-    IConfiguration configuration
-)
+public sealed class CatalogPopularityMetadataReader(PopularityRefreshRequest refresh)
 {
-    private readonly bool includeYearlyWindow = configuration.GetYearlyPopularityEnabled();
-
     public async Task ApplyArtists(
         CatalogReadSession session,
         IReadOnlyList<CatalogArtist> artists,
@@ -34,15 +28,12 @@ public sealed class CatalogPopularityMetadataReader(
         refresh.Require(PopularityPopulationKind.Artist);
         var rows = await session.Connection.QueryAsync<StoredPopularity>(
             session.Command(
-                $"SELECT {StoredPopularity.ReadColumns(includeYearlyWindow)} FROM artist_popularity p WHERE p.uuid=ANY(@ids) AND {StoredPopularity.MetadataFilter(includeYearlyWindow)}",
-                new { ids = artists.Select(artist => artist.uuid).ToArray(), includeYearlyWindow },
+                $"SELECT {StoredPopularity.ReadColumns} FROM artist_popularity p WHERE p.uuid=ANY(@ids) AND {StoredPopularity.MetadataFilter}",
+                new { ids = artists.Select(artist => artist.uuid).ToArray() },
                 cancellationToken
             )
         );
-        var metrics = rows.ToDictionary(
-            row => row.uuid,
-            row => row.ToMetrics(includeYearlyWindow: includeYearlyWindow)
-        );
+        var metrics = rows.ToDictionary(row => row.uuid, row => row.ToMetrics());
         foreach (var artist in artists)
         {
             artist.Popularity = metrics.GetValueOrDefault(artist.uuid);
@@ -67,21 +58,16 @@ public sealed class CatalogPopularityMetadataReader(
         var rows = await session.Connection.QueryAsync<StoredPopularity>(
             session.Command(
                 $"""
-                SELECT {StoredPopularity.ReadColumns(includeYearlyWindow)} FROM year_popularity p
+                SELECT {StoredPopularity.ReadColumns} FROM year_popularity p
                 JOIN years y ON y.uuid=p.uuid JOIN artists a ON a.id=y.artist_id
                 WHERE NOT p.is_global AND p.uuid=ANY(@ids)
-                  AND p.artist_uuid=a.uuid AND {StoredPopularity.MetadataFilter(
-                    includeYearlyWindow
-                )}
+                  AND p.artist_uuid=a.uuid AND {StoredPopularity.MetadataFilter}
                 """,
                 new { ids = years.Select(year => year.uuid).ToArray() },
                 cancellationToken
             )
         );
-        var metrics = rows.ToDictionary(
-            row => row.uuid,
-            row => row.ToMetrics(includeYearlyWindow: includeYearlyWindow)
-        );
+        var metrics = rows.ToDictionary(row => row.uuid, row => row.ToMetrics());
         foreach (var year in years)
         {
             year.Popularity = metrics.GetValueOrDefault(year.uuid);

@@ -15,7 +15,7 @@ namespace Relisten.Services.Popularity;
 /// inactive targets. Per-row timestamps reject late older calculations. Sorted
 /// upserts keep overlapping publications in the same row-lock order.
 /// </summary>
-public sealed class PopularityStore(DbService db, bool includeYearlyWindow = false)
+public sealed class PopularityStore(DbService db)
 {
     /// <summary>Reads only selected artist-local show scores in the caller's connection/snapshot.</summary>
     internal static async Task<
@@ -23,7 +23,6 @@ public sealed class PopularityStore(DbService db, bool includeYearlyWindow = fal
     > ReadArtistLocalShowMetrics(
         IDbConnection connection,
         Guid[] ids,
-        bool includeYearlyWindow,
         IDbTransaction? transaction = null,
         CancellationToken cancellationToken = default
     )
@@ -31,10 +30,10 @@ public sealed class PopularityStore(DbService db, bool includeYearlyWindow = fal
         var rows = await connection.QueryAsync<StoredPopularity>(
             new CommandDefinition(
                 $"""
-                SELECT {StoredPopularity.ReadColumns(includeYearlyWindow)} FROM show_popularity p
+                SELECT {StoredPopularity.ReadColumns} FROM show_popularity p
                 JOIN shows s ON s.uuid=p.uuid JOIN artists a ON a.id=s.artist_id
                 WHERE NOT p.is_global AND p.uuid=ANY(@ids) AND p.artist_uuid=a.uuid
-                  AND {StoredPopularity.MetadataFilter(includeYearlyWindow)}
+                  AND {StoredPopularity.MetadataFilter}
                 """,
                 new { ids },
                 transaction,
@@ -42,10 +41,7 @@ public sealed class PopularityStore(DbService db, bool includeYearlyWindow = fal
                 cancellationToken: cancellationToken
             )
         );
-        return rows.ToDictionary(
-            row => row.uuid,
-            row => row.ToMetrics(includeYearlyWindow: includeYearlyWindow)!
-        );
+        return rows.ToDictionary(row => row.uuid, row => row.ToMetrics()!);
     }
 
     public Task ReplaceArtists(
@@ -86,15 +82,9 @@ public sealed class PopularityStore(DbService db, bool includeYearlyWindow = fal
         IReadOnlyDictionary<Guid, CachedShowPopularity>? shows = null
     )
     {
-        var rows = BuildRows(map, shows);
-        if (includeYearlyWindow)
-        {
-            var byId = rows.ToDictionary(row => row.uuid);
-            await AddYearlyTotals(population, byId, DateOnly.FromDateTime(generatedAt));
-            rows = byId.Values;
-        }
-
-        await Publish(population, rows, generatedAt);
+        var rows = BuildRows(map, shows).ToDictionary(row => row.uuid);
+        await AddYearlyTotals(population, rows, DateOnly.FromDateTime(generatedAt));
+        await Publish(population, rows.Values, generatedAt);
     }
 
     private IEnumerable<StoredPopularity> BuildRows(
@@ -103,9 +93,9 @@ public sealed class PopularityStore(DbService db, bool includeYearlyWindow = fal
     )
     {
         // The Redis maps retain their legacy populations. V4 scores compare only
-        // 30-day-active targets when the yearly window is enabled.
+        // 30-day-active targets.
         Dictionary<Guid, double>? activeScores = null;
-        if (includeYearlyWindow && map.Values.Any(metrics => metrics.windows.days_30d.plays == 0))
+        if (map.Values.Any(metrics => metrics.windows.days_30d.plays == 0))
         {
             var active = map.Where(item => item.Value.windows.days_30d.plays > 0).ToArray();
             var scores = PopularityService.CalculateMomentumScores(
@@ -247,16 +237,12 @@ public sealed class PopularityStore(DbService db, bool includeYearlyWindow = fal
         var ownerValues = kind == "artist" ? "" : ",a.uuid,@isGlobal";
         var ownerFilter = kind == "artist" ? "true" : "(@artist::uuid IS NULL OR a.uuid=@artist)";
         var conflict = kind == "artist" ? "uuid" : "uuid,is_global";
-        var columns = Columns;
+        var columns = Columns + ",plays_1y,hours_1y,hot_score_1y";
         if (kind == "show")
         {
             columns += ",organic_momentum_score";
         }
 
-        if (includeYearlyWindow)
-        {
-            columns += ",plays_1y,hours_1y,hot_score_1y";
-        }
         var fields = columns.Split(',');
         var selected = string.Join(
             ',',
