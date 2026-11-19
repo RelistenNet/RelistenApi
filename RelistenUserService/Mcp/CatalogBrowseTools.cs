@@ -12,10 +12,8 @@ namespace RelistenUserService.Mcp;
 // The SDK uses method parameter names as wire names. Keep public tool arguments in snake_case.
 internal sealed class CatalogBrowseTools(McpCatalogClient catalog)
 {
-    private const string NoAuth = """[{"type":"noauth"}]""";
-
     [McpServerTool(Name = "find", ReadOnly = true, OpenWorld = false)]
-    [McpMeta("securitySchemes", JsonValue = NoAuth)]
+    [McpMeta("securitySchemes", JsonValue = McpSecuritySchemes.NoAuth)]
     [Description(
         "Find artists, shows, songs, venues or tours by text. Provide an artist ID to narrow a search."
     )]
@@ -153,7 +151,7 @@ internal sealed class CatalogBrowseTools(McpCatalogClient catalog)
     }
 
     [McpServerTool(Name = "browse", ReadOnly = true, OpenWorld = false)]
-    [McpMeta("securitySchemes", JsonValue = NoAuth)]
+    [McpMeta("securitySchemes", JsonValue = McpSecuritySchemes.NoAuth)]
     [Description("Browse an artist by years, tours, venues, or eras.")]
     public Task<CallToolResult> Browse(
         string artist,
@@ -224,7 +222,7 @@ internal sealed class CatalogBrowseTools(McpCatalogClient catalog)
         });
 
     [McpServerTool(Name = "get_song", ReadOnly = true, OpenWorld = false)]
-    [McpMeta("securitySchemes", JsonValue = NoAuth)]
+    [McpMeta("securitySchemes", JsonValue = McpSecuritySchemes.NoAuth)]
     [Description(
         "Get a song's aliases, recording counts and a page of per-show timing statistics. Use a canonical song ID or artist song slug."
     )]
@@ -283,7 +281,7 @@ internal sealed class CatalogBrowseTools(McpCatalogClient catalog)
         });
 
     [McpServerTool(Name = "get_show", ReadOnly = true, OpenWorld = false)]
-    [McpMeta("securitySchemes", JsonValue = NoAuth)]
+    [McpMeta("securitySchemes", JsonValue = McpSecuritySchemes.NoAuth)]
     [Description(
         "Get a show's recordings and ordered sets. Supply a show ID, or an artist ID and YYYY-MM-DD date."
     )]
@@ -323,7 +321,7 @@ internal sealed class CatalogBrowseTools(McpCatalogClient catalog)
         });
 
     [McpServerTool(Name = "get_source", ReadOnly = true, OpenWorld = false)]
-    [McpMeta("securitySchemes", JsonValue = NoAuth)]
+    [McpMeta("securitySchemes", JsonValue = McpSecuritySchemes.NoAuth)]
     [Description("Get one recording's playable tracks, ordered sets, durations and song parts.")]
     public Task<CallToolResult> GetSource(string source_id, CancellationToken cancellationToken) =>
         Read(async () =>
@@ -336,7 +334,7 @@ internal sealed class CatalogBrowseTools(McpCatalogClient catalog)
         });
 
     [McpServerTool(Name = "get_tracks", ReadOnly = true, OpenWorld = false)]
-    [McpMeta("securitySchemes", JsonValue = NoAuth)]
+    [McpMeta("securitySchemes", JsonValue = McpSecuritySchemes.NoAuth)]
     [Description(
         "Check up to 500 canonical track IDs for availability, duration, playable URLs and song parts."
     )]

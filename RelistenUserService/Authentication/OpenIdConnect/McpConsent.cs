@@ -8,39 +8,19 @@ using static OpenIddict.Abstractions.OpenIddictConstants;
 
 namespace RelistenUserService.Authentication.OpenIdConnect;
 
-public sealed class McpConsent(
-    IOpenIddictApplicationManager applications,
-    IOpenIddictAuthorizationManager authorizations,
-    IAntiforgery antiforgery,
-    AccountsOptions options
-)
+/// <summary>
+/// Renders the sign-in and consent pages for the ChatGPT connector and verifies the
+/// listener's decision.
+/// </summary>
+/// <remarks>
+/// Consent is asked on every authorization and never remembered. Every ChatGPT user shares
+/// one redirect URI, so a silently issued code would let an attacker start a flow in their
+/// own ChatGPT session, send the link to a signed-in listener, and end up with that
+/// listener's Relisten account linked to the attacker's ChatGPT. The page and its
+/// anti-forgery token make the listener the one who approves each link.
+/// </remarks>
+public sealed class McpConsent(IAntiforgery antiforgery, AccountsOptions options)
 {
-    public async Task<bool> HasGrantAsync(
-        UserId user,
-        OpenIddictRequest request,
-        CancellationToken cancellationToken
-    )
-    {
-        var application =
-            await applications.FindByClientIdAsync(McpOAuth.ClientId, cancellationToken)
-            ?? throw new InvalidOperationException("The validated ChatGPT client is unavailable.");
-        var applicationId = await applications.GetIdAsync(application, cancellationToken);
-        await foreach (
-            var _ in authorizations.FindAsync(
-                user.Value,
-                applicationId,
-                Statuses.Valid,
-                AuthorizationTypes.Permanent,
-                request.GetScopes(),
-                cancellationToken
-            )
-        )
-        {
-            return true;
-        }
-        return false;
-    }
-
     public string SignInPage(HttpContext context)
     {
         var google = options.Google.Enabled

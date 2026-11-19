@@ -136,7 +136,7 @@ public sealed class TestMcpHttp
                 .EnumerateArray()
                 .Select(scope => scope.GetString())
                 .Should()
-                .BeEquivalentTo("user.read", "library.read");
+                .BeEquivalentTo("user.read", "library.read", "library.write", "offline_access");
         }
 
         using var auth = await http.GetAsync(
@@ -310,11 +310,14 @@ public sealed class TestMcpHttp
             .Contain("error=\"insufficient_scope\"")
             .And.Contain("scope=\"library.write\"");
 
-        using var existingGrant = await Authorize(
+        // A prior grant must not issue a code without the listener's approval.
+        using var repeatedAuthorize = await Authorize(
             AuthorizeFields(ChatGpt, ChatGptRedirect, ReadScopes, Resource),
             cookie
         );
-        ReadCode(existingGrant).Should().NotBeEmpty();
+        repeatedAuthorize.StatusCode.Should().Be(HttpStatusCode.OK);
+        repeatedAuthorize.Headers.Location.Should().BeNull();
+        (await repeatedAuthorize.Content.ReadAsStringAsync()).Should().Contain("decision");
         var writeFields = AuthorizeFields(
             ChatGpt,
             ChatGptRedirect,
@@ -348,7 +351,7 @@ public sealed class TestMcpHttp
             "structuredContent"
         );
         playlist
-            .GetProperty("metadata")
+            .GetProperty("untrusted_listener_text")
             .GetProperty("name")
             .GetString()
             .Should()
@@ -356,6 +359,7 @@ public sealed class TestMcpHttp
         playlist
             .GetProperty("segments")[0]
             .GetProperty("entries")[0]
+            .GetProperty("untrusted_listener_text")
             .GetProperty("description")
             .GetString()
             .Should()
@@ -385,11 +389,6 @@ public sealed class TestMcpHttp
             .Contain("invalid_token");
         using var invalidRefresh = await Refresh(refreshed.Refresh);
         (await OAuthError(invalidRefresh)).Should().Be("invalid_grant");
-        using var newConsent = await Authorize(
-            AuthorizeFields(ChatGpt, ChatGptRedirect, ReadScopes, Resource),
-            cookie
-        );
-        newConsent.StatusCode.Should().Be(HttpStatusCode.OK);
         using var sameNativeSession = await Get(AccountsOrigin + "/v1/me", native.Access);
         sameNativeSession.StatusCode.Should().Be(HttpStatusCode.OK);
     }
@@ -452,7 +451,7 @@ public sealed class TestMcpHttp
             .GetProperty("state")
             .GetString()
             .Should()
-            .Be("consent_remembered");
+            .Be("allowed");
         var anonymous = await Call("search_reviews", args, tokens.Access);
         anonymous.TryGetProperty("structuredContent", out _).Should().BeTrue();
         catalog.AuthorizedReviewRequests.Should().Be(30);
@@ -494,6 +493,119 @@ public sealed class TestMcpHttp
             .Contain("invalid_token");
         using var refresh = await Refresh(tokens.Refresh);
         (await OAuthError(refresh)).Should().Be("invalid_grant");
+    }
+
+    [Test]
+    public async Task Playlist_tools_report_another_accounts_playlist_as_not_found()
+    {
+        await StartApp();
+        var owner = await ConnectChatGpt("google-alice");
+        var other = await ConnectChatGpt("google-shared");
+        var id = (await Call("create_playlist", Draft, owner.Access))
+            .GetProperty("structuredContent")
+            .GetProperty("playlist_id")
+            .GetString()!;
+        var rename = new[]
+        {
+            new { operation_type = "update_metadata", payload = new { name = "Taken over" } },
+        };
+
+        // The answer must match a playlist that does not exist, so IDs cannot be probed.
+        var missing = PlaylistId.New().Value;
+        var read = await Call("read_playlist", new { id }, other.Access);
+        ErrorText(read)
+            .Should()
+            .Be(ErrorText(await Call("read_playlist", new { id = missing }, other.Access)));
+        var edit = await Call("edit_playlist", new { id, changes = rename }, other.Access);
+        ErrorText(edit)
+            .Should()
+            .Be(
+                ErrorText(
+                    await Call(
+                        "edit_playlist",
+                        new { id = missing, changes = rename },
+                        other.Access
+                    )
+                )
+            );
+        PlaylistName(await Call("read_playlist", new { id }, owner.Access))
+            .Should()
+            .Be("Listening guide");
+    }
+
+    [Test]
+    public async Task A_linked_account_is_rate_limited_separately_from_anonymous_callers()
+    {
+        await StartApp();
+        var tokens = await ConnectChatGpt("google-alice");
+
+        for (var request = 0; request < McpEndpoints.AccountRequestsPerMinute; request++)
+        {
+            using var allowed = await SendRpc("tools/list", token: tokens.Access);
+            allowed.StatusCode.Should().Be(HttpStatusCode.OK);
+        }
+
+        using var limited = await SendRpc("tools/list", token: tokens.Access);
+        limited.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+        using var anonymous = await SendRpc("tools/list");
+        anonymous.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Test]
+    public async Task Playlist_writes_replay_a_repeated_key_and_refuse_a_stale_revision()
+    {
+        await StartApp();
+        var tokens = await ConnectChatGpt("google-alice");
+        var draft = new
+        {
+            name = "Listening guide",
+            segments = new[] { new { entries = new[] { new { description = "Opening note" } } } },
+            idempotency_key = "guide-draft-1",
+        };
+
+        var created = await Call("create_playlist", draft, tokens.Access);
+        var id = created.GetProperty("structuredContent").GetProperty("playlist_id").GetString()!;
+        var playlistsAfterCreate = await PlaylistCount(tokens.Access);
+        var retried = await Call("create_playlist", draft, tokens.Access);
+        retried
+            .GetProperty("structuredContent")
+            .GetProperty("playlist_id")
+            .GetString()
+            .Should()
+            .Be(id);
+        (await PlaylistCount(tokens.Access)).Should().Be(playlistsAfterCreate);
+
+        object Rename(string name, string key) =>
+            new
+            {
+                id,
+                changes = new[]
+                {
+                    new { operation_type = "update_metadata", payload = new { name } },
+                },
+                expected_revision = 1,
+                idempotency_key = key,
+            };
+        var renamed = await Call(
+            "edit_playlist",
+            Rename("First rename", "rename-1"),
+            tokens.Access
+        );
+        renamed.TryGetProperty("structuredContent", out _).Should().BeTrue(renamed.ToString());
+
+        // The retry finds the revision advanced by its own first attempt and must still replay.
+        var replayed = await Call(
+            "edit_playlist",
+            Rename("First rename", "rename-1"),
+            tokens.Access
+        );
+        replayed.TryGetProperty("structuredContent", out _).Should().BeTrue(replayed.ToString());
+
+        var stale = await Call("edit_playlist", Rename("Stale rename", "rename-2"), tokens.Access);
+        ErrorText(stale).Should().Contain("revision 2");
+        PlaylistName(await Call("read_playlist", new { id }, tokens.Access))
+            .Should()
+            .Be("First rename");
     }
 
     private static readonly object Draft = new
@@ -584,6 +696,19 @@ public sealed class TestMcpHttp
             .StatusCode.Should()
             .Be(HttpStatusCode.Redirect, await response.Content.ReadAsStringAsync());
         return ReadCookie(response, AuthenticationConstants.AuthSsoCookie);
+    }
+
+    private async Task<TokenPair> ConnectChatGpt(string persona)
+    {
+        var fields = AuthorizeFields(
+            ChatGpt,
+            ChatGptRedirect,
+            ReadScopes + " library.write",
+            Resource
+        );
+        var cookie = await SignIn(fields, persona);
+        var code = await Approve(fields, cookie, "Create or edit your playlists.");
+        return await Exchange(ChatGpt, ChatGptRedirect, code, Resource);
     }
 
     private Task<HttpResponseMessage> Authorize(
@@ -771,6 +896,25 @@ public sealed class TestMcpHttp
             return await http.SendAsync(request);
         }
     }
+
+    private static string ErrorText(JsonElement result)
+    {
+        result.GetProperty("isError").GetBoolean().Should().BeTrue(result.ToString());
+        return result.GetProperty("content")[0].GetProperty("text").GetString()!;
+    }
+
+    private async Task<int> PlaylistCount(string token) =>
+        (await Call("my_library", new { limit = 50 }, token))
+            .GetProperty("structuredContent")
+            .GetProperty("playlists")
+            .GetArrayLength();
+
+    private static string? PlaylistName(JsonElement result) =>
+        result
+            .GetProperty("structuredContent")
+            .GetProperty("untrusted_listener_text")
+            .GetProperty("name")
+            .GetString();
 
     private static string ChallengeFrom(JsonElement result)
     {

@@ -69,13 +69,27 @@ existing v4 endpoint or to one of the backend additions below.
 | `create_playlist(name, description, segments: [{description?, entries: [{track_id?, description?}]}])` | `library.write` | One segment per segued run. Track descriptions explain each pick from review evidence; an entry with no `track_id` is a text block. | Existing: `POST /v1/playlists`, extended by guide content |
 | `edit_playlist(id, changes)` | `library.write` | Add segment, move, remove, rename, and add or change notes and text blocks. Checks ownership itself, so a later editor role on the batch service doesn't widen it | Existing: `operations:batch` |
 
-**Retries.** The server generates fresh UUIDv7 IDs for every write call. Unlike
-mobile, the model can't keep IDs between calls, so a call retried after a lost
-response is a new request. A retried `create_playlist` can create a second
-playlist, which the listener can archive. A retried `edit_playlist` can apply its
-changes twice, which shows in the playlist and can be undone with another edit.
-This is accepted for MCP. If it turns out to be a real problem, add an
-idempotency key then.
+**Retries.** Unlike mobile, the model can't keep IDs between calls. Both write
+tools take an optional `idempotency_key`. The server derives the command,
+operation and created IDs from the account, the target and the key, so a call
+repeated with the same key and arguments replays the stored result. The same
+key with different arguments returns a conflict. Without a key the server
+generates fresh UUIDv7 IDs and a retried call is a new write.
+
+**Stale edits.** `read_playlist` returns the playlist's `revision`.
+`edit_playlist` takes an optional `expected_revision` and refuses the edit when
+the playlist has moved on, unless the call is a replay of its own earlier
+success. The playlist service treats `base_revision` as a diagnostic, so the
+tool makes this comparison before the service takes its lock. It catches a
+playlist that changed since the model read it. Two edits that start at the same
+moment can both pass.
+
+**Untrusted text.** Review excerpts, playlist names, descriptions and notes are
+written by listeners. A copied public playlist keeps its author's text. Tools
+name every field they return and place this text under
+`untrusted_listener_text` with a notice that it is content and not
+instructions. The tool descriptions repeat the warning, because the same
+session may hold `library.write`.
 
 Tool annotations: catalog and read tools set `readOnlyHint: true`.
 `create_playlist` sets `readOnlyHint: false`. `edit_playlist` sets
@@ -105,8 +119,8 @@ signal for a future show-page "fan favorite" badge.
 
 - Require an artist. Grateful Dead is 75,112 reviews (34 MB of text); the
   unindexed artist-wide scan takes about 1.0 s and a one-show scan about 107 ms.
-- `song_id` builds the pattern from `norm.song_aliases`. A raw `pattern` is
-  allowed, up to 100 characters, with no backreferences.
+- `song_id` builds the pattern from `norm.song_aliases`. The route accepts no
+  caller-supplied regular expression.
 - Every query runs with `SET LOCAL statement_timeout = '2s'`. A timeout returns
   a "narrow the search" error, not a 500.
 - The limits live on the catalog route itself, because the route is public
@@ -318,7 +332,11 @@ Changes:
 4. **Consent page.** Existing clients use implicit consent. Third-party MCP
    clients need an explicit consent screen that shows the client name, the
    redirect host (required by the MCP spec), and the requested scopes in plain
-   language. Record grants so later authorizations can skip the prompt.
+   language. Show it on every authorization, including after an earlier grant,
+   and issue a code only from the form's anti-forgery-protected POST. Every
+   ChatGPT user shares one redirect URI, so a silent code would let an attacker
+   link a signed-in listener's Relisten account to the attacker's ChatGPT.
+   `prompt=none` returns `consent_required`.
 5. **Revocation.** List and revoke connected MCP clients in account settings.
    The list reports `connected` for an active session and `consent_remembered`
    when the session can no longer refresh. Disconnect revokes either state.
@@ -329,8 +347,10 @@ Changes:
    `/.well-known/oauth-protected-resource/mcp` and the root fallback:
    `resource: "https://mcp.relisten.net/mcp"`,
    `authorization_servers: ["https://auth.relisten.net/"]`,
-   `scopes_supported: ["user.read", "library.read"]`. Request `library.write`
-   by step-up when a write tool is first called.
+   `scopes_supported: ["user.read", "library.read", "library.write",
+   "offline_access"]`, the scopes the registered client may be granted. A client
+   may still request `library.write` by step-up when a write tool is first
+   called.
 2. **Mixed authentication.** Accept unauthenticated `initialize` and catalog calls.
    Declare per-tool `securitySchemes` in `_meta`: `{ "type": "noauth" }` on
    catalog tools, `{ "type": "oauth2", "scopes": [...] }` on account tools.
@@ -348,8 +368,12 @@ Changes:
    `security_version` to match the token, and the OpenIddict authorization to be
    valid, as `NativeSessionAuthorizationHandler` does for `/v1`. Test with a
    token issued before a disconnect, and with one issued before an account purge.
-5. Rate limit anonymous calls per client IP, and review search separately from
-   cheap catalog reads. Optionally verify ChatGPT's OpenAI-managed mTLS client
+5. Rate limit anonymous calls per client IP (60 a minute) and signed-in calls
+   per account (300 a minute), and review search separately from cheap catalog
+   reads. The account limit is finite because anyone can sign up and mint a
+   token through the public client. The limiter is in process memory, so the
+   effective ceiling is the limit times the replica count. Cap `/mcp` request
+   bodies at 2 MB, as the playlist routes do. Optionally verify ChatGPT's OpenAI-managed mTLS client
    certificate (SAN `mtls.prod.connectors.openai.com`); it identifies ChatGPT
    but does not replace OAuth.
 6. Keep tokens and tool results out of logs.

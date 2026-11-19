@@ -116,7 +116,7 @@ public sealed partial class TestV4CatalogHttp
     }
 
     [Test]
-    public async Task Mcp_review_search_keeps_literals_literal_and_rejects_malformed_patterns()
+    public async Task Mcp_review_search_keeps_literals_literal_and_ignores_caller_patterns()
     {
         await using var connection = await MigratedTestDatabase.OpenAsync();
         var reviewId = Guid.NewGuid();
@@ -161,14 +161,15 @@ public sealed partial class TestV4CatalogHttp
                 .Select(review => review!["excerpt"]!.GetValue<string>())
                 .Should()
                 .Contain(literal);
-            using var backref = await http.GetAsync(path + "?pattern=%28x%29%5C1");
-            backref.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
-            using var malformed = await http.GetAsync(path + "?pattern=%5B");
-            malformed.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
-            JsonNode.Parse(await malformed.Content.ReadAsStringAsync())!["code"]!
-                .GetValue<string>()
+            // The route takes no caller-supplied regular expression. One that matches
+            // nothing must not narrow the results.
+            var ignoredPattern = (
+                await GetJson(path + "?pattern=matches-no-review&show_id=" + ShowId(4))
+            ).AsArray();
+            ignoredPattern
+                .Select(review => review!["excerpt"]!.GetValue<string>())
                 .Should()
-                .Be("invalid_review_pattern");
+                .Contain(literal);
             var noMatches = (await GetJson(path + "?q=" + query + "&years=1994")).AsArray();
             noMatches.Should().BeEmpty();
         }

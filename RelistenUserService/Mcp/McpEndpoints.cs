@@ -1,18 +1,26 @@
-using System.Text.Json;
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using ModelContextProtocol.AspNetCore;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 using OpenIddict.Abstractions;
-using RelistenUserService.Authentication;
+using RelistenUserService.Authentication.OpenIdConnect;
 using RelistenUserService.Configuration;
 
 namespace RelistenUserService.Mcp;
 
 internal static class McpEndpoints
 {
-    private const string AnonymousPolicy = "mcp-anonymous";
+    private const string RateLimitPolicy = "mcp";
+    private const int AnonymousRequestsPerMinute = 60;
+
+    // A stateless tool call costs a few HTTP requests, and a playlist build makes a few dozen
+    // calls in a burst. Five requests a second leaves several times that headroom for one
+    // listener while bounding what a throwaway account can ask of the database and catalog.
+    internal const int AccountRequestsPerMinute = 300;
+
+    private const int MaximumRequestBytes = 2 * 1024 * 1024;
     internal const string MetadataPath = "/.well-known/oauth-protected-resource/mcp";
 
     public static void AddMcpEndpoints(
@@ -52,21 +60,51 @@ internal static class McpEndpoints
         services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-            options.AddPolicy(
-                AnonymousPolicy,
-                context =>
-                    context.User.HasAudience(mcp.Resource.AbsoluteUri)
-                        ? RateLimitPartition.GetNoLimiter("mcp-bearer")
-                        : RateLimitPartition.GetFixedWindowLimiter(
-                            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                            _ => new FixedWindowRateLimiterOptions
-                            {
-                                PermitLimit = 60,
-                                Window = TimeSpan.FromMinutes(1),
-                            }
-                        )
-            );
+            options.AddPolicy(RateLimitPolicy, context => RateLimitPartitionFor(context, mcp));
         });
+    }
+
+    /// <summary>
+    /// Gives each linked account and each anonymous address its own request budget.
+    /// </summary>
+    /// <remarks>
+    /// ChatGPT sends every listener's requests from shared addresses, so a signed-in caller is
+    /// counted by account instead of by address. The account budget must still be finite: the
+    /// OAuth client is public, so anyone can sign up and mint a token with the MCP audience.
+    /// The subject comes from a token whose signature, issuer and expiry OpenIddict has
+    /// checked. A token without a subject falls back to the anonymous budget.
+    ///
+    /// The limiter lives in process memory. Each replica counts separately, so the effective
+    /// ceiling is the configured limit multiplied by the replica count.
+    /// </remarks>
+    private static RateLimitPartition<string> RateLimitPartitionFor(
+        HttpContext context,
+        McpConfiguration mcp
+    )
+    {
+        var subject = context.User.GetClaim(OpenIddictConstants.Claims.Subject);
+        var isLinkedAccount =
+            context.User.Identity?.IsAuthenticated == true
+            && context.User.HasAudience(mcp.Resource.AbsoluteUri)
+            && !string.IsNullOrEmpty(subject);
+
+        return isLinkedAccount
+            ? RateLimitPartition.GetFixedWindowLimiter(
+                "account:" + subject,
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = AccountRequestsPerMinute,
+                    Window = TimeSpan.FromMinutes(1),
+                }
+            )
+            : RateLimitPartition.GetFixedWindowLimiter(
+                "address:" + (context.Connection.RemoteIpAddress?.ToString() ?? "unknown"),
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = AnonymousRequestsPerMinute,
+                    Window = TimeSpan.FromMinutes(1),
+                }
+            );
     }
 
     public static void UseMcpEndpoints(
@@ -75,7 +113,6 @@ internal static class McpEndpoints
     )
     {
         var mcp = runtime.Mcp!;
-        AdvertiseOptionalLibraryFilter(app.Services);
 
         app.Use(
             async (context, next) =>
@@ -88,47 +125,21 @@ internal static class McpEndpoints
             }
         );
         app.UseRateLimiter();
-        app.MapMcp("/mcp").RequireRateLimiting(AnonymousPolicy);
+        app.MapMcp("/mcp")
+            .RequireRateLimiting(RateLimitPolicy)
+            // A playlist draft is the largest legitimate message, so use the playlist routes' cap.
+            .WithMetadata(new RequestSizeLimitAttribute(MaximumRequestBytes));
 
         var metadata = new
         {
             resource = mcp.Resource.AbsoluteUri,
             authorization_servers = new[] { runtime.Issuer.AbsoluteUri },
-            scopes_supported = new[] { RelistenScopes.UserRead, RelistenScopes.LibraryRead },
+            scopes_supported = McpOAuth.AdvertisedScopes,
             bearer_methods_supported = new[] { "header" },
         };
-        app.MapGet(MetadataPath, () => Results.Json(metadata)).RequireRateLimiting(AnonymousPolicy);
+        app.MapGet(MetadataPath, () => Results.Json(metadata)).RequireRateLimiting(RateLimitPolicy);
         app.MapGet("/.well-known/oauth-protected-resource", () => Results.Json(metadata))
-            .RequireRateLimiting(AnonymousPolicy);
-    }
-
-    private static void AdvertiseOptionalLibraryFilter(IServiceProvider services)
-    {
-        // The SDK registers each tool as a singleton. Set optional auth metadata
-        // before startup so every tools/list response reads the same descriptor.
-        foreach (
-            var tool in services
-                .GetServices<McpServerTool>()
-                .Where(tool =>
-                    tool.ProtocolTool.Name
-                        is "list_performances"
-                            or "sample_shows"
-                            or "search_reviews"
-                )
-        )
-        {
-            var scope =
-                tool.ProtocolTool.Name == "search_reviews"
-                    ? RelistenScopes.UserRead
-                    : RelistenScopes.LibraryRead;
-            tool.ProtocolTool.Meta!["securitySchemes"] = JsonSerializer.SerializeToNode(
-                new object[]
-                {
-                    new { type = "noauth" },
-                    new { type = "oauth2", scopes = new[] { scope } },
-                }
-            );
-        }
+            .RequireRateLimiting(RateLimitPolicy);
     }
 
     private static bool ValidateRequest(HttpContext context, McpConfiguration mcp)

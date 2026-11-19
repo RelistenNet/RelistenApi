@@ -54,7 +54,9 @@ public sealed class ConnectedClientsController(
                         {
                             id = "chatgpt",
                             name = "ChatGPT",
-                            state = active ? "connected" : "consent_remembered",
+                            // "allowed": the grant stands but no session is live, so the
+                            // app would be let back in without asking.
+                            state = active ? "connected" : "allowed",
                         },
                     }
                     : [],

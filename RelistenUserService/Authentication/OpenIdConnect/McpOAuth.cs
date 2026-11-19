@@ -11,6 +11,21 @@ internal static class McpOAuth
     public const string ClientId = "https://chatgpt.com/oauth/client.json";
     public const string Redirect = "https://chatgpt.com/connector_platform_oauth_redirect";
 
+    private static readonly string[] ResourceScopes =
+    [
+        RelistenScopes.UserRead,
+        RelistenScopes.LibraryRead,
+        RelistenScopes.LibraryWrite,
+    ];
+
+    /// <summary>
+    /// The scopes the MCP resource metadata tells a client it may request. The client's scope
+    /// permissions are built from the same list, so the two cannot drift apart. OpenIddict
+    /// grants <c>offline_access</c> through the refresh token grant permission instead of a
+    /// scope permission.
+    /// </summary>
+    public static readonly string[] AdvertisedScopes = [.. ResourceScopes, Scopes.OfflineAccess];
+
     public static void Configure(OpenIddictServerBuilder server, McpConfiguration? mcp)
     {
         if (mcp is not null)
@@ -29,6 +44,7 @@ internal static class McpOAuth
                     )
                     .UseInlineHandler(context =>
                     {
+                        // Only the client registered in InitializeAsync is accepted.
                         context.Metadata["client_id_metadata_document_supported"] = true;
                         // ChatGPT chooses its JWT assertion preference when advertised. The
                         // checked-in Relisten clients use PKCE or client secrets.
@@ -114,12 +130,13 @@ internal static class McpOAuth
                 Permissions.GrantTypes.RefreshToken,
                 Permissions.ResponseTypes.Code,
                 Permissions.Prefixes.Resource + mcp.Resource.AbsoluteUri,
+                // An identity scope, so the resource metadata does not advertise it.
                 Permissions.Prefixes.Scope + Scopes.Profile,
-                Permissions.Prefixes.Scope + RelistenScopes.UserRead,
-                Permissions.Prefixes.Scope + RelistenScopes.LibraryRead,
-                Permissions.Prefixes.Scope + RelistenScopes.LibraryWrite,
             },
         };
+        description.Permissions.UnionWith(
+            ResourceScopes.Select(scope => Permissions.Prefixes.Scope + scope)
+        );
         var client = await manager.FindByClientIdAsync(ClientId, cancellationToken);
         if (client is null)
         {

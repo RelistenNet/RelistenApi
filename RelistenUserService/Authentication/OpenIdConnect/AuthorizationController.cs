@@ -121,11 +121,10 @@ public sealed class AuthorizationController(
                     return RejectMcpAuthorization(Errors.AccessDenied);
                 }
             }
-            else if (
-                request.HasPromptValue(PromptValues.Consent)
-                || !await mcpConsent.HasGrantAsync(userId, request, cancellationToken)
-            )
+            else
             {
+                // A code is issued only from the consent form's POST. See McpConsent for why
+                // an earlier grant does not skip the page.
                 return request.HasPromptValue(PromptValues.None)
                     ? RejectMcpAuthorization(Errors.ConsentRequired)
                     : Content(

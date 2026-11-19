@@ -2,7 +2,6 @@ using System;
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using System.Linq;
-using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
@@ -31,7 +30,6 @@ public sealed class CatalogPerformanceController(
     public async Task<IActionResult> SearchReviews(
         string artistId,
         string? q,
-        string? pattern,
         [FromQuery(Name = "song_id")] string? songId,
         [FromQuery(Name = "show_id")] string? showId,
         string? years,
@@ -43,21 +41,23 @@ public sealed class CatalogPerformanceController(
             !TryYears(years, out var parsedYears)
             || (showId is not null && !UuidTypeId.TryParse(showId, ShowId.Prefix, out _))
             || (songId is not null && !IsSong(songId))
-            || new[] { q, pattern, songId }.Count(value => value is not null) > 1
+            || (q is not null && songId is not null)
             || q is { Length: > 200 }
-            || (pattern is not null && (pattern.Length > 100 || Regex.IsMatch(pattern, @"\\[0-9]")))
         )
         {
             return Failure(
                 422,
                 "invalid_review_search",
-                "Use one literal query, song ID or pattern (up to 100 characters with no backreferences), and valid show and year filters."
+                "Use one literal query or song ID, and valid show and year filters."
             );
         }
 
+        // Callers search by literal text or song ID. The search service derives its own
+        // expression from a song's aliases; a caller-supplied one would run arbitrary
+        // PostgreSQL regular expressions against the review corpus.
         var query = new CatalogReviewQuery(
             q,
-            pattern,
+            Pattern: null,
             songId,
             showId is null ? null : ShowId.Parse(showId).Value,
             parsedYears,
@@ -82,14 +82,6 @@ public sealed class CatalogPerformanceController(
                         throw new ReviewQueryRejected(
                             "review_search_timeout",
                             "Narrow the review search with a show, year, or more specific expression."
-                        );
-                    }
-                    catch (PostgresException exception)
-                        when (exception.SqlState == PostgresErrorCodes.InvalidRegularExpression)
-                    {
-                        throw new ReviewQueryRejected(
-                            "invalid_review_pattern",
-                            "Use a valid PostgreSQL regular expression."
                         );
                     }
                 },
