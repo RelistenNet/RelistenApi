@@ -26,8 +26,10 @@ public sealed class PostgresIntegrationDatabase
         {
             await using var admin = new NpgsqlConnection(_adminConnectionString);
             await admin.OpenAsync();
+            // The play-history migration installs the server's Timescale version.
+            // An existing template1 can carry an older extension version.
             await using var create = new NpgsqlCommand(
-                $"CREATE DATABASE \"{_databaseName}\"",
+                $"CREATE DATABASE \"{_databaseName}\" TEMPLATE template0",
                 admin
             );
             await create.ExecuteNonQueryAsync();

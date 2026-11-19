@@ -25,5 +25,10 @@
       Update="Fixtures/playlists/guide-markdown-vectors.json"
       CopyToOutputDirectory="PreserveNewest"
     />
+    <None
+      Include="../local-dev/seed/schema.sql"
+      Link="Fixtures/catalog-schema.sql"
+      CopyToOutputDirectory="PreserveNewest"
+    />
   </ItemGroup>
 </Project>

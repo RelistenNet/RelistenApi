@@ -229,6 +229,7 @@ public static class AuthenticationServiceCollectionExtensions
         services.AddScoped<RelistenUserService.Playlists.PlaylistWriteService>();
         services.AddScoped<RelistenUserService.Playlists.PlaylistReadService>();
         services.AddScoped<RelistenUserService.Playlists.PlaylistHttpFilter>();
+        services.AddScoped<RelistenUserService.History.PlayHistoryUploads>();
         services.AddScoped<LibraryStateStore>();
         services.AddScoped<LibraryReadService>();
         services.AddSingleton<LibraryCursorProtector>();

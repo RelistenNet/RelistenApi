@@ -57,6 +57,16 @@ public sealed class TestAccountDeletionSchema
                     );
             }
 
+            // Both accounts have a play in the same chunk. Purge must delete one
+            // account through the foreign key even after the chunk is compressed.
+            var chunk = await connection.QuerySingleAsync<string>(
+                "SELECT show_chunks('user_data.plays')::text"
+            );
+            await connection.ExecuteAsync(
+                "CALL public.convert_to_columnstore(CAST(@chunk AS regclass))",
+                new { chunk }
+            );
+
             // Restore replay uses the same deletes without requiring a job. Running it
             // twice also verifies that a missing user is safe to replay.
             var purge = new AccountPurge(database.ConnectionString);
@@ -94,6 +104,7 @@ public sealed class TestAccountDeletionSchema
                 FROM pg_constraint fk
                 JOIN owned ON fk.confrelid = owned.table_oid
                 WHERE fk.contype = 'f'
+                    AND NOT EXISTS (SELECT FROM pg_inherits WHERE inhrelid = fk.conrelid)
             )
             SELECT format('%I.%I', namespace.nspname, relation.relname)
             FROM owned
@@ -179,6 +190,11 @@ public sealed class TestAccountDeletionSchema
             INSERT INTO user_data.playlist_receipts
                 (id, actor_id, playlist_id, kind, payload_hash, status, revision, archived, changed, created_at)
             VALUES (@PlaylistCommandId, @UserId, @PlaylistId, 'create', @Hash, 'active', 2, false, true, now());
+
+            INSERT INTO user_data.plays
+                (user_id, play_id, track_id, qualified_at, started_at, received_at, app_type, offline, origin)
+            VALUES (@UserId, @PlayId, @TrackId, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z',
+                    now(), 1, false, 1);
             """,
             new
             {
@@ -203,17 +219,27 @@ public sealed class TestAccountDeletionSchema
                 SegmentId = PlaylistSegmentId.New().ToString(),
                 EntryId = PlaylistEntryId.New().ToString(),
                 PlaylistCommandId = CommandId.New().ToString(),
+                PlayId = PlayId.New().Value,
             },
             transaction
         );
 
         // Compare the tables seeded by this transaction with the foreign key walk, so
         // removing an existing foreign key cannot silently remove that table from coverage.
+        // Timescale writes to chunks and maintains extension-owned catalogs for them.
         var seeded = await connection.QueryAsync<string>(
             """
-            SELECT format('%I.%I', schemaname, relname)
-            FROM pg_stat_xact_user_tables
-            WHERE n_tup_ins > 0
+            SELECT DISTINCT format('%I.%I', ns.nspname, relation.relname)
+            FROM pg_stat_xact_user_tables stats
+            LEFT JOIN pg_inherits child ON child.inhrelid = stats.relid
+            JOIN pg_class relation ON relation.oid = coalesce(child.inhparent, stats.relid)
+            JOIN pg_namespace ns ON ns.oid = relation.relnamespace
+            WHERE stats.n_tup_ins > 0
+                AND NOT EXISTS (
+                    SELECT FROM pg_depend dep
+                    WHERE dep.classid = 'pg_class'::regclass AND dep.objid = stats.relid
+                        AND dep.deptype = 'e'
+                )
             """,
             transaction: transaction
         );

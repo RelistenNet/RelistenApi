@@ -1,7 +1,7 @@
 # Save signed-in plays to the listener's account
 
-Status: planned 2026-11-18, revised after review the same day; not started. This
-plan replaces Milestone 5 of the
+Status: server implementation and local verification complete. Mobile upload
+and rollout are pending. This plan replaces Milestone 5 of the
 [July implementation plan](2026-07-18-relisten-identity-user-data-and-sonos-implementation.md),
 Slice 3 of the
 [mobile-first delivery plan](2026-07-18-relisten-mobile-first-account-delivery-plan.md),
@@ -118,9 +118,36 @@ reported them through `/live/play`. A retried play is skipped in step 1, so it
 can't double-count popularity.
 
 Return each play's result as `accepted`, `duplicate` or `rejected`. Mobile marks
-all three as sent. A server switch can turn uploads off without breaking
-clients. While it is off, the endpoint returns `503` and mobile keeps the rows
-pending.
+all three as sent. On a transient failure such as a `503`, mobile keeps the
+rows pending and retries the same plays.
+
+#### Server contract
+
+The endpoint uses the existing library write authorization. Send
+`contract_version: 1` and a `plays` array. Each item takes the fields from the
+table above, except `user_id` and `received_at`, which the service supplies.
+Send `origin` as `"live"` or `"anonymous_import"` and `app_type` as the existing
+play smallint (0 unknown, 1 iOS, 2 web, 3 Sonos, 4 Android). The optional
+playlist IDs and duration may be omitted or null.
+
+The `200` body is `{contract_version, results: [{play_id, status}, ...]}`.
+Results match request order. A rejected item with an invalid ID has
+`play_id: null`. The first occurrence of a valid ID in a batch claims that
+position, and repeats receive `duplicate`. Across requests, retry with the
+same `qualified_at` and `play_id` so the account play and anonymous count
+deduplicate together.
+
+The accounts migration requires TimescaleDB and a connection to the shared
+database containing `public.source_track_plays`. Deploy the migration and
+account deletion before releasing the mobile writer. The User Service build
+serves uploads as soon as it is deployed.
+
+The migration configures the columnstore without scheduling automatic
+compression. In a disposable TimescaleDB 2.28.2 database, ten 500-play SQL
+batches per mode had median times of 8.3 ms into rowstore and 10.5 ms into a
+compressed chunk. Each batch also wrote its 500 anonymous plays. This
+single-listener sample checks that late ingest works. Choose the compression
+delay after measuring the rollout workload.
 
 ### 3. Mobile
 
