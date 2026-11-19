@@ -19,7 +19,8 @@ public static partial class V4CatalogProjection
             new(
                 Window(metrics.windows.hours_48h),
                 Window(metrics.windows.days_7d),
-                Window(metrics.windows.days_30d)
+                Window(metrics.windows.days_30d),
+                metrics.windows.Year is { } year ? Window(year) : null
             )
         );
     }

@@ -368,11 +368,18 @@ public sealed partial class TestV4CatalogHttp
             var document = await GetJson("/api-docs/v4/swagger.json");
             AssertSchemaFields(document, "ArtistRankingResource", groups[0]!);
             AssertSchemaFields(document, "PopularityResource", expectedPopularity);
-            AssertSchemaFields(
-                document,
-                "PopularityWindowsResource",
-                expectedPopularity["windows"]!
-            );
+            var windowsSchema = document["components"]!["schemas"]!["PopularityWindowsResource"]!;
+            var returnedWindows = expectedPopularity["windows"]!.AsObject();
+            windowsSchema["properties"]!
+                .AsObject()
+                .Select(field => field.Key)
+                .Should()
+                .BeEquivalentTo(returnedWindows.Select(field => field.Key).Append("1y"));
+            windowsSchema["required"]!
+                .AsArray()
+                .Select(field => field!.GetValue<string>())
+                .Should()
+                .BeEquivalentTo(returnedWindows.Select(field => field.Key));
             AssertSchemaFields(
                 document,
                 "PopularityWindowResource",

@@ -12,14 +12,19 @@ and queue one batch for any required stale or missing populations.
   `artist_uuid` supports artist-scoped selection and replacement.
 - `year_popularity`: global and artist-local year metrics, with the same keys.
 
-Each metrics table has plays, hours, and hot score for 48 hours, seven days, and
-30 days, plus trend ratio and raw momentum. Only show rows have nullable organic
-momentum. Each row also has `generated_at`. Counters are zero and momentum is
-null for targets without scored activity. Public `popularity` remains null for
-those rows; rankings exclude them. Six-hour and 90-day play counts remain only
-calculation inputs. Ranking indexes contain only scored rows, and global
-show/year indexes contain only global scored rows. Catalog foreign keys cascade
-deletion.
+Each metrics table has plays, hours, and hot score for 48 hours, seven days,
+30 days, and 365 days, plus trend ratio and raw momentum. Show rows also store
+organic momentum. Each row has `generated_at`. Yearly counters are null until
+they have been calculated once.
+
+With the yearly window enabled, ordinary v4 metadata includes `popularity`
+when any window has plays. Rows without 30-day activity have null stored
+momentum and return numeric zero for momentum and trend ratio. Rankings require
+a stored momentum score. The v4 population compares 30-day-active rows only,
+which can change percentiles for scopes that previously included older
+activity. Legacy Redis maps use their existing populations and fields.
+Six-hour and 90-day play counts remain scoring inputs. Catalog foreign keys
+cascade deletion.
 
 Global and artist-local percentiles have different comparison populations and
 can refresh independently. Storing separate rows preserves those results without
@@ -47,8 +52,8 @@ and queues at most one `PopularityJobs.RefreshPopulations` job. The same one-hou
 staleness threshold is used by legacy maps. Unknown artists and scopes without catalog targets are excluded from refresh
 requests. Successfully calculated inactive rows are fresh normally.
 
-The response keeps its stored scores. A missing show metric is null; a missing
-ranking population is empty while its first calculation is queued. SQL or queue
+The response keeps its stored scores. A missing show metric is null. A missing ranking population is empty while its
+first calculation is queued. SQL or queue
 submission failures use v4's existing 503/no-store boundary. A later request can
 retry. Enqueueing finishes before publication of the response or its ETag.
 
@@ -105,3 +110,58 @@ use the hourly/daily Timescale aggregates installed by the
 [PopularityService](../../RelistenApi/Services/Popularity/PopularityService.cs)
 owns the scoring rules. Change the calculation there rather than maintaining
 a second formula specification in documentation.
+
+## Yearly window rollout
+
+Migration 21 creates `source_track_plays_monthly` and `source_plays_daily`
+without an initial backfill. Both derive from `source_track_plays_daily` and
+receive daily refresh policies. The track rollup stores month totals and the
+count of daily rows per track. The source rollup groups by source and UTC day,
+so two tracks from one source played on the same day contribute one source-day.
+
+The yearly window covers 365 UTC dates through the calculation date. Complete
+months come from the monthly rollup. The partial month at each edge comes
+from the daily rollup. At month turnover, the real-time monthly view reads the
+daily aggregate for buckets it has yet to materialize. The daily aggregate's
+own freshness still bounds what these reads can see.
+
+1. Deploy the explicit popularity read projections before migration 21.
+   Wait for the previous API instances to drain. Apply migration 21 with
+   `Popularity__EnableYearlyWindow` off. Backfill both new rollups from the
+   earliest available daily bucket, moving forward in bounded UTC month ranges. Use the start of the current UTC month as the
+   exclusive end of the monthly backfill. Force each range so it fills any gaps
+   left by an earlier refresh. Run each call as its own statement on the
+   primary. These calls backfill October 2018.
+
+   ```sql
+   CALL refresh_continuous_aggregate(
+       'source_track_plays_monthly', TIMESTAMPTZ '2018-10-01 00:00Z',
+       TIMESTAMPTZ '2018-11-01 00:00Z', force => true
+   );
+   CALL refresh_continuous_aggregate(
+       'source_plays_daily', TIMESTAMPTZ '2018-10-01 00:00Z',
+       TIMESTAMPTZ '2018-11-01 00:00Z', force => true
+   );
+   ```
+
+   For the source-day rollup, also refresh the current month through the
+   daily aggregate's last completed day. This fills any earlier days in the
+   current month before the real-time tail takes over.
+
+2. Compare yearly totals with a daily-only calculation across both edge
+   months. Measure the yearly scan and complete popularity refresh on
+   production data, including global shows and the largest artist. Check
+   legacy reads on a cold Redis cache too. Their cache-miss calculations use
+   the same writer and wait for the yearly query.
+3. Verify the migration has reached the standby and enable
+   `Popularity__EnableYearlyWindow=true` on the catalog API and its popularity
+   job runners. Wait for all writers to use the new setting before running
+   `PopularityJobs.RefreshReadModel`. Confirm ordinary reads expose
+   `windows.1y` and yearly-only rows stay out of rankings.
+
+Every enabled refresh calculates the yearly window before the existing atomic
+upsert. The yearly scan uses the same database read path as the recent windows.
+If the scan fails, the job keeps the previous publication for retry. Turning
+off the switch hides yearly metadata immediately. Subsequent refreshes resume
+the previous scoring population and preserve the stored yearly values.
+After migration 21, recovery images must recognize that schema version.

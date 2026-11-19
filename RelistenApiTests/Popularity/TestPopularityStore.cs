@@ -1,6 +1,7 @@
 using Dapper;
 using FluentAssertions;
 using Hangfire;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Hosting.Internal;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -106,7 +107,11 @@ public sealed class TestPopularityStore
             var settings = new NpgsqlConnectionStringBuilder(reader.ConnectionString);
             for (var i = 0; i <= settings.AutoPrepareMinUsages; i++)
             {
-                await PopularityStore.ReadArtistLocalShowMetrics(reader, [show]);
+                await PopularityStore.ReadArtistLocalShowMetrics(
+                    reader,
+                    [show],
+                    includeYearlyWindow: false
+                );
             }
             (await HasPreparedPopularityRead(reader)).Should().BeTrue();
 
@@ -115,7 +120,11 @@ public sealed class TestPopularityStore
             );
             try
             {
-                var after = await PopularityStore.ReadArtistLocalShowMetrics(reader, [show]);
+                var after = await PopularityStore.ReadArtistLocalShowMetrics(
+                    reader,
+                    [show],
+                    includeYearlyWindow: false
+                );
                 after[show].windows.days_30d.plays.Should().Be(12);
                 after[show].momentum_score.Should().Be(0.5);
             }
@@ -398,6 +407,292 @@ public sealed class TestPopularityStore
         finally
         {
             redis.connection.Dispose();
+        }
+    }
+
+    [Test]
+    public async Task YearlyRollupSplitsUtcMonthEdgesAndCountsSourceDaysOnce()
+    {
+        var source = Guid.NewGuid();
+        var firstTrack = Guid.NewGuid();
+        var secondTrack = Guid.NewGuid();
+        try
+        {
+            await connection.ExecuteAsync(
+                """
+                INSERT INTO sources(uuid,artist_id,show_id,upstream_identifier,display_date,is_soundboard,is_remaster,has_jamcharts,updated_at)
+                SELECT @source,artist_id,id,@source::text,display_date,false,false,false,now() FROM shows WHERE uuid=@show;
+                INSERT INTO source_tracks(uuid,artist_id,source_id,track_position,title,slug,mp3_url,duration,updated_at)
+                SELECT t.uuid,s.artist_id,s.id,t.position,t.title,t.title,'https://example.test/'||t.title||'.mp3',t.duration,now()
+                FROM sources s CROSS JOIN (VALUES (@firstTrack,1,'first',120),(@secondTrack,2,'second',180))
+                    AS t(uuid,position,title,duration)
+                WHERE s.uuid=@source;
+                INSERT INTO source_track_plays(created_at,source_track_uuid,app_type)
+                VALUES ('2023-03-01 23:59Z',@firstTrack,0),
+                       ('2023-03-02 00:00Z',@firstTrack,0),
+                       ('2023-03-02 12:00Z',@secondTrack,0),
+                       ('2023-05-12 12:00Z',@firstTrack,0),
+                       ('2024-02-29 12:00Z',@firstTrack,0),
+                       ('2024-02-29 14:00Z',@firstTrack,0),
+                       ('2024-03-01 00:00Z',@firstTrack,0);
+                """,
+                new
+                {
+                    source,
+                    show,
+                    firstTrack,
+                    secondTrack,
+                }
+            );
+            await RefreshRollup("source_track_plays_daily", "2023-03-01", "2024-04-01");
+            await RefreshRollup("source_track_plays_monthly", "2023-03-01", "2024-04-01");
+            await RefreshRollup("source_plays_daily", "2023-03-01", "2024-04-01");
+
+            // February is a whole month at leap day and a partial month the day before.
+            var throughLeapDay = new DateOnly(2024, 2, 29);
+            (
+                await PlayRollupReader.ReadTracks(
+                    connection,
+                    [firstTrack, secondTrack],
+                    throughLeapDay
+                )
+            )
+                .Should()
+                .BeEquivalentTo(
+                    new PlayRollupTotals[]
+                    {
+                        new(firstTrack, 4, 480, 3),
+                        new(secondTrack, 1, 180, 1),
+                    }
+                );
+            (await PlayRollupReader.ReadSources(connection, [source], throughLeapDay))
+                .Should()
+                .Equal(new PlayRollupTotals(source, 5, 660, 3));
+            (await PlayRollupReader.ReadSources(connection, [source], new DateOnly(2024, 2, 28)))
+                .Should()
+                .Equal(new PlayRollupTotals(source, 4, 540, 3));
+
+            (await PlayRollupReader.ReadTracks(connection, [firstTrack]))
+                .Should()
+                .Equal(new PlayRollupTotals(firstTrack, 6, 720, 5));
+            (await PlayRollupReader.ReadSources(connection, [source]))
+                .Should()
+                .Equal(new PlayRollupTotals(source, 7, 900, 5));
+            await AssertMonthTurnoverReadsDailyTail(firstTrack);
+        }
+        finally
+        {
+            await connection.ExecuteAsync(
+                """
+                DELETE FROM source_track_plays WHERE source_track_uuid=ANY(@ids);
+                DELETE FROM sources WHERE uuid=@source;
+                """,
+                new { ids = new[] { firstTrack, secondTrack }, source }
+            );
+            await RefreshRollup("source_track_plays_daily", "2023-03-01", "2024-04-01");
+            await RefreshRollup("source_track_plays_monthly", "2023-03-01", "2024-04-01");
+            await RefreshRollup("source_plays_daily", "2023-03-01", "2024-04-01");
+        }
+    }
+
+    private async Task AssertMonthTurnoverReadsDailyTail(Guid trackId)
+    {
+        // Earlier tests may have refreshed through the current month. Use the next
+        // month to test a full bucket beyond the monthly materialization watermark.
+        var today = DateTime.UtcNow;
+        var monthEnd = new DateOnly(today.Year, today.Month, 1).AddMonths(2);
+        var lastDay = monthEnd.AddDays(-1);
+        var playAt = lastDay.ToDateTime(new TimeOnly(12, 0), DateTimeKind.Utc);
+        var from = lastDay.ToString("yyyy-MM-dd") + " 00:00Z";
+        var to = monthEnd.ToString("yyyy-MM-dd") + " 00:00Z";
+        try
+        {
+            await connection.ExecuteAsync(
+                "INSERT INTO source_track_plays(created_at,source_track_uuid,app_type) VALUES (@playAt,@trackId,0)",
+                new { playAt, trackId }
+            );
+            await RefreshRollup("source_track_plays_daily", from, to);
+
+            // The upper rollup has never materialized this month. At the first
+            // instant of the next month, yearly reads choose it as a whole bucket.
+            var totals = await PlayRollupReader.ReadTracks(connection, [trackId], lastDay);
+            totals.Should().Equal(new PlayRollupTotals(trackId, 1, 120, 1));
+        }
+        finally
+        {
+            await connection.ExecuteAsync(
+                "DELETE FROM source_track_plays WHERE source_track_uuid=@trackId AND created_at=@playAt",
+                new { playAt, trackId }
+            );
+            await RefreshRollup("source_track_plays_daily", from, to);
+        }
+    }
+
+    private Task RefreshRollup(string relation, string from, string to) =>
+        connection.ExecuteAsync(
+            "CALL refresh_continuous_aggregate(@relation::regclass, @from::timestamptz, @to::timestamptz, force => true)",
+            new
+            {
+                relation,
+                from,
+                to,
+            }
+        );
+
+    [Test]
+    public async Task FullAndOnDemandRefreshKeepYearlyOnlyPlaysWithoutScoringThem()
+    {
+        var oldShow = Guid.NewGuid();
+        var oldTrack = Guid.NewGuid();
+        var oldYear = Guid.NewGuid();
+        var recentPlayAt = DateTime.UtcNow.AddDays(-2);
+        var options = RedisService.BuildConfiguration("redis://127.0.0.1:16379");
+        options.DefaultDatabase = 14;
+        var redis = new RedisService(options);
+        try
+        {
+            await connection.ExecuteAsync(
+                """
+                INSERT INTO years(uuid,artist_id,year,updated_at)
+                SELECT @oldYear,id,'1983',now() FROM artists WHERE uuid=@artist;
+                INSERT INTO shows(uuid,artist_id,year_id,date,display_date,updated_at)
+                SELECT @oldShow,artist_id,id,'1983-07-07','1983-07-07',now() FROM years WHERE uuid=@oldYear;
+                INSERT INTO sources(uuid,artist_id,show_id,upstream_identifier,display_date,is_soundboard,is_remaster,has_jamcharts,updated_at)
+                SELECT @oldShow,artist_id,id,@oldShow::text,'1983-07-07',false,false,false,now() FROM shows WHERE uuid=@oldShow;
+                INSERT INTO source_tracks(uuid,artist_id,source_id,track_position,title,slug,mp3_url,duration,updated_at)
+                SELECT @oldTrack,artist_id,id,1,'Old','old','https://example.test/old.mp3',240,now() FROM sources WHERE uuid=@oldShow;
+                INSERT INTO source_track_plays(created_at,source_track_uuid,app_type)
+                VALUES (now()-interval '60 days',@oldTrack,0),(@recentPlayAt,@track,0);
+                """,
+                new
+                {
+                    oldYear,
+                    artist,
+                    oldShow,
+                    oldTrack,
+                    track,
+                    recentPlayAt,
+                }
+            );
+            await connection.ExecuteAsync(
+                "CALL refresh_continuous_aggregate('source_track_plays_daily',NULL,NULL)"
+            );
+            await connection.ExecuteAsync(
+                "CALL refresh_continuous_aggregate('source_track_plays_monthly',NULL,NULL)"
+            );
+
+            var cache = new PopularityCacheService(redis);
+            var jobs = System.Reflection.DispatchProxy.Create<IBackgroundJobClient, NoRefresh>();
+            var service = new PopularityService(
+                db,
+                cache,
+                jobs,
+                NullLogger<PopularityService>.Instance,
+                new ConfigurationBuilder()
+                    .AddInMemoryCollection(
+                        new Dictionary<string, string?>
+                        {
+                            ["Popularity:EnableYearlyWindow"] = "true",
+                        }
+                    )
+                    .Build()
+            );
+            await service.RefreshReadModel();
+            await AssertYearlyRowsAsync(oldShow, oldYear);
+
+            // Clear the annual values before the stale-read batch to prove that it
+            // recalculates the window instead of preserving the full refresh's result.
+            await connection.ExecuteAsync(
+                """
+                UPDATE show_popularity SET plays_1y=NULL WHERE uuid=@oldShow;
+                UPDATE year_popularity SET plays_1y=NULL WHERE uuid=@oldYear;
+                """,
+                new { oldShow, oldYear }
+            );
+            await service.RefreshPopulations([
+                new(PopularityPopulationKind.Artist),
+                new(PopularityPopulationKind.Show),
+                new(PopularityPopulationKind.Show, artist),
+                new(PopularityPopulationKind.Year),
+                new(PopularityPopulationKind.Year, artist),
+            ]);
+
+            await AssertYearlyRowsAsync(oldShow, oldYear);
+
+            var active = await connection.QuerySingleAsync<StoredPopularity>(
+                "SELECT * FROM show_popularity WHERE uuid=@show AND NOT is_global",
+                new { show }
+            );
+            active.momentum_score.Should().Be(1);
+            var artistPlays = await connection.QuerySingleAsync<long>(
+                "SELECT plays_1y FROM artist_popularity WHERE uuid=@artist",
+                new { artist }
+            );
+            artistPlays.Should().BeGreaterThanOrEqualTo(2);
+
+            var legacy = (
+                await cache.GetAsync<Dictionary<Guid, PopularityMetrics>>(
+                    "popularity:shows:map:30d-48h"
+                )
+            )
+                .Entry!
+                .data;
+            legacy.Should().NotContainKey(oldShow);
+            Newtonsoft.Json.Linq.JObject.FromObject(legacy[show])["windows"]!
+                ["1y"]
+                .Should()
+                .BeNull();
+        }
+        finally
+        {
+            await connection.ExecuteAsync(
+                """
+                DELETE FROM source_track_plays
+                WHERE source_track_uuid=@oldTrack OR (source_track_uuid=@track AND created_at=@recentPlayAt);
+                DELETE FROM shows WHERE uuid=@oldShow;
+                DELETE FROM years WHERE uuid=@oldYear;
+                """,
+                new
+                {
+                    oldTrack,
+                    oldShow,
+                    oldYear,
+                    track,
+                    recentPlayAt,
+                }
+            );
+            await connection.ExecuteAsync(
+                "CALL refresh_continuous_aggregate('source_track_plays_daily',NULL,NULL)"
+            );
+            await connection.ExecuteAsync(
+                "CALL refresh_continuous_aggregate('source_track_plays_monthly',NULL,NULL)"
+            );
+            redis.connection.Dispose();
+        }
+    }
+
+    private async Task AssertYearlyRowsAsync(Guid showId, Guid yearId)
+    {
+        foreach (
+            var (table, id) in new[] { ("show_popularity", showId), ("year_popularity", yearId) }
+        )
+        {
+            var rows = (
+                await connection.QueryAsync<StoredPopularity>(
+                    $"SELECT * FROM {table} WHERE uuid=@id",
+                    new { id }
+                )
+            ).ToArray();
+            rows.Should().HaveCount(2);
+            foreach (var row in rows)
+            {
+                row.plays_1y.Should().Be(1);
+                row.hours_1y.Should().Be(0.0667);
+                row.hot_score_1y.Should().Be(1);
+                row.plays_30d.Should().Be(0);
+                row.momentum_score.Should().BeNull();
+                row.trend_ratio.Should().Be(0);
+            }
         }
     }
 

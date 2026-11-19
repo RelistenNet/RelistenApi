@@ -15,7 +15,7 @@ namespace Relisten.Services.Popularity;
 /// inactive targets. Per-row timestamps reject late older calculations. Sorted
 /// upserts keep overlapping publications in the same row-lock order.
 /// </summary>
-public sealed class PopularityStore(DbService db)
+public sealed class PopularityStore(DbService db, bool includeYearlyWindow = false)
 {
     /// <summary>Reads only selected artist-local show scores in the caller's connection/snapshot.</summary>
     internal static async Task<
@@ -23,6 +23,7 @@ public sealed class PopularityStore(DbService db)
     > ReadArtistLocalShowMetrics(
         IDbConnection connection,
         Guid[] ids,
+        bool includeYearlyWindow,
         IDbTransaction? transaction = null,
         CancellationToken cancellationToken = default
     )
@@ -30,9 +31,10 @@ public sealed class PopularityStore(DbService db)
         var rows = await connection.QueryAsync<StoredPopularity>(
             new CommandDefinition(
                 $"""
-                SELECT {StoredPopularity.MetricColumns} FROM show_popularity p
+                SELECT {StoredPopularity.ReadColumns(includeYearlyWindow)} FROM show_popularity p
                 JOIN shows s ON s.uuid=p.uuid JOIN artists a ON a.id=s.artist_id
-                WHERE NOT p.is_global AND p.uuid=ANY(@ids) AND p.artist_uuid=a.uuid AND p.momentum_score IS NOT NULL
+                WHERE NOT p.is_global AND p.uuid=ANY(@ids) AND p.artist_uuid=a.uuid
+                  AND {StoredPopularity.MetadataFilter(includeYearlyWindow)}
                 """,
                 new { ids },
                 transaction,
@@ -40,30 +42,21 @@ public sealed class PopularityStore(DbService db)
                 cancellationToken: cancellationToken
             )
         );
-        return rows.ToDictionary(row => row.uuid, row => row.ToMetrics()!);
+        return rows.ToDictionary(
+            row => row.uuid,
+            row => row.ToMetrics(includeYearlyWindow: includeYearlyWindow)!
+        );
     }
 
     public Task ReplaceArtists(
         IReadOnlyDictionary<Guid, PopularityMetrics> map,
         DateTime generatedAt
-    ) =>
-        Replace(
-            "artist",
-            null,
-            map.Select(item => StoredPopularity.From(item.Key, item.Value)),
-            generatedAt
-        );
+    ) => Replace(new(PopularityPopulationKind.Artist), map, generatedAt);
 
     public Task ReplaceGlobalShows(
         IReadOnlyDictionary<Guid, PopularityMetrics> map,
         DateTime generatedAt
-    ) =>
-        Replace(
-            "show",
-            null,
-            map.Select(item => StoredPopularity.From(item.Key, item.Value)),
-            generatedAt
-        );
+    ) => Replace(new(PopularityPopulationKind.Show), map, generatedAt);
 
     internal Task ReplaceArtistShows(
         Guid artist,
@@ -71,30 +64,116 @@ public sealed class PopularityStore(DbService db)
         DateTime generatedAt
     ) =>
         Replace(
-            "show",
-            artist,
-            map.Select(item =>
-                StoredPopularity.From(
-                    item.Key,
-                    CachedShowPopularityMapper.ToPopularityMetrics(item.Value),
-                    CachedShowPopularityMapper.GetRankingMomentumScore(item.Value),
-                    roundScores: false
-                )
+            new(PopularityPopulationKind.Show, artist),
+            map.ToDictionary(
+                item => item.Key,
+                item => CachedShowPopularityMapper.ToPopularityMetrics(item.Value)
             ),
-            generatedAt
+            generatedAt,
+            map
         );
 
     public Task ReplaceYears(
         Guid? artist,
         IReadOnlyDictionary<Guid, PopularityMetrics> map,
         DateTime generatedAt
-    ) =>
-        Replace(
-            "year",
-            artist,
-            map.Select(item => StoredPopularity.From(item.Key, item.Value)),
-            generatedAt
+    ) => Replace(new(PopularityPopulationKind.Year, artist), map, generatedAt);
+
+    private async Task Replace(
+        PopularityPopulation population,
+        IReadOnlyDictionary<Guid, PopularityMetrics> map,
+        DateTime generatedAt,
+        IReadOnlyDictionary<Guid, CachedShowPopularity>? shows = null
+    )
+    {
+        var rows = BuildRows(map, shows);
+        if (includeYearlyWindow)
+        {
+            var byId = rows.ToDictionary(row => row.uuid);
+            await AddYearlyTotals(population, byId, DateOnly.FromDateTime(generatedAt));
+            rows = byId.Values;
+        }
+
+        await Publish(population, rows, generatedAt);
+    }
+
+    private IEnumerable<StoredPopularity> BuildRows(
+        IReadOnlyDictionary<Guid, PopularityMetrics> map,
+        IReadOnlyDictionary<Guid, CachedShowPopularity>? shows
+    )
+    {
+        // The Redis maps retain their legacy populations. V4 scores compare only
+        // 30-day-active targets when the yearly window is enabled.
+        Dictionary<Guid, double>? activeScores = null;
+        if (includeYearlyWindow && map.Values.Any(metrics => metrics.windows.days_30d.plays == 0))
+        {
+            var active = map.Where(item => item.Value.windows.days_30d.plays > 0).ToArray();
+            var scores = PopularityService.CalculateMomentumScores(
+                active.Select(item => item.Value).ToArray()
+            );
+            activeScores = active
+                .Select((item, index) => (item.Key, Score: scores[index]))
+                .ToDictionary(item => item.Key, item => item.Score);
+        }
+
+        foreach (var (id, metrics) in map)
+        {
+            var show = shows?.GetValueOrDefault(id);
+            double? organic = show is null
+                ? null
+                : CachedShowPopularityMapper.GetRankingMomentumScore(show);
+            var row = StoredPopularity.From(id, metrics, organic, roundScores: shows is null);
+
+            if (activeScores is not null)
+            {
+                if (activeScores.TryGetValue(id, out var raw))
+                {
+                    row.momentum_score = shows is null ? Math.Round(raw, 4) : raw;
+                    if (show is not null)
+                    {
+                        row.organic_momentum_score =
+                            ShowMomentumScoring.ComputeOrganicMomentumScore(
+                                raw,
+                                show.momentum?.otd_penalty_ratio_7d ?? 0
+                            );
+                    }
+                }
+                else
+                {
+                    row.momentum_score = null;
+                    row.organic_momentum_score = null;
+                    row.trend_ratio = 0;
+                }
+            }
+
+            yield return row;
+        }
+    }
+
+    private async Task AddYearlyTotals(
+        PopularityPopulation population,
+        Dictionary<Guid, StoredPopularity> rows,
+        DateOnly through
+    )
+    {
+        // Keep the yearly scan on the same read path as the recent calculation.
+        // A failed scan leaves the previous Postgres and Redis publications intact.
+        var totals = await db.WithConnection(connection =>
+            PlayRollupReader.ReadPopularity(connection, population, through)
         );
+        foreach (var total in totals)
+        {
+            if (!rows.TryGetValue(total.Id, out var row))
+            {
+                row = new() { uuid = total.Id };
+                rows.Add(total.Id, row);
+            }
+
+            row.plays_1y = total.Plays;
+            row.hours_1y = Math.Round(total.Seconds / 3600.0, 4);
+            row.hot_score_1y = Math.Round(Math.Sqrt(total.Plays), 4);
+        }
+    }
 
     internal async Task<PopularityPopulation[]> ReadStale(
         IReadOnlyList<PopularityPopulation> populations,
@@ -149,9 +228,8 @@ public sealed class PopularityStore(DbService db)
         return populations.Where((_, index) => ordinals.Contains(index + 1)).ToArray();
     }
 
-    private async Task Replace(
-        string kind,
-        Guid? artist,
+    private async Task Publish(
+        PopularityPopulation population,
         IEnumerable<StoredPopularity> values,
         DateTime generatedAt
     )
@@ -160,6 +238,8 @@ public sealed class PopularityStore(DbService db)
         // value becomes zero counters and NULL momentum, clearing prior activity
         // without deleting rows. JSON is one batch parameter, not executable SQL.
         var rows = JsonConvert.SerializeObject(values);
+        var kind = population.StorageKind;
+        var artist = population.Artist;
         await using var connection = db.CreateConnection(longTimeout: false, readOnly: false);
         await connection.OpenAsync();
         var ownerJoin = kind == "artist" ? "" : " JOIN artists a ON a.id=entity.artist_id";
@@ -167,7 +247,16 @@ public sealed class PopularityStore(DbService db)
         var ownerValues = kind == "artist" ? "" : ",a.uuid,@isGlobal";
         var ownerFilter = kind == "artist" ? "true" : "(@artist::uuid IS NULL OR a.uuid=@artist)";
         var conflict = kind == "artist" ? "uuid" : "uuid,is_global";
-        var columns = kind == "show" ? Columns + ",organic_momentum_score" : Columns;
+        var columns = Columns;
+        if (kind == "show")
+        {
+            columns += ",organic_momentum_score";
+        }
+
+        if (includeYearlyWindow)
+        {
+            columns += ",plays_1y,hours_1y,hot_score_1y";
+        }
         var fields = columns.Split(',');
         var selected = string.Join(
             ',',
@@ -192,7 +281,8 @@ public sealed class PopularityStore(DbService db)
                     plays_7d bigint,hours_7d double precision,hot_score_7d double precision,
                     plays_48h bigint,hours_48h double precision,hot_score_48h double precision,
                     trend_ratio double precision,momentum_score double precision,
-                    organic_momentum_score double precision)
+                    organic_momentum_score double precision,
+                    plays_1y bigint,hours_1y double precision,hot_score_1y double precision)
             )
             INSERT INTO {kind}_popularity(uuid,{columns}{ownerColumns},generated_at)
             SELECT entity.uuid,{selected}{ownerValues},@generatedAt

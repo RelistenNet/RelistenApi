@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json.Nodes;
 using Dapper;
 using FluentAssertions;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Relisten;
 using Relisten.Api.Models;
@@ -168,6 +169,94 @@ public sealed partial class TestV4CatalogHttp
         finally
         {
             await ClearBrowseScores(owner);
+        }
+    }
+
+    [Test]
+    public async Task Yearly_only_popularity_is_metadata_with_numeric_scores_and_stays_out_of_rankings()
+    {
+        const string flag = "Popularity:EnableYearlyWindow";
+        var configuration = app.Services.GetRequiredService<IConfiguration>();
+        var previous = configuration[flag];
+        var owner = Guid.Parse(ReferenceUuid(14));
+        var year = Guid.Parse(ReferenceUuid(64));
+        var show = Guid.Parse(ReferenceUuid(4));
+        var rankedShow = Guid.Parse(ReferenceUuid(1));
+        await using var connection = await MigratedTestDatabase.OpenAsync();
+
+        try
+        {
+            var store = new PopularityStore(app.Services.GetRequiredService<DbService>());
+            var time = DateTime.UtcNow;
+            await store.ReplaceArtists(new Dictionary<Guid, PopularityMetrics>(), time);
+            await store.ReplaceYears(owner, new Dictionary<Guid, PopularityMetrics>(), time);
+            await store.ReplaceGlobalShows(
+                new Dictionary<Guid, PopularityMetrics> { [rankedShow] = Score(10) },
+                time
+            );
+            await store.ReplaceArtistShows(
+                owner,
+                new Dictionary<Guid, CachedShowPopularity>(),
+                time
+            );
+            await connection.ExecuteAsync(
+                """
+                UPDATE artist_popularity SET plays_1y=81,hours_1y=10,hot_score_1y=9 WHERE uuid=@owner;
+                UPDATE year_popularity SET plays_1y=49,hours_1y=8,hot_score_1y=7 WHERE uuid=@year;
+                UPDATE show_popularity SET plays_1y=25,hours_1y=6,hot_score_1y=5 WHERE uuid=@show;
+                UPDATE show_popularity SET plays_1y=100,hours_1y=12,hot_score_1y=10
+                WHERE uuid=@rankedShow AND is_global;
+                """,
+                new
+                {
+                    owner,
+                    year,
+                    show,
+                    rankedShow,
+                }
+            );
+
+            configuration[flag] = "true";
+            var yearId = CatalogId("year", 64);
+            foreach (
+                var (path, plays, hours, score) in new[]
+                {
+                    (BrowseArtistPath, 81, 10, 9),
+                    (BrowseArtistPath + "/years/" + yearId, 49, 8, 7),
+                    (ShowPath(4), 25, 6, 5),
+                }
+            )
+            {
+                var popularity = (await GetJson(path))["popularity"]!;
+                popularity["momentum_score"]!.GetValue<double>().Should().Be(0);
+                popularity["trend_ratio"]!.GetValue<double>().Should().Be(0);
+                var yearly = popularity["windows"]!["1y"]!;
+                yearly["plays"]!.GetValue<long>().Should().Be(plays);
+                yearly["hours"]!.GetValue<double>().Should().Be(hours);
+                yearly["hot_score"]!.GetValue<double>().Should().Be(score);
+            }
+
+            var ranked = (await GetJson("/api/v4/popular/shows")).AsArray();
+            ranked.Should().NotContain(item => item!["id"]!.GetValue<string>() == ShowId(4));
+            var rankedResource = ranked.Single(item =>
+                item!["id"]!.GetValue<string>() == ShowId(1)
+            );
+            rankedResource!["popularity"]!["windows"]!["1y"]!["plays"]!
+                .GetValue<long>()
+                .Should()
+                .Be(100);
+
+            configuration[flag] = "false";
+            (await GetJson(ShowPath(4)))["popularity"].Should().BeNull();
+        }
+        finally
+        {
+            configuration[flag] = previous;
+            await ClearBrowseScores(owner);
+            await connection.ExecuteAsync(
+                "DELETE FROM show_popularity WHERE uuid=ANY(@shows)",
+                new { shows = new[] { show, rankedShow } }
+            );
         }
     }
 

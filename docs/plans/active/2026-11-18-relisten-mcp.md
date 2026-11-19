@@ -1,8 +1,9 @@
 # Relisten MCP server
 
-> Status: proposal. Nothing here is implemented. Production work waits for owner
-> approval of each step below. The [server roadmap](2026-11-18-server-roadmap.md)
-> places this work among the other planned server work.
+> Status: PR 1 implemented locally. PR 2 and PR 3 are planned. Production work
+> waits for owner approval of each step below. The
+> [server roadmap](2026-11-18-server-roadmap.md) places this work among the
+> other planned server work.
 
 ## Dependencies
 

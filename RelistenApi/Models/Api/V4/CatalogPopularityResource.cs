@@ -21,5 +21,7 @@ public sealed record PopularityWindowResource(long Plays, double Hours, double H
 public sealed record PopularityWindowsResource(
     [property: JsonProperty("48h")] PopularityWindowResource Hours48,
     [property: JsonProperty("7d")] PopularityWindowResource Days7,
-    [property: JsonProperty("30d")] PopularityWindowResource Days30
+    [property: JsonProperty("30d")] PopularityWindowResource Days30,
+    [property: JsonProperty("1y", NullValueHandling = NullValueHandling.Ignore)]
+        PopularityWindowResource? Year = null
 );

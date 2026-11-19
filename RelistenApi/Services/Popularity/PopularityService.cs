@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Dapper;
 using Hangfire;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Relisten.Api.Models;
 using Relisten.Api.Models.Api;
@@ -38,11 +39,12 @@ namespace Relisten.Services.Popularity
             DbService db,
             PopularityCacheService cache,
             IBackgroundJobClient backgroundJobs,
-            ILogger<PopularityService> logger
+            ILogger<PopularityService> logger,
+            IConfiguration? configuration = null
         )
         {
             this.db = db;
-            store = new PopularityStore(db);
+            store = new PopularityStore(db, configuration.GetYearlyPopularityEnabled());
             this.cache = cache;
             this.backgroundJobs = backgroundJobs;
             this.logger = logger;
@@ -1408,15 +1410,23 @@ namespace Relisten.Services.Popularity
 
         internal static void ApplyMomentumScores(IReadOnlyList<PopularityMetrics> metrics)
         {
+            var scores = CalculateMomentumScores(metrics);
+            for (var i = 0; i < metrics.Count; i++)
+            {
+                metrics[i].momentum_score = scores[i];
+            }
+        }
+
+        internal static double[] CalculateMomentumScores(IReadOnlyList<PopularityMetrics> metrics)
+        {
             if (metrics.Count == 0)
             {
-                return;
+                return [];
             }
 
             if (metrics.Count == 1)
             {
-                metrics[0].momentum_score = 1;
-                return;
+                return [1];
             }
 
             var trendRanks = PercentileRanks(metrics.Select(item => item.trend_ratio).ToList());
@@ -1432,17 +1442,16 @@ namespace Relisten.Services.Popularity
                     .ToList()
             );
 
+            var scores = new double[metrics.Count];
             for (var i = 0; i < metrics.Count; i++)
             {
                 var trendNorm = trendRanks[i];
                 var hotNorm = hotRanks[i];
                 var shortNorm = shortTrendRanks[i];
-                metrics[i].momentum_score = Math.Clamp(
-                    0.6 * trendNorm + 0.2 * shortNorm + 0.2 * hotNorm,
-                    0,
-                    1
-                );
+                scores[i] = Math.Clamp(0.6 * trendNorm + 0.2 * shortNorm + 0.2 * hotNorm, 0, 1);
             }
+
+            return scores;
         }
 
         private static IReadOnlyList<double> PercentileRanks(IReadOnlyList<double> values)
