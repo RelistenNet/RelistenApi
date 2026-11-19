@@ -54,9 +54,10 @@ public sealed class ConnectedClientsController(
                         {
                             id = "chatgpt",
                             name = "ChatGPT",
-                            // "allowed": the grant stands but no session is live, so the
-                            // app would be let back in without asking.
-                            state = active ? "connected" : "allowed",
+                            // "expired": the session lapsed (idle, past its absolute
+                            // limit, or outlived a security change). The app must sign in
+                            // and be approved again; disconnecting revokes the old grant.
+                            state = active ? "connected" : "expired",
                         },
                     }
                     : [],

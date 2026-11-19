@@ -80,9 +80,9 @@ generates fresh UUIDv7 IDs and a retried call is a new write.
 `edit_playlist` takes an optional `expected_revision` and refuses the edit when
 the playlist has moved on, unless the call is a replay of its own earlier
 success. The playlist service treats `base_revision` as a diagnostic, so the
-tool makes this comparison before the service takes its lock. It catches a
-playlist that changed since the model read it. Two edits that start at the same
-moment can both pass.
+tool passes the expected revision to the write service, which compares it under
+the playlist lock after replaying any stored result. Two edits from the same
+read can't both apply.
 
 **Untrusted text.** Review excerpts, playlist names, descriptions and notes are
 written by listeners. A copied public playlist keeps its author's text. Tools
@@ -338,8 +338,9 @@ Changes:
    link a signed-in listener's Relisten account to the attacker's ChatGPT.
    `prompt=none` returns `consent_required`.
 5. **Revocation.** List and revoke connected MCP clients in account settings.
-   The list reports `connected` for an active session and `consent_remembered`
-   when the session can no longer refresh. Disconnect revokes either state.
+   The list reports `connected` for an active session and `expired` when the
+   session can no longer refresh; the app must sign in and be approved again.
+   Disconnect revokes either state.
 
 ### MCP endpoint changes
 

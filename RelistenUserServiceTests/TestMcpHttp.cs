@@ -451,7 +451,7 @@ public sealed class TestMcpHttp
             .GetProperty("state")
             .GetString()
             .Should()
-            .Be("allowed");
+            .Be("expired");
         var anonymous = await Call("search_reviews", args, tokens.Access);
         anonymous.TryGetProperty("structuredContent", out _).Should().BeTrue();
         catalog.AuthorizedReviewRequests.Should().Be(30);
