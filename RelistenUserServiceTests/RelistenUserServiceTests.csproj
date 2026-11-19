@@ -21,6 +21,9 @@
   <ItemGroup>
     <None Update="Fixtures/pre-typed-accounts.sql" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures/playlists/ranks.json" CopyToOutputDirectory="PreserveNewest" />
-    <None Update="Fixtures/playlists/guide-markdown-vectors.json" CopyToOutputDirectory="PreserveNewest" />
+    <None
+      Update="Fixtures/playlists/guide-markdown-vectors.json"
+      CopyToOutputDirectory="PreserveNewest"
+    />
   </ItemGroup>
 </Project>

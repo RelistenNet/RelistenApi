@@ -378,8 +378,7 @@ writes every entry's track into a required Realm string. A background sync of
 one text entry from an updated device would fail there. So:
 1. Ship the mobile build that reads text entries.
 2. Raise the minimum OTA version so 6055 updates.
-3. Only then enable text writes, behind a server switch that rejects
-   descriptions and text entries until it's on.
+3. Deploy the User Service build that accepts guide writes.
 
 **Tests.** The rollout checks in the design doc, plus:
 - receipt replay for both new operations;
@@ -635,8 +634,8 @@ qualification separately. No deployment or publication is authorized by this pla
   descriptions, text blocks, and description updates at version 1. Keep
   `entry_count` for all entries and add `track_count` to summaries for playback
   counts. Apply the description byte limit to all live descriptions, including
-  playlist metadata, which retains its existing 1,000-character limit. Keep
-  guide writes off by default and allow exact receipt replays with the switch off.
+  playlist metadata, which retains its existing 1,000-character limit. Deploy
+  guide writes after supported clients can read text entries.
   The [private playlist contract](2026-11-16-v4-playlist-contracts.md) records
   the wire changes and receipt encoding.
 - 2026-11-17, implementation under Alec's authorization: complete the unspecified

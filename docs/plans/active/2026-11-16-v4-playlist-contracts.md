@@ -96,12 +96,6 @@ The byte limit covers all live descriptions, including playlist metadata. The
 2 MiB request limit applies independently to the encoded JSON. Descriptions
 that require heavy JSON escaping can still exceed the request limit.
 
-The server accepts guide writes only when `Accounts__EnablePlaylistGuideContent=true`.
-While it is off, new writes that supply segment or entry descriptions, create
-text entries, or use either description update operation return
-`422 playlist_guide_content_disabled`. Existing metadata and track-only writes
-still work. Reads and exact receipt replays remain available.
-
 ## Endpoints
 
 Start with a new account to reproduce the library revisions in these examples.
@@ -180,8 +174,7 @@ Responses:
 - `409 idempotency_conflict` if `command_id` was used with a different payload.
 - `409 id_conflict` if the playlist, segment or entry IDs already exist. The body
   lists `conflicting_ids`.
-- `422 quota_exceeded`, `422 invalid_playlist_operation`, `422 invalid_contract_version`,
-  `422 playlist_guide_content_disabled`.
+- `422 quota_exceeded`, `422 invalid_playlist_operation`, or `422 invalid_contract_version`.
 
 Creating a playlist produces revision `1`. Mobile sends dependent operations only
 after this command is acknowledged; a lost response is retried with the identical
@@ -414,7 +407,6 @@ Whole-batch failures apply nothing:
 | 422 | `invalid_contract_version` | Unsupported version. |
 | 422 | `invalid_playlist_operation` | Malformed envelope or payload, such as a wrong prefix, an unknown type or field, empty `entries`, or a duplicate `operation_id` or created ID within the request. |
 | 422 | `quota_exceeded` | The state after the batch would exceed a limit (see Quota preflight). |
-| 422 | `playlist_guide_content_disabled` | The write switch is off and the batch contains a new guide write. |
 | 422 | `limit_exceeded` | More than 500 operations. |
 
 ## Operations

@@ -22,7 +22,6 @@ using Relisten.Identifiers;
 using RelistenUserService;
 using RelistenUserService.Authentication;
 using RelistenUserService.Authentication.Authorization;
-using RelistenUserService.Configuration;
 using RelistenUserService.Identity.Entities;
 using RelistenUserService.Persistence;
 using RelistenUserService.Playlists;
@@ -51,11 +50,11 @@ public sealed class TestPlaylistApi
             $"relisten-playlist-proof-{Guid.NewGuid():N}"
         );
         Directory.CreateDirectory(_directory);
-        _app = await StartApp(enableGuideContent: true);
+        _app = await StartApp();
         _client = CreateClient(_app);
     }
 
-    private async Task<WebApplication> StartApp(bool enableGuideContent)
+    private async Task<WebApplication> StartApp()
     {
         var builder = WebApplication.CreateBuilder(
             new WebApplicationOptions
@@ -74,7 +73,6 @@ public sealed class TestPlaylistApi
                 ["AllowedHosts"] = "auth.relisten.net;accounts.relisten.net;relisten.net",
                 ["Accounts:Issuer"] = "https://auth.relisten.net/",
                 ["Accounts:WebClientSecret"] = "disposable-proof-secret",
-                ["Accounts:EnablePlaylistGuideContent"] = enableGuideContent ? "true" : null,
             }
         );
         builder.Logging.ClearProviders();
@@ -522,54 +520,6 @@ public sealed class TestPlaylistApi
             409,
             "idempotency_conflict"
         );
-    }
-
-    [Test]
-    public async Task Guide_write_switch_refuses_new_writes_and_keeps_existing_receipts_replayable()
-    {
-        await using var disabledApp = await StartApp(enableGuideContent: false);
-        using var disabled = CreateClient(disabledApp);
-        var segment = new PlaylistSegmentInput(PlaylistSegmentId.New(), [Entry()], "Intro");
-        var create = NewPlaylist() with { Segments = [segment] };
-        await Problem(
-            await Send(HttpMethod.Post, "/v1/playlists", create, client: disabled),
-            422,
-            "playlist_guide_content_disabled"
-        );
-        (await Send(HttpMethod.Post, "/v1/playlists", create))
-            .StatusCode.Should()
-            .Be(HttpStatusCode.Created);
-        (await Send(HttpMethod.Post, "/v1/playlists", create, client: disabled))
-            .StatusCode.Should()
-            .Be(HttpStatusCode.OK);
-
-        var id = create.PlaylistId;
-        var url = $"/v1/playlists/{id}/operations:batch";
-        var rename = Op("update_metadata", new UpdatePlaylistMetadata(new(true, "Renamed")));
-        var update = Op(
-            "update_segment",
-            new UpdatePlaylistSegment(segment.SegmentId, new(true, "New text"))
-        );
-        var batch = new PlaylistBatchRequest(1, [rename, update]);
-        await Problem(
-            await Send(HttpMethod.Post, url, batch, client: disabled),
-            422,
-            "playlist_guide_content_disabled"
-        );
-        (await Snapshot(id)).Revision.Should().Be(1);
-        var applied = await Apply(id, batch);
-        var replay = await Read<PlaylistBatchResponse>(
-            await Send(HttpMethod.Post, url, batch, client: disabled)
-        );
-        replay.Should().BeEquivalentTo(applied);
-
-        var reads = await Read<PlaylistSnapshot>(
-            await Send(HttpMethod.Get, $"/v1/playlists/{id}/snapshot", client: disabled)
-        );
-        reads.Segments.Single().Description.Should().Be("New text");
-        (await Send(HttpMethod.Post, "/v1/playlists", NewPlaylist(1), client: disabled))
-            .StatusCode.Should()
-            .Be(HttpStatusCode.Created);
     }
 
     [TestCase(null)]
@@ -1061,13 +1011,7 @@ public sealed class TestPlaylistApi
             .AddInterceptors(new RejectSave())
             .Options;
         await using var db = new AccountsDbContext(options);
-        var service = new PlaylistWriteService(
-            db,
-            new(db),
-            new(db),
-            TimeProvider.System,
-            new AccountsOptions()
-        );
+        var service = new PlaylistWriteService(db, new(db), new(db), TimeProvider.System);
         var edit = Op(
             "move_entry",
             new MovePlaylistEntry(
@@ -1215,8 +1159,7 @@ public sealed class TestPlaylistApi
         object? body = null,
         string? raw = null,
         UserId? actor = null,
-        bool readOnly = false,
-        HttpClient? client = null
+        bool readOnly = false
     )
     {
         using var request = new HttpRequestMessage(method, url);
@@ -1233,7 +1176,7 @@ public sealed class TestPlaylistApi
                 "application/json"
             );
         }
-        return await (client ?? _client).SendAsync(request);
+        return await _client.SendAsync(request);
     }
 
     private static async Task<T> Read<T>(HttpResponseMessage response)

@@ -14,9 +14,6 @@ public sealed class AccountsOptions
 
     /// <summary>Optional projected JSON file containing exact preview origins. Disabled when unset.</summary>
     public string? PreviewOriginsFile { get; init; }
-
-    /// <summary>Allows new guide writes after clients can read text-only playlist entries.</summary>
-    public bool EnablePlaylistGuideContent { get; init; }
     public bool EnableDevelopmentPersonas { get; init; }
     public bool EnableExternalProviders { get; init; }
     public bool AllowInsecureHttp { get; init; }

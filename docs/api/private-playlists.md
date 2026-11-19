@@ -70,16 +70,12 @@ and [TestWebSessionAntiforgery](../../RelistenUserServiceTests/TestWebSessionAnt
 These checks do not exercise production ingress, a backup restore or mobile
 application state.
 
-## Enable guide content
+## Deploy guide content
 
-Apply the accounts migration with `Accounts__EnablePlaylistGuideContent` unset.
 Ship a mobile build that reads text entries and raise the minimum OTA version
-so TestFlight 6055 updates. Then set `Accounts__EnablePlaylistGuideContent=true`
-in the User Service.
-
-To pause new guide writes, turn the switch off. Keep the guide-capable server
-and schema in place after activation so snapshots, deltas and receipts for
-existing guides remain readable.
+so TestFlight 6055 updates. Then deploy the guide-capable User Service with its
+accounts migration. Once text entries exist, recovery builds must still read
+their snapshots, deltas and receipts.
 
 ## Connection routing and sync cost
 

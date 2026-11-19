@@ -224,19 +224,6 @@ public static class PlaylistValidation
             _ => [],
         };
 
-    public static bool UsesGuideContent(PlaylistSegmentInput segment) =>
-        segment.Description is not null || segment.Entries.Any(UsesGuideContent);
-
-    public static bool UsesGuideContent(PlaylistOperation operation) =>
-        operation.Payload switch
-        {
-            UpdatePlaylistSegment or UpdatePlaylistEntry => true,
-            InsertPlaylistSegment insert => insert.Description is not null
-                || insert.Entries.Any(UsesGuideContent),
-            InsertPlaylistEntries insert => insert.Entries.Any(UsesGuideContent),
-            _ => false,
-        };
-
     public static void CheckGuideQuota(int proseOnlySegments, IEnumerable<string?> descriptions)
     {
         if (proseOnlySegments > MaximumProseOnlySegments)
@@ -259,9 +246,6 @@ public static class PlaylistValidation
             );
         }
     }
-
-    private static bool UsesGuideContent(PlaylistEntryInput entry) =>
-        entry.TrackId is null || entry.Description is not null;
 
     private static IReadOnlyList<PlaylistEntryInput> NormalizeEntries(
         IReadOnlyList<PlaylistEntryInput>? entries,

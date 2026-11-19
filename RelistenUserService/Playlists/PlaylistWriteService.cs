@@ -2,7 +2,6 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Relisten.Accounts.Contracts.Playlists;
-using RelistenUserService.Configuration;
 using RelistenUserService.Library;
 using RelistenUserService.Library.Entities;
 using RelistenUserService.Persistence;
@@ -18,8 +17,7 @@ public sealed class PlaylistWriteService(
     AccountsDbContext dbContext,
     AdvisoryLockService advisoryLocks,
     LibraryStateStore stateStore,
-    TimeProvider timeProvider,
-    AccountsOptions options
+    TimeProvider timeProvider
 )
 {
     public async Task<(PlaylistCreated Response, bool Replayed)> CreateAsync(
@@ -58,14 +56,6 @@ public sealed class PlaylistWriteService(
             CheckReceipt(receipt, actor, request.PlaylistId, hash);
             await transaction.CommitAsync(cancellationToken);
             return (new(1, generation, request.PlaylistId, receipt.Revision!.Value), true);
-        }
-
-        if (
-            !options.EnablePlaylistGuideContent
-            && request.Segments.Any(PlaylistValidation.UsesGuideContent)
-        )
-        {
-            throw GuideContentDisabled();
         }
 
         var conflicts = await ExistingIdsAsync(createdIds, cancellationToken);
@@ -196,15 +186,6 @@ public sealed class PlaylistWriteService(
         var newOperations = request
             .Operations.Where(operation => !receipts.ContainsKey(operation.OperationId.Value))
             .ToArray();
-        // Closing the write switch must still allow matching committed receipts to replay.
-        if (
-            !options.EnablePlaylistGuideContent
-            && newOperations.Any(PlaylistValidation.UsesGuideContent)
-        )
-        {
-            throw GuideContentDisabled();
-        }
-
         // Name edits cannot affect entry counts or the description budget.
         var editsOnlyName = newOperations.All(operation =>
             operation.Payload is UpdatePlaylistMetadata { Description.IsPresent: false }
@@ -712,7 +693,4 @@ public sealed class PlaylistWriteService(
             );
         }
     }
-
-    private static PlaylistException GuideContentDisabled() =>
-        new(422, "playlist_guide_content_disabled", "Playlist guide content writes are disabled.");
 }
