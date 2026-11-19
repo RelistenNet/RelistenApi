@@ -404,6 +404,8 @@ public sealed class TestPopularityStore
     [Test]
     public async Task Monthly_job_refreshes_the_last_day_before_publishing_a_closed_month()
     {
+        var showId = Guid.NewGuid();
+        var source = Guid.NewGuid();
         var trackId = Guid.NewGuid();
         var cutoff = DateTime.UtcNow.AddDays(-1);
         var end = new DateTime(cutoff.Year, cutoff.Month, 1, 0, 0, 0, DateTimeKind.Utc);
@@ -414,18 +416,15 @@ public sealed class TestPopularityStore
         var beforeLastDay = lastDay.ToString("yyyy-MM-dd") + " 00:00Z";
         try
         {
+            await AddShowWithTracks(showId, source, (trackId, 1, 120));
             await connection.ExecuteAsync(
                 """
-                INSERT INTO source_tracks(uuid,artist_id,source_id,track_position,title,slug,mp3_url,duration,updated_at)
-                SELECT @trackId,artist_id,source_id,3,'Monthly rollover','monthly-rollover','https://example.test/rollover.mp3',120,now()
-                FROM source_tracks WHERE uuid=@track;
                 INSERT INTO source_track_plays(created_at,source_track_uuid,app_type)
                 VALUES (@firstPlay,@trackId,0),(@lastPlay,@trackId,0);
                 """,
                 new
                 {
                     trackId,
-                    track,
                     firstPlay = start.AddHours(12),
                     lastPlay = lastDay.AddHours(12),
                 }
@@ -435,8 +434,9 @@ public sealed class TestPopularityStore
             await RefreshRollup("source_track_plays_daily", from, beforeLastDay);
             await RefreshRollup("source_track_plays_monthly", from, to);
             var through = DateOnly.FromDateTime(lastDay);
-            var before = await PlayRollupReader.ReadTracks(connection, [trackId], through);
-            before.Should().Equal(new PlayRollupTotals(trackId, 1, 120, 1));
+            (await YearlyShowTotal(showId, through))
+                .Should()
+                .Be(new YearlyPopularityTotal(showId, 1, 120));
 
             var jobId = await connection.QuerySingleAsync<int>(
                 """
@@ -446,18 +446,13 @@ public sealed class TestPopularityStore
             );
             await connection.ExecuteAsync("CALL run_job(@jobId)", new { jobId });
 
-            var after = await PlayRollupReader.ReadTracks(connection, [trackId], through);
-            after.Should().Equal(new PlayRollupTotals(trackId, 2, 240, 2));
+            (await YearlyShowTotal(showId, through))
+                .Should()
+                .Be(new YearlyPopularityTotal(showId, 2, 240));
         }
         finally
         {
-            await connection.ExecuteAsync(
-                """
-                DELETE FROM source_track_plays WHERE source_track_uuid=@trackId;
-                DELETE FROM source_tracks WHERE uuid=@trackId;
-                """,
-                new { trackId }
-            );
+            await DeleteShowWithPlays(showId, [trackId]);
             await RefreshRollup("source_track_plays_daily", from, to);
             await RefreshRollup("source_track_plays_monthly", from, to);
         }
@@ -466,20 +461,15 @@ public sealed class TestPopularityStore
     [Test]
     public async Task YearlyRollupSplitsUtcMonthEdgesAndCountsSourceDaysOnce()
     {
+        var showId = Guid.NewGuid();
         var source = Guid.NewGuid();
         var firstTrack = Guid.NewGuid();
         var secondTrack = Guid.NewGuid();
         try
         {
+            await AddShowWithTracks(showId, source, (firstTrack, 1, 120), (secondTrack, 2, 180));
             await connection.ExecuteAsync(
                 """
-                INSERT INTO sources(uuid,artist_id,show_id,upstream_identifier,display_date,is_soundboard,is_remaster,has_jamcharts,updated_at)
-                SELECT @source,artist_id,id,@source::text,display_date,false,false,false,now() FROM shows WHERE uuid=@show;
-                INSERT INTO source_tracks(uuid,artist_id,source_id,track_position,title,slug,mp3_url,duration,updated_at)
-                SELECT t.uuid,s.artist_id,s.id,t.position,t.title,t.title,'https://example.test/'||t.title||'.mp3',t.duration,now()
-                FROM sources s CROSS JOIN (VALUES (@firstTrack,1,'first',120),(@secondTrack,2,'second',180))
-                    AS t(uuid,position,title,duration)
-                WHERE s.uuid=@source;
                 INSERT INTO source_track_plays(created_at,source_track_uuid,app_type)
                 VALUES ('2023-03-01 23:59Z',@firstTrack,0),
                        ('2023-03-02 00:00Z',@firstTrack,0),
@@ -489,13 +479,7 @@ public sealed class TestPopularityStore
                        ('2024-02-29 14:00Z',@firstTrack,0),
                        ('2024-03-01 00:00Z',@firstTrack,0);
                 """,
-                new
-                {
-                    source,
-                    show,
-                    firstTrack,
-                    secondTrack,
-                }
+                new { firstTrack, secondTrack }
             );
             await RefreshRollup("source_track_plays_daily", "2023-03-01", "2024-04-01");
             await RefreshRollup("source_track_plays_monthly", "2023-03-01", "2024-04-01");
@@ -503,52 +487,40 @@ public sealed class TestPopularityStore
 
             // February is a whole month at leap day and a partial month the day before.
             var throughLeapDay = new DateOnly(2024, 2, 29);
+            (await YearlyShowTotal(showId, throughLeapDay))
+                .Should()
+                .Be(new YearlyPopularityTotal(showId, 5, 660));
+            (await YearlyShowTotal(showId, new DateOnly(2024, 2, 28)))
+                .Should()
+                .Be(new YearlyPopularityTotal(showId, 4, 540));
+
+            // Both files played on 2023-03-02: the performance and its source each
+            // count that day once.
             (
-                await PlayRollupReader.ReadTracks(
+                await PlayRollupReader.ReadPerformances(
                     connection,
-                    [firstTrack, secondTrack],
-                    throughLeapDay
+                    [new PerformancePlaysRequest([firstTrack, secondTrack], source)],
+                    throughLeapDay,
+                    null,
+                    CancellationToken.None
                 )
             )
                 .Should()
-                .BeEquivalentTo(
-                    new PlayRollupTotals[]
-                    {
-                        new(firstTrack, 4, 480, 3),
-                        new(secondTrack, 1, 180, 1),
-                    }
+                .Equal(
+                    new PerformancePlays(Index: 0, Plays: 5, Days: 3, SourcePlays: 5, SourceDays: 3)
                 );
-            (await PlayRollupReader.ReadSources(connection, [source], throughLeapDay))
-                .Should()
-                .Equal(new PlayRollupTotals(source, 5, 660, 3));
-            (await PlayRollupReader.ReadSources(connection, [source], new DateOnly(2024, 2, 28)))
-                .Should()
-                .Equal(new PlayRollupTotals(source, 4, 540, 3));
-
-            (await PlayRollupReader.ReadTracks(connection, [firstTrack]))
-                .Should()
-                .Equal(new PlayRollupTotals(firstTrack, 6, 720, 5));
-            (await PlayRollupReader.ReadSources(connection, [source]))
-                .Should()
-                .Equal(new PlayRollupTotals(source, 7, 900, 5));
-            await AssertMonthTurnoverReadsDailyTail(firstTrack);
+            await AssertMonthTurnoverReadsDailyTail(showId, firstTrack);
         }
         finally
         {
-            await connection.ExecuteAsync(
-                """
-                DELETE FROM source_track_plays WHERE source_track_uuid=ANY(@ids);
-                DELETE FROM sources WHERE uuid=@source;
-                """,
-                new { ids = new[] { firstTrack, secondTrack }, source }
-            );
+            await DeleteShowWithPlays(showId, [firstTrack, secondTrack]);
             await RefreshRollup("source_track_plays_daily", "2023-03-01", "2024-04-01");
             await RefreshRollup("source_track_plays_monthly", "2023-03-01", "2024-04-01");
             await RefreshRollup("source_plays_daily", "2023-03-01", "2024-04-01");
         }
     }
 
-    private async Task AssertMonthTurnoverReadsDailyTail(Guid trackId)
+    private async Task AssertMonthTurnoverReadsDailyTail(Guid showId, Guid trackId)
     {
         // Earlier tests may have refreshed through the current month. Use the next
         // month to test a full bucket beyond the monthly materialization watermark.
@@ -568,8 +540,9 @@ public sealed class TestPopularityStore
 
             // The upper rollup has never materialized this month. At the first
             // instant of the next month, yearly reads choose it as a whole bucket.
-            var totals = await PlayRollupReader.ReadTracks(connection, [trackId], lastDay);
-            totals.Should().Equal(new PlayRollupTotals(trackId, 1, 120, 1));
+            (await YearlyShowTotal(showId, lastDay))
+                .Should()
+                .Be(new YearlyPopularityTotal(showId, 1, 120));
         }
         finally
         {
@@ -579,6 +552,56 @@ public sealed class TestPopularityStore
             );
             await RefreshRollup("source_track_plays_daily", from, to);
         }
+    }
+
+    // Other tests leave recent plays on the shared fixture show. A dedicated show
+    // keeps these exact yearly totals independent of them.
+    private Task AddShowWithTracks(
+        Guid showId,
+        Guid source,
+        params (Guid Uuid, int Position, int Duration)[] tracks
+    ) =>
+        connection.ExecuteAsync(
+            """
+            INSERT INTO shows(uuid,artist_id,year_id,date,display_date,updated_at)
+            SELECT @showId,artist_id,id,'1985-07-08','1985-07-08',now() FROM years WHERE uuid=@year;
+            INSERT INTO sources(uuid,artist_id,show_id,upstream_identifier,display_date,is_soundboard,is_remaster,has_jamcharts,updated_at)
+            SELECT @source,artist_id,id,@source::text,display_date,false,false,false,now() FROM shows WHERE uuid=@showId;
+            INSERT INTO source_tracks(uuid,artist_id,source_id,track_position,title,slug,mp3_url,duration,updated_at)
+            SELECT t.uuid,s.artist_id,s.id,t.position,t.uuid::text,t.uuid::text,'https://example.test/'||t.uuid||'.mp3',t.duration,now()
+            FROM sources s CROSS JOIN unnest(@uuids::uuid[],@positions::int[],@durations::int[]) t(uuid,position,duration)
+            WHERE s.uuid=@source;
+            """,
+            new
+            {
+                showId,
+                year,
+                source,
+                uuids = tracks.Select(track => track.Uuid).ToArray(),
+                positions = tracks.Select(track => track.Position).ToArray(),
+                durations = tracks.Select(track => track.Duration).ToArray(),
+            }
+        );
+
+    private Task DeleteShowWithPlays(Guid showId, Guid[] tracks) =>
+        connection.ExecuteAsync(
+            """
+            DELETE FROM source_track_plays WHERE source_track_uuid=ANY(@tracks);
+            DELETE FROM shows WHERE uuid=@showId;
+            """,
+            new { showId, tracks }
+        );
+
+    private async Task<YearlyPopularityTotal?> YearlyShowTotal(Guid showId, DateOnly through)
+    {
+        await using var transaction = await connection.BeginTransactionAsync();
+        var totals = await PlayRollupReader.ReadPopularity(
+            connection,
+            transaction,
+            new(PopularityPopulationKind.Show, artist),
+            through
+        );
+        return totals.SingleOrDefault(total => total.Id == showId);
     }
 
     private Task RefreshRollup(string relation, string from, string to) =>

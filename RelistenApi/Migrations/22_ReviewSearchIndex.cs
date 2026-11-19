@@ -12,12 +12,21 @@ public sealed class ReviewSearchIndex : SqlFileMigration
 
     protected override void Up()
     {
-        // Concurrent index creation must be sent as a statement of its own.
         Execute("CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public");
+
+        // A pod that dies during the concurrent build leaves an invalid index with
+        // this name. IF NOT EXISTS would skip it and the check below would then fail
+        // on every start, so drop that leftover and build again.
+        if (HasInvalidSearchIndex())
+        {
+            Execute("DROP INDEX CONCURRENTLY public.source_reviews_search_trgm_idx");
+        }
+
+        // Concurrent index creation must be sent as a statement of its own.
         ExecuteSqlFile("022_review_search_index.sql");
 
-        // A canceled concurrent build can leave an invalid index with the expected name.
-        // IF NOT EXISTS skips it, so verify the build before recording the migration.
+        // IF NOT EXISTS also skips a valid index with another definition, so verify
+        // the build before recording the migration.
         Execute(
             """
             DO $$
@@ -40,6 +49,21 @@ public sealed class ReviewSearchIndex : SqlFileMigration
             $$;
             """
         );
+    }
+
+    private bool HasInvalidSearchIndex()
+    {
+        using var command = CreateCommand(
+            """
+            SELECT EXISTS (
+                SELECT 1 FROM pg_index
+                WHERE indexrelid = to_regclass('public.source_reviews_search_trgm_idx')
+                  AND NOT (indisready AND indisvalid)
+            )
+            """,
+            null
+        );
+        return (bool)command.ExecuteScalar()!;
     }
 
     protected override void Down() =>

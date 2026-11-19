@@ -49,11 +49,12 @@ population freshness without a separate freshness table or placeholder ID.
 required populations while assembling the response. After catalog snapshots
 are disposed, the controller checks all required timestamps in one SQL query
 and queues at most one `PopularityJobs.RefreshPopulations` job. The same one-hour
-staleness threshold is used by legacy maps. Unknown artists and scopes without catalog targets are excluded from refresh
-requests. Successfully calculated inactive rows are fresh normally.
+staleness threshold is used by legacy maps. Unknown artists and scopes without
+catalog targets are excluded from refresh requests. Successfully calculated
+inactive rows are fresh normally.
 
-The response keeps its stored scores. A missing show metric is null. A missing ranking population is empty while its
-first calculation is queued. SQL or queue
+The response keeps its stored scores. A missing show metric is null. A missing
+ranking population is empty while its first calculation is queued. SQL or queue
 submission failures use v4's existing 503/no-store boundary. A later request can
 retry. Enqueueing finishes before publication of the response or its ETag.
 
@@ -115,69 +116,169 @@ a second formula specification in documentation.
 
 Migration 21 creates `source_track_plays_monthly` and `source_plays_daily`
 without an initial backfill. Both derive from `source_track_plays_daily`.
-The track rollup stores month totals and the count of daily rows per track.
-The source rollup groups by source and UTC day, so two tracks from one source
-played on the same day contribute one source-day.
+The track rollup stores month totals per track. The source rollup groups by
+source and UTC day, so two tracks from one source played on the same day
+contribute one source-day.
 
-The Timescale job `Refresh monthly track plays` runs daily and refreshes the
-three latest UTC months that have been closed for at least one day. It refreshes
-daily track buckets for that range first. After that call succeeds, it refreshes
-the monthly track buckets for the same range. A failed attempt starts over with
-daily on retry. The regular daily track and source-day policies still handle
-recent activity.
+Two Timescale jobs maintain the rollups once enabled. `Refresh monthly track
+plays` refreshes the three latest UTC months that have been closed for at least
+one day. `Refresh daily source plays` refreshes the last seven UTC days that
+have been closed for at least one day. Each job refreshes the daily track
+buckets for its range first, then the upper rollup for the same range, because
+an upper refresh reads only what the daily aggregate has materialized. A failed
+attempt starts over with daily on retry.
 
-Before applying migration 21, verify that its database role owns the existing
-`source_track_plays_daily` aggregate or inherits its owner role. Timescale runs
-the job as the role that registers it and requires ownership to refresh the
-aggregate.
+Migration 21 registers both jobs unscheduled. Both rollups are real-time
+aggregates: until a bucket is materialized, reads compute it from the daily
+aggregate, so yearly totals are correct but slower before the backfill. A
+scheduled run before the backfill would materialize only recent buckets and
+move the watermark past the unmaterialized history, and older months would
+then read as empty. Enable the jobs only after the backfill.
 
 The yearly window covers 365 UTC dates through the calculation date. Complete
 months come from the monthly rollup. The partial month at each edge comes
 from the daily rollup. At month turnover, the real-time monthly view reads the
 daily aggregate for buckets it has yet to materialize. The daily aggregate's
-own freshness still bounds what these reads can see.
+own freshness still bounds what these reads can see. Performance pages read
+their few files and sources from the daily rollups directly.
 
-1. Deploy the explicit popularity read projections and let older instances
-   drain. Build the API, popularity job runners, and ingestion worker from the
-   commit that adds migration 21 and the rollups, before the yearly reader and
-   writer changes. Run that ingestion worker image with `--migrate`. Roll out
-   the matching API and job runners before starting the backfill. The previous
-   binaries can keep running across the schema change, but only binaries that
-   include migration 21 can restart against it. Backfill both new rollups from the
-   earliest available daily bucket, moving forward in bounded UTC month ranges. Use the start of the current UTC month as the
-   exclusive end of the monthly backfill. Force each range so it fills any gaps
-   left by an earlier refresh. Run each call as its own statement on the
-   primary. These calls backfill October 2018.
+Popularity jobs run in Hangfire on API pods started with
+`ENABLE_HANGFIRE_SERVER`. Each refresh calculates the yearly window, with JIT
+disabled for that read, before the existing atomic upsert. If the yearly scan
+fails, the job fails for retry and the previous publication stays in place.
+
+Run these steps in order. Run SQL on the primary unless a step says otherwise.
+
+1. Check ownership. Timescale runs each job as the role that registers it and
+   requires that role to own the aggregates it refreshes. As the role the
+   migration connects with, this query must return `true`:
+
+   ```sql
+   SELECT pg_has_role(current_user, view_owner, 'USAGE')
+   FROM timescaledb_information.continuous_aggregates
+   WHERE view_name = 'source_track_plays_daily';
+   ```
+
+2. Migrate. Run the ingestion worker image built from this branch with
+   `--migrate`. Migration 21 runs in one transaction and sets
+   `lock_timeout = '5s'` before adding the popularity columns. If it fails with
+   a lock timeout, nothing was recorded; run `--migrate` again. Then roll out
+   the API pods, including those with `ENABLE_HANGFIRE_SERVER`, from the same
+   image. API startup also applies pending migrations, so a pod that starts
+   before `--migrate` succeeds retries it the same way. Outside Development, an
+   image without migration 21 fails at startup against the migrated database,
+   so fix problems by rolling forward.
+   Confirm the standby has the migration before relying on replica reads. On
+   the replica, this returns `22`:
+
+   ```sql
+   SELECT max(version) FROM versioninfo;
+   ```
+
+   Until the backfill finishes, yearly scans compute unmaterialized buckets
+   from the daily aggregate. They are correct but slow, and a scan that times
+   out keeps the previous publication.
+
+3. Backfill. Use `psql`: `\gexec` runs each generated `CALL` as its own
+   statement, and the refresh procedure cannot run inside a transaction block.
+   Production data takes about 10–25 minutes in total. `force => true` makes
+   each range idempotent, so after an interruption, rerun the same commands.
+
+   First bring the daily track aggregate up to date, because each upper refresh
+   reads only what daily has materialized. Without `force`, this processes only
+   pending invalidations:
 
    ```sql
    CALL refresh_continuous_aggregate(
-       'source_track_plays_monthly', TIMESTAMPTZ '2018-10-01 00:00Z',
-       TIMESTAMPTZ '2018-11-01 00:00Z', force => true
-   );
-   CALL refresh_continuous_aggregate(
-       'source_plays_daily', TIMESTAMPTZ '2018-10-01 00:00Z',
-       TIMESTAMPTZ '2018-11-01 00:00Z', force => true
+       'source_track_plays_daily', NULL,
+       date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
    );
    ```
 
-   For the source-day rollup, also refresh the current month through the
-   daily aggregate's last completed day. This fills any earlier days in the
-   current month before the real-time tail takes over. To repair a historical
-   month with changed raw plays, refresh its daily track buckets first, then
-   refresh the monthly track and daily source buckets for that month.
+   Then backfill the monthly track rollup, one month per statement, through
+   the last complete UTC month. Daily now covers that month, including on the
+   first day of a month.
 
-2. Compare yearly totals with a daily-only calculation across both edge
-   months. Measure the yearly scan and complete popularity refresh on
-   production data, including global shows and the largest artist. Check
-   legacy reads on a cold Redis cache too. Their cache-miss calculations use
-   the same writer and wait for the yearly query.
-3. Verify the migration has reached the standby, then deploy the catalog API
-   and popularity job runners that calculate the yearly window. Wait for all
-   popularity writers to roll before running `PopularityJobs.RefreshReadModel`.
-   Confirm ordinary reads expose `windows.1y` and yearly-only rows stay out of
-   rankings.
+   ```sql
+   WITH months AS (
+       SELECT generate_series(
+           date_trunc('month', min(play_day) AT TIME ZONE 'UTC'),
+           date_trunc('month', now() AT TIME ZONE 'UTC') - INTERVAL '1 month',
+           INTERVAL '1 month'
+       ) AS month
+       FROM source_track_plays_daily
+   )
+   SELECT format(
+       'CALL refresh_continuous_aggregate(%L, %L::timestamptz, %L::timestamptz, force => true)',
+       'source_track_plays_monthly', month AT TIME ZONE 'UTC',
+       (month + INTERVAL '1 month') AT TIME ZONE 'UTC'
+   )
+   FROM months ORDER BY month
+   \gexec
+   ```
 
-Each refresh calculates the yearly window before the existing atomic upsert.
-The yearly scan uses the same database read path as the recent windows. If the
-scan fails, the job keeps the previous publication for retry. After migration 21,
-recovery images must recognize that schema version.
+   Then backfill the source-day rollup through the daily aggregate's
+   materialization watermark. The last range is cut at the watermark; when the
+   watermark is the first of the month, the current month has no range.
+
+   ```sql
+   WITH bounds AS (
+       SELECT
+           date_trunc('month', (SELECT min(play_day) FROM source_track_plays_daily)
+               AT TIME ZONE 'UTC') AS first_month,
+           _timescaledb_functions.to_timestamp(
+               _timescaledb_functions.cagg_watermark(mat_hypertable_id)
+           ) AT TIME ZONE 'UTC' AS watermark
+       FROM _timescaledb_catalog.continuous_agg
+       WHERE user_view_name = 'source_track_plays_daily'
+   ), months AS (
+       SELECT month, least(month + INTERVAL '1 month', watermark) AS month_end
+       FROM bounds, generate_series(first_month, watermark, INTERVAL '1 month') AS month
+   )
+   SELECT format(
+       'CALL refresh_continuous_aggregate(%L, %L::timestamptz, %L::timestamptz, force => true)',
+       'source_plays_daily', month AT TIME ZONE 'UTC', month_end AT TIME ZONE 'UTC'
+   )
+   FROM months WHERE month < month_end ORDER BY month
+   \gexec
+   ```
+
+4. Enable both jobs.
+
+   ```sql
+   SELECT alter_job(job_id, scheduled => true, next_start => now())
+   FROM timescaledb_information.jobs
+   WHERE proc_schema = 'public'
+     AND proc_name IN ('refresh_source_track_plays_monthly', 'refresh_source_plays_daily');
+   ```
+
+5. Verify.
+   - Both jobs report `scheduled = true`, and after their first run
+     `timescaledb_information.job_stats.last_run_status` is `Success`.
+   - Monthly totals match the daily aggregate. On the replica, this query
+     returns no rows:
+
+     ```sql
+     SELECT play_month, sum(plays) FROM source_track_plays_monthly GROUP BY 1
+     EXCEPT
+     SELECT time_bucket(INTERVAL '1 month', play_day), sum(plays)
+     FROM source_track_plays_daily GROUP BY 1;
+     ```
+
+   - Run `PopularityJobs.RefreshReadModel`. Ordinary v4 reads expose
+     `windows.1y`. A legacy read on a cold Redis cache completes; cache misses
+     use the same writer and wait for the yearly scan.
+   - Yearly-only rows stay out of rankings: rankings require a stored momentum
+     score, and rows without 30-day plays store none. Each query returns `0`:
+
+     ```sql
+     SELECT count(*) FROM show_popularity
+     WHERE plays_1y > 0 AND plays_30d = 0 AND momentum_score IS NOT NULL;
+     SELECT count(*) FROM year_popularity
+     WHERE plays_1y > 0 AND plays_30d = 0 AND momentum_score IS NOT NULL;
+     SELECT count(*) FROM artist_popularity
+     WHERE plays_1y > 0 AND plays_30d = 0 AND momentum_score IS NOT NULL;
+     ```
+
+To repair a historical month with changed raw plays, refresh its daily track
+buckets first, then the monthly track and daily source buckets for that month.

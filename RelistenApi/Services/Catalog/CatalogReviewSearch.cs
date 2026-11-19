@@ -11,7 +11,6 @@ namespace Relisten.Catalog;
 
 public sealed record CatalogReviewQuery(
     string? Text,
-    string? Pattern,
     string? SongId,
     Guid? ShowUuid,
     int[]? Years,
@@ -47,9 +46,15 @@ public sealed class CatalogReviewSearch(DbService db, CatalogSongMetadataReader 
             return null;
         }
 
-        var pattern = query.Pattern;
+        // The only expression ever run is one built from a song's aliases; callers
+        // never supply their own, so no one can run arbitrary regular expressions
+        // against the review corpus.
+        string? pattern = null;
         if (query.SongId is { } songId)
         {
+            // Song identities and aliases exist only in an approved normalized
+            // catalog. Text search reads the imported reviews directly, so it stays
+            // available for every artist.
             if (!artist.Approved)
             {
                 return [];
@@ -119,22 +124,38 @@ public sealed class CatalogReviewSearch(DbService db, CatalogSongMetadataReader 
             )
         );
 
-        // Alias text is literal. PostgreSQL's word-boundary operators prevent a song
-        // such as "Play" from matching every use of "playing" in a review.
-        return @"\m("
-            + string.Join(
-                "|",
-                aliases
-                    .Append(song.name)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .Select(Regex.Escape)
-            )
-            + @")\M";
+        return string.Join(
+            "|",
+            aliases
+                .Append(song.name)
+                .Where(alias => alias.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Select(BoundedAlias)
+        );
     }
 
-    // Match the expression in migration 22. Use an indexable predicate for
-    // candidate selection, then find the precise excerpt offset only for the page.
+    // Alias text is literal. PostgreSQL's word-boundary operators prevent a song
+    // such as "Play" from matching every use of "playing" in a review. \m and \M
+    // only match next to a word character, so an edge such as the apostrophe in
+    // "Truckin'" or the "!" in "Slipknot!" takes no boundary on that side.
+    // Regex.Escape output is also literal in a PostgreSQL ARE: it prefixes
+    // metacharacters and spaces with a backslash, which makes any non-alphanumeric
+    // character literal there, and writes tab, newline, and similar characters as
+    // \t and \n, which ARE reads as the same characters.
+    private static string BoundedAlias(string alias) =>
+        (IsWordCharacter(alias[0]) ? @"\m" : "")
+        + Regex.Escape(alias)
+        + (IsWordCharacter(alias[^1]) ? @"\M" : "");
+
+    // PostgreSQL's word characters for \m and \M: alphanumerics and underscore.
+    private static bool IsWordCharacter(char value) => char.IsLetterOrDigit(value) || value == '_';
+
+    // Must match the expression indexed by migration 22.
     private const string ReviewBody = "coalesce(r.title || ' — ', '') || r.review";
+
+    // An excerpt starts this many characters before the match and is this long.
+    private const int ExcerptLead = 80;
+    private const int ExcerptLength = 300;
 
     private static string LiteralPattern(string text) =>
         "%" + text.Replace("!", "!!").Replace("%", "!%").Replace("_", "!_") + "%";
@@ -146,6 +167,8 @@ public sealed class CatalogReviewSearch(DbService db, CatalogSongMetadataReader 
             : hasText ? $"AND ({ReviewBody}) ILIKE @literal ESCAPE '!'"
             : "";
 
+        // Select candidates with the indexable predicate, then find the precise
+        // excerpt offset only for the returned page.
         return $"""
             WITH matching AS (
                 SELECT r.uuid, r.rating, r.source_id, sh.uuid AS show_uuid, sh.display_date,
@@ -167,9 +190,9 @@ public sealed class CatalogReviewSearch(DbService db, CatalogSongMetadataReader 
             )
             SELECT p.uuid, p.show_uuid AS ShowUuid, s.uuid AS SourceUuid, a.slug AS ArtistSlug,
                    p.display_date AS DisplayDate, p.rating,
-                   (CASE WHEN p.match_at>81 THEN '…' ELSE '' END) ||
-                     substring(body,greatest(1,p.match_at-80),300) ||
-                     (CASE WHEN length(body)>=greatest(1,p.match_at-80)+300 THEN '…' ELSE '' END) AS Excerpt,
+                   (CASE WHEN p.match_at>{ExcerptLead + 1} THEN '…' ELSE '' END) ||
+                     substring(body,greatest(1,p.match_at-{ExcerptLead}),{ExcerptLength}) ||
+                     (CASE WHEN length(body)>=greatest(1,p.match_at-{ExcerptLead})+{ExcerptLength} THEN '…' ELSE '' END) AS Excerpt,
                    ARRAY(SELECT t.uuid FROM source_tracks t JOIN source_sets sets ON sets.id=t.source_set_id
                          WHERE t.source_id=s.id AND NOT t.is_orphaned AND (t.mp3_url IS NOT NULL OR t.flac_url IS NOT NULL)
                          ORDER BY sets.index,t.track_position,t.uuid LIMIT 100) AS TrackUuids

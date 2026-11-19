@@ -65,9 +65,29 @@ public sealed record CatalogPerformanceCursor(decimal Score, DateOnly Date, Guid
     }
 }
 
+/// <summary>
+/// Reads one page of performances: an artist's playable recordings of one song at
+/// one show, ranked by the requested order.
+/// </summary>
+/// <remarks>
+/// Cursor protocol: every order ranks by (score, date, show, song ID) descending,
+/// and the cursor is that tuple for the last returned row. The ranked-row query
+/// returns only rows strictly after the cursor tuple. Each read asks for one row
+/// more than the limit; that extra row decides whether a next cursor exists and
+/// is not returned. A date-ordered page reads shows in batches; the first batch
+/// includes the cursor's show, because that show's remaining songs may follow the
+/// cursor, and the tuple filter drops the songs already returned.
+/// </remarks>
 public sealed class CatalogPerformances(DbService db, CatalogSongMetadataReader songs)
 {
-    private const int ShowBatchSize = 16;
+    private const int FirstShowBatchSize = 16;
+    private const int MaxShowBatchSize = 256;
+
+    // A page may take several statements: show batches, ranked rows, and plays.
+    // The overall budget bounds their sum; the per-statement timeout stops one slow
+    // statement before it uses the whole budget. Both report the same timeout.
+    private static readonly TimeSpan ReadBudget = TimeSpan.FromSeconds(3);
+    private const string StatementTimeout = "2s";
 
     public async Task<CatalogPerformancePage?> Read(
         Guid artistUuid,
@@ -76,7 +96,7 @@ public sealed class CatalogPerformances(DbService db, CatalogSongMetadataReader 
     )
     {
         using var budget = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        budget.CancelAfter(TimeSpan.FromSeconds(3));
+        budget.CancelAfter(ReadBudget);
         try
         {
             return await ReadWithinBudget(artistUuid, query, budget.Token);
@@ -101,18 +121,14 @@ public sealed class CatalogPerformances(DbService db, CatalogSongMetadataReader 
     {
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
         await session.Connection.ExecuteAsync(
-            session.Command("SET LOCAL statement_timeout = '2s'", null, cancellationToken)
-        );
-        var artist = await session.Connection.QuerySingleOrDefaultAsync<Artist>(
             session.Command(
-                """
-                SELECT a.id, a.slug, coalesce(f.norm_catalogue,false) AS approved
-                FROM artists a LEFT JOIN features f ON f.artist_id=a.id WHERE a.uuid=@artistUuid
-                """,
-                new { artistUuid },
+                $"SET LOCAL statement_timeout = '{StatementTimeout}'",
+                null,
                 cancellationToken
             )
         );
+
+        var artist = await ReadArtist(session, artistUuid, cancellationToken);
         if (artist is null)
         {
             return null;
@@ -122,57 +138,91 @@ public sealed class CatalogPerformances(DbService db, CatalogSongMetadataReader 
             return new([], null);
         }
 
-        var songIds = new[] { query.SongId, query.SeguedFrom, query.SeguedInto }
-            .OfType<string>()
-            .ToArray();
-        var scope = await songs.Read(session, songIds, cancellationToken);
-        if (
-            songIds.Any(id =>
-                !scope.TryGetValue(id, out var song) || song.artist_uuid != artistUuid
-            )
-        )
+        var scope = await ReadSongScope(session, artistUuid, query, cancellationToken);
+        if (scope is null)
         {
             return new([], null);
         }
 
-        var rows =
-            query.Order == "date" && query.SongId is null
-                ? await ReadDatePage(
-                    session,
-                    artistUuid,
-                    artist.Id,
-                    query,
-                    scope,
-                    cancellationToken
-                )
-                : await ReadPage(
-                    session,
-                    artistUuid,
-                    artist.Id,
-                    query,
-                    scope,
-                    null,
-                    query.Limit + 1,
-                    cancellationToken
-                );
+        var rows = await ReadRows(session, artistUuid, artist.Id, query, scope, cancellationToken);
         var page = rows.Take(query.Limit).ToArray();
         var popularity = await ReadPopularity(session, page, cancellationToken);
 
-        var last = page.LastOrDefault();
-        var cursor =
-            rows.Length > page.Length && last is not null
-                ? new CatalogPerformanceCursor(
-                    last.Score,
-                    DateOnly.FromDateTime(last.Date),
-                    last.ShowUuid,
-                    last.SongId
-                ).Encode()
-                : null;
         return new(
             page.Select((row, index) => Project(row, artist.Slug, popularity[index])).ToArray(),
-            cursor
+            rows.Length > page.Length ? NextCursor(page[^1]) : null
         );
     }
+
+    private static Task<Artist?> ReadArtist(
+        CatalogReadSession session,
+        Guid artistUuid,
+        CancellationToken cancellationToken
+    ) =>
+        session.Connection.QuerySingleOrDefaultAsync<Artist?>(
+            session.Command(
+                """
+                SELECT a.id, a.slug, coalesce(f.norm_catalogue,false) AS approved
+                FROM artists a LEFT JOIN features f ON f.artist_id=a.id WHERE a.uuid=@artistUuid
+                """,
+                new { artistUuid },
+                cancellationToken
+            )
+        );
+
+    // Resolves the song, segued-from and segued-into IDs. Null when any of them is
+    // unknown or belongs to another artist: such a filter matches nothing.
+    private async Task<IReadOnlyDictionary<string, CatalogSong>?> ReadSongScope(
+        CatalogReadSession session,
+        Guid artistUuid,
+        CatalogPerformanceQuery query,
+        CancellationToken cancellationToken
+    )
+    {
+        var songIds = new[] { query.SongId, query.SeguedFrom, query.SeguedInto }
+            .OfType<string>()
+            .ToArray();
+        var scope = await songs.Read(session, songIds, cancellationToken);
+
+        var allOwned = songIds.All(id =>
+            scope.TryGetValue(id, out var song) && song.artist_uuid == artistUuid
+        );
+        return allOwned ? scope : null;
+    }
+
+    // Date order without a song filter reads the newest shows in batches and stops
+    // once the page fills, instead of matching every song in the catalog. A song
+    // filter starts matching from that song's own track rows, a bounded set, so one
+    // ranked query reads it directly. Score orders must rank every candidate before
+    // any page, so they use one query too.
+    private static Task<PerformanceRow[]> ReadRows(
+        CatalogReadSession session,
+        Guid artistUuid,
+        int artistId,
+        CatalogPerformanceQuery query,
+        IReadOnlyDictionary<string, CatalogSong> scope,
+        CancellationToken cancellationToken
+    ) =>
+        query.Order == "date" && query.SongId is null
+            ? ReadDatePage(session, artistUuid, artistId, query, scope, cancellationToken)
+            : ReadRankedRows(
+                session,
+                artistUuid,
+                artistId,
+                query,
+                scope,
+                showBatch: null,
+                query.Limit + 1,
+                cancellationToken
+            );
+
+    private static string NextCursor(PerformanceRow last) =>
+        new CatalogPerformanceCursor(
+            last.Score,
+            DateOnly.FromDateTime(last.Date),
+            last.ShowUuid,
+            last.SongId
+        ).Encode();
 
     private static async Task<PerformanceRow[]> ReadDatePage(
         CatalogReadSession session,
@@ -185,51 +235,32 @@ public sealed class CatalogPerformances(DbService db, CatalogSongMetadataReader 
     {
         var target = query.Limit + 1;
         var matches = new List<PerformanceRow>(target);
-        var afterDate = query.After?.Date.ToDateTime(TimeOnly.MinValue);
-        var afterShow = query.After?.Show;
-        var includeBoundary = true;
+        var position = new ShowPosition(
+            query.After?.Date.ToDateTime(TimeOnly.MinValue),
+            query.After?.Show,
+            IncludeBoundary: true
+        );
+        var batchSize = FirstShowBatchSize;
 
         // Date and show UUID sort before song ID, so contiguous show batches
-        // concatenate in final order. Include the cursor show in the first batch
-        // because its remaining songs may belong on the next page.
+        // concatenate in final order (see the cursor protocol on the class).
         while (matches.Count < target)
         {
-            var batch = (
-                await session.Connection.QueryAsync<ShowBoundary>(
-                    session.Command(
-                        $"""
-                        WITH RECURSIVE {VenueMap}, show_scope AS ({ShowScopeSql})
-                        SELECT uuid AS Show, date::timestamp AS Date
-                        FROM show_scope
-                        WHERE @afterDate::date IS NULL OR (date,uuid)<(@afterDate::date,@afterShow)
-                           OR (@includeBoundary AND (date,uuid)=(@afterDate::date,@afterShow))
-                        ORDER BY date DESC, uuid DESC
-                        LIMIT @batchSize
-                        """,
-                        new
-                        {
-                            artistUuid,
-                            artistId,
-                            query.ExcludedShows,
-                            query.Years,
-                            query.TourUuid,
-                            query.VenueId,
-                            venueUuid = ImportedVenueUuid(query.VenueId),
-                            afterDate,
-                            afterShow,
-                            includeBoundary,
-                            batchSize = ShowBatchSize,
-                        },
-                        cancellationToken
-                    )
-                )
-            ).ToArray();
+            var batch = await ReadShowBatch(
+                session,
+                artistUuid,
+                artistId,
+                query,
+                position,
+                batchSize,
+                cancellationToken
+            );
             if (batch.Length == 0)
             {
                 break;
             }
 
-            var rows = await ReadPage(
+            var rows = await ReadRankedRows(
                 session,
                 artistUuid,
                 artistId,
@@ -240,16 +271,78 @@ public sealed class CatalogPerformances(DbService db, CatalogSongMetadataReader 
                 cancellationToken
             );
             matches.AddRange(rows);
-            if (batch.Length < ShowBatchSize)
+            if (batch.Length < batchSize)
             {
                 break;
             }
 
-            afterDate = batch[^1].Date;
-            afterShow = batch[^1].Show;
-            includeBoundary = false;
+            // Filters the show query cannot see, such as segues, can leave most
+            // batches empty. Doubling bounds the round trips across a large
+            // catalog; the cap keeps each ranked-row statement well inside the
+            // statement timeout.
+            position = new ShowPosition(batch[^1].Date, batch[^1].Show, IncludeBoundary: false);
+            batchSize = Math.Min(batchSize * 2, MaxShowBatchSize);
         }
+
         return matches.ToArray();
+    }
+
+    // The EXISTS clause applies the per-file filters before a show enters a batch.
+    // It is a necessary condition for an eligible match, so it never drops a show
+    // that ReadRankedRows would return. Without it, a selective duration or soundboard
+    // filter reads most of a large catalog 16 shows at a time.
+    private static async Task<ShowBoundary[]> ReadShowBatch(
+        CatalogReadSession session,
+        Guid artistUuid,
+        int artistId,
+        CatalogPerformanceQuery query,
+        ShowPosition position,
+        int batchSize,
+        CancellationToken cancellationToken
+    )
+    {
+        var shows = await session.Connection.QueryAsync<ShowBoundary>(
+            session.Command(
+                $"""
+                WITH RECURSIVE {VenueMap}, show_scope AS ({ShowScopeSql})
+                SELECT sc.uuid AS Show, sc.date::timestamp AS Date
+                FROM show_scope sc
+                WHERE (@afterDate::date IS NULL OR (sc.date,sc.uuid)<(@afterDate::date,@afterShow)
+                    OR (@includeBoundary AND (sc.date,sc.uuid)=(@afterDate::date,@afterShow)))
+                  AND EXISTS (
+                    SELECT 1 FROM sources s JOIN source_tracks t ON t.source_id=s.id
+                    WHERE s.show_id=sc.id AND NOT t.is_orphaned
+                      AND (t.mp3_url IS NOT NULL OR t.flac_url IS NOT NULL)
+                      AND NOT t.uuid=ANY(@ExcludedTracks)
+                      AND (NOT @SoundboardOnly OR s.is_soundboard)
+                      AND (@MinSeconds::double precision IS NULL OR t.duration>=@MinSeconds)
+                      AND (@MaxSeconds::double precision IS NULL OR t.duration<=@MaxSeconds)
+                  )
+                ORDER BY sc.date DESC, sc.uuid DESC
+                LIMIT @batchSize
+                """,
+                new
+                {
+                    artistUuid,
+                    artistId,
+                    query.ExcludedShows,
+                    query.ExcludedTracks,
+                    query.SoundboardOnly,
+                    query.MinSeconds,
+                    query.MaxSeconds,
+                    query.Years,
+                    query.TourUuid,
+                    query.VenueId,
+                    venueUuid = ImportedVenueUuid(query.VenueId),
+                    afterDate = position.Date,
+                    afterShow = position.Show,
+                    includeBoundary = position.IncludeBoundary,
+                    batchSize,
+                },
+                cancellationToken
+            )
+        );
+        return shows.ToArray();
     }
 
     private static Guid? ImportedVenueUuid(string? venueId) =>
@@ -259,7 +352,11 @@ public sealed class CatalogPerformances(DbService db, CatalogSongMetadataReader 
 
     private sealed record ShowBoundary(Guid Show, DateTime Date);
 
-    private static async Task<PerformanceRow[]> ReadPage(
+    private sealed record ShowPosition(DateTime? Date, Guid? Show, bool IncludeBoundary);
+
+    // Reads ranked performance rows after the cursor, for the given shows or, when
+    // showBatch is null, for every show the query's filters allow.
+    private static async Task<PerformanceRow[]> ReadRankedRows(
         CatalogReadSession session,
         Guid artistUuid,
         int artistId,
@@ -279,7 +376,10 @@ public sealed class CatalogPerformances(DbService db, CatalogSongMetadataReader 
             "review_count" => "g.review_count::numeric",
             "random" =>
                 "hashtextextended(g.show_uuid::text || '/' || g.song_id || '/' || @seed,0)::numeric",
-            _ => "0::numeric",
+            // Every row ties on score, so the tie-breakers alone order the page:
+            // newest date, then show, then song ID.
+            "date" => "0::numeric",
+            _ => throw new ArgumentOutOfRangeException(nameof(query), query.Order, null),
         };
         var useShowScope =
             query.Years is not null || query.TourUuid is not null || query.VenueId is not null;
@@ -293,6 +393,7 @@ public sealed class CatalogPerformances(DbService db, CatalogSongMetadataReader 
             session.Command(
                 $"""
                 WITH RECURSIVE song_map AS (
+                  -- Every song ID of this artist mapped to the surviving song of its merges.
                   SELECT id, id AS canonical_id, ARRAY[id] AS path
                   FROM norm.songs WHERE artist_uuid=@artistUuid AND merged_into IS NULL
                   UNION ALL
@@ -303,6 +404,7 @@ public sealed class CatalogPerformances(DbService db, CatalogSongMetadataReader 
                   SELECT * FROM ({ShowScopeSql}) scoped
                   WHERE @showBatch::uuid[] IS NULL OR scoped.uuid=ANY(@showBatch)
                 ), eligible AS MATERIALIZED (
+                  -- One row per playable file that matches the filters, with its show and source.
                   SELECT m.song_id, m.show_uuid, m.track_uuid, m.matching_part_ordinals,
                          sc.date, sc.display_date, sc.venue, s.id AS source_id, s.uuid AS source_uuid, s.is_soundboard,
                          s.avg_rating, coalesce(rc.source_review_count,0) AS review_count, t.duration
@@ -320,11 +422,13 @@ public sealed class CatalogPerformances(DbService db, CatalogSongMetadataReader 
                     AND (@MinSeconds::double precision IS NULL OR t.duration>=@MinSeconds)
                     AND (@MaxSeconds::double precision IS NULL OR t.duration<=@MaxSeconds)
                 ), source_counts AS (
+                  -- Per performance: distinct eligible sources and their best rating and reviews.
                   SELECT song_id, show_uuid, count(*) AS source_count, bool_or(is_soundboard) AS soundboard,
                          max(avg_rating)::double precision AS rating, sum(review_count)::bigint AS review_count
                   FROM (SELECT DISTINCT song_id, show_uuid, source_id, is_soundboard, avg_rating, review_count FROM eligible) s
                   GROUP BY song_id, show_uuid
                 ), tracks AS (
+                  -- Per performance: its files, longest first; the first is the representative.
                   SELECT song_id, show_uuid, max(date) AS date, max(display_date) AS display_date, max(venue) AS venue, max(duration) AS longest_seconds,
                          array_agg(track_uuid ORDER BY duration DESC NULLS LAST, track_uuid) AS track_uuids
                   FROM eligible GROUP BY song_id, show_uuid
@@ -334,6 +438,7 @@ public sealed class CatalogPerformances(DbService db, CatalogSongMetadataReader 
                 ), scored AS (
                   SELECT g.*, {order} AS score FROM grouped g
                 ), page AS MATERIALIZED (
+                  -- Rows strictly after the cursor tuple, in rank order.
                   SELECT * FROM scored
                   WHERE @afterScore::numeric IS NULL OR
                     (score,date,show_uuid,song_id) < (@afterScore,@afterDate::date,@afterShow,@afterSong)
@@ -387,19 +492,30 @@ public sealed class CatalogPerformances(DbService db, CatalogSongMetadataReader 
         return rows.ToArray();
     }
 
+    // Resolve only the venues this artist's shows (and the requested venue) use,
+    // following merges up to their surviving venue. Cycles and chains longer than
+    // the public 32-node limit have no canonical venue.
     private const string VenueMap = """
-        venue_map AS (
-          SELECT id, id AS canonical_id, ARRAY[id] AS path
-          FROM norm.venues WHERE merged_into IS NULL
+        venue_chain AS (
+          SELECT start.id, start.id AS current_id, ARRAY[start.id] AS path
+          FROM (
+            SELECT sv.venue_id AS id FROM shows sh JOIN norm.show_venues sv ON sv.show_uuid=sh.uuid
+            WHERE sh.artist_id=@artistId
+            UNION SELECT @VenueId::text WHERE @VenueId::text IS NOT NULL
+          ) start
           UNION ALL
-          SELECT v.id, m.canonical_id, m.path || v.id
-          FROM venue_map m JOIN norm.venues v ON v.merged_into=m.id
-          WHERE cardinality(m.path)<32 AND NOT v.id=ANY(m.path)
+          SELECT c.id, v.merged_into, c.path || v.merged_into
+          FROM venue_chain c JOIN norm.venues v ON v.id=c.current_id
+          WHERE v.merged_into IS NOT NULL AND cardinality(c.path)<32 AND NOT v.merged_into=ANY(c.path)
+        ), venue_map AS (
+          SELECT c.id, c.current_id AS canonical_id
+          FROM venue_chain c JOIN norm.venues v ON v.id=c.current_id
+          WHERE v.merged_into IS NULL
         )
         """;
 
     private const string ShowScopeSql = """
-        SELECT sh.uuid, sh.date, sh.display_date, coalesce(v.name,iv.name) venue
+        SELECT sh.id, sh.uuid, sh.date, sh.display_date, coalesce(v.name,iv.name) venue
         FROM shows sh
         LEFT JOIN tours tour ON tour.id=sh.tour_id
         LEFT JOIN venues iv ON iv.id=sh.venue_id
@@ -456,7 +572,7 @@ public sealed class CatalogPerformances(DbService db, CatalogSongMetadataReader 
             ORDER BY current_part.part
             """;
 
-    private static async Task<Popularity[]> ReadPopularity(
+    private static async Task<PerformancePlays[]> ReadPopularity(
         CatalogReadSession session,
         PerformanceRow[] page,
         CancellationToken cancellationToken
@@ -466,69 +582,22 @@ public sealed class CatalogPerformances(DbService db, CatalogSongMetadataReader 
         {
             return [];
         }
-        var through = DateOnly.FromDateTime(DateTime.UtcNow);
-        var trackIds = page.SelectMany(row => row.TrackUuids).Distinct().ToArray();
-        var tracks = (
-            await PlayRollupReader.ReadTracks(
-                session.Connection,
-                trackIds,
-                through,
-                cancellationToken,
-                session.Transaction
-            )
-        ).ToDictionary(row => row.Id);
-        var sources = (
-            await PlayRollupReader.ReadSources(
-                session.Connection,
-                page.Select(row => row.SourceUuid).Distinct().ToArray(),
-                through,
-                cancellationToken,
-                session.Transaction
-            )
-        ).ToDictionary(row => row.Id);
 
-        // Each match may have several files. Count the union of their served UTC days.
-        var fileGroups = page.SelectMany((row, index) => row.TrackUuids.Select(id => (id, index)))
-            .ToArray();
-        var days = (
-            await session.Connection.QueryAsync<(int Index, long Days)>(
-                session.Command(
-                    """
-                    SELECT m.index, count(DISTINCT p.play_day)
-                    FROM unnest(@ids::uuid[],@indices::int[]) m(id,index)
-                    JOIN source_track_plays_daily p ON p.source_track_uuid=m.id
-                    WHERE p.play_day>=@start AND p.play_day<@end
-                    GROUP BY m.index
-                    """,
-                    new
-                    {
-                        ids = fileGroups.Select(row => row.id).ToArray(),
-                        indices = fileGroups.Select(row => row.index).ToArray(),
-                        start = through
-                            .AddDays(-364)
-                            .ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
-                        end = through.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
-                    },
-                    cancellationToken
-                )
-            )
-        ).ToDictionary(row => row.Index, row => row.Days);
-
-        return page.Select(
-                (row, index) =>
-                    new Popularity(
-                        row.TrackUuids.Sum(id => tracks.GetValueOrDefault(id)?.Plays ?? 0),
-                        days.GetValueOrDefault(index),
-                        sources.GetValueOrDefault(row.SourceUuid)
-                    )
-            )
-            .ToArray();
+        var plays = await PlayRollupReader.ReadPerformances(
+            session.Connection,
+            page.Select(row => new PerformancePlaysRequest(row.TrackUuids, row.SourceUuid))
+                .ToArray(),
+            DateOnly.FromDateTime(DateTime.UtcNow),
+            session.Transaction,
+            cancellationToken
+        );
+        return plays.ToArray();
     }
 
     private static CatalogPerformance Project(
         PerformanceRow row,
         string slug,
-        Popularity popularity
+        PerformancePlays popularity
     ) =>
         new(
             new(row.ShowUuid),
@@ -550,16 +619,14 @@ public sealed class CatalogPerformances(DbService db, CatalogSongMetadataReader 
                     : new(row.PreviousId, row.PreviousSong!, row.SegueFrom),
                 row.NextId is null ? null : new(row.NextId, row.NextSong!, row.SegueInto),
                 CatalogWebLinks.Source(slug, row.DisplayDate, row.SourceUuid),
-                popularity.Source?.Plays ?? 0,
-                popularity.Source?.DaysWithPlays ?? 0
+                popularity.SourcePlays,
+                popularity.SourceDays
             ),
             popularity.Plays,
             popularity.Days
         );
 
     private sealed record Artist(int Id, string Slug, bool Approved);
-
-    private sealed record Popularity(long Plays, long Days, PlayRollupTotals? Source);
 
     private sealed class PerformanceRow
     {

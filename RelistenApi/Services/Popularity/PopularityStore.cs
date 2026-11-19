@@ -148,9 +148,23 @@ public sealed class PopularityStore(DbService db)
     {
         // Keep the yearly scan on the same read path as the recent calculation.
         // A failed scan leaves the previous Postgres and Redis publications intact.
-        var totals = await db.WithConnection(connection =>
-            PlayRollupReader.ReadPopularity(connection, population, through)
-        );
+        var totals = await db.WithConnection(async connection =>
+        {
+            // The rollup scans have large planner estimates. On production JIT
+            // compilation made one of them take 14.5s instead of 55ms. Scope the
+            // setting to this read-only transaction, as CatalogReadSession does.
+            using var transaction = connection.BeginTransaction();
+            await connection.ExecuteAsync(
+                "SET TRANSACTION READ ONLY; SET LOCAL jit = off",
+                transaction: transaction
+            );
+            return await PlayRollupReader.ReadPopularity(
+                connection,
+                transaction,
+                population,
+                through
+            );
+        });
         foreach (var total in totals)
         {
             if (!rows.TryGetValue(total.Id, out var row))

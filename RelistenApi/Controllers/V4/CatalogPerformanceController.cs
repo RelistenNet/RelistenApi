@@ -52,12 +52,8 @@ public sealed class CatalogPerformanceController(
             );
         }
 
-        // Callers search by literal text or song ID. The search service derives its own
-        // expression from a song's aliases; a caller-supplied one would run arbitrary
-        // PostgreSQL regular expressions against the review corpus.
         var query = new CatalogReviewQuery(
             q,
-            Pattern: null,
             songId,
             showId is null ? null : ShowId.Parse(showId).Value,
             parsedYears,
