@@ -21,14 +21,32 @@ public sealed class AppleTokenRevocation(
 {
     private static readonly Uri AppleIssuer = new(AuthenticationConstants.AppleIssuer);
 
+    /// <summary>Whether iOS should offer Apple reauthorization before deleting this account.</summary>
+    public async Task<bool> CanRevokeNativeAsync(
+        UserId userId,
+        CancellationToken cancellationToken
+    ) =>
+        runtime.Options.Apple is { Enabled: true } provider
+        && !string.IsNullOrWhiteSpace(provider.NativeClientId)
+        && !string.IsNullOrWhiteSpace(provider.PrivateKeyPath)
+        && await LinkedSubjects(userId).AnyAsync(cancellationToken);
+
     public async Task TryRevokeAsync(
         UserId userId,
-        string? code,
+        string? browserCode,
+        string? nativeCode,
         CancellationToken cancellationToken
     )
     {
         var provider = runtime.Options.Apple;
-        if (string.IsNullOrWhiteSpace(code) || !provider.Enabled)
+        var native = !string.IsNullOrWhiteSpace(nativeCode);
+        var code = native ? nativeCode : browserCode;
+        var clientId = native ? provider.NativeClientId : provider.ClientId;
+        if (
+            !provider.Enabled
+            || string.IsNullOrWhiteSpace(code)
+            || string.IsNullOrWhiteSpace(clientId)
+        )
         {
             return;
         }
@@ -38,23 +56,26 @@ public sealed class AppleTokenRevocation(
 
         try
         {
-            var subjects = await database
-                .ExternalIdentities.Where(identity =>
-                    identity.UserId == userId
-                    && identity.Issuer == AuthenticationConstants.AppleIssuer
-                )
-                .Select(identity => identity.ProviderSubject)
-                .ToArrayAsync(deadline.Token);
+            var subjects = await LinkedSubjects(userId).ToArrayAsync(deadline.Token);
             if (subjects.Length == 0)
             {
                 return;
             }
 
-            var secret = CreateClientSecret(provider);
-            var tokens = await ExchangeCodeAsync(code, provider.ClientId, secret, deadline.Token);
+            var redirectUri = native
+                ? null
+                : new Uri(runtime.Issuer, AuthenticationConstants.AppleCallbackPath).AbsoluteUri;
+            var secret = CreateClientSecret(provider, clientId);
+            var tokens = await ExchangeCodeAsync(
+                code,
+                clientId,
+                secret,
+                redirectUri,
+                deadline.Token
+            );
             var subject = await ValidateIdentityAsync(
                 tokens.IdentityToken,
-                provider.ClientId,
+                clientId,
                 deadline.Token
             );
             if (subject is null || !subjects.Contains(subject, StringComparer.Ordinal))
@@ -65,7 +86,7 @@ public sealed class AppleTokenRevocation(
                 return;
             }
 
-            await RevokeAsync(provider.ClientId, secret, tokens, deadline.Token);
+            await RevokeAsync(clientId, secret, tokens, deadline.Token);
         }
         catch (Exception error) when (!cancellationToken.IsCancellationRequested)
         {
@@ -77,7 +98,14 @@ public sealed class AppleTokenRevocation(
         }
     }
 
-    private string CreateClientSecret(AppleProviderOptions provider)
+    private IQueryable<string> LinkedSubjects(UserId userId) =>
+        database
+            .ExternalIdentities.Where(identity =>
+                identity.UserId == userId && identity.Issuer == AuthenticationConstants.AppleIssuer
+            )
+            .Select(identity => identity.ProviderSubject);
+
+    private string CreateClientSecret(AppleProviderOptions provider, string clientId)
     {
         var now = clock.GetUtcNow().UtcDateTime;
         var key = AppleSigningKey.Load(provider);
@@ -87,9 +115,7 @@ public sealed class AppleTokenRevocation(
             {
                 Issuer = provider.TeamId,
                 Audience = AuthenticationConstants.AppleIssuer,
-                Subject = new ClaimsIdentity([
-                    new Claim(JwtRegisteredClaimNames.Sub, provider.ClientId),
-                ]),
+                Subject = new ClaimsIdentity([new Claim(JwtRegisteredClaimNames.Sub, clientId)]),
                 IssuedAt = now,
                 Expires = now.AddMinutes(5),
                 SigningCredentials = new SigningCredentials(key, SecurityAlgorithms.EcdsaSha256)
@@ -107,24 +133,24 @@ public sealed class AppleTokenRevocation(
         string code,
         string clientId,
         string secret,
+        string? redirectUri,
         CancellationToken cancellationToken
     )
     {
-        // The configured registration is the browser Services ID.
-        // TODO: For iOS native codes, use its App ID and eligible signing key and omit redirect_uri.
-        using var form = new FormUrlEncodedContent(
-            new Dictionary<string, string>
-            {
-                ["grant_type"] = "authorization_code",
-                ["client_id"] = clientId,
-                ["client_secret"] = secret,
-                ["code"] = code,
-                ["redirect_uri"] = new Uri(
-                    runtime.Issuer,
-                    AuthenticationConstants.AppleCallbackPath
-                ).AbsoluteUri,
-            }
-        );
+        var fields = new Dictionary<string, string>
+        {
+            ["grant_type"] = "authorization_code",
+            ["client_id"] = clientId,
+            ["client_secret"] = secret,
+            ["code"] = code,
+        };
+        // Apple requires this field only when the authorization request supplied one.
+        if (redirectUri is not null)
+        {
+            fields["redirect_uri"] = redirectUri;
+        }
+
+        using var form = new FormUrlEncodedContent(fields);
         using var response = await client.PostAsync(
             new Uri(AppleIssuer, "/auth/token"),
             form,

@@ -43,6 +43,7 @@ public sealed class TestAccountDeletionApi
 {
     private const string AuthOrigin = "https://auth.relisten.localhost:5443";
     private const string AppleClientId = "net.relisten.test.auth";
+    private const string AppleNativeClientId = "net.relisten.test.ios";
     private const string AppleSubject = "dev-apple-shared";
     private const string ClientId = "relisten-mobile-ios-dev";
     private const string RedirectUri = "net.relisten.mobile:/oauth2redirect/ios";
@@ -159,33 +160,49 @@ public sealed class TestAccountDeletionApi
         await RunPurgeAsync(job.Id);
     }
 
-    [TestCase(AppleSubject, true)]
-    [TestCase("another-listener", false)]
-    [TestCase(null, false)]
+    [TestCase(false, AppleSubject, true)]
+    [TestCase(true, AppleSubject, true)]
+    [TestCase(true, "another-listener", false)]
+    [TestCase(true, null, false)]
     public async Task DeletionOnlyRevokesTokensForTheLinkedAppleIdentity(
+        bool native,
         string? subject,
         bool revoked
     )
     {
-        using var apple = new AppleRevocationProvider(subject);
+        var clientId = native ? AppleNativeClientId : AppleClientId;
+        using var apple = new AppleRevocationProvider(subject, clientId);
         await StartAppAsync(apple);
         var session = await SignInAsync("apple-shared", "apple");
+        var account = await _accounts.GetFromJsonAsync<JsonElement>("/v1/me");
+        account.GetProperty("apple_native_revocation_available").GetBoolean().Should().BeTrue();
+
+        var codeField = native ? "apple_native_authorization_code" : "apple_authorization_code";
+        var deletion = new Dictionary<string, string> { [codeField] = "fresh-test-code" };
 
         using var response = await _accounts
-            .PostAsJsonAsync(
-                "/v1/account-deletions",
-                new { apple_authorization_code = "fresh-test-code" }
-            )
+            .PostAsJsonAsync("/v1/account-deletions", deletion)
             .WaitAsync(TestDeadline);
 
         response.StatusCode.Should().Be(HttpStatusCode.Accepted);
         apple.ExchangeForm["grant_type"].ToString().Should().Be("authorization_code");
-        apple.ExchangeForm["client_id"].ToString().Should().Be(AppleClientId);
-        apple.ExchangeForm["redirect_uri"].ToString().Should().Be(AuthOrigin + "/signin-apple");
+        apple.ExchangeForm["client_id"].ToString().Should().Be(clientId);
+        new JsonWebToken(apple.ExchangeForm["client_secret"].ToString())
+            .Subject.Should()
+            .Be(clientId);
+        if (native)
+        {
+            apple.ExchangeForm.Should().NotContainKey("redirect_uri");
+        }
+        else
+        {
+            apple.ExchangeForm["redirect_uri"].ToString().Should().Be(AuthOrigin + "/signin-apple");
+        }
         apple.ExchangeForm["code"].ToString().Should().Be("fresh-test-code");
         if (revoked)
         {
             apple.RevokedToken.Should().Be("apple-test-refresh-token");
+            apple.RevocationClientId.Should().Be(clientId);
         }
         else
         {
@@ -195,6 +212,17 @@ public sealed class TestAccountDeletionApi
         await RunPurgeAsync((await GetJobAsync(session.UserId)).Id);
         using var profile = await _accounts.GetAsync("/v1/me");
         profile.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Test]
+    public async Task TheProfileOmitsAppleReauthorizationForAnAccountWithoutAnAppleIdentity()
+    {
+        using var apple = new AppleRevocationProvider(AppleSubject, AppleNativeClientId);
+        await StartAppAsync(apple);
+        await SignInAsync();
+
+        var account = await _accounts.GetFromJsonAsync<JsonElement>("/v1/me");
+        account.TryGetProperty("apple_native_revocation_available", out _).Should().BeFalse();
     }
 
     [Test]
@@ -426,6 +454,7 @@ public sealed class TestAccountDeletionApi
                 {
                     ["Accounts:Apple:Enabled"] = "true",
                     ["Accounts:Apple:ClientId"] = AppleClientId,
+                    ["Accounts:Apple:NativeClientId"] = AppleNativeClientId,
                     ["Accounts:Apple:TeamId"] = "TESTTEAM00",
                     ["Accounts:Apple:KeyId"] = "TESTKEY000",
                     ["Accounts:Apple:PrivateKeyPath"] = keyPath,
@@ -592,7 +621,8 @@ public sealed class TestAccountDeletionApi
 
     private sealed record NativeLogin(string UserId, string AuthSsoCookie, string RefreshToken);
 
-    private sealed class AppleRevocationProvider(string? subject) : HttpMessageHandler
+    private sealed class AppleRevocationProvider(string? subject, string clientId)
+        : HttpMessageHandler
     {
         private readonly RSA _key = RSA.Create(2048);
 
@@ -602,6 +632,7 @@ public sealed class TestAccountDeletionApi
             private set;
         } = [];
         public string? RevokedToken { get; private set; }
+        public string? RevocationClientId { get; private set; }
 
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
@@ -632,7 +663,7 @@ public sealed class TestAccountDeletionApi
                                     new SecurityTokenDescriptor
                                     {
                                         Issuer = AuthenticationConstants.AppleIssuer,
-                                        Audience = AppleClientId,
+                                        Audience = clientId,
                                         Subject = new ClaimsIdentity([
                                             new Claim(JwtRegisteredClaimNames.Sub, subject),
                                         ]),
@@ -673,6 +704,7 @@ public sealed class TestAccountDeletionApi
                         await request.Content!.ReadAsStringAsync(cancellationToken)
                     );
                     RevokedToken = form["token"].ToString();
+                    RevocationClientId = form["client_id"].ToString();
                     return new HttpResponseMessage(HttpStatusCode.OK);
                 default:
                     throw new InvalidOperationException("Unexpected Apple request.");

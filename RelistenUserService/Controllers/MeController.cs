@@ -5,6 +5,8 @@ using Relisten.Accounts.Contracts.Errors;
 using RelistenUserService.Authentication;
 using RelistenUserService.Authentication.Authorization;
 using RelistenUserService.Identity;
+using RelistenUserService.Identity.Deletion;
+using RelistenUserService.Identity.Entities;
 using RelistenUserService.Identity.Usernames;
 
 namespace RelistenUserService.Controllers;
@@ -13,14 +15,15 @@ namespace RelistenUserService.Controllers;
 [Route("v1/me")]
 public sealed class MeController(
     CurrentAccountContext currentAccount,
-    UsernameCommandService usernameCommands
+    UsernameCommandService usernameCommands,
+    AppleTokenRevocation apple
 ) : ControllerBase
 {
     [HttpGet]
     [Authorize(Policy = AuthenticationConstants.UserReadPolicy)]
-    public ActionResult<AccountProfileResponse> Get()
+    public async Task<ActionResult<AccountProfileResponse>> Get(CancellationToken cancellationToken)
     {
-        var profile = CreateProfile();
+        var profile = await CreateProfileAsync(currentAccount.User, cancellationToken);
         SetEtag(profile.UsernameVersion);
         return Ok(profile);
     }
@@ -55,9 +58,9 @@ public sealed class MeController(
             request,
             cancellationToken
         );
-        var profile = AccountProfileFactory.Create(result.User, currentAccount.NativeSessionId);
         if (result.Status == UsernameCommandStatus.Success)
         {
+            var profile = await CreateProfileAsync(result.User, cancellationToken);
             SetEtag(profile.UsernameVersion);
             return Ok(profile);
         }
@@ -89,17 +92,28 @@ public sealed class MeController(
                 StatusCodes.Status409Conflict,
                 AccountErrorCodes.UsernameVersionStale,
                 "The account has a newer username version.",
-                new() { ["current_profile"] = profile }
+                new()
+                {
+                    ["current_profile"] = await CreateProfileAsync(result.User, cancellationToken),
+                }
             ),
             _ => throw new InvalidOperationException("Unknown username command result."),
         };
     }
 
-    private AccountProfileResponse CreateProfile() =>
+    private async Task<AccountProfileResponse> CreateProfileAsync(
+        User user,
+        CancellationToken cancellationToken
+    ) =>
         AccountProfileFactory.Create(
-            currentAccount.User,
+            user,
             currentAccount.IsNative ? currentAccount.NativeSessionId : null
-        );
+        ) with
+        {
+            AppleNativeRevocationAvailable =
+                currentAccount.IsNative
+                && await apple.CanRevokeNativeAsync(user.Id, cancellationToken),
+        };
 
     private ObjectResult AccountProblem(
         int status,

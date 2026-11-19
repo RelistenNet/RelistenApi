@@ -34,7 +34,12 @@ public sealed class AccountDeletionsController(
             return Unauthorized();
         }
 
-        await apple.TryRevokeAsync(userId, request?.AppleAuthorizationCode, cancellationToken);
+        await apple.TryRevokeAsync(
+            userId,
+            request?.AppleAuthorizationCode,
+            request?.AppleNativeAuthorizationCode,
+            cancellationToken
+        );
 
         try
         {
@@ -59,4 +64,7 @@ public sealed class AccountDeletionsController(
     }
 }
 
-public sealed record AccountDeletionRequest(string? AppleAuthorizationCode);
+public sealed record AccountDeletionRequest(
+    string? AppleAuthorizationCode = null,
+    string? AppleNativeAuthorizationCode = null
+);
