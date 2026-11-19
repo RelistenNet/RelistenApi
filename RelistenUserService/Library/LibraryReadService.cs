@@ -45,19 +45,13 @@ public sealed class LibraryReadService(
                 favorite.UpdatedAt
             ))
             .ToArrayAsync(cancellationToken);
-        var playlists = await dbContext
+        var ownedPlaylists = dbContext
             .Playlists.AsNoTracking()
             .Where(row => row.OwnerId == userId)
             .OrderByDescending(row => row.UpdatedAt)
-            .ThenBy(row => row.Id)
-            .Select(row => new PlaylistSummary(
-                row.Id,
-                row.Name,
-                row.EntryCount,
-                row.Archived,
-                row.Revision,
-                row.UpdatedAt
-            ))
+            .ThenBy(row => row.Id);
+        var playlists = await PlaylistReadService
+            .Summaries(dbContext, ownedPlaylists)
             .ToArrayAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 

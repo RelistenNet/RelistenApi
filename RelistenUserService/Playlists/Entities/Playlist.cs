@@ -17,6 +17,7 @@ public sealed class PlaylistSegment
 {
     public PlaylistSegmentId Id { get; set; }
     public PlaylistId PlaylistId { get; set; }
+    public string? Description { get; set; }
     public string? Rank { get; set; }
     public bool Deleted { get; set; }
 }
@@ -26,7 +27,8 @@ public sealed class PlaylistEntry
     public PlaylistEntryId Id { get; set; }
     public PlaylistId PlaylistId { get; set; }
     public PlaylistSegmentId SegmentId { get; set; }
-    public string TrackId { get; set; } = "";
+    public string? TrackId { get; set; }
+    public string? Description { get; set; }
     public string? Rank { get; set; }
     public bool Deleted { get; set; }
 }

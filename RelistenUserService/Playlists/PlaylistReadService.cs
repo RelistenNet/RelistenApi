@@ -28,22 +28,36 @@ public sealed class PlaylistReadService(AccountsDbContext dbContext)
             cancellationToken
         );
         var generation = await GenerationAsync(cancellationToken);
-        var summaries = await dbContext
+        var playlists = dbContext
             .Playlists.AsNoTracking()
             .Where(row => row.OwnerId == actor && row.Archived == (view == "archived"))
             .OrderByDescending(row => row.UpdatedAt)
-            .ThenBy(row => row.Id)
-            .Select(row => new PlaylistSummary(
-                row.Id,
-                row.Name,
-                row.EntryCount,
-                row.Archived,
-                row.Revision,
-                row.UpdatedAt
-            ))
-            .ToArrayAsync(cancellationToken);
+            .ThenBy(row => row.Id);
+        var summaries = await Summaries(dbContext, playlists).ToArrayAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return new(1, generation, summaries);
+    }
+
+    internal static IQueryable<PlaylistEntry> LiveTracks(AccountsDbContext dbContext) =>
+        dbContext.PlaylistEntries.Where(entry => !entry.Deleted && entry.TrackId != null);
+
+    internal static IQueryable<PlaylistSummary> Summaries(
+        AccountsDbContext dbContext,
+        IQueryable<Playlist> playlists
+    )
+    {
+        var tracks = LiveTracks(dbContext);
+        return playlists.Select(row => new PlaylistSummary(
+            row.Id,
+            row.Name,
+            row.EntryCount,
+            row.Archived,
+            row.Revision,
+            row.UpdatedAt
+        )
+        {
+            TrackCount = tracks.Count(entry => entry.PlaylistId == row.Id),
+        });
     }
 
     public async Task<PlaylistSnapshot> SnapshotAsync(
@@ -89,9 +103,11 @@ public sealed class PlaylistReadService(AccountsDbContext dbContext)
                         .Select(entry => new PlaylistEntrySnapshot(
                             entry.Id,
                             entry.TrackId,
-                            entry.Rank!
+                            entry.Rank!,
+                            entry.Description
                         ))
-                        .ToArray()
+                        .ToArray(),
+                    segment.Description
                 ))
                 .ToArray(),
             playlist.CreatedAt,

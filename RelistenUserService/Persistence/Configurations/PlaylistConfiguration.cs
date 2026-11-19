@@ -85,7 +85,7 @@ public sealed class PlaylistConfiguration
                 );
                 table.HasCheckConstraint(
                     "ck_playlist_entries_track",
-                    "track_id ~ '^track_[0-7][0-9a-hjkmnp-tv-z]{25}$'"
+                    "CASE WHEN track_id IS NULL THEN description IS NOT NULL AND description ~ '[^[:space:]]' ELSE track_id ~ '^track_[0-7][0-9a-hjkmnp-tv-z]{25}$' END"
                 );
                 table.HasCheckConstraint(
                     "ck_playlist_entries_rank",

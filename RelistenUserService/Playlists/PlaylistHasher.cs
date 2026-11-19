@@ -20,10 +20,8 @@ public static class PlaylistHasher
         foreach (var segment in request.Segments)
         {
             lines.Add($"S:{segment.SegmentId}|{segment.Entries.Count}");
-            foreach (var entry in segment.Entries)
-            {
-                lines.Add($"{entry.EntryId}|{entry.TrackId}");
-            }
+            Description(lines, segment.Description);
+            EntryLines(lines, segment.Entries);
         }
         return Digest(lines);
     }
@@ -49,6 +47,17 @@ public static class PlaylistHasher
                 Entries(lines, insert.Entries);
                 Value(lines, insert.AfterSegmentId?.Value);
                 Value(lines, insert.BeforeSegmentId?.Value);
+                if (insert.Description is not null)
+                {
+                    // A plain value here could be mistaken for an anchor after a described entry.
+                    lines.Add(
+                        "segment_description:" + JsonSerializer.Serialize(insert.Description)
+                    );
+                }
+                break;
+            case UpdatePlaylistSegment update:
+                Value(lines, update.SegmentId.Value);
+                Optional(lines, update.Description);
                 break;
             case MovePlaylistSegment move:
                 Value(lines, move.SegmentId.Value);
@@ -86,6 +95,10 @@ public static class PlaylistHasher
             case DeletePlaylistEntry delete:
                 Value(lines, delete.EntryId.Value);
                 break;
+            case UpdatePlaylistEntry update:
+                Value(lines, update.EntryId.Value);
+                Optional(lines, update.Description);
+                break;
             default:
                 throw new InvalidOperationException("Unknown playlist operation.");
         }
@@ -118,7 +131,25 @@ public static class PlaylistHasher
     private static void Entries(List<string> lines, IReadOnlyList<PlaylistEntryInput> entries)
     {
         lines.Add($"L:{entries.Count}");
-        lines.AddRange(entries.Select(entry => $"{entry.EntryId}|{entry.TrackId}"));
+        EntryLines(lines, entries);
+    }
+
+    private static void EntryLines(List<string> lines, IReadOnlyList<PlaylistEntryInput> entries)
+    {
+        foreach (var entry in entries)
+        {
+            lines.Add($"{entry.EntryId}|{entry.TrackId ?? "N"}");
+            Description(lines, entry.Description);
+        }
+    }
+
+    private static void Description(List<string> lines, string? description)
+    {
+        // Omit the whole line so pre-rollout create and insert receipts keep their hash.
+        if (description is not null)
+        {
+            Value(lines, description);
+        }
     }
 
     private static byte[] Digest(List<string> lines) =>

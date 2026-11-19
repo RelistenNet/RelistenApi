@@ -4,7 +4,7 @@ using Relisten.Accounts.Contracts.Identifiers;
 
 namespace Relisten.Accounts.Contracts.Playlists;
 
-/// <summary>Distinguishes an omitted metadata patch from an explicit null.</summary>
+/// <summary>Distinguishes an omitted text patch from an explicit null.</summary>
 [JsonConverter(typeof(OptionalTextConverter))]
 public readonly record struct OptionalText(bool IsPresent, string? Value);
 
@@ -33,11 +33,16 @@ public sealed class OptionalTextConverter : JsonConverter<OptionalText>
 
 public sealed record PlaylistMetadata(string Name, string? Description = null);
 
-public sealed record PlaylistEntryInput(PlaylistEntryId EntryId, string TrackId);
+public sealed record PlaylistEntryInput(
+    PlaylistEntryId EntryId,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? TrackId = null,
+    string? Description = null
+);
 
 public sealed record PlaylistSegmentInput(
     PlaylistSegmentId SegmentId,
-    IReadOnlyList<PlaylistEntryInput> Entries
+    IReadOnlyList<PlaylistEntryInput> Entries,
+    string? Description = null
 );
 
 public sealed record CreatePlaylistRequest(
@@ -81,7 +86,14 @@ public sealed record InsertPlaylistSegment(
     PlaylistSegmentId SegmentId,
     IReadOnlyList<PlaylistEntryInput> Entries,
     PlaylistSegmentId? AfterSegmentId = null,
-    PlaylistSegmentId? BeforeSegmentId = null
+    PlaylistSegmentId? BeforeSegmentId = null,
+    string? Description = null
+) : PlaylistOperationPayload;
+
+public sealed record UpdatePlaylistSegment(
+    PlaylistSegmentId SegmentId,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        OptionalText Description = default
 ) : PlaylistOperationPayload;
 
 public sealed record MovePlaylistSegment(
@@ -105,6 +117,12 @@ public sealed record MovePlaylistEntry(
 ) : PlaylistOperationPayload;
 
 public sealed record DeletePlaylistEntry(PlaylistEntryId EntryId) : PlaylistOperationPayload;
+
+public sealed record UpdatePlaylistEntry(
+    PlaylistEntryId EntryId,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        OptionalText Description = default
+) : PlaylistOperationPayload;
 
 public sealed record PlaylistEntryDestination(
     PlaylistSegmentId? SegmentId = null,
@@ -137,9 +155,11 @@ public sealed class PlaylistOperationConverter : JsonConverter<PlaylistOperation
         {
             "update_metadata" => typeof(UpdatePlaylistMetadata),
             "insert_segment" => typeof(InsertPlaylistSegment),
+            "update_segment" => typeof(UpdatePlaylistSegment),
             "move_segment" => typeof(MovePlaylistSegment),
             "delete_segment" => typeof(DeletePlaylistSegment),
             "insert_entries" => typeof(InsertPlaylistEntries),
+            "update_entry" => typeof(UpdatePlaylistEntry),
             "move_entry" => typeof(MovePlaylistEntry),
             "delete_entry" => typeof(DeletePlaylistEntry),
             _ => throw new JsonException("Unknown operation_type."),

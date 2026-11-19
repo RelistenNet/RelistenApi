@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Relisten.Accounts.Contracts.Playlists;
+using RelistenUserService.Configuration;
 using RelistenUserService.Library;
 using RelistenUserService.Library.Entities;
 using RelistenUserService.Persistence;
@@ -17,7 +18,8 @@ public sealed class PlaylistWriteService(
     AccountsDbContext dbContext,
     AdvisoryLockService advisoryLocks,
     LibraryStateStore stateStore,
-    TimeProvider timeProvider
+    TimeProvider timeProvider,
+    AccountsOptions options
 )
 {
     public async Task<(PlaylistCreated Response, bool Replayed)> CreateAsync(
@@ -58,6 +60,14 @@ public sealed class PlaylistWriteService(
             return (new(1, generation, request.PlaylistId, receipt.Revision!.Value), true);
         }
 
+        if (
+            !options.EnablePlaylistGuideContent
+            && request.Segments.Any(PlaylistValidation.UsesGuideContent)
+        )
+        {
+            throw GuideContentDisabled();
+        }
+
         var conflicts = await ExistingIdsAsync(createdIds, cancellationToken);
         if (conflicts.Count > 0)
         {
@@ -76,6 +86,14 @@ public sealed class PlaylistWriteService(
             ownerPlaylists.Length + 1,
             count,
             ownerPlaylists.Sum(row => row.EntryCount) + count
+        );
+        var entries = request.Segments.SelectMany(segment => segment.Entries);
+        PlaylistValidation.CheckGuideQuota(
+            request.Segments.Count(segment => segment.Entries.Count == 0),
+            request
+                .Segments.Select(segment => segment.Description)
+                .Concat(entries.Select(entry => entry.Description))
+                .Append(request.Metadata.Description)
         );
 
         var now = timeProvider.GetUtcNow();
@@ -105,7 +123,12 @@ public sealed class PlaylistWriteService(
                 CreatedAt = now,
             }
         );
-        AppendLibrarySummary(state, playlist, now);
+        AppendLibrarySummary(
+            state,
+            playlist,
+            entries.Count(entry => entry.TrackId is not null),
+            now
+        );
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return (new(1, generation, playlist.Id, 1), false);
@@ -173,7 +196,22 @@ public sealed class PlaylistWriteService(
         var newOperations = request
             .Operations.Where(operation => !receipts.ContainsKey(operation.OperationId.Value))
             .ToArray();
-        var editor = await LoadEditorAsync(playlist, newOperations, cancellationToken);
+        // Closing the write switch must still allow matching committed receipts to replay.
+        if (
+            !options.EnablePlaylistGuideContent
+            && newOperations.Any(PlaylistValidation.UsesGuideContent)
+        )
+        {
+            throw GuideContentDisabled();
+        }
+
+        // Name edits cannot affect entry counts or the description budget.
+        var editsOnlyName = newOperations.All(operation =>
+            operation.Payload is UpdatePlaylistMetadata { Description.IsPresent: false }
+        );
+        var editor = editsOnlyName
+            ? new PlaylistEditor(Copy(playlist), [], [], [])
+            : await LoadEditorAsync(playlist, newOperations, cancellationToken);
         var results = new List<PlaylistOperationResult>();
         foreach (var operation in request.Operations)
         {
@@ -186,22 +224,19 @@ public sealed class PlaylistWriteService(
 
         // Intermediate states may exceed quotas. The ordered evaluator already resolved parent
         // deletion and semantic rejections; only the final state is admitted and persisted.
-        CheckQuota(0, editor.LiveEntryCount, 0);
-        // All writes enforce the same owner quota while holding its library-state lock.
-        // Starting from that valid stored state, a non-increasing batch cannot exceed it.
-        if (editor.LiveEntryCount > playlist.EntryCount)
+        if (!editsOnlyName)
         {
-            var ownedCount = await dbContext
-                .Playlists.Where(row => row.OwnerId == actor)
-                .SumAsync(row => row.EntryCount, cancellationToken);
-            CheckQuota(
-                0,
-                editor.LiveEntryCount,
-                ownedCount - playlist.EntryCount + editor.LiveEntryCount
-            );
+            await CheckEditedQuotaAsync(playlist, editor, cancellationToken);
         }
+
         var now = timeProvider.GetUtcNow();
-        PublishContent(playlist, editor, state, now);
+        if (editor.Revisions.Count > 0)
+        {
+            var trackCount = editsOnlyName
+                ? await CountTracksAsync(id, cancellationToken)
+                : editor.LiveTrackCount;
+            PublishContent(playlist, editor, state, trackCount, now);
+        }
         foreach (
             var result in results.Where(result => !receipts.ContainsKey(result.OperationId.Value))
         )
@@ -260,7 +295,8 @@ public sealed class PlaylistWriteService(
         {
             playlist.Archived = request.Archived;
             playlist.UpdatedAt = now;
-            AppendLibrarySummary(state, playlist, now);
+            var trackCount = await CountTracksAsync(id, cancellationToken);
+            AppendLibrarySummary(state, playlist, trackCount, now);
         }
         dbContext.PlaylistReceipts.Add(
             new()
@@ -379,12 +415,6 @@ public sealed class PlaylistWriteService(
         CancellationToken cancellationToken
     )
     {
-        if (operations.All(operation => operation.Payload is UpdatePlaylistMetadata))
-        {
-            // Metadata changes retain the locked playlist's count without loading its structure.
-            return new(Copy(playlist), [], [], []);
-        }
-
         var segmentTargets = operations
             .Select(operation => operation.Payload)
             .SelectMany(payload =>
@@ -392,6 +422,7 @@ public sealed class PlaylistWriteService(
                 {
                     MovePlaylistSegment move => new[] { move.SegmentId },
                     DeletePlaylistSegment delete => [delete.SegmentId],
+                    UpdatePlaylistSegment update => [update.SegmentId],
                     _ => Array.Empty<PlaylistSegmentId>(),
                 }
             )
@@ -403,6 +434,7 @@ public sealed class PlaylistWriteService(
                 {
                     MovePlaylistEntry move => new[] { move.EntryId },
                     DeletePlaylistEntry delete => [delete.EntryId],
+                    UpdatePlaylistEntry update => [update.EntryId],
                     _ => Array.Empty<PlaylistEntryId>(),
                 }
             )
@@ -433,17 +465,39 @@ public sealed class PlaylistWriteService(
     private T Copy<T>(T tracked)
         where T : class => (T)dbContext.Entry(tracked).CurrentValues.ToObject();
 
+    private async Task CheckEditedQuotaAsync(
+        Playlist before,
+        PlaylistEditor editor,
+        CancellationToken cancellationToken
+    )
+    {
+        CheckQuota(0, editor.LiveEntryCount, 0);
+        editor.CheckGuideQuota();
+
+        // The owner lock protects the previously admitted count. Only growth needs a new sum.
+        if (editor.LiveEntryCount <= before.EntryCount)
+        {
+            return;
+        }
+
+        var ownedCount = await dbContext
+            .Playlists.Where(row => row.OwnerId == before.OwnerId)
+            .SumAsync(row => row.EntryCount, cancellationToken);
+        CheckQuota(
+            0,
+            editor.LiveEntryCount,
+            ownedCount - before.EntryCount + editor.LiveEntryCount
+        );
+    }
+
     private void PublishContent(
         Playlist playlist,
         PlaylistEditor editor,
         LibraryState state,
+        int trackCount,
         DateTimeOffset now
     )
     {
-        if (editor.Revisions.Count == 0)
-        {
-            return;
-        }
         editor.Playlist.UpdatedAt = now;
         ApplyWorkingState(playlist, editor);
         foreach (var revision in editor.Revisions)
@@ -455,11 +509,14 @@ public sealed class PlaylistWriteService(
                     Revision = revision.Revision,
                     Kind = revision.Kind,
                     ChangeCount = revision.Changes.Count,
-                    ChangesJson = JsonSerializer.Serialize(revision.Changes, PlaylistJson.Options),
+                    ChangesJson = JsonSerializer.Serialize(
+                        revision.Changes,
+                        PlaylistJson.StoredOptions
+                    ),
                 }
             );
         }
-        AppendLibrarySummary(state, playlist, now);
+        AppendLibrarySummary(state, playlist, trackCount, now);
     }
 
     private void ApplyWorkingState(Playlist playlist, PlaylistEditor editor)
@@ -499,11 +556,14 @@ public sealed class PlaylistWriteService(
         dbContext.ChangeTracker.DetectChanges();
         var segments = dbContext
             .ChangeTracker.Entries<PlaylistSegment>()
-            .Where(entry => entry.State == EntityState.Modified)
+            .Where(entry => entry.Property(row => row.Rank).IsModified)
             .ToArray();
         var entries = dbContext
             .ChangeTracker.Entries<PlaylistEntry>()
-            .Where(entry => entry.State == EntityState.Modified)
+            .Where(entry =>
+                entry.Property(row => row.Rank).IsModified
+                || entry.Property(row => row.SegmentId).IsModified
+            )
             .ToArray();
         if (segments.Length > 0)
         {
@@ -542,6 +602,7 @@ public sealed class PlaylistWriteService(
                 {
                     Id = segment.SegmentId,
                     PlaylistId = request.PlaylistId,
+                    Description = segment.Description,
                     Rank = ranks[index],
                 }
             );
@@ -556,6 +617,7 @@ public sealed class PlaylistWriteService(
                         PlaylistId = request.PlaylistId,
                         SegmentId = segment.SegmentId,
                         TrackId = entry.TrackId,
+                        Description = entry.Description,
                         Rank = entryRanks[entryIndex],
                     }
                 );
@@ -563,7 +625,17 @@ public sealed class PlaylistWriteService(
         }
     }
 
-    private void AppendLibrarySummary(LibraryState state, Playlist playlist, DateTimeOffset now)
+    private Task<int> CountTracksAsync(PlaylistId id, CancellationToken cancellationToken) =>
+        PlaylistReadService
+            .LiveTracks(dbContext)
+            .CountAsync(entry => entry.PlaylistId == id, cancellationToken);
+
+    private void AppendLibrarySummary(
+        LibraryState state,
+        Playlist playlist,
+        int trackCount,
+        DateTimeOffset now
+    )
     {
         state.Revision++;
         state.UpdatedAt = now;
@@ -582,8 +654,11 @@ public sealed class PlaylistWriteService(
                         playlist.Archived,
                         playlist.Revision,
                         playlist.UpdatedAt
-                    ),
-                    PlaylistJson.Options
+                    )
+                    {
+                        TrackCount = trackCount,
+                    },
+                    PlaylistJson.StoredOptions
                 ),
             }
         );
@@ -637,4 +712,7 @@ public sealed class PlaylistWriteService(
             );
         }
     }
+
+    private static PlaylistException GuideContentDisabled() =>
+        new(422, "playlist_guide_content_disabled", "Playlist guide content writes are disabled.");
 }

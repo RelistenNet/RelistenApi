@@ -343,9 +343,10 @@ same shapes:
   description of an empty segment.
 - **Limits.** A description is at most 2,000 characters after trimming. A
   playlist has at most 100 prose-only segments. All of a playlist's
-  descriptions together are at most 200 KB of UTF-8. The total cap keeps every
-  guide that's valid on a device under the contract's 2 MiB request limit when
-  mobile sends it as one create. Mobile enforces the same limits locally.
+  descriptions together are at most 200 KB of UTF-8. Mobile enforces the same
+  limits locally. The 2 MiB create request limit applies to encoded JSON.
+  At the combined entry and description limits, heavy JSON escaping can make
+  a create exceed the request limit.
 
 **Everywhere else.**
 - **Feeds.** Snapshots carry descriptions and text entries. In the change feed,
@@ -358,9 +359,10 @@ same shapes:
   replays. The new lines are:
   - a create segment: `S:<segment_id>|<entry count>`, then `V:<description>`
     when present;
-  - `insert_segment`: a `V:<description>` line after its existing field lines,
-    only when a description is present. An absent description writes no line,
-    not `A`, so track-only inserts keep their bytes;
+  - `insert_segment`: a `segment_description:<JSON string>` line after its
+    existing field lines, only when a description is present. The distinct tag
+    prevents collisions between entry descriptions, anchors and segment
+    descriptions. Omitting the line preserves track-only hashes;
   - an entry element: `entry_id|track_id` as today, `entry_id|N` for a text
     block, then `V:<description>` when present. This applies to creates,
     `insert_segment` and `insert_entries`.
@@ -629,6 +631,14 @@ qualification separately. No deployment or publication is authorized by this pla
 
 ## Decision Log
 
+- 2026-11-18, guide content server contract: add segment and entry Markdown
+  descriptions, text blocks, and description updates at version 1. Keep
+  `entry_count` for all entries and add `track_count` to summaries for playback
+  counts. Apply the description byte limit to all live descriptions, including
+  playlist metadata, which retains its existing 1,000-character limit. Keep
+  guide writes off by default and allow exact receipt replays with the switch off.
+  The [private playlist contract](2026-11-16-v4-playlist-contracts.md) records
+  the wire changes and receipt encoding.
 - 2026-11-17, implementation under Alec's authorization: complete the unspecified
   private-contract details without changing its product scope. Names and
   descriptions are trimmed and NFC-normalized before storage, equality or hashing;

@@ -1026,6 +1026,10 @@ namespace RelistenUserService.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("deleted");
 
+                    b.Property<string>("Description")
+                        .HasColumnType("text")
+                        .HasColumnName("description");
+
                     b.Property<string>("PlaylistId")
                         .IsRequired()
                         .HasColumnType("text")
@@ -1042,7 +1046,6 @@ namespace RelistenUserService.Persistence.Migrations
                         .HasColumnName("segment_id");
 
                     b.Property<string>("TrackId")
-                        .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("track_id");
 
@@ -1062,7 +1065,7 @@ namespace RelistenUserService.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_playlist_entries_rank", "rank IS NULL OR rank ~ '^[0-9A-Za-z]{1,48}$'");
 
-                            t.HasCheckConstraint("ck_playlist_entries_track", "track_id ~ '^track_[0-7][0-9a-hjkmnp-tv-z]{25}$'");
+                            t.HasCheckConstraint("ck_playlist_entries_track", "CASE WHEN track_id IS NULL THEN description IS NOT NULL AND description ~ '[^[:space:]]' ELSE track_id ~ '^track_[0-7][0-9a-hjkmnp-tv-z]{25}$' END");
                         });
                 });
 
@@ -1169,6 +1172,10 @@ namespace RelistenUserService.Persistence.Migrations
                     b.Property<bool>("Deleted")
                         .HasColumnType("boolean")
                         .HasColumnName("deleted");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text")
+                        .HasColumnName("description");
 
                     b.Property<string>("PlaylistId")
                         .IsRequired()

@@ -128,6 +128,113 @@ public sealed class TestPlaylistContracts
             .Be("ED80EBBA8EDBD05DE7D868BAA6F8A48E7766B70A1AA6EB3904CEDF523B103B10");
     }
 
+    [Test]
+    public void Stored_track_only_envelopes_remain_compatible_during_rollout()
+    {
+        var playlistId = PlaylistId.New();
+        var segmentId = PlaylistSegmentId.New();
+        var summaryJson = JsonSerializer.Serialize(
+            new PlaylistSummary(playlistId, "Tracks", 2, false, 2, DateTimeOffset.UnixEpoch),
+            PlaylistJson.StoredOptions
+        );
+        using var summary = JsonDocument.Parse(summaryJson);
+        summary.RootElement.TryGetProperty("track_count", out _).Should().BeFalse();
+        var restored = JsonSerializer.Deserialize<PlaylistSummary>(
+            summaryJson,
+            PlaylistJson.Options
+        );
+        restored!.TrackCount.Should().Be(2);
+
+        PlaylistChange[] changes =
+        [
+            new PlaylistSegmentUpserted(segmentId, "a0"),
+            new PlaylistEntryUpserted(
+                PlaylistEntryId.New(),
+                segmentId,
+                "track_01k8000000e008000000000007",
+                "a0"
+            ),
+        ];
+        var changesJson = JsonSerializer.Serialize(changes, PlaylistJson.StoredOptions);
+        using var envelope = JsonDocument.Parse(changesJson);
+        envelope
+            .RootElement.EnumerateArray()
+            .Select(change => change.TryGetProperty("description", out _))
+            .Should()
+            .OnlyContain(hasDescription => !hasDescription);
+        JsonSerializer
+            .Deserialize<PlaylistChange[]>(changesJson, PlaylistJson.Options)
+            .Should()
+            .Equal(changes);
+    }
+
+    [Test]
+    public void Durable_guide_hashes_cover_descriptions_text_entries_and_optional_patches()
+    {
+        var id = PlaylistId.Parse("playlist_01k8000000e008000000000001");
+        var segment = PlaylistSegmentId.Parse("playlist_segment_01k8000000e008000000000002");
+        var track = new PlaylistEntryInput(
+            PlaylistEntryId.Parse("playlist_entry_01k8000000e008000000000004"),
+            "track_01k8000000e008000000000007",
+            "Track note"
+        );
+        var text = new PlaylistEntryInput(
+            PlaylistEntryId.Parse("playlist_entry_01k8000000e008000000000005"),
+            Description: "Text block"
+        );
+        var create = PlaylistValidation.Normalize(
+            new CreatePlaylistRequest(
+                1,
+                CommandId.New(),
+                id,
+                new("Guide"),
+                [new(segment, [track, text], "Intro")]
+            )
+        );
+        Convert
+            .ToHexString(PlaylistHasher.Hash(create))
+            .Should()
+            .Be("03B1138293546C3CFD42F464EEB8279FC68D1307C93FFF73BB7D1D373C0F756A");
+
+        (string Type, PlaylistOperationPayload Payload, string Hash)[] vectors =
+        [
+            (
+                "insert_segment",
+                new InsertPlaylistSegment(segment, [track, text], Description: "Intro"),
+                "A87161B1611640AD4D5E81FDA2A0BC2484A4600DDE6C38BCD06D870635A8DF50"
+            ),
+            (
+                "insert_entries",
+                new InsertPlaylistEntries(segment, [track, text]),
+                "51E7E533DA0AD2AF79A98FABC391EC96DE23A262730A67CC482EB2526D5A4C50"
+            ),
+            (
+                "update_segment",
+                new UpdatePlaylistSegment(segment, new(true, null)),
+                "3E04EC7B14E937E5686E9A910E38418DB4A89E07A5C3482CD0D6EB41E76EF130"
+            ),
+            (
+                "update_entry",
+                new UpdatePlaylistEntry(text.EntryId, new(true, "Changed")),
+                "2CE1E830344219F635778BB08827B5A21E2B58E942EBB09B9CB768E3BE5AC9BF"
+            ),
+            (
+                "update_entry",
+                new UpdatePlaylistEntry(text.EntryId),
+                "A780142732C8F3D81E769D78B6DEEFBB194FA7BA5E4AD1BE0FF7B1529F750C70"
+            ),
+        ];
+        foreach (var (type, payload, expected) in vectors)
+        {
+            var operation = new PlaylistOperation(PlaylistOperationId.New(), 0, type, payload);
+            var normalized = PlaylistValidation.Normalize(new PlaylistBatchRequest(1, [operation]));
+            Convert
+                .ToHexString(PlaylistHasher.Hash(id, 1, normalized.Operations.Single()))
+                .Should()
+                .Be(expected, "the {0} receipt uses the frozen v1 format", type);
+        }
+    }
+
     private static PlaylistOperation Read(string payload)
     {
         var operation = JsonSerializer.Deserialize<PlaylistOperation>(
