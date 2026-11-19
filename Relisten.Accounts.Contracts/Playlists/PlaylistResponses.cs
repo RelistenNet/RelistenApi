@@ -14,6 +14,9 @@ public sealed record PlaylistSummary(
 {
     // Library changes stored before guide content have only track entries.
     public int TrackCount { get; init; } = EntryCount;
+    public string? PublicCode { get; init; }
+    public bool Published { get; init; }
+    public bool TakenDown { get; init; }
 }
 
 public sealed record PlaylistList(
@@ -62,7 +65,12 @@ public sealed record PlaylistSnapshot(
     IReadOnlyList<PlaylistSegmentSnapshot> Segments,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt
-);
+)
+{
+    public string? PublicCode { get; init; }
+    public bool Published { get; init; }
+    public bool TakenDown { get; init; }
+}
 
 public sealed record PlaylistOperationResult(
     PlaylistOperationId OperationId,

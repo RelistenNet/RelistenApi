@@ -10,10 +10,10 @@ using RelistenUserService.Playlists.Entities;
 namespace RelistenUserService.Playlists;
 
 /// <summary>
-/// Owns every private-playlist transaction. Identity locks precede the owner's library-state
-/// lock, then the playlist lock. A future account-deletion fence attaches before library state.
+/// Owns playlist creation, editing, and publication. Receipt locks precede the
+/// active-account deletion fence, then the actor's library state and the playlist.
 /// </summary>
-public sealed class PlaylistWriteService(
+public sealed partial class PlaylistWriteService(
     AccountsDbContext dbContext,
     AdvisoryLockService advisoryLocks,
     LibraryStateStore stateStore,
@@ -40,7 +40,7 @@ public sealed class PlaylistWriteService(
         await using var transaction = await dbContext.Database.BeginTransactionAsync(
             cancellationToken
         );
-        var state = await LockOwnerAsync(
+        var state = await LockActorLibraryAsync(
             actor,
             [request.CommandId.Value],
             createdIds,
@@ -68,6 +68,28 @@ public sealed class PlaylistWriteService(
                 conflicts.Order(StringComparer.Ordinal).ToArray()
             );
         }
+        var created = await AddPlaylistAsync(
+            actor,
+            state,
+            request,
+            "create",
+            hash,
+            cancellationToken
+        );
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return (new(1, generation, created.Id, created.Revision), false);
+    }
+
+    private async Task<Playlist> AddPlaylistAsync(
+        UserId actor,
+        LibraryState state,
+        CreatePlaylistRequest request,
+        string receiptKind,
+        byte[] hash,
+        CancellationToken cancellationToken
+    )
+    {
         var ownerPlaylists = await dbContext
             .Playlists.Where(row => row.OwnerId == actor)
             .ToArrayAsync(cancellationToken);
@@ -106,7 +128,7 @@ public sealed class PlaylistWriteService(
                 Id = request.CommandId.Value,
                 ActorId = actor,
                 PlaylistId = playlist.Id,
-                Kind = "create",
+                Kind = receiptKind,
                 PayloadHash = hash,
                 Revision = 1,
                 Changed = true,
@@ -119,9 +141,7 @@ public sealed class PlaylistWriteService(
             entries.Count(entry => entry.TrackId is not null),
             now
         );
-        await dbContext.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        return (new(1, generation, playlist.Id, 1), false);
+        return playlist;
     }
 
     public async Task<PlaylistBatchResponse> ApplyAsync(
@@ -140,7 +160,7 @@ public sealed class PlaylistWriteService(
         await using var transaction = await dbContext.Database.BeginTransactionAsync(
             cancellationToken
         );
-        var state = await LockOwnerAsync(actor, hashes.Keys, createdIds, cancellationToken);
+        var state = await LockActorLibraryAsync(actor, hashes.Keys, createdIds, cancellationToken);
         var playlist = await LockOwnedPlaylistAsync(actor, id, cancellationToken);
         var generation = await GenerationAsync(cancellationToken);
 
@@ -256,7 +276,12 @@ public sealed class PlaylistWriteService(
         await using var transaction = await dbContext.Database.BeginTransactionAsync(
             cancellationToken
         );
-        var state = await LockOwnerAsync(actor, [request.CommandId.Value], [], cancellationToken);
+        var state = await LockActorLibraryAsync(
+            actor,
+            [request.CommandId.Value],
+            [],
+            cancellationToken
+        );
         var playlist = await LockOwnedPlaylistAsync(actor, id, cancellationToken);
         var generation = await GenerationAsync(cancellationToken);
         var receipt = await dbContext.PlaylistReceipts.FindAsync(
@@ -297,7 +322,7 @@ public sealed class PlaylistWriteService(
         return new(1, generation, id, request.Archived, changed);
     }
 
-    private async Task<LibraryState> LockOwnerAsync(
+    private async Task<LibraryState> LockActorLibraryAsync(
         UserId actor,
         IEnumerable<string> receipts,
         IEnumerable<string> createdIds,
@@ -311,6 +336,7 @@ public sealed class PlaylistWriteService(
                 .Concat(createdIds.Select(id => $"playlist-id:{id}")),
             cancellationToken
         );
+        await PlaylistAccountLock.RequireActiveAsync(dbContext, actor, cancellationToken);
         return await stateStore.GetOrCreateForUpdateAsync(
             actor,
             timeProvider.GetUtcNow(),
@@ -638,6 +664,9 @@ public sealed class PlaylistWriteService(
                     )
                     {
                         TrackCount = trackCount,
+                        PublicCode = playlist.PublicCode,
+                        Published = playlist.Published,
+                        TakenDown = playlist.TakenDown,
                     },
                     PlaylistJson.StoredOptions
                 ),

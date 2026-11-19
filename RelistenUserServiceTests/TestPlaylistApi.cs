@@ -30,7 +30,7 @@ namespace RelistenUserServiceTests;
 
 [TestFixture]
 [NonParallelizable]
-public sealed class TestPlaylistApi
+public sealed partial class TestPlaylistApi
 {
     private readonly PostgresIntegrationDatabase _database = new();
     private string _directory = "";

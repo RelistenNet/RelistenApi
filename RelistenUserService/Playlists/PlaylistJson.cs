@@ -20,17 +20,17 @@ public static class PlaylistJson
         };
 
     // During a rolling deploy, the old server still reads these durable envelopes
-    // with strict deserialization. Track-only writes keep the old shape.
+    // with strict deserialization. Writes that use no guide or sharing features keep the old shape.
     internal static JsonSerializerOptions StoredOptions { get; } =
         new(Options)
         {
             TypeInfoResolver = new DefaultJsonTypeInfoResolver
             {
-                Modifiers = { OmitRedundantGuideFields },
+                Modifiers = { OmitRedundantFields },
             },
         };
 
-    private static void OmitRedundantGuideFields(JsonTypeInfo type)
+    private static void OmitRedundantFields(JsonTypeInfo type)
     {
         if (type.Type == typeof(PlaylistSummary))
         {
@@ -38,6 +38,18 @@ public static class PlaylistJson
                 value,
                 _
             ) => value is PlaylistSummary summary && summary.TrackCount != summary.EntryCount;
+            type.Properties.Single(property => property.Name == "public_code").ShouldSerialize = (
+                _,
+                code
+            ) => code is not null;
+            type.Properties.Single(property => property.Name == "published").ShouldSerialize = (
+                _,
+                published
+            ) => published is true;
+            type.Properties.Single(property => property.Name == "taken_down").ShouldSerialize = (
+                _,
+                takenDown
+            ) => takenDown is true;
         }
         else if (
             type.Type == typeof(PlaylistSegmentUpserted)

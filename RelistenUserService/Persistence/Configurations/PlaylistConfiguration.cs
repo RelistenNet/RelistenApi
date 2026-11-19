@@ -22,6 +22,10 @@ public sealed class PlaylistConfiguration
             {
                 table.HasCheckConstraint("ck_playlists_id", AccountIdConstraint.Sql("playlist"));
                 table.HasCheckConstraint(
+                    "ck_playlists_publication",
+                    "(NOT published OR public_code IS NOT NULL) AND (public_code IS NULL OR public_code ~ '^[0-9a-f]{32}$')"
+                );
+                table.HasCheckConstraint(
                     "ck_playlists_state",
                     "revision >= 1 AND entry_count >= 0 AND char_length(name) BETWEEN 1 AND 100 AND (description IS NULL OR char_length(description) <= 1000)"
                 );
@@ -34,8 +38,9 @@ public sealed class PlaylistConfiguration
             row.Archived,
             row.UpdatedAt,
         });
+        builder.HasIndex(row => row.PublicCode).IsUnique();
         builder
-            .HasOne<User>()
+            .HasOne(row => row.Owner)
             .WithMany()
             .HasForeignKey(row => row.OwnerId)
             .OnDelete(DeleteBehavior.Cascade);
@@ -151,7 +156,7 @@ public sealed class PlaylistConfiguration
                 );
                 table.HasCheckConstraint(
                     "ck_playlist_receipts_kind",
-                    "kind IN ('create', 'archive', 'operation')"
+                    "kind IN ('create', 'archive', 'copy', 'publication', 'operation')"
                 );
             }
         );

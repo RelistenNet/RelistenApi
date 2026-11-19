@@ -190,6 +190,10 @@ public sealed class TestAccountDeletionSchema
             INSERT INTO user_data.playlist_receipts
                 (id, actor_id, playlist_id, kind, payload_hash, status, revision, archived, changed, created_at)
             VALUES (@PlaylistCommandId, @UserId, @PlaylistId, 'create', @Hash, 'active', 2, false, true, now());
+            INSERT INTO user_data.playlist_follows (user_id, playlist_id, created_at)
+            VALUES (@UserId, @PlaylistId, now());
+            INSERT INTO user_data.playlist_reports (id, user_id, playlist_id, reason, created_at)
+            VALUES (@ReportId, @UserId, @PlaylistId, 'Fixture report', now());
 
             INSERT INTO user_data.plays
                 (user_id, play_id, track_id, qualified_at, started_at, received_at, app_type, offline, origin)
@@ -219,6 +223,7 @@ public sealed class TestAccountDeletionSchema
                 SegmentId = PlaylistSegmentId.New().ToString(),
                 EntryId = PlaylistEntryId.New().ToString(),
                 PlaylistCommandId = CommandId.New().ToString(),
+                ReportId = PlaylistReportId.New().ToString(),
                 PlayId = PlayId.New().Value,
             },
             transaction

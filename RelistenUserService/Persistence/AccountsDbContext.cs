@@ -25,6 +25,8 @@ public sealed class AccountsDbContext(DbContextOptions<AccountsDbContext> option
         Set<FavoriteMutationReceipt>();
     public DbSet<LibraryState> LibraryStates => Set<LibraryState>();
     public DbSet<LibraryChange> LibraryChanges => Set<LibraryChange>();
+    public DbSet<PlaylistFollow> PlaylistFollows => Set<PlaylistFollow>();
+    public DbSet<PlaylistReport> PlaylistReports => Set<PlaylistReport>();
     public DbSet<Playlist> Playlists => Set<Playlist>();
     public DbSet<PlaylistSegment> PlaylistSegments => Set<PlaylistSegment>();
     public DbSet<PlaylistEntry> PlaylistEntries => Set<PlaylistEntry>();
@@ -45,6 +47,9 @@ public sealed class AccountsDbContext(DbContextOptions<AccountsDbContext> option
             .Properties<PlaylistSegmentId>()
             .HaveConversion<AccountIdConverter<PlaylistSegmentId>>();
         builder.Properties<PlaylistEntryId>().HaveConversion<AccountIdConverter<PlaylistEntryId>>();
+        builder
+            .Properties<PlaylistReportId>()
+            .HaveConversion<AccountIdConverter<PlaylistReportId>>();
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

@@ -17,7 +17,10 @@ public static class AccountApiBehavior
                 "contract_version",
                 "ContractVersion"
             );
-            if (context.HttpContext.Request.Path.StartsWithSegments("/v1/playlists"))
+            if (
+                context.HttpContext.Request.Path.StartsWithSegments("/v1/playlists")
+                || context.HttpContext.Request.Path.StartsWithSegments("/v1/public-playlists")
+            )
             {
                 var playlistCode = invalidContractVersion
                     ? AccountErrorCodes.InvalidContractVersion

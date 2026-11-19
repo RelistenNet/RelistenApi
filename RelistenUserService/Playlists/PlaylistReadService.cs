@@ -57,7 +57,33 @@ public sealed class PlaylistReadService(AccountsDbContext dbContext)
         )
         {
             TrackCount = tracks.Count(entry => entry.PlaylistId == row.Id),
+            PublicCode = row.PublicCode,
+            Published = row.Published,
+            TakenDown = row.TakenDown,
         });
+    }
+
+    internal static Task<FollowedPlaylistHead[]> FollowedHeadsAsync(
+        AccountsDbContext database,
+        UserId actor,
+        CancellationToken cancellationToken
+    )
+    {
+        var visible = database.Playlists.AsNoTracking().Public();
+        return (
+            from follow in database.PlaylistFollows.AsNoTracking()
+            where follow.UserId == actor
+            join playlist in visible on follow.PlaylistId equals playlist.Id into matches
+            from playlist in matches.DefaultIfEmpty()
+            orderby follow.PlaylistId
+            select new FollowedPlaylistHead(follow.PlaylistId, playlist != null)
+            {
+                PublicCode = playlist == null ? null : playlist.PublicCode,
+                Name = playlist == null ? null : playlist.Name,
+                Owner = playlist == null ? null : new(playlist.OwnerId, playlist.Owner.Username),
+                Revision = playlist == null ? null : playlist.Revision,
+            }
+        ).ToArrayAsync(cancellationToken);
     }
 
     public async Task<PlaylistSnapshot> SnapshotAsync(
@@ -74,6 +100,34 @@ public sealed class PlaylistReadService(AccountsDbContext dbContext)
         );
         var playlist = await AuthorizedPlaylistAsync(actor, id, cancellationToken);
         var generation = await GenerationAsync(cancellationToken);
+        var structure = await ReadStructureAsync(dbContext, id, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        return new(
+            1,
+            generation,
+            id,
+            playlist.Revision,
+            playlist.Archived,
+            "owner",
+            new(playlist.Name, playlist.Description),
+            structure,
+            playlist.CreatedAt,
+            playlist.UpdatedAt
+        )
+        {
+            PublicCode = playlist.PublicCode,
+            Published = playlist.Published,
+            TakenDown = playlist.TakenDown,
+        };
+    }
+
+    internal static async Task<PlaylistSegmentSnapshot[]> ReadStructureAsync(
+        AccountsDbContext dbContext,
+        PlaylistId id,
+        CancellationToken cancellationToken
+    )
+    {
         var segments = await dbContext
             .PlaylistSegments.AsNoTracking()
             .Where(row => row.PlaylistId == id && !row.Deleted)
@@ -84,36 +138,23 @@ public sealed class PlaylistReadService(AccountsDbContext dbContext)
             .Where(row => row.PlaylistId == id && !row.Deleted)
             .OrderBy(row => row.Rank)
             .ToArrayAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-
         var entriesBySegment = entries.ToLookup(row => row.SegmentId);
-        var response = new PlaylistSnapshot(
-            1,
-            generation,
-            id,
-            playlist.Revision,
-            playlist.Archived,
-            "owner",
-            new(playlist.Name, playlist.Description),
-            segments
-                .Select(segment => new PlaylistSegmentSnapshot(
-                    segment.Id,
-                    segment.Rank!,
-                    entriesBySegment[segment.Id]
-                        .Select(entry => new PlaylistEntrySnapshot(
-                            entry.Id,
-                            entry.TrackId,
-                            entry.Rank!,
-                            entry.Description
-                        ))
-                        .ToArray(),
-                    segment.Description
-                ))
-                .ToArray(),
-            playlist.CreatedAt,
-            playlist.UpdatedAt
-        );
-        return response;
+
+        return segments
+            .Select(segment => new PlaylistSegmentSnapshot(
+                segment.Id,
+                segment.Rank!,
+                entriesBySegment[segment.Id]
+                    .Select(entry => new PlaylistEntrySnapshot(
+                        entry.Id,
+                        entry.TrackId,
+                        entry.Rank!,
+                        entry.Description
+                    ))
+                    .ToArray(),
+                segment.Description
+            ))
+            .ToArray();
     }
 
     public async Task<PlaylistChanges> ChangesAsync(

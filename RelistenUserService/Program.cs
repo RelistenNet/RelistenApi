@@ -1,6 +1,19 @@
 using Microsoft.EntityFrameworkCore;
 using RelistenUserService;
 using RelistenUserService.Persistence;
+using RelistenUserService.Playlists;
+
+if (args.FirstOrDefault() == "playlist-moderation")
+{
+    Environment.ExitCode = await PlaylistModerationCommand.RunAsync(
+        args[1..],
+        () => new AccountsDbContextFactory().CreateDbContext([]),
+        Console.Out,
+        Console.Error,
+        CancellationToken.None
+    );
+    return;
+}
 
 if (args is ["rotate-history-generation", "--traffic-stopped"])
 {

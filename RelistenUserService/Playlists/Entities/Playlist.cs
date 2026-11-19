@@ -1,3 +1,5 @@
+using RelistenUserService.Identity.Entities;
+
 namespace RelistenUserService.Playlists.Entities;
 
 public sealed class Playlist
@@ -7,6 +9,10 @@ public sealed class Playlist
     public string Name { get; set; } = "";
     public string? Description { get; set; }
     public bool Archived { get; set; }
+    public string? PublicCode { get; set; }
+    public bool Published { get; set; }
+    public bool TakenDown { get; set; }
+    public User Owner { get; set; } = null!;
     public long Revision { get; set; }
     public int EntryCount { get; set; }
     public DateTimeOffset CreatedAt { get; set; }

@@ -209,8 +209,23 @@ public static class PlaylistValidation
 
     public static void Validate(ArchivePlaylistRequest request)
     {
-        Version(request.ContractVersion);
-        Require(!request.CommandId.IsEmpty, "command_id is required.");
+        ValidateCommand(request.ContractVersion, request.CommandId);
+    }
+
+    internal static void ValidateCommand(int version, CommandId commandId)
+    {
+        Version(version);
+        Require(!commandId.IsEmpty, "command_id is required.");
+    }
+
+    internal static string NormalizeReportReason(string reason)
+    {
+        var normalized = NormalizeText(reason);
+        Require(
+            normalized.EnumerateRunes().Count() is >= 1 and <= 300,
+            "reason must be between 1 and 300 characters."
+        );
+        return normalized;
     }
 
     public static IEnumerable<string> CreatedIds(PlaylistOperation operation) =>

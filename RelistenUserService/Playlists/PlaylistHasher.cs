@@ -33,6 +33,21 @@ public static class PlaylistHasher
         return Digest(lines);
     }
 
+    public static byte[] Hash(PlaylistId playlistId, SetPlaylistPublicationRequest request)
+    {
+        var lines = Header("publication", request.ContractVersion, playlistId, "publication");
+        Value(lines, request.Published);
+        return Digest(lines);
+    }
+
+    public static byte[] Hash(string publicCode, CopyPublicPlaylistRequest request)
+    {
+        var lines = new List<string> { "relisten-playlist-copy-v1" };
+        Value(lines, request.ContractVersion);
+        Value(lines, publicCode);
+        return Digest(lines);
+    }
+
     public static byte[] Hash(PlaylistId playlistId, int version, PlaylistOperation operation)
     {
         var lines = Header("operation", version, playlistId, operation.OperationType);

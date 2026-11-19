@@ -28,7 +28,18 @@ public sealed class LibraryChangeConfiguration : IEntityTypeConfiguration<Librar
                 );
                 table.HasCheckConstraint(
                     "ck_library_changes_change_type",
-                    "(change_type IN ('favorite_added', 'favorite_removed') AND favorite_id IS NOT NULL AND catalog_type IS NOT NULL AND catalog_id IS NOT NULL AND playlist_json IS NULL) OR (change_type = 'playlist_summary' AND favorite_id IS NULL AND catalog_type IS NULL AND catalog_id IS NULL AND playlist_json IS NOT NULL)"
+                    """
+                    (change_type IN ('favorite_added', 'favorite_removed') AND favorite_id IS NOT NULL
+                        AND catalog_type IS NOT NULL AND catalog_id IS NOT NULL AND playlist_json IS NULL AND followed_playlist_id IS NULL)
+                    OR (change_type = 'playlist_summary' AND favorite_id IS NULL
+                        AND catalog_type IS NULL AND catalog_id IS NULL AND playlist_json IS NOT NULL AND followed_playlist_id IS NULL)
+                    OR (change_type IN ('playlist_followed', 'playlist_unfollowed') AND favorite_id IS NULL
+                        AND catalog_type IS NULL AND catalog_id IS NULL AND playlist_json IS NULL AND followed_playlist_id IS NOT NULL)
+                    """
+                );
+                table.HasCheckConstraint(
+                    "ck_library_changes_followed_playlist_id",
+                    AccountIdConstraint.Sql("playlist", "followed_playlist_id")
                 );
                 table.HasCheckConstraint("ck_library_changes_revision", "revision > 0");
             }
