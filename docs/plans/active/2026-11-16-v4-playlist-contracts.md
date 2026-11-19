@@ -81,12 +81,17 @@ and `initial_segments` name are dropped.
 | `name` | 1–100 characters after trimming | `422 invalid_playlist_operation` |
 | Playlist metadata `description` | 0–1,000 characters | `422 invalid_playlist_operation` |
 | Segment or entry `description` | 0–2,000 characters | `422 invalid_playlist_operation` |
+| Segment or entry `description` content | No images, no raw HTML, and only `https:`, `#entry=…&t=…` or `#t=…` link destinations | `422 invalid_playlist_operation` |
 | Prose-only segments per playlist | 100 | `422 quota_exceeded` |
 | Total descriptions per playlist | 200,000 UTF-8 bytes | `422 quota_exceeded` |
 
 Names and descriptions are trimmed and NFC-normalized. Character limits count
 Unicode scalar values after normalization. Names need not be unique. An empty
 description is stored as `null`; NUL and invalid Unicode are rejected.
+The content rule parses the description as CommonMark, so image or HTML syntax
+inside a code span is accepted. The server stores accepted text as sent and never
+rewrites it; clients sanitize before rendering. See the
+[guide content design](../../design/2026-11-18-playlist-guide-content.md#accepting-and-sanitizing-descriptions).
 The byte limit covers all live descriptions, including playlist metadata. The
 2 MiB request limit applies independently to the encoded JSON. Descriptions
 that require heavy JSON escaping can still exceed the request limit.

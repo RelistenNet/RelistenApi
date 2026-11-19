@@ -307,7 +307,16 @@ public static class PlaylistValidation
     private static OptionalText NormalizeGuidePatch(OptionalText patch) =>
         patch.IsPresent ? new(true, GuideDescription(patch.Value)) : default;
 
-    private static string? GuideDescription(string? text) => Description(text, 2_000);
+    private static string? GuideDescription(string? text)
+    {
+        var description = Description(text, 2_000);
+        if (description is not null && GuideMarkdownPolicy.Violation(description) is { } violation)
+        {
+            throw Invalid(violation);
+        }
+
+        return description;
+    }
 
     private static string? Description(string? text, int maximumLength)
     {
