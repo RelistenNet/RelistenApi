@@ -15,7 +15,7 @@ wins.
 | 3 | MCP PR 1: monthly play rollup and `1y` popularity | [Relisten MCP](2026-11-18-relisten-mcp.md) | Nothing. The daily backfill reached 2018-10-19 |
 | 4 | Guide content: descriptions, text blocks, timestamp links | [v4 playlists](2026-11-06-v4-playlists.md) §2, mobile milestone 3 | #1. API and mobile ship together |
 | 5 | Cloud play history | [Cloud play history](2026-11-18-cloud-play-history.md) | #2 before any external users |
-| 6 | MCP PR 2 and 3: endpoint, OAuth, ChatGPT client, deployment | [Relisten MCP](2026-11-18-relisten-mcp.md) | #3, #4. Account tools stay switched off until #2 |
+| 6 | MCP PR 2 and 3: endpoint, OAuth, ChatGPT client, deployment | [Relisten MCP](2026-11-18-relisten-mcp.md) | #2, #3, #4 before configuring the MCP host |
 | 7 | Sharing: publish, follow, copy, report, takedown | [v4 playlists](2026-11-06-v4-playlists.md) §3, mobile milestone 4 | #2, #4 |
 | 8 | Collaboration | [v4 playlists](2026-11-06-v4-playlists.md) §4 | #7 |
 

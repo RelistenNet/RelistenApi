@@ -110,7 +110,7 @@ public sealed class AuthorizationController(
 
         if (isMcp)
         {
-            if (runtime.Mcp?.Allows(userId) != true)
+            if (runtime.Mcp is null)
             {
                 return RejectMcpAuthorization(Errors.AccessDenied);
             }

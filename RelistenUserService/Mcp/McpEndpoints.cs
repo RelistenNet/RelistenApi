@@ -21,13 +21,10 @@ internal static class McpEndpoints
         string? reviewSearchKey
     )
     {
-        if (
-            mcp.HasAccountTools
-            && (string.IsNullOrWhiteSpace(reviewSearchKey) || reviewSearchKey.Length < 32)
-        )
+        if (string.IsNullOrWhiteSpace(reviewSearchKey) || reviewSearchKey.Length < 32)
         {
             throw new InvalidOperationException(
-                "Configure MCP_REVIEW_SEARCH_KEY with at least 32 characters before enabling MCP account tools."
+                "Configure MCP_REVIEW_SEARCH_KEY with at least 32 characters when an MCP host is configured."
             );
         }
 
@@ -41,20 +38,16 @@ internal static class McpEndpoints
                 new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false }
             );
 
-        var server = services
+        services
             .AddMcpServer(options =>
                 options.ServerInfo = new Implementation { Name = "relisten", Version = "1.0.0" }
             )
             .WithHttpTransport(options => options.SessionMode = HttpServerSessionMode.Stateless)
             .WithTools<CatalogBrowseTools>()
             .WithTools<CatalogEvidenceTools>()
+            .WithTools<AccountMcpTools>()
             .WithResources<McpGuidance>()
             .WithPrompts<McpGuidance>();
-
-        if (mcp.HasAccountTools)
-        {
-            server.WithTools<AccountMcpTools>();
-        }
 
         services.AddRateLimiter(options =>
         {
@@ -82,10 +75,7 @@ internal static class McpEndpoints
     )
     {
         var mcp = runtime.Mcp!;
-        if (mcp.HasAccountTools)
-        {
-            AdvertiseOptionalLibraryFilter(app.Services);
-        }
+        AdvertiseOptionalLibraryFilter(app.Services);
 
         app.Use(
             async (context, next) =>
@@ -104,9 +94,7 @@ internal static class McpEndpoints
         {
             resource = mcp.Resource.AbsoluteUri,
             authorization_servers = new[] { runtime.Issuer.AbsoluteUri },
-            scopes_supported = mcp.HasAccountTools
-                ? new[] { RelistenScopes.UserRead, RelistenScopes.LibraryRead }
-                : Array.Empty<string>(),
+            scopes_supported = new[] { RelistenScopes.UserRead, RelistenScopes.LibraryRead },
             bearer_methods_supported = new[] { "header" },
         };
         app.MapGet(MetadataPath, () => Results.Json(metadata)).RequireRateLimiting(AnonymousPolicy);

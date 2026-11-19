@@ -18,7 +18,7 @@ public sealed class McpAccountAuthorization(
         CancellationToken cancellationToken
     )
     {
-        if (runtime.Mcp is not { HasAccountTools: true } mcp)
+        if (runtime.Mcp is not { } mcp)
         {
             return null;
         }
@@ -39,7 +39,7 @@ public sealed class McpAccountAuthorization(
         CancellationToken cancellationToken
     )
     {
-        if (runtime.Mcp?.Allows(session.UserId) != true)
+        if (runtime.Mcp is null)
         {
             return false;
         }

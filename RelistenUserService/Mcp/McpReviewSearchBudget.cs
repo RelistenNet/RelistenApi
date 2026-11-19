@@ -3,7 +3,7 @@ using System.Threading.RateLimiting;
 namespace RelistenUserService.Mcp;
 
 /// <summary>A signed-in listener gets an independent review budget before the catalog call.</summary>
-internal sealed class McpReviewSearchBudget(string? catalogKey) : IDisposable
+internal sealed class McpReviewSearchBudget(string catalogKey) : IDisposable
 {
     private readonly PartitionedRateLimiter<UserId> accounts = PartitionedRateLimiter.Create<
         UserId,
@@ -31,10 +31,7 @@ internal sealed class McpReviewSearchBudget(string? catalogKey) : IDisposable
 
         // Send the service credential only for this route. The access token and
         // listener ID stay in the User Service.
-        return catalogKey
-            ?? throw new InvalidOperationException(
-                "Authenticated review search is not configured."
-            );
+        return catalogKey;
     }
 
     public void Dispose() => accounts.Dispose();

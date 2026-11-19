@@ -13,8 +13,6 @@ internal sealed class McpToolAuthorization(
     McpAccountAuthorization accounts
 )
 {
-    public bool AccountToolsAvailable => runtime.Mcp?.HasAccountTools == true;
-
     public Task<NativeSession?> AuthenticateAsync(CancellationToken cancellationToken) =>
         accounts.AuthenticateAsync(http.HttpContext!.User, cancellationToken);
 

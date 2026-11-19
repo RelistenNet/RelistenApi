@@ -1,16 +1,7 @@
 namespace RelistenUserService.Configuration;
 
-public sealed record McpConfiguration(
-    Uri Resource,
-    Uri Catalog,
-    bool EnableAccountTools,
-    IReadOnlySet<UserId> AllowedAccounts
-)
+public sealed record McpConfiguration(Uri Resource, Uri Catalog)
 {
-    public bool HasAccountTools => EnableAccountTools || AllowedAccounts.Count > 0;
-
-    public bool Allows(UserId userId) => EnableAccountTools || AllowedAccounts.Contains(userId);
-
     public static McpConfiguration? Create(AccountsOptions options, IHostEnvironment environment)
     {
         if (string.IsNullOrEmpty(options.McpHost))
@@ -59,11 +50,6 @@ public sealed record McpConfiguration(
             );
         }
 
-        return new(
-            resource,
-            catalog,
-            options.McpAccountTools,
-            options.McpAccountAllowlist.Select(UserId.Parse).ToHashSet()
-        );
+        return new(resource, catalog);
     }
 }

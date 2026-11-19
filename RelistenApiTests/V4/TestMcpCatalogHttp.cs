@@ -36,7 +36,6 @@ public sealed partial class TestV4CatalogHttp
             .Be(
                 "https://relisten.net/v4-review-4/1995/12/31?source=00000000-0000-0000-0000-000000000024"
             );
-        row.AsObject().ContainsKey("plays_1y").Should().BeFalse();
 
         var second = await GetJson(
             path + "?years=1995&limit=1&cursor=" + first["next_cursor"]!.GetValue<string>()
@@ -288,7 +287,6 @@ public sealed partial class TestV4CatalogHttp
         try
         {
             await RefreshRollups();
-            app.Configuration["Popularity:EnableYearlyWindow"] = "true";
             var artist = UuidTypeId.Format(
                 "artist",
                 Guid.Parse("00000000-0000-0000-0000-000000000301")
@@ -306,7 +304,6 @@ public sealed partial class TestV4CatalogHttp
         }
         finally
         {
-            app.Configuration["Popularity:EnableYearlyWindow"] = null;
             await connection.ExecuteAsync(
                 "DELETE FROM source_track_plays WHERE source_track_uuid IN (@firstTrack,@secondTrack) AND created_at >= @start AND created_at < @end",
                 new

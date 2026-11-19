@@ -19,8 +19,6 @@ using NUnit.Framework;
 using RelistenIngestionWorker.AccountDeletion;
 using RelistenUserService;
 using RelistenUserService.Authentication;
-using RelistenUserService.Authentication.Development;
-using RelistenUserService.Identity.Entities;
 using RelistenUserService.Mcp;
 
 namespace RelistenUserServiceTests;
@@ -76,32 +74,15 @@ public sealed class TestMcpHttp
         }
     }
 
-    [TestCase(false)]
-    [TestCase(true)]
-    public async Task AccountToolsAndClientStayOffWithoutAnExplicitOptIn(bool mountCatalog)
+    [Test]
+    public async Task Mcp_routes_and_oauth_require_a_configured_host()
     {
-        await StartApp(mountCatalog, accountTools: false);
+        await StartApp(mountCatalog: false);
 
         using var response = await SendRpc("tools/list");
-        if (mountCatalog)
-        {
-            response.StatusCode.Should().Be(HttpStatusCode.OK);
-            var tools = (await Json(response))
-                .GetProperty("result")
-                .GetProperty("tools")
-                .EnumerateArray();
-            tools
-                .Select(tool => tool.GetProperty("name").GetString())
-                .Should()
-                .Contain("find")
-                .And.NotContain("whoami");
-        }
-        else
-        {
-            response.StatusCode.Should().Be(HttpStatusCode.NotFound);
-            using var metadata = await http.GetAsync(McpOrigin + MetadataPath);
-            metadata.StatusCode.Should().Be(HttpStatusCode.NotFound);
-        }
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        using var metadata = await http.GetAsync(McpOrigin + MetadataPath);
+        metadata.StatusCode.Should().Be(HttpStatusCode.NotFound);
 
         using var authorize = await Authorize(
             AuthorizeFields(ChatGpt, ChatGptRedirect, ReadScopes, Resource)
@@ -488,49 +469,6 @@ public sealed class TestMcpHttp
     }
 
     [Test]
-    public async Task AllowlistAllowsTheEnrolledAccountAndDeniesOtherSignedInUsers()
-    {
-        const string persona = "google-no-email";
-        var allowed = await database.CreateUserAsync("mcp_allowlisted");
-        var identity = DevelopmentPersonaCatalog.Find(persona, "google")!.Profile;
-        var now = DateTimeOffset.UtcNow;
-        await using (var db = database.CreateContext())
-        {
-            db.ExternalIdentities.Add(
-                new ExternalIdentity
-                {
-                    Id = Guid.CreateVersion7(),
-                    UserId = allowed,
-                    Issuer = identity.Issuer,
-                    ProviderSubject = identity.Subject,
-                    CreatedAt = now,
-                    UpdatedAt = now,
-                    LastLoginAt = now,
-                }
-            );
-            await db.SaveChangesAsync();
-        }
-
-        await StartApp(accountTools: false, allowlistedAccount: allowed.Value);
-        var deniedFields = AuthorizeFields(ChatGpt, ChatGptRedirect, ReadScopes, Resource);
-        var otherCookie = await SignIn(deniedFields, "google-shared");
-        using var denied = await Authorize(deniedFields, otherCookie);
-        (await OAuthError(denied)).Should().Be("access_denied");
-
-        var allowedFields = AuthorizeFields(ChatGpt, ChatGptRedirect, ReadScopes, Resource);
-        var allowedCookie = await SignIn(allowedFields, persona);
-        var code = await Approve(allowedFields, allowedCookie, "Read your favorites");
-        var tokens = await Exchange(ChatGpt, ChatGptRedirect, code, Resource);
-        var result = await Call("whoami", new { }, tokens.Access);
-        result
-            .GetProperty("structuredContent")
-            .GetProperty("id")
-            .GetString()
-            .Should()
-            .Be(allowed.Value);
-    }
-
-    [Test]
     public async Task AccountPurgeInvalidatesPreviouslyIssuedMcpAccessAndRefreshTokens()
     {
         await StartApp();
@@ -565,11 +503,7 @@ public sealed class TestMcpHttp
         segments = new[] { new { entries = new[] { new { description = "Opening note" } } } },
     };
 
-    private async Task StartApp(
-        bool mountCatalog = true,
-        bool accountTools = true,
-        string? allowlistedAccount = null
-    )
+    private async Task StartApp(bool mountCatalog = true)
     {
         directory = Directory.CreateTempSubdirectory("relisten-mcp-test-");
         var caPath = Path.Combine(directory.FullName, "test-ca.pem");
@@ -604,17 +538,11 @@ public sealed class TestMcpHttp
                 ["Accounts:WebClientSecret"] = "mcp-test-secret",
                 ["Accounts:DevelopmentCertificateAuthorityPath"] = caPath,
                 ["Accounts:EnableDevelopmentPersonas"] = "true",
-                ["Accounts:EnablePlaylistGuideContent"] = "true",
                 ["Accounts:McpHost"] = mountCatalog ? new Uri(McpOrigin).Authority : null,
                 ["Accounts:McpCatalogBaseUrl"] = "https://catalog.example.test",
-                ["Accounts:McpAccountTools"] = accountTools ? "true" : null,
                 ["MCP_REVIEW_SEARCH_KEY"] = ReviewServiceKey,
             }
         );
-        if (allowlistedAccount is not null)
-        {
-            builder.Configuration["Accounts:McpAccountAllowlist:0"] = allowlistedAccount;
-        }
         builder.Logging.ClearProviders();
         builder.WebHost.UseTestServer();
         builder

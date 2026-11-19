@@ -356,9 +356,8 @@ Changes:
 
 ## Delivery
 
-Two RelistenApi PRs and one relisten-flux PR. Production has no staging
-environment, so each lands behind a configuration switch and is verified in
-production before anything depends on it.
+Two RelistenApi PRs and one relisten-flux PR. Verify each prerequisite in
+production before deploying the build that depends on it.
 
 ### PR 1: monthly rollup and `1y` window (RelistenApi)
 
@@ -375,8 +374,8 @@ response contract, and its rollback is independent of the MCP work.
 
 Everything else:
 
-- Catalog API: review search and `list_performances`. Until PR 1 is deployed,
-  `list_performances` omits `plays_1y` and `days_with_plays`.
+- Catalog API: review search and `list_performances`. Deploy PR 1 and backfill
+  the rollups before serving the performance query.
 - User service: the MCP endpoint and all tools, the `mcp.relisten.net` host
   boundary and configuration, protected resource metadata, the authorization
   server changes (MCP audience, ChatGPT client, discovery additions, consent
@@ -400,8 +399,9 @@ In `clusters/relisten3-k3s/apps/relisten-user-service.yaml`:
   trusted proxy CIDRs for the catalog API. Review search uses the connection
   address until these are configured. Verify that external callers receive
   independent limits through the real ingress chain, including Cloudflare.
-- For the authenticated pilot, set the same high-entropy `MCP_REVIEW_SEARCH_KEY`
-  on the User Service and Catalog API. The User Service gives each active
+- Before configuring the MCP hostname, provision the same high-entropy
+  `MCP_REVIEW_SEARCH_KEY` on Catalog and the User Service. Both manifests read
+  the required Secret. The User Service gives each active
   connected account 30 searches per minute. It sends a service credential only
   on those review calls. Catalog allows 120 searches per minute per instance
   for that traffic, independently of the anonymous limit. Direct anonymous
@@ -418,24 +418,20 @@ caching, allow long streamed responses, and add MCP rate limits for that host.
 
 ### Order and checks
 
-1. Merge and deploy PR 1. It doesn't depend on the others, and the backfill is
-   done.
-2. Merge and deploy PR 2 with MCP disabled. Existing auth, accounts, and catalog
-   behavior must not change. A separate switch, `Accounts:McpAccountTools`,
-   keeps account tools and the ChatGPT OAuth client off. It stays off in
-   production until account deletion ships, because developer-mode users can
-   connect before app submission. Until then it takes an allowlist of account
-   IDs, so the owner's own account can test account tools in production.
-3. Before enabling it, test the user service locally with the MCP Inspector.
-   For ChatGPT, use developer mode against a temporary public HTTPS URL for the
-   local service; app submission needs the stable production host.
-4. Add DNS and merge PR 3. Connect ChatGPT to `https://mcp.relisten.net/mcp`
-   in developer mode. Use catalog tools without signing in. Then, with an
-   allowlisted account, complete sign-in, consent, a library read, a step-up to `library.write`, and a
-   playlist create. Confirm `/v1` rejects the MCP token, `/mcp` rejects an
-   accounts token, and `/mcp` returns 404 on the auth and accounts hosts.
-5. Turn on `Accounts:McpAccountTools` for everyone once account deletion has
-   shipped, then submit the app for review.
+1. Apply and backfill PR 1's rollups, then deploy its catalog and popularity
+   images. Ship account deletion and guide content before the MCP host goes live.
+2. Before the PR 2 catalog image, prebuild and verify the review-search index.
+   Test the User Service locally with the MCP Inspector and ChatGPT developer
+   mode against a temporary public HTTPS URL.
+3. Provision the shared review-search Secret. Roll the Catalog API with the
+   Secret before the User Service starts serving MCP. Add the Cloudflare DNS
+   and cache and rate-limit rules, then deploy PR 3's User Service manifests.
+   The configured hostname exposes anonymous and signed-in tools together.
+4. In ChatGPT developer mode, call an anonymous catalog tool, then test
+   sign-in, consent, a library read, step-up to `library.write`, and playlist
+   creation. Confirm `/v1` rejects the MCP token, `/mcp` rejects an accounts
+   token, and `/mcp` returns 404 on the auth and accounts hosts. Submit the app
+   for review once the checks pass.
 
 ## PR 2 verification
 

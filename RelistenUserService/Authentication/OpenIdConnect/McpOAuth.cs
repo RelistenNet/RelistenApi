@@ -13,7 +13,7 @@ internal static class McpOAuth
 
     public static void Configure(OpenIddictServerBuilder server, McpConfiguration? mcp)
     {
-        if (mcp is { HasAccountTools: true })
+        if (mcp is not null)
         {
             server
                 .RegisterResources(mcp.Resource)
@@ -41,7 +41,7 @@ internal static class McpOAuth
             );
         }
 
-        // Keep a previously provisioned client closed even when the feature is switched off.
+        // Reject a previously registered client when the MCP host is no longer configured.
         server.AddEventHandler<ValidateAuthorizationRequestContext>(handler =>
             handler
                 .SetOrder(
@@ -76,7 +76,7 @@ internal static class McpOAuth
         {
             return null;
         }
-        if (mcp is not { HasAccountTools: true })
+        if (mcp is null)
         {
             return Errors.UnauthorizedClient;
         }

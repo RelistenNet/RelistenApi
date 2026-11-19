@@ -259,15 +259,6 @@ internal sealed class CatalogEvidenceTools(
         {
             return (null, null);
         }
-        if (!authorization.AccountToolsAvailable)
-        {
-            return (
-                null,
-                McpResults.Error(
-                    "Library filtering is unavailable while account tools are disabled."
-                )
-            );
-        }
         var (session, error) = await authorization.AuthorizeAsync(
             RelistenScopes.LibraryRead,
             cancellationToken

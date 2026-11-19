@@ -148,7 +148,7 @@ public static class AccountsApplication
             .Services.GetRequiredService<WebClientApplicationInitializer>()
             .InitializeAsync(cancellationToken);
 
-        if (runtime.Mcp is { HasAccountTools: true } mcp)
+        if (runtime.Mcp is { } mcp)
         {
             await McpOAuth.InitializeAsync(app.Services, mcp, cancellationToken);
         }

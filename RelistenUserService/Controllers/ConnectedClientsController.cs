@@ -29,7 +29,7 @@ public sealed class ConnectedClientsController(
     {
         var now = clock.GetUtcNow();
         var cutoff = now - AuthenticationConstants.NativeSessionInactivityLimit;
-        var permitted = runtime.Mcp?.Allows(account.User.Id) == true;
+        var permitted = runtime.Mcp is not null;
         var status = await (
             from session in Sessions()
             join grant in database.Set<OpenIddictEntityFrameworkCoreAuthorization<Guid>>()
