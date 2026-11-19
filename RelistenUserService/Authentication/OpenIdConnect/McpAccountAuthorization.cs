@@ -28,7 +28,8 @@ public sealed class McpAccountAuthorization(
             cancellationToken
         );
         return
-            session?.ClientId == McpOAuth.ClientId
+            session is not null
+            && McpOAuth.FindClient(session.ClientId) is not null
             && await HasGrantAsync(session, cancellationToken)
             ? session
             : null;

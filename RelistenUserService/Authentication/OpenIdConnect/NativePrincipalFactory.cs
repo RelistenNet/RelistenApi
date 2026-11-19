@@ -30,7 +30,7 @@ public sealed class NativePrincipalFactory(Configuration.AccountsRuntimeConfigur
         var principal = new ClaimsPrincipal(identity);
         principal.SetScopes(scopes);
         principal.SetResources(
-            session.ClientId == McpOAuth.ClientId
+            McpOAuth.FindClient(session.ClientId) is not null
                 ? runtime.Mcp?.Resource.AbsoluteUri
                     ?? throw new InvalidOperationException("MCP capability has no resource.")
                 : runtime.Options.Audience

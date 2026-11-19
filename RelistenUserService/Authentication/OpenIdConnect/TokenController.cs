@@ -97,7 +97,7 @@ public sealed class TokenController(
             || session.ClientId != request.ClientId
             || session.SecurityVersion != user.SecurityVersion
             || (
-                request.ClientId == McpOAuth.ClientId
+                McpOAuth.FindClient(request.ClientId) is not null
                 && !await mcpAuthorization.HasGrantAsync(session, cancellationToken)
             )
         )

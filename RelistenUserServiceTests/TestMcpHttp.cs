@@ -35,6 +35,8 @@ public sealed class TestMcpHttp
     private const string MetadataPath = "/.well-known/oauth-protected-resource/mcp";
     private const string ChatGpt = "https://chatgpt.com/oauth/client.json";
     private const string ChatGptRedirect = "https://chatgpt.com/connector_platform_oauth_redirect";
+    private const string Codex = "https://chatgpt.com/oauth/codex/client.json";
+    private const string CodexRedirect = "http://127.0.0.1:51057/callback";
     private const string Native = "relisten-mobile-ios-dev";
     private const string NativeRedirect = "net.relisten.mobile:/oauth2redirect/ios";
     private const string Verifier =
@@ -462,6 +464,65 @@ public sealed class TestMcpHttp
     }
 
     [Test]
+    public async Task CodexCanCreateAndDisconnectIndependentlyOfChatGpt()
+    {
+        await StartApp();
+        var nativeFields = AuthorizeFields(Native, NativeRedirect, ReadScopes + " account.manage");
+        var cookie = await SignIn(nativeFields);
+        using var nativeCode = await Authorize(nativeFields, cookie);
+        var native = await Exchange(Native, NativeRedirect, ReadCode(nativeCode));
+        var chatGpt = await ConnectChatGpt("google-alice");
+
+        using var wrongCallback = await Authorize(
+            AuthorizeFields(Codex, "http://127.0.0.1:51058/callback", ReadScopes, Resource),
+            cookie
+        );
+        wrongCallback.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        using var wrongTarget = await Authorize(
+            AuthorizeFields(Codex, CodexRedirect, ReadScopes, AccountsOrigin),
+            cookie
+        );
+        (await OAuthError(wrongTarget)).Should().Be("invalid_target");
+
+        var fields = AuthorizeFields(Codex, CodexRedirect, ReadScopes + " library.write", Resource);
+        var code = await Approve(fields, cookie, "Create or edit your playlists.");
+        var codex = await Exchange(Codex, CodexRedirect, code, Resource);
+        using var accounts = await Get(AccountsOrigin + "/v1/me", codex.Access);
+        accounts.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+        var created = await Call("create_playlist", Draft, codex.Access);
+        created.TryGetProperty("structuredContent", out _).Should().BeTrue(created.ToString());
+        using var refreshedResponse = await Refresh(codex.Refresh, Codex);
+        var refreshed = await ReadTokens(refreshedResponse);
+
+        using var clients = await Get(AccountsOrigin + "/v1/connected-clients", native.Access);
+        (await Json(clients))
+            .GetProperty("clients")
+            .EnumerateArray()
+            .Select(client => client.GetProperty("id").GetString())
+            .Should()
+            .BeEquivalentTo(new[] { "chatgpt", "codex" });
+
+        using var disconnected = await Send(
+            new(HttpMethod.Delete, AccountsOrigin + "/v1/connected-clients/codex")
+            {
+                Headers =
+                {
+                    Authorization = new AuthenticationHeaderValue("Bearer", native.Access),
+                },
+            }
+        );
+        disconnected.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        ChallengeFrom(await Call("my_library", new { }, refreshed.Access))
+            .Should()
+            .Contain("invalid_token");
+        using var invalidRefresh = await Refresh(refreshed.Refresh, Codex);
+        (await OAuthError(invalidRefresh)).Should().Be("invalid_grant");
+        var chatGptProfile = await Call("whoami", new { }, chatGpt.Access);
+        chatGptProfile.TryGetProperty("structuredContent", out _).Should().BeTrue();
+    }
+
+    [Test]
     public async Task Review_search_uses_a_separate_budget_only_while_the_link_is_active()
     {
         await StartApp();
@@ -848,13 +909,14 @@ public sealed class TestMcpHttp
     {
         using var consent = await Authorize(fields, cookie);
         var html = await consent.Content.ReadAsStringAsync();
+        var redirectOrigin = new Uri(fields["redirect_uri"]).GetLeftPart(UriPartial.Authority);
         consent
             .Headers.GetValues("Content-Security-Policy")
             .Single()
             .Should()
-            .Contain("form-action 'self' https://chatgpt.com;");
+            .Contain($"form-action 'self' {redirectOrigin};");
         consent.StatusCode.Should().Be(HttpStatusCode.OK, html);
-        html.Should().Contain("chatgpt.com").And.Contain(scopeDescription);
+        html.Should().Contain(redirectOrigin).And.Contain(scopeDescription);
         var csrf = ReadCookie(consent, AuthenticationConstants.CsrfCookie);
         var form = Regex
             .Matches(html, """<input type="hidden" name="([^"]+)" value="([^"]*)">""")
@@ -919,13 +981,13 @@ public sealed class TestMcpHttp
             )
         );
 
-    private Task<HttpResponseMessage> Refresh(string token) =>
+    private Task<HttpResponseMessage> Refresh(string token, string client = ChatGpt) =>
         SendForm(
             AuthOrigin + "/connect/token",
             new Dictionary<string, string>
             {
                 ["grant_type"] = "refresh_token",
-                ["client_id"] = ChatGpt,
+                ["client_id"] = client,
                 ["refresh_token"] = token,
                 ["resource"] = Resource,
             }

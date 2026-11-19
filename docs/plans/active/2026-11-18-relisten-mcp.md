@@ -465,6 +465,23 @@ caching, allow long streamed responses, and add MCP rate limits for that host.
    token, and `/mcp` returns 404 on the auth and accounts hosts. Submit the app
    for review once the checks pass.
 
+### Local Codex smoke test
+
+Relisten registers Codex separately from ChatGPT and pins its callback to
+`http://127.0.0.1:51057/callback`. To sign in with a command-only configuration:
+
+```sh
+codex mcp login relisten_prod_smoke \
+  -c 'mcp_servers.relisten_prod_smoke.url="https://mcp.relisten.net/mcp"' \
+  -c 'mcp_oauth_callback_port=51057' \
+  --scopes user.read,library.read,library.write
+```
+
+Check the account using `whoami` before writing. To roll back Codex support,
+use a User Service image that rejects unallowlisted client metadata URLs.
+The Codex registration persists across image rolls. Disable that registration
+before reverting to any image built before the allowlist guard.
+
 ## PR 2 verification
 
 - OpenIddict 7.6 parses resource indicators and checks configured resources and
