@@ -43,7 +43,7 @@ public sealed class TestMcpHttp
     private const string WriteIdKey = "synthetic-mcp-write-id-key-for-tests-only";
     private const string ReadScopes = "openid offline_access user.read library.read";
 
-    private readonly CatalogStub catalog = new();
+    private CatalogStub catalog = null!;
     private PostgresIntegrationDatabase database = null!;
     private DirectoryInfo directory = null!;
     private WebApplication app = null!;
@@ -260,6 +260,43 @@ public sealed class TestMcpHttp
             .GetString()
             .Should()
             .Contain("tastes");
+    }
+
+    [Test]
+    public async Task Find_returns_shows_for_an_imported_venue_and_year()
+    {
+        const string venueId = "imported_venue_harbor";
+        const string showId = "show_harbor_1998";
+        await StartApp(catalogResponse: uri =>
+            (
+                uri.AbsolutePath,
+                QueryHelpers.ParseQuery(uri.Query).GetValueOrDefault("q").ToString()
+            ) switch
+            {
+                ("/api/v4/search", "Harbor Hall 1998") => new { shows = Array.Empty<object>() },
+                ("/api/v4/search", "Harbor Hall") => new
+                {
+                    venues = new[]
+                    {
+                        new { imported_venue = new { id = venueId, artist_id = "artist_example" } },
+                    },
+                },
+                ($"/api/v4/imported-venues/{venueId}", "") => new
+                {
+                    shows = new[] { new { id = showId, date = "1998-10-01" } },
+                },
+                _ => null,
+            }
+        );
+
+        var result = await Call("find", new { text = "Harbor Hall 1998" });
+
+        result.TryGetProperty("structuredContent", out var data).Should().BeTrue(result.ToString());
+        data.GetProperty("shows")
+            .EnumerateArray()
+            .Select(show => show.GetProperty("id").GetString())
+            .Should()
+            .Equal(showId);
     }
 
     [Test]
@@ -656,8 +693,12 @@ public sealed class TestMcpHttp
         segments = new[] { new { entries = new[] { new { description = "Opening note" } } } },
     };
 
-    private async Task StartApp(bool mountCatalog = true)
+    private async Task StartApp(
+        bool mountCatalog = true,
+        Func<Uri, object?>? catalogResponse = null
+    )
     {
+        catalog = new(catalogResponse);
         directory = Directory.CreateTempSubdirectory("relisten-mcp-test-");
         var caPath = Path.Combine(directory.FullName, "test-ca.pem");
         using var key = RSA.Create();
@@ -1022,7 +1063,7 @@ public sealed class TestMcpHttp
 
     private sealed record TokenPair(string Access, string Refresh);
 
-    private sealed class CatalogStub : HttpMessageHandler
+    private sealed class CatalogStub(Func<Uri, object?>? respond) : HttpMessageHandler
     {
         public Uri? LastRequest { get; private set; }
         public int AuthorizedReviewRequests { get; private set; }
@@ -1040,24 +1081,28 @@ public sealed class TestMcpHttp
                 credentials.Should().Equal(ReviewServiceKey);
                 AuthorizedReviewRequests++;
             }
-            return Task.FromResult(
-                new HttpResponseMessage(HttpStatusCode.OK)
+            var body = respond is null
+                ? new
                 {
-                    Content = JsonContent.Create(
+                    artists = new[]
+                    {
                         new
                         {
-                            artists = new[]
-                            {
-                                new
-                                {
-                                    id = "artist_example",
-                                    name = "Synthetic Artist",
-                                    slug = "synthetic",
-                                },
-                            },
-                        }
-                    ),
+                            id = "artist_example",
+                            name = "Synthetic Artist",
+                            slug = "synthetic",
+                        },
+                    },
                 }
+                : respond(request.RequestUri!);
+
+            return Task.FromResult(
+                body is null
+                    ? new HttpResponseMessage(HttpStatusCode.NotFound)
+                    : new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = JsonContent.Create(body),
+                    }
             );
         }
     }

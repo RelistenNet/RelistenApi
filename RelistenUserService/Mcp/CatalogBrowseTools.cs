@@ -120,7 +120,7 @@ internal sealed class CatalogBrowseTools(McpCatalogClient catalog)
                 var imported = Object(venue, "imported_venue");
                 return canonical is { } relationship
                     ? $"artist-venues/{Segment(String(relationship, "id")!)}"
-                    : $"artists/{Segment(String(imported!.Value, "artist_id")!)}/imported-venues/{Segment(String(imported.Value, "id")!)}";
+                    : $"imported-venues/{Segment(String(imported!.Value, "id")!)}";
             });
         var results = await Task.WhenAll(
             locations.Select(path => catalog.Get(path, cancellationToken))
