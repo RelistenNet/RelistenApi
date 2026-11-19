@@ -170,7 +170,18 @@ become cheap now that the daily backfill reaches 2018-10-19 (about 97 months).
 
 ### 3. `list_performances`
 
-One row per show and song, built on the server. Dark Star alone has 1,649 tracks,
+One row per show and song, built on the server. For date order, walk shows in
+descending date and ID batches, then match recordings only for those shows.
+The date cursor includes the last show and song so a page can resume inside a
+show. Other sorts need to compare the full filtered set. The Catalog API runs
+at most four performance queries at once per instance, gives each SQL statement
+two seconds, and gives the complete read three seconds. On timeout, narrow by
+song, year, or tour.
+
+`track_ids`, the source counts and ratings, and the play totals summarize the
+eligible recordings. `representative` identifies the longest playable file
+with its track, source, link, neighbors and source play totals. Duration filters
+and sorting use whole-file lengths, including medleys. Dark Star alone has 1,649 tracks,
 so client-side assembly from `songs/{id}?include_tracks=all` plus source reads is
 too many calls. Include neighbouring songs with segue marks so clients can find
 sequences such as Help > Slip > Franklin's.
@@ -187,7 +198,7 @@ itself from year listings until the endpoint exists.
     ChatGPT ──OAuth 2.1 + PKCE──▶ auth.relisten.net ┐
        │                                             │ RelistenUserService
        └──streamable HTTP + Bearer──▶ mcp.relisten.net ┘ (one deployment)
-                                         ├─ catalog tools → api.relisten.net, anonymous
+                                         ├─ catalog tools → api.relisten.net
                                          └─ account tools → library services, in process
 
     MCP tokens carry aud = https://mcp.relisten.net/mcp and are rejected by
@@ -205,8 +216,10 @@ deployment.
 - Account tools call the library and playlist services in process. A separate
   MCP service would have to forward the user's token to the accounts API, which
   the MCP spec forbids ("token passthrough"), or add token exchange.
-- Catalog tools call `api.relisten.net` over HTTP without credentials. The
-  catalog is a different service with its own database.
+- Catalog tools call `api.relisten.net` over HTTPS. The catalog has its own
+  database. Review searches for active accounts carry a service credential for
+  admission to the authenticated search budget. User tokens and IDs stay in the
+  User Service.
 
 Split the endpoint into its own deployment only if MCP traffic needs to scale
 separately. The URL stays the same, so connected clients do not reconnect.
@@ -288,6 +301,8 @@ Changes:
    redirect host (required by the MCP spec), and the requested scopes in plain
    language. Record grants so later authorizations can skip the prompt.
 5. **Revocation.** List and revoke connected MCP clients in account settings.
+   The list reports `connected` for an active session and `consent_remembered`
+   when the session can no longer refresh. Disconnect revokes either state.
 
 ### MCP endpoint changes
 
@@ -300,8 +315,8 @@ Changes:
 2. **Mixed authentication.** Accept unauthenticated `initialize` and catalog calls.
    Declare per-tool `securitySchemes` in `_meta`: `{ "type": "noauth" }` on
    catalog tools, `{ "type": "oauth2", "scopes": [...] }` on account tools.
-   The two catalog tools with an optional library filter advertise both schemes
-   when account access is available. When
+   The two catalog tools with an optional library filter and review search
+   advertise both schemes when account access is available. When
    an account tool runs without a valid token, return a tool error whose
    `_meta["mcp/www_authenticate"]` carries `error` and `error_description`.
    ChatGPT needs both the declaration and this error to show its linking UI.
@@ -366,10 +381,18 @@ In `clusters/relisten3-k3s/apps/relisten-user-service.yaml`:
   trusted proxy CIDRs for the catalog API. Review search uses the connection
   address until these are configured. Verify that external callers receive
   independent limits through the real ingress chain, including Cloudflare.
-- Catalog tools can reach `https://api.relisten.net` through the existing
-  egress rule for TCP 443. Calling `relistenapi` inside the cluster instead
-  avoids the Cloudflare round trip and catalog rate limits, but needs a new
-  egress rule here and a matching ingress rule on `relistenapi`.
+- For the authenticated pilot, set the same high-entropy `MCP_REVIEW_SEARCH_KEY`
+  on the User Service and Catalog API. The User Service gives each active
+  connected account 30 searches per minute. It sends a service credential only
+  on those review calls. Catalog allows 120 searches per minute per instance
+  for that traffic, independently of the anonymous limit. Direct anonymous
+  callers keep their 10-per-IP catalog budget. Anonymous MCP calls share the
+  budget for the User Service's observed egress IP.
+  Verify both paths and measure before widening access.
+- Catalog tools can reach `https://api.relisten.net` through the existing TCP
+  443 egress rule. In-cluster routing avoids the Cloudflare round trip and
+  needs matching egress and ingress rules. The catalog rate limiter applies
+  over either path.
 
 Outside flux: add the `mcp.relisten.net` DNS record in Cloudflare, then bypass
 caching, allow long streamed responses, and add MCP rate limits for that host.

@@ -7,6 +7,7 @@ using Dapper;
 using Microsoft.AspNetCore.WebUtilities;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
+using Npgsql;
 using Relisten.Identifiers;
 using Relisten.Services.Popularity;
 
@@ -66,13 +67,42 @@ public sealed record CatalogPerformanceCursor(decimal Score, DateOnly Date, Guid
 
 public sealed class CatalogPerformances(DbService db, CatalogSongMetadataReader songs)
 {
+    private const int ShowBatchSize = 16;
+
     public async Task<CatalogPerformancePage?> Read(
         Guid artistUuid,
         CatalogPerformanceQuery query,
         CancellationToken cancellationToken
     )
     {
+        using var budget = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        budget.CancelAfter(TimeSpan.FromSeconds(3));
+        try
+        {
+            return await ReadWithinBudget(artistUuid, query, budget.Token);
+        }
+        catch (Exception exception)
+            when (!cancellationToken.IsCancellationRequested
+                && (
+                    exception is PostgresException { SqlState: PostgresErrorCodes.QueryCanceled }
+                    || exception is OperationCanceledException && budget.IsCancellationRequested
+                )
+            )
+        {
+            throw new CatalogPerformanceTimeoutException();
+        }
+    }
+
+    private async Task<CatalogPerformancePage?> ReadWithinBudget(
+        Guid artistUuid,
+        CatalogPerformanceQuery query,
+        CancellationToken cancellationToken
+    )
+    {
         await using var session = await CatalogReadSession.Open(db, cancellationToken);
+        await session.Connection.ExecuteAsync(
+            session.Command("SET LOCAL statement_timeout = '2s'", null, cancellationToken)
+        );
         var artist = await session.Connection.QuerySingleOrDefaultAsync<Artist>(
             session.Command(
                 """
@@ -105,7 +135,26 @@ public sealed class CatalogPerformances(DbService db, CatalogSongMetadataReader 
             return new([], null);
         }
 
-        var rows = await ReadPage(session, artistUuid, artist.Id, query, scope, cancellationToken);
+        var rows =
+            query.Order == "date" && query.SongId is null
+                ? await ReadDatePage(
+                    session,
+                    artistUuid,
+                    artist.Id,
+                    query,
+                    scope,
+                    cancellationToken
+                )
+                : await ReadPage(
+                    session,
+                    artistUuid,
+                    artist.Id,
+                    query,
+                    scope,
+                    null,
+                    query.Limit + 1,
+                    cancellationToken
+                );
         var page = rows.Take(query.Limit).ToArray();
         var popularity = await ReadPopularity(session, page, cancellationToken);
 
@@ -125,7 +174,7 @@ public sealed class CatalogPerformances(DbService db, CatalogSongMetadataReader 
         );
     }
 
-    private static async Task<PerformanceRow[]> ReadPage(
+    private static async Task<PerformanceRow[]> ReadDatePage(
         CatalogReadSession session,
         Guid artistUuid,
         int artistId,
@@ -134,13 +183,95 @@ public sealed class CatalogPerformances(DbService db, CatalogSongMetadataReader 
         CancellationToken cancellationToken
     )
     {
+        var target = query.Limit + 1;
+        var matches = new List<PerformanceRow>(target);
+        var afterDate = query.After?.Date.ToDateTime(TimeOnly.MinValue);
+        var afterShow = query.After?.Show;
+        var includeBoundary = true;
+
+        // Date and show UUID sort before song ID, so contiguous show batches
+        // concatenate in final order. Include the cursor show in the first batch
+        // because its remaining songs may belong on the next page.
+        while (matches.Count < target)
+        {
+            var batch = (
+                await session.Connection.QueryAsync<ShowBoundary>(
+                    session.Command(
+                        $"""
+                        WITH RECURSIVE {VenueMap}, show_scope AS ({ShowScopeSql})
+                        SELECT uuid AS Show, date::timestamp AS Date
+                        FROM show_scope
+                        WHERE @afterDate::date IS NULL OR (date,uuid)<(@afterDate::date,@afterShow)
+                           OR (@includeBoundary AND (date,uuid)=(@afterDate::date,@afterShow))
+                        ORDER BY date DESC, uuid DESC
+                        LIMIT @batchSize
+                        """,
+                        new
+                        {
+                            artistUuid,
+                            artistId,
+                            query.ExcludedShows,
+                            query.Years,
+                            query.TourUuid,
+                            query.VenueId,
+                            venueUuid = ImportedVenueUuid(query.VenueId),
+                            afterDate,
+                            afterShow,
+                            includeBoundary,
+                            batchSize = ShowBatchSize,
+                        },
+                        cancellationToken
+                    )
+                )
+            ).ToArray();
+            if (batch.Length == 0)
+            {
+                break;
+            }
+
+            var rows = await ReadPage(
+                session,
+                artistUuid,
+                artistId,
+                query,
+                scope,
+                batch.Select(show => show.Show).ToArray(),
+                target - matches.Count,
+                cancellationToken
+            );
+            matches.AddRange(rows);
+            if (batch.Length < ShowBatchSize)
+            {
+                break;
+            }
+
+            afterDate = batch[^1].Date;
+            afterShow = batch[^1].Show;
+            includeBoundary = false;
+        }
+        return matches.ToArray();
+    }
+
+    private static Guid? ImportedVenueUuid(string? venueId) =>
+        venueId is { } venue && UuidTypeId.TryParse(venue, ImportedVenueId.Prefix, out var uuid)
+            ? uuid
+            : null;
+
+    private sealed record ShowBoundary(Guid Show, DateTime Date);
+
+    private static async Task<PerformanceRow[]> ReadPage(
+        CatalogReadSession session,
+        Guid artistUuid,
+        int artistId,
+        CatalogPerformanceQuery query,
+        IReadOnlyDictionary<string, CatalogSong> scope,
+        Guid[]? showBatch,
+        int size,
+        CancellationToken cancellationToken
+    )
+    {
         string? CanonicalId(string? id) => id is null ? null : scope[id].id;
 
-        var venueUuid =
-            query.VenueId is { } venue
-            && UuidTypeId.TryParse(venue, ImportedVenueId.Prefix, out var importedVenue)
-                ? importedVenue
-                : (Guid?)null;
         var order = query.Order switch
         {
             "duration" => "coalesce(g.longest_seconds,0)::numeric",
@@ -168,33 +299,15 @@ public sealed class CatalogPerformances(DbService db, CatalogSongMetadataReader 
                   SELECT s.id, m.canonical_id, m.path || s.id
                   FROM song_map m JOIN norm.songs s ON s.merged_into=m.id
                   WHERE s.artist_uuid=@artistUuid AND cardinality(m.path)<32 AND NOT s.id=ANY(m.path)
-                ), venue_map AS (
-                  SELECT id, id AS canonical_id, ARRAY[id] AS path
-                  FROM norm.venues WHERE merged_into IS NULL
-                  UNION ALL
-                  SELECT v.id, m.canonical_id, m.path || v.id
-                  FROM venue_map m JOIN norm.venues v ON v.merged_into=m.id
-                  WHERE cardinality(m.path)<32 AND NOT v.id=ANY(m.path)
-                ), show_scope AS MATERIALIZED (
-                  SELECT sh.uuid, sh.date, sh.display_date, coalesce(v.name,iv.name) venue
-                  FROM shows sh
-                    LEFT JOIN tours tour ON tour.id=sh.tour_id
-                  LEFT JOIN venues iv ON iv.id=sh.venue_id
-                  LEFT JOIN norm.show_venues sv ON sv.show_uuid=sh.uuid
-                  LEFT JOIN venue_map vm ON vm.id=sv.venue_id
-                  LEFT JOIN norm.venues v ON v.id=vm.canonical_id
-                  LEFT JOIN venue_map filter_venue ON filter_venue.id=@VenueId
-                  LEFT JOIN norm.artist_venues av ON av.artist_uuid=@artistUuid AND av.venue_id=v.id
-                  WHERE sh.artist_id=@artistId AND NOT sh.uuid=ANY(@ExcludedShows)
-                    AND (@Years::int[] IS NULL OR extract(year from sh.date)::int=ANY(@Years))
-                    AND (@TourUuid::uuid IS NULL OR tour.uuid=@TourUuid)
-                    AND (@VenueId::text IS NULL OR v.id=filter_venue.canonical_id OR av.id=@VenueId OR iv.uuid=@venueUuid)
+                ), {VenueMap}, show_scope AS MATERIALIZED (
+                  SELECT * FROM ({ShowScopeSql}) scoped
+                  WHERE @showBatch::uuid[] IS NULL OR scoped.uuid=ANY(@showBatch)
                 ), eligible AS MATERIALIZED (
                   SELECT m.song_id, m.show_uuid, m.track_uuid, m.matching_part_ordinals,
                          sc.date, sc.display_date, sc.venue, s.id AS source_id, s.uuid AS source_uuid, s.is_soundboard,
                          s.avg_rating, coalesce(rc.source_review_count,0) AS review_count, t.duration
                   FROM norm.song_recording_matches(
-                    @artistUuid, @songIds::text[], CASE WHEN @useShowScope THEN ARRAY(SELECT uuid FROM show_scope) END
+                    @artistUuid, @songIds::text[], coalesce(@showBatch::uuid[], CASE WHEN @useShowScope THEN ARRAY(SELECT uuid FROM show_scope) END)
                   ) m
                   JOIN show_scope sc ON sc.uuid=m.show_uuid
                   JOIN sources s ON s.uuid=m.source_uuid
@@ -251,7 +364,8 @@ public sealed class CatalogPerformances(DbService db, CatalogSongMetadataReader 
                     query.Years,
                     query.TourUuid,
                     query.VenueId,
-                    venueUuid,
+                    venueUuid = ImportedVenueUuid(query.VenueId),
+                    showBatch,
                     songIds = CanonicalId(query.SongId) is { } id ? new[] { id } : null,
                     seguedFrom = CanonicalId(query.SeguedFrom),
                     seguedInto = CanonicalId(query.SeguedInto),
@@ -261,7 +375,7 @@ public sealed class CatalogPerformances(DbService db, CatalogSongMetadataReader 
                     query.MinSeconds,
                     query.MaxSeconds,
                     query.Seed,
-                    size = query.Limit + 1,
+                    size,
                     afterScore = query.After?.Score,
                     afterDate = query.After?.Date.ToDateTime(TimeOnly.MinValue),
                     afterShow = query.After?.Show,
@@ -272,6 +386,33 @@ public sealed class CatalogPerformances(DbService db, CatalogSongMetadataReader 
         );
         return rows.ToArray();
     }
+
+    private const string VenueMap = """
+        venue_map AS (
+          SELECT id, id AS canonical_id, ARRAY[id] AS path
+          FROM norm.venues WHERE merged_into IS NULL
+          UNION ALL
+          SELECT v.id, m.canonical_id, m.path || v.id
+          FROM venue_map m JOIN norm.venues v ON v.merged_into=m.id
+          WHERE cardinality(m.path)<32 AND NOT v.id=ANY(m.path)
+        )
+        """;
+
+    private const string ShowScopeSql = """
+        SELECT sh.uuid, sh.date, sh.display_date, coalesce(v.name,iv.name) venue
+        FROM shows sh
+        LEFT JOIN tours tour ON tour.id=sh.tour_id
+        LEFT JOIN venues iv ON iv.id=sh.venue_id
+        LEFT JOIN norm.show_venues sv ON sv.show_uuid=sh.uuid
+        LEFT JOIN venue_map vm ON vm.id=sv.venue_id
+        LEFT JOIN norm.venues v ON v.id=vm.canonical_id
+        LEFT JOIN venue_map filter_venue ON filter_venue.id=@VenueId
+        LEFT JOIN norm.artist_venues av ON av.artist_uuid=@artistUuid AND av.venue_id=v.id
+        WHERE sh.artist_id=@artistId AND NOT sh.uuid=ANY(@ExcludedShows)
+          AND (@Years::int[] IS NULL OR extract(year from sh.date)::int=ANY(@Years))
+          AND (@TourUuid::uuid IS NULL OR tour.uuid=@TourUuid)
+          AND (@VenueId::text IS NULL OR v.id=filter_venue.canonical_id OR av.id=@VenueId OR iv.uuid=@venueUuid)
+        """;
 
     private const string SeguePredicate = """
         (@seguedFrom::text IS NULL OR edge.previous_id=@seguedFrom AND edge.segue_from)
@@ -395,20 +536,25 @@ public sealed class CatalogPerformances(DbService db, CatalogSongMetadataReader 
             row.Song,
             DateOnly.FromDateTime(row.Date),
             row.Venue,
-            row.LongestSeconds,
             row.SourceCount,
             row.Soundboard,
             row.Rating,
             row.ReviewCount,
-            new(row.SourceUuid),
-            row.PreviousId is null ? null : new(row.PreviousId, row.PreviousSong!, row.SegueFrom),
-            row.NextId is null ? null : new(row.NextId, row.NextSong!, row.SegueInto),
             row.TrackUuids.Select(id => new TrackId(id)).ToArray(),
-            CatalogWebLinks.Source(slug, row.DisplayDate, row.SourceUuid),
+            new CatalogPerformanceRecording(
+                new(row.TrackUuids[0]),
+                new(row.SourceUuid),
+                row.LongestSeconds,
+                row.PreviousId is null
+                    ? null
+                    : new(row.PreviousId, row.PreviousSong!, row.SegueFrom),
+                row.NextId is null ? null : new(row.NextId, row.NextSong!, row.SegueInto),
+                CatalogWebLinks.Source(slug, row.DisplayDate, row.SourceUuid),
+                popularity.Source?.Plays ?? 0,
+                popularity.Source?.DaysWithPlays ?? 0
+            ),
             popularity.Plays,
-            popularity.Days,
-            popularity.Source?.Plays ?? 0,
-            popularity.Source?.DaysWithPlays ?? 0
+            popularity.Days
         );
 
     private sealed record Artist(int Id, string Slug, bool Approved);
@@ -440,6 +586,8 @@ public sealed class CatalogPerformances(DbService db, CatalogSongMetadataReader 
     }
 }
 
+internal sealed class CatalogPerformanceTimeoutException : Exception;
+
 [JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
 public sealed record CatalogPerformancePage(
     IReadOnlyList<CatalogPerformance> Items,
@@ -456,19 +604,26 @@ public sealed record CatalogPerformance(
     string Song,
     DateOnly Date,
     string? Venue,
-    int? LongestSeconds,
-    long SourceCount,
-    bool Soundboard,
-    double Rating,
-    long ReviewCount,
-    SourceId SourceId,
-    CatalogPerformanceNeighbor? Previous,
-    CatalogPerformanceNeighbor? Next,
+    long EligibleSourceCount,
+    bool HasSoundboardSource,
+    double MaxSourceRating,
+    long EligibleSourceReviewCount,
     IReadOnlyList<TrackId> TrackIds,
-    string Link,
+    CatalogPerformanceRecording Representative,
     [property: JsonProperty("plays_1y", NullValueHandling = NullValueHandling.Ignore)]
         long? Plays1y,
-    [property: JsonProperty(NullValueHandling = NullValueHandling.Ignore)] long? DaysWithPlays,
+    [property: JsonProperty(NullValueHandling = NullValueHandling.Ignore)] long? DaysWithPlays
+);
+
+/// <summary>The longest eligible playable file, including any other songs in that file.</summary>
+[JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
+public sealed record CatalogPerformanceRecording(
+    TrackId TrackId,
+    SourceId SourceId,
+    int? FileDurationSeconds,
+    CatalogPerformanceNeighbor? Previous,
+    CatalogPerformanceNeighbor? Next,
+    string Link,
     [property: JsonProperty("source_plays_1y", NullValueHandling = NullValueHandling.Ignore)]
         long? SourcePlays1y,
     [property: JsonProperty(NullValueHandling = NullValueHandling.Ignore)] long? SourceDaysWithPlays

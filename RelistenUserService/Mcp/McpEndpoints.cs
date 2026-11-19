@@ -15,9 +15,24 @@ internal static class McpEndpoints
     private const string AnonymousPolicy = "mcp-anonymous";
     internal const string MetadataPath = "/.well-known/oauth-protected-resource/mcp";
 
-    public static void AddMcpEndpoints(this IServiceCollection services, McpConfiguration mcp)
+    public static void AddMcpEndpoints(
+        this IServiceCollection services,
+        McpConfiguration mcp,
+        string? reviewSearchKey
+    )
     {
+        if (
+            mcp.HasAccountTools
+            && (string.IsNullOrWhiteSpace(reviewSearchKey) || reviewSearchKey.Length < 32)
+        )
+        {
+            throw new InvalidOperationException(
+                "Configure MCP_REVIEW_SEARCH_KEY with at least 32 characters before enabling MCP account tools."
+            );
+        }
+
         services.AddHttpContextAccessor();
+        services.AddSingleton(_ => new McpReviewSearchBudget(reviewSearchKey));
         services.AddScoped<McpToolAuthorization>();
         services
             .AddHttpClient<McpCatalogClient>(client => client.BaseAddress = mcp.Catalog)
@@ -106,14 +121,23 @@ internal static class McpEndpoints
         foreach (
             var tool in services
                 .GetServices<McpServerTool>()
-                .Where(tool => tool.ProtocolTool.Name is "list_performances" or "sample_shows")
+                .Where(tool =>
+                    tool.ProtocolTool.Name
+                        is "list_performances"
+                            or "sample_shows"
+                            or "search_reviews"
+                )
         )
         {
+            var scope =
+                tool.ProtocolTool.Name == "search_reviews"
+                    ? RelistenScopes.UserRead
+                    : RelistenScopes.LibraryRead;
             tool.ProtocolTool.Meta!["securitySchemes"] = JsonSerializer.SerializeToNode(
                 new object[]
                 {
                     new { type = "noauth" },
-                    new { type = "oauth2", scopes = new[] { RelistenScopes.LibraryRead } },
+                    new { type = "oauth2", scopes = new[] { scope } },
                 }
             );
         }

@@ -24,7 +24,7 @@ internal sealed class CatalogEvidenceTools(
     [McpServerTool(Name = "list_performances", ReadOnly = true, OpenWorld = false)]
     [McpMeta("securitySchemes", JsonValue = NoAuth)]
     [Description(
-        "List recording-backed song performances, with one row per show and song. Filters take canonical IDs. Order by date, random, duration, rating or review_count. A library-filtered page can be empty with a next cursor."
+        "List recording-backed song performances, with one row per show and song. Filters take canonical IDs. Order by date, random, duration, rating or review_count. Duration filters and sort use whole files, including medleys. The representative gives the longest matching file and its source. Other evidence summarizes eligible recordings. A library-filtered page can be empty with a next cursor."
     )]
     public Task<CallToolResult> ListPerformances(
         string artist,
@@ -106,17 +106,20 @@ internal sealed class CatalogEvidenceTools(
         int limit = 10,
         CancellationToken cancellationToken = default
     ) =>
-        Read(() =>
-            catalog.Get(
-                $"artists/{Segment(artist)}/reviews/search",
+        Read(async () =>
+        {
+            var session = await authorization.AuthenticateAsync(cancellationToken);
+            return await catalog.SearchReviews(
+                artist,
+                session?.UserId,
                 cancellationToken,
                 ("q", query),
                 ("song_id", song),
                 ("show_id", show),
                 ("years", Join(years)),
                 ("limit", limit.ToString(CultureInfo.InvariantCulture))
-            )
-        );
+            );
+        });
 
     [McpServerTool(Name = "sample_shows", ReadOnly = true, OpenWorld = false)]
     [McpMeta("securitySchemes", JsonValue = NoAuth)]

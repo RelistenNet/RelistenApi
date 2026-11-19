@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -40,6 +41,7 @@ public sealed class TestMcpHttp
     private const string Verifier =
         "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~abc";
     private const string Challenge = "dYSqskoTcWrpu8GYY0XpWlzOc0c5rd9YO3uAgh_zmV4";
+    private const string ReviewServiceKey = "synthetic-catalog-review-key-for-tests-only";
     private const string ReadScopes = "openid offline_access user.read library.read";
 
     private readonly CatalogStub catalog = new();
@@ -412,6 +414,80 @@ public sealed class TestMcpHttp
     }
 
     [Test]
+    public async Task Review_search_uses_a_separate_budget_only_while_the_link_is_active()
+    {
+        await StartApp();
+        var nativeFields = AuthorizeFields(Native, NativeRedirect, ReadScopes + " account.manage");
+        var cookie = await SignIn(nativeFields, "google-shared");
+        using var nativeCode = await Authorize(nativeFields, cookie);
+        var native = await Exchange(Native, NativeRedirect, ReadCode(nativeCode));
+
+        var fields = AuthorizeFields(ChatGpt, ChatGptRedirect, ReadScopes, Resource);
+        var tokens = await Exchange(
+            ChatGpt,
+            ChatGptRedirect,
+            await Approve(fields, cookie, "Read your favorites"),
+            Resource
+        );
+        var profile = await Call("whoami", new { }, tokens.Access);
+        var user = UserId.Parse(
+            profile.GetProperty("structuredContent").GetProperty("id").GetString()!
+        );
+        var args = new { artist = "artist_example", query = "Scarlet" };
+        await Call("search_reviews", args);
+        catalog.AuthorizedReviewRequests.Should().Be(0);
+
+        for (var search = 0; search < 30; search++)
+        {
+            var result = await Call("search_reviews", args, tokens.Access);
+            result.TryGetProperty("structuredContent", out _).Should().BeTrue();
+        }
+        var limited = await Call("search_reviews", args, tokens.Access);
+        limited.GetProperty("isError").GetBoolean().Should().BeTrue();
+        limited
+            .GetProperty("content")[0]
+            .GetProperty("text")
+            .GetString()
+            .Should()
+            .Contain("signed-in review search limit");
+        catalog.AuthorizedReviewRequests.Should().Be(30);
+
+        await using (var db = database.CreateContext())
+        {
+            await db
+                .NativeSessions.Where(session =>
+                    session.UserId == user && session.ClientId == ChatGpt
+                )
+                .ExecuteUpdateAsync(set =>
+                    set.SetProperty(
+                        session => session.AbsoluteExpiresAt,
+                        DateTimeOffset.UtcNow.AddMinutes(-1)
+                    )
+                );
+        }
+        using var clients = await Get(AccountsOrigin + "/v1/connected-clients", native.Access);
+        (await Json(clients))
+            .GetProperty("clients")[0]
+            .GetProperty("state")
+            .GetString()
+            .Should()
+            .Be("consent_remembered");
+        var anonymous = await Call("search_reviews", args, tokens.Access);
+        anonymous.TryGetProperty("structuredContent", out _).Should().BeTrue();
+        catalog.AuthorizedReviewRequests.Should().Be(30);
+
+        using var request = new HttpRequestMessage(
+            HttpMethod.Delete,
+            AccountsOrigin + "/v1/connected-clients/chatgpt"
+        );
+        request.Headers.Authorization = new("Bearer", native.Access);
+        using var disconnected = await http.SendAsync(request);
+        disconnected.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        using var cleared = await Get(AccountsOrigin + "/v1/connected-clients", native.Access);
+        (await Json(cleared)).GetProperty("clients").GetArrayLength().Should().Be(0);
+    }
+
+    [Test]
     public async Task AllowlistAllowsTheEnrolledAccountAndDeniesOtherSignedInUsers()
     {
         const string persona = "google-no-email";
@@ -532,6 +608,7 @@ public sealed class TestMcpHttp
                 ["Accounts:McpHost"] = mountCatalog ? new Uri(McpOrigin).Authority : null,
                 ["Accounts:McpCatalogBaseUrl"] = "https://catalog.example.test",
                 ["Accounts:McpAccountTools"] = accountTools ? "true" : null,
+                ["MCP_REVIEW_SEARCH_KEY"] = ReviewServiceKey,
             }
         );
         if (allowlistedAccount is not null)
@@ -605,6 +682,11 @@ public sealed class TestMcpHttp
     {
         using var consent = await Authorize(fields, cookie);
         var html = await consent.Content.ReadAsStringAsync();
+        consent
+            .Headers.GetValues("Content-Security-Policy")
+            .Single()
+            .Should()
+            .Contain("form-action 'self' https://chatgpt.com;");
         consent.StatusCode.Should().Be(HttpStatusCode.OK, html);
         html.Should().Contain("chatgpt.com").And.Contain(scopeDescription);
         var csrf = ReadCookie(consent, AuthenticationConstants.CsrfCookie);
@@ -829,6 +911,7 @@ public sealed class TestMcpHttp
     private sealed class CatalogStub : HttpMessageHandler
     {
         public Uri? LastRequest { get; private set; }
+        public int AuthorizedReviewRequests { get; private set; }
 
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
@@ -837,6 +920,12 @@ public sealed class TestMcpHttp
         {
             request.Headers.Authorization.Should().BeNull();
             LastRequest = request.RequestUri;
+            if (request.Headers.TryGetValues("X-Relisten-Mcp-Review-Key", out var credentials))
+            {
+                request.RequestUri!.AbsolutePath.Should().EndWith("/reviews/search");
+                credentials.Should().Equal(ReviewServiceKey);
+                AuthorizedReviewRequests++;
+            }
             return Task.FromResult(
                 new HttpResponseMessage(HttpStatusCode.OK)
                 {

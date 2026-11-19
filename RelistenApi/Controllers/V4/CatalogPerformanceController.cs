@@ -108,8 +108,9 @@ public sealed class CatalogPerformanceController(
     }
 
     [HttpGet("performances")]
+    [ServiceFilter(typeof(PerformanceConcurrencyLimit))]
     [ProducesResponseType(typeof(CatalogPerformancePage), 200)]
-    public Task<IActionResult> List(
+    public async Task<IActionResult> List(
         string artistId,
         [FromQuery(Name = "song_id")] string? songId,
         string? years,
@@ -150,12 +151,10 @@ public sealed class CatalogPerformanceController(
             || !CatalogPerformanceCursor.TryRead(cursor, out var after)
         )
         {
-            return Task.FromResult<IActionResult>(
-                Failure(
-                    422,
-                    "invalid_performance_query",
-                    "Check the performance filters, sort order, exclusions and cursor. Random order requires a seed."
-                )
+            return Failure(
+                422,
+                "invalid_performance_query",
+                "Check the performance filters, sort order, exclusions and cursor. Random order requires a seed."
             );
         }
 
@@ -182,12 +181,23 @@ public sealed class CatalogPerformanceController(
             limit,
             after
         );
-        return Read(
-            artistId,
-            ArtistId.Prefix,
-            uuid => performances.Read(uuid, query, cancellationToken),
-            cacheable: false
-        );
+        try
+        {
+            return await Read(
+                artistId,
+                ArtistId.Prefix,
+                uuid => performances.Read(uuid, query, cancellationToken),
+                cacheable: false
+            );
+        }
+        catch (CatalogPerformanceTimeoutException)
+        {
+            return Failure(
+                422,
+                "performance_query_timeout",
+                "Narrow the performance search with a song, year, or tour."
+            );
+        }
     }
 
     private static bool ValidMinutes(double? minutes) =>

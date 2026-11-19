@@ -49,9 +49,13 @@ public sealed class McpConsent(
         var apple = options.Apple.Enabled
             ? "<button name=\"provider\" value=\"apple\">Continue with Apple</button>"
             : "";
+        var destinations =
+            (options.Google.Enabled ? " https://accounts.google.com" : "")
+            + (options.Apple.Enabled ? " https://appleid.apple.com" : "");
         return Page(
             context,
             "Sign in to connect ChatGPT",
+            destinations,
             $"""
             <form method="get" action="/connect/authorize">
             {RequestFields(context)}
@@ -77,6 +81,7 @@ public sealed class McpConsent(
         return Page(
             context,
             "Connect ChatGPT to Relisten",
+            " " + new Uri(McpOAuth.Redirect).GetLeftPart(UriPartial.Authority),
             $"""
             <p>ChatGPT at chatgpt.com is requesting access to {Encode(user.Username)}.</p>
             <ul>{scopes}</ul>
@@ -123,11 +128,17 @@ public sealed class McpConsent(
             _ => scope,
         };
 
-    private static string Page(HttpContext context, string title, string body)
+    private static string Page(
+        HttpContext context,
+        string title,
+        string redirectOrigins,
+        string body
+    )
     {
         context.Response.Headers.CacheControl = "private, no-store";
+        // Chromium also applies form-action to redirects following a submission.
         context.Response.Headers.ContentSecurityPolicy =
-            "default-src 'none'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'";
+            $"default-src 'none'; form-action 'self'{redirectOrigins}; base-uri 'none'; frame-ancestors 'none'";
         return $"""
             <!doctype html>
             <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width">

@@ -15,13 +15,16 @@ internal sealed class McpToolAuthorization(
 {
     public bool AccountToolsAvailable => runtime.Mcp?.HasAccountTools == true;
 
+    public Task<NativeSession?> AuthenticateAsync(CancellationToken cancellationToken) =>
+        accounts.AuthenticateAsync(http.HttpContext!.User, cancellationToken);
+
     public async Task<(NativeSession? Session, CallToolResult? Error)> AuthorizeAsync(
         string scope,
         CancellationToken cancellationToken
     )
     {
         var principal = http.HttpContext!.User;
-        var session = await accounts.AuthenticateAsync(principal, cancellationToken);
+        var session = await AuthenticateAsync(cancellationToken);
         if (session is null)
         {
             return (

@@ -8,6 +8,8 @@ namespace RelistenApiTests.V4;
 
 public sealed partial class TestV4CatalogHttp
 {
+    private const string ReviewServiceKey = "synthetic-catalog-review-key-for-tests-only";
+
     private static string McpArtistPath(string suffix) =>
         "/api/v4/artists/"
         + UuidTypeId.Format("artist", Guid.Parse("00000000-0000-0000-0000-000000000014"))
@@ -25,8 +27,10 @@ public sealed partial class TestV4CatalogHttp
             .Select(track => track!.GetValue<string>())
             .Should()
             .Equal(TrackId(4));
-        row["longest_seconds"]!.GetValue<int>().Should().Be(600);
-        row["link"]!
+        var recording = row["representative"]!;
+        recording["track_id"]!.GetValue<string>().Should().Be(TrackId(4));
+        recording["file_duration_seconds"]!.GetValue<int>().Should().Be(600);
+        recording["link"]!
             .GetValue<string>()
             .Should()
             .Be(
@@ -48,10 +52,68 @@ public sealed partial class TestV4CatalogHttp
                 + "?song_id=song_00000004&segued_from=song_00000003&soundboard_only=true&min_minutes=9"
         );
         var match = segue["items"]!.AsArray().Should().ContainSingle().Subject!;
-        match["previous"]!["id"]!.GetValue<string>().Should().Be("song_00000003");
-        match["previous"]!["segue"]!.GetValue<bool>().Should().BeTrue();
+        match["representative"]!["previous"]!["id"]!
+            .GetValue<string>()
+            .Should()
+            .Be("song_00000003");
+        match["representative"]!["previous"]!["segue"]!.GetValue<bool>().Should().BeTrue();
         var excluded = await GetJson(path + "?exclude=" + TrackId(4));
         excluded["items"]!.AsArray().Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task Mcp_date_page_passes_shows_without_playable_matches_and_keeps_its_song_cursor()
+    {
+        await using var connection = await MigratedTestDatabase.OpenAsync();
+        var imported = (
+            await connection.QueryAsync<Guid>(
+                """
+                INSERT INTO shows (uuid, artist_id, date, display_date, created_at, updated_at)
+                SELECT gen_random_uuid(), artist_id, date + n, (date + n)::text, now(), now()
+                FROM shows CROSS JOIN generate_series(1, 17) n
+                WHERE uuid = '00000000-0000-0000-0000-000000000004'
+                RETURNING uuid
+                """
+            )
+        ).ToArray();
+        try
+        {
+            var path = McpArtistPath("/performances?limit=1");
+            var first = await GetJson(path);
+            first["items"]![0]!["show_id"]!.GetValue<string>().Should().Be(ShowId(4));
+            var second = await GetJson(
+                path + "&cursor=" + first["next_cursor"]!.GetValue<string>()
+            );
+            second["items"]![0]!["show_id"]!.GetValue<string>().Should().Be(ShowId(4));
+            second["items"]![0]!["song_id"]!
+                .GetValue<string>()
+                .Should()
+                .NotBe(first["items"]![0]!["song_id"]!.GetValue<string>());
+        }
+        finally
+        {
+            await connection.ExecuteAsync(
+                "DELETE FROM shows WHERE uuid=ANY(@imported)",
+                new { imported }
+            );
+        }
+    }
+
+    [Test]
+    public async Task Mcp_performance_timeout_suggests_a_narrower_query()
+    {
+        await using var connection = await MigratedTestDatabase.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        await connection.ExecuteAsync(
+            "LOCK TABLE norm.track_songs IN ACCESS EXCLUSIVE MODE",
+            transaction: transaction
+        );
+
+        using var response = await http.GetAsync(McpArtistPath("/performances"));
+        response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        var problem = JsonNode.Parse(await response.Content.ReadAsStringAsync())!;
+        problem["code"]!.GetValue<string>().Should().Be("performance_query_timeout");
+        problem["title"]!.GetValue<string>().Should().Contain("Narrow");
     }
 
     [Test]
@@ -130,13 +192,17 @@ public sealed partial class TestV4CatalogHttp
     [Test]
     public async Task Mcp_review_search_limits_the_forwarded_client_independently_of_catalog_reads()
     {
-        async Task<HttpStatusCode> Status(string client)
+        async Task<HttpStatusCode> Status(string client, string? serviceKey = null)
         {
             using var request = new HttpRequestMessage(
                 HttpMethod.Get,
                 McpArtistPath("/reviews/search?limit=1")
             );
             request.Headers.Add("X-Forwarded-For", client);
+            if (serviceKey is not null)
+            {
+                request.Headers.Add("X-Relisten-Mcp-Review-Key", serviceKey);
+            }
             using var response = await http.SendAsync(request);
             return response.StatusCode;
         }
@@ -147,6 +213,9 @@ public sealed partial class TestV4CatalogHttp
         }
         (await Status("192.0.2.1")).Should().Be(HttpStatusCode.TooManyRequests);
         (await Status("192.0.2.2")).Should().Be(HttpStatusCode.OK);
+        (await Status("192.0.2.1", "invalid-test-key")).Should().Be(HttpStatusCode.Forbidden);
+        (await Status("192.0.2.1", ReviewServiceKey)).Should().Be(HttpStatusCode.OK);
+        (await Status("192.0.2.1")).Should().Be(HttpStatusCode.TooManyRequests);
         (await GetJson(McpArtistPath("/years"))).AsArray().Should().NotBeEmpty();
     }
 
@@ -219,11 +288,11 @@ public sealed partial class TestV4CatalogHttp
             );
             var row = page["items"]!
                 .AsArray()
-                .Single(item => item!["source_count"]!.GetValue<int>() == 2)!;
+                .Single(item => item!["eligible_source_count"]!.GetValue<int>() == 2)!;
             row["plays_1y"]!.GetValue<int>().Should().Be(3);
             row["days_with_plays"]!.GetValue<int>().Should().Be(2);
-            row["source_plays_1y"]!.GetValue<int>().Should().Be(2);
-            row["source_days_with_plays"]!.GetValue<int>().Should().Be(2);
+            row["representative"]!["source_plays_1y"]!.GetValue<int>().Should().Be(2);
+            row["representative"]!["source_days_with_plays"]!.GetValue<int>().Should().Be(2);
         }
         finally
         {

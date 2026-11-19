@@ -2,11 +2,14 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenIddict.Abstractions;
+using OpenIddict.EntityFrameworkCore.Models;
 using RelistenUserService.Authentication;
 using RelistenUserService.Authentication.Authorization;
 using RelistenUserService.Authentication.OpenIdConnect;
+using RelistenUserService.Configuration;
 using RelistenUserService.Identity.Entities;
 using RelistenUserService.Persistence;
+using static OpenIddict.Abstractions.OpenIddictConstants;
 
 namespace RelistenUserService.Controllers;
 
@@ -17,15 +20,45 @@ public sealed class ConnectedClientsController(
     AccountsDbContext database,
     CurrentAccountContext account,
     IOpenIddictAuthorizationManager authorizations,
+    AccountsRuntimeConfiguration runtime,
     TimeProvider clock
 ) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> List(CancellationToken cancellationToken)
     {
-        var connected = await Sessions().AnyAsync(cancellationToken);
+        var now = clock.GetUtcNow();
+        var cutoff = now - AuthenticationConstants.NativeSessionInactivityLimit;
+        var permitted = runtime.Mcp?.Allows(account.User.Id) == true;
+        var status = await (
+            from session in Sessions()
+            join grant in database.Set<OpenIddictEntityFrameworkCoreAuthorization<Guid>>()
+                on session.AuthorizationId equals grant.Id
+            where grant.Status == Statuses.Valid
+            select permitted
+                && session.AbsoluteExpiresAt > now
+                && session.LastUsedAt > cutoff
+                && session.SecurityVersion == account.User.SecurityVersion
+        )
+            .OrderByDescending(active => active)
+            .Select(active => (bool?)active)
+            .FirstOrDefaultAsync(cancellationToken);
+
         return Ok(
-            new { clients = connected ? new[] { new { id = "chatgpt", name = "ChatGPT" } } : [] }
+            new
+            {
+                clients = status is { } active
+                    ? new[]
+                    {
+                        new
+                        {
+                            id = "chatgpt",
+                            name = "ChatGPT",
+                            state = active ? "connected" : "consent_remembered",
+                        },
+                    }
+                    : [],
+            }
         );
     }
 

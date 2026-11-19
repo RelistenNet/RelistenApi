@@ -72,6 +72,7 @@ public static class V4CatalogRegistration
         services.AddTransient<CatalogReviewSearch>();
         services.AddTransient<CatalogPerformances>();
         services.AddSingleton<ReviewSearchRateLimit>();
+        services.AddSingleton<PerformanceConcurrencyLimit>();
         services.AddTransient<CatalogReferenceLookup>();
         services.AddTransient<CatalogResolverHydrator>();
         services.AddTransient<CatalogResolver>();
