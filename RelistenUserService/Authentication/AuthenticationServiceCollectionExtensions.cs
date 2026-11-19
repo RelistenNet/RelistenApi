@@ -114,7 +114,11 @@ public static class AuthenticationServiceCollectionExtensions
                     .UseDbContext<AccountsDbContext>()
                     .ReplaceDefaultEntities<Guid>()
             )
-            .AddServer(options => ConfigureServer(options, environment, runtime))
+            .AddServer(options =>
+            {
+                ConfigureServer(options, environment, runtime);
+                OAuthIssuance.Configure(options);
+            })
             .AddValidation(options =>
             {
                 options.UseLocalServer();

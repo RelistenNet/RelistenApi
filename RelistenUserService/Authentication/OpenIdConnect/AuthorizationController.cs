@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http.Extensions;
@@ -68,13 +69,9 @@ public sealed class AuthorizationController(
             );
         }
 
-        var user = await dbContext.Users.SingleOrDefaultAsync(
-            item => item.Id == userId && item.Status == UserStatuses.Active,
-            cancellationToken
-        );
+        var clientId = request.ClientId;
         if (
-            user is null
-            || string.IsNullOrWhiteSpace(request.ClientId)
+            string.IsNullOrWhiteSpace(clientId)
             || !SessionId.TryParse(
                 authentication.Principal?.GetClaim(RelistenClaims.SessionId),
                 out var authSsoSessionId
@@ -85,22 +82,48 @@ public sealed class AuthorizationController(
             return Forbid();
         }
 
-        if (request.ClientId == AuthenticationConstants.WebClientId)
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(
+            cancellationToken
+        );
+        var user = await OAuthIssuance.LockActiveUserAsync(dbContext, userId, cancellationToken);
+        if (user is null)
         {
-            var webPrincipal = webPrincipalFactory.Create(
-                user,
-                authSsoSessionId,
-                request.GetScopes()
-            );
-            return SignIn(webPrincipal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+            cookies.ClearAuthSso(Response);
+            return Forbid();
         }
 
+        var principal =
+            clientId == AuthenticationConstants.WebClientId
+                ? webPrincipalFactory.Create(user, authSsoSessionId, request.GetScopes())
+                : await CreateNativeAuthorizationAsync(
+                    user,
+                    clientId,
+                    request.GetScopes(),
+                    cancellationToken
+                );
+
+        // Execute sign-in before disposing the transaction. Returning a SignInResult would
+        // defer OpenIddict's writes until MVC executes the result outside the user lock.
+        await HttpContext.SignInAsync(
+            OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
+            principal
+        );
+        return new EmptyResult();
+    }
+
+    private async Task<ClaimsPrincipal> CreateNativeAuthorizationAsync(
+        User user,
+        string clientId,
+        IEnumerable<string> scopes,
+        CancellationToken cancellationToken
+    )
+    {
         var now = timeProvider.GetUtcNow();
         var session = new NativeSession
         {
             Id = SessionId.New(),
             UserId = user.Id,
-            ClientId = request.ClientId,
+            ClientId = clientId,
             SecurityVersion = user.SecurityVersion,
             AuthenticatedAt = now,
             LastUsedAt = now,
@@ -108,13 +131,10 @@ public sealed class AuthorizationController(
             CreatedAt = now,
             UpdatedAt = now,
         };
-        var principal = principalFactory.Create(user, session, request.GetScopes());
+        var principal = principalFactory.Create(user, session, scopes);
 
-        await using var transaction = await dbContext.Database.BeginTransactionAsync(
-            cancellationToken
-        );
         var application =
-            await applicationManager.FindByClientIdAsync(request.ClientId, cancellationToken)
+            await applicationManager.FindByClientIdAsync(session.ClientId, cancellationToken)
             ?? throw new InvalidOperationException(
                 "The validated OpenIddict client is unavailable."
             );
@@ -138,9 +158,7 @@ public sealed class AuthorizationController(
         principal.SetAuthorizationId(authorizationId);
         dbContext.NativeSessions.Add(session);
         await dbContext.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-
-        return SignIn(principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+        return principal;
     }
 
     private IActionResult ChallengeExternalProvider(OpenIddictRequest request)
