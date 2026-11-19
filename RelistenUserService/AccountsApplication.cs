@@ -65,6 +65,12 @@ public static class AccountsApplication
         builder.Services.AddTemporalClient(temporalAddress, temporalNamespace);
         builder.Services.AddScoped<AccountDeletionJobs>();
         builder.Services.AddSingleton<AccountDeletionStarter>();
+        builder
+            .Services.AddHttpClient<AppleTokenRevocation>()
+            .RemoveAllLoggers()
+            .ConfigurePrimaryHttpMessageHandler(() =>
+                new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false }
+            );
 
         if (runtime.Mcp is { } mcp)
         {

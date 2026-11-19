@@ -15,6 +15,7 @@ namespace RelistenUserService.Controllers;
 public sealed class AccountDeletionsController(
     CurrentAccountContext currentAccount,
     AccountDeletionJobs jobs,
+    AppleTokenRevocation apple,
     AccountDeletionStarter starter,
     ILogger<AccountDeletionsController> logger
 ) : ControllerBase
@@ -33,9 +34,7 @@ public sealed class AccountDeletionsController(
             return Unauthorized();
         }
 
-        // TODO: Exchange apple_authorization_code and revoke the resulting token within five
-        // seconds for an account with an Apple identity. The configured Apple client is the
-        // browser Services ID. Native codes need the matching App ID and signing credentials.
+        await apple.TryRevokeAsync(userId, request?.AppleAuthorizationCode, cancellationToken);
 
         try
         {

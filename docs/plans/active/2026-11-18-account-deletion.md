@@ -1,7 +1,8 @@
 # Let listeners delete their account
 
-Status: server implementation complete locally. Apple token revocation, mobile,
-web, and deployment are pending. This plan replaces the account-deletion design
+Status: server deletion and revocation for the browser Apple registration are
+implemented locally. Native Apple code exchange, mobile and web integration,
+and deployment are pending. This plan replaces the account-deletion design
 in Milestone 2 of the [July implementation plan](2026-07-18-relisten-identity-user-data-and-sonos-implementation.md).
 It must ship before accounts reach an external beta or a public store build.
 
@@ -77,14 +78,19 @@ gets `202` while the session is still valid and `401` once the purge completes.
 The username stays held until the purge removes the user row. A `disabled` user
 can't reach the endpoint. An operator can delete that account by hand.
 
-**Apple.** If the account has an Apple identity, mobile first runs Sign in with
-Apple to get a fresh authorization code and sends it with the request. After
-step 1, the User Service exchanges the code and calls Apple's token revocation
-endpoint, with a five-second limit. This is best effort. If the listener cancels
-the Apple prompt or Apple fails, deletion continues. This follows Apple's
-guidance for apps that never stored the tokens. The current Apple configuration
-serves the browser client. Native code exchange needs the App ID and signing
-credentials for the mobile client.
+**Apple.** The deletion request accepts an optional `apple_authorization_code`.
+After step 1, the User Service exchanges it using the configured Apple Services
+ID and `/signin-apple` redirect. It validates the returned Apple identity token
+against the account's linked Apple subject before revoking the token. The whole
+attempt has a five-second limit. Deletion continues if the code is absent or
+Apple fails.
+
+The current mobile sign-in uses the browser registration, which redeems its code
+during sign-in. iOS still needs a deletion-time Apple prompt and a way to send
+the fresh, unused code. For a native prompt, confirm which Apple signing key
+covers the iOS App ID and add the matching server registration. Native codes
+use that App ID and omit the browser redirect URI. If the listener cancels the
+prompt, send the deletion request without a code.
 
 The User Service gets a Temporal client with the same address and namespace
 settings as the ingestion services. It only starts workflows and runs none.

@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
@@ -407,36 +406,12 @@ public static class AuthenticationServiceCollectionExtensions
                     apple
                         .SetClientId(runtime.Options.Apple.ClientId)
                         .SetTeamId(runtime.Options.Apple.TeamId)
-                        .SetSigningKey(LoadAppleSigningKey(runtime.Options.Apple))
+                        .SetSigningKey(AppleSigningKey.Load(runtime.Options.Apple))
                         .SetRegistrationId(AuthenticationConstants.AppleProvider)
                         .SetRedirectUri(AuthenticationConstants.AppleCallbackPath)
                         .AddScopes(Scopes.Email)
                 );
             }
-        }
-    }
-
-    private static ECDsaSecurityKey LoadAppleSigningKey(AppleProviderOptions options)
-    {
-        if (!File.Exists(options.PrivateKeyPath))
-        {
-            throw new InvalidOperationException(
-                $"The Apple private key file '{options.PrivateKeyPath}' does not exist."
-            );
-        }
-
-        var algorithm = ECDsa.Create();
-        try
-        {
-            // Apple's .p8 is a PEM-encoded PKCS#8 key. Importing it directly keeps the
-            // provider credential out of certificate stores and the macOS login Keychain.
-            algorithm.ImportFromPem(File.ReadAllText(options.PrivateKeyPath));
-            return new ECDsaSecurityKey(algorithm) { KeyId = options.KeyId };
-        }
-        catch
-        {
-            algorithm.Dispose();
-            throw;
         }
     }
 

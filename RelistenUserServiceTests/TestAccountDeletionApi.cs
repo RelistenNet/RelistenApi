@@ -2,6 +2,7 @@ using System.Data.Common;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
@@ -17,6 +18,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.IdentityModel.JsonWebTokens;
+using Microsoft.IdentityModel.Tokens;
 using Npgsql;
 using NUnit.Framework;
 using Relisten.Accounts.Contracts.Deletion;
@@ -39,6 +42,8 @@ namespace RelistenUserServiceTests;
 public sealed class TestAccountDeletionApi
 {
     private const string AuthOrigin = "https://auth.relisten.localhost:5443";
+    private const string AppleClientId = "net.relisten.test.auth";
+    private const string AppleSubject = "dev-apple-shared";
     private const string ClientId = "relisten-mobile-ios-dev";
     private const string RedirectUri = "net.relisten.mobile:/oauth2redirect/ios";
     private const string Verifier =
@@ -152,6 +157,44 @@ public sealed class TestAccountDeletionApi
         (await handle.DescribeAsync()).RunId.Should().Be(execution.RunId);
         _starts.RequestedIds.Should().Equal(handle.Id, handle.Id, handle.Id);
         await RunPurgeAsync(job.Id);
+    }
+
+    [TestCase(AppleSubject, true)]
+    [TestCase("another-listener", false)]
+    [TestCase(null, false)]
+    public async Task DeletionOnlyRevokesTokensForTheLinkedAppleIdentity(
+        string? subject,
+        bool revoked
+    )
+    {
+        using var apple = new AppleRevocationProvider(subject);
+        await StartAppAsync(apple);
+        var session = await SignInAsync("apple-shared", "apple");
+
+        using var response = await _accounts
+            .PostAsJsonAsync(
+                "/v1/account-deletions",
+                new { apple_authorization_code = "fresh-test-code" }
+            )
+            .WaitAsync(TestDeadline);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Accepted);
+        apple.ExchangeForm["grant_type"].ToString().Should().Be("authorization_code");
+        apple.ExchangeForm["client_id"].ToString().Should().Be(AppleClientId);
+        apple.ExchangeForm["redirect_uri"].ToString().Should().Be(AuthOrigin + "/signin-apple");
+        apple.ExchangeForm["code"].ToString().Should().Be("fresh-test-code");
+        if (revoked)
+        {
+            apple.RevokedToken.Should().Be("apple-test-refresh-token");
+        }
+        else
+        {
+            apple.RevokedToken.Should().BeNull();
+        }
+
+        await RunPurgeAsync((await GetJobAsync(session.UserId)).Id);
+        using var profile = await _accounts.GetAsync("/v1/me");
+        profile.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     [Test]
@@ -332,7 +375,7 @@ public sealed class TestAccountDeletionApi
         records.Should().Be(0);
     }
 
-    private async Task StartAppAsync()
+    private async Task StartAppAsync(AppleRevocationProvider? apple = null)
     {
         var caPath = Path.Combine(_directory, "test-ca.pem");
         using var key = RSA.Create(2048);
@@ -373,6 +416,29 @@ public sealed class TestAccountDeletionApi
                 ["Temporal:Address"] = _temporal.Client.Connection.Options.TargetHost,
             }
         );
+        if (apple is not null)
+        {
+            var keyPath = Path.Combine(_directory, "apple-test-key.pem");
+            using var appleKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+            await File.WriteAllTextAsync(keyPath, appleKey.ExportPkcs8PrivateKeyPem());
+            builder.Configuration.AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["Accounts:Apple:Enabled"] = "true",
+                    ["Accounts:Apple:ClientId"] = AppleClientId,
+                    ["Accounts:Apple:TeamId"] = "TESTTEAM00",
+                    ["Accounts:Apple:KeyId"] = "TESTKEY000",
+                    ["Accounts:Apple:PrivateKeyPath"] = keyPath,
+                }
+            );
+            builder.Services.PostConfigure<Microsoft.Extensions.Http.HttpClientFactoryOptions>(
+                nameof(AppleTokenRevocation),
+                options =>
+                    options.HttpMessageHandlerBuilderActions.Add(handler =>
+                        handler.PrimaryHandler = apple
+                    )
+            );
+        }
         builder.Logging.ClearProviders();
         builder.WebHost.UseTestServer();
         builder.Services.Configure<TemporalClientConnectOptions>(options =>
@@ -391,15 +457,18 @@ public sealed class TestAccountDeletionApi
         _accounts.BaseAddress = new Uri("https://accounts.relisten.localhost:5443");
     }
 
-    private async Task<NativeLogin> SignInAsync()
+    private async Task<NativeLogin> SignInAsync(
+        string persona = "google-alice",
+        string provider = "google"
+    )
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, "/development/sign-in")
         {
             Content = new FormUrlEncodedContent(
                 new Dictionary<string, string>
                 {
-                    ["persona"] = "google-alice",
-                    ["return_url"] = AuthorizePath(),
+                    ["persona"] = persona,
+                    ["return_url"] = AuthorizePath(provider),
                 }
             ),
         };
@@ -415,7 +484,7 @@ public sealed class TestAccountDeletionApi
                 )
             )
             .Split(';', 2)[0];
-        using var authorize = await AuthorizeAsync(cookie);
+        using var authorize = await AuthorizeAsync(cookie, provider);
         authorize.StatusCode.Should().Be(HttpStatusCode.Redirect);
         var code = QueryHelpers.ParseQuery(authorize.Headers.Location!.Query)["code"].ToString();
         code.Should().NotBeEmpty();
@@ -449,14 +518,17 @@ public sealed class TestAccountDeletionApi
         );
     }
 
-    private async Task<HttpResponseMessage> AuthorizeAsync(string cookie)
+    private async Task<HttpResponseMessage> AuthorizeAsync(
+        string cookie,
+        string provider = "google"
+    )
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, AuthorizePath());
+        using var request = new HttpRequestMessage(HttpMethod.Get, AuthorizePath(provider));
         request.Headers.Add("Cookie", cookie);
         return await _auth.SendAsync(request);
     }
 
-    private static string AuthorizePath() =>
+    private static string AuthorizePath(string provider) =>
         QueryHelpers.AddQueryString(
             "/connect/authorize",
             new Dictionary<string, string?>
@@ -467,7 +539,7 @@ public sealed class TestAccountDeletionApi
                 ["scope"] = "openid profile offline_access user.read account.manage",
                 ["code_challenge"] = Challenge,
                 ["code_challenge_method"] = "S256",
-                ["provider"] = "google",
+                ["provider"] = provider,
                 ["state"] = Guid.NewGuid().ToString("N"),
             }
         );
@@ -519,6 +591,103 @@ public sealed class TestAccountDeletionApi
     }
 
     private sealed record NativeLogin(string UserId, string AuthSsoCookie, string RefreshToken);
+
+    private sealed class AppleRevocationProvider(string? subject) : HttpMessageHandler
+    {
+        private readonly RSA _key = RSA.Create(2048);
+
+        public Dictionary<string, Microsoft.Extensions.Primitives.StringValues> ExchangeForm
+        {
+            get;
+            private set;
+        } = [];
+        public string? RevokedToken { get; private set; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        )
+        {
+            switch (request.RequestUri?.AbsolutePath)
+            {
+                case "/auth/token":
+                    ExchangeForm = QueryHelpers.ParseQuery(
+                        await request.Content!.ReadAsStringAsync(cancellationToken)
+                    );
+                    if (subject is null)
+                    {
+                        // This request can finish only if the revocation budget cancels it.
+                        await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                        throw new InvalidOperationException(
+                            "Expected the Apple request to be cancelled."
+                        );
+                    }
+
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = JsonContent.Create(
+                            new
+                            {
+                                id_token = new JsonWebTokenHandler().CreateToken(
+                                    new SecurityTokenDescriptor
+                                    {
+                                        Issuer = AuthenticationConstants.AppleIssuer,
+                                        Audience = AppleClientId,
+                                        Subject = new ClaimsIdentity([
+                                            new Claim(JwtRegisteredClaimNames.Sub, subject),
+                                        ]),
+                                        SigningCredentials = new SigningCredentials(
+                                            new RsaSecurityKey(_key) { KeyId = "apple-test" },
+                                            SecurityAlgorithms.RsaSha256
+                                        ),
+                                    }
+                                ),
+                                refresh_token = "apple-test-refresh-token",
+                            }
+                        ),
+                    };
+                case "/auth/keys":
+                    var key = _key.ExportParameters(includePrivateParameters: false);
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = JsonContent.Create(
+                            new
+                            {
+                                keys = new[]
+                                {
+                                    new
+                                    {
+                                        kty = "RSA",
+                                        kid = "apple-test",
+                                        alg = "RS256",
+                                        use = "sig",
+                                        n = Base64UrlEncoder.Encode(key.Modulus),
+                                        e = Base64UrlEncoder.Encode(key.Exponent),
+                                    },
+                                },
+                            }
+                        ),
+                    };
+                case "/auth/revoke":
+                    var form = QueryHelpers.ParseQuery(
+                        await request.Content!.ReadAsStringAsync(cancellationToken)
+                    );
+                    RevokedToken = form["token"].ToString();
+                    return new HttpResponseMessage(HttpStatusCode.OK);
+                default:
+                    throw new InvalidOperationException("Unexpected Apple request.");
+            }
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _key.Dispose();
+            }
+            base.Dispose(disposing);
+        }
+    }
 
     private sealed class ObserveWorkflowStarts : IClientInterceptor
     {
