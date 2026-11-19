@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\RelistenUserService\RelistenUserService.csproj" />
+    <ProjectReference Include="../RelistenIngestionWorker/RelistenIngestionWorker.csproj" />
   </ItemGroup>
   <ItemGroup>
     <None Update="Fixtures/pre-typed-accounts.sql" CopyToOutputDirectory="PreserveNewest" />

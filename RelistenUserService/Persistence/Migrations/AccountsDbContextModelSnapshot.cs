@@ -311,6 +311,37 @@ namespace RelistenUserService.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("RelistenUserService.Identity.Entities.AccountDeletionJob", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
+                    b.Property<DateTimeOffset>("RequestedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("requested_at");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .IsUnique();
+
+                    b.ToTable("account_deletion_jobs", "identity", t =>
+                        {
+                            t.HasCheckConstraint("ck_account_deletion_jobs_id_uuid_v7", "uuid_extract_version(id) IS NOT DISTINCT FROM 7");
+                        });
+                });
+
             modelBuilder.Entity("RelistenUserService.Identity.Entities.ExternalIdentity", b =>
                 {
                     b.Property<Guid>("Id")

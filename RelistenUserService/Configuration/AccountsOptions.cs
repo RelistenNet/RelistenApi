@@ -14,6 +14,7 @@ public sealed class AccountsOptions
 
     /// <summary>Optional projected JSON file containing exact preview origins. Disabled when unset.</summary>
     public string? PreviewOriginsFile { get; init; }
+    public bool EnableAccountDeletion { get; init; }
     public bool EnableDevelopmentPersonas { get; init; }
     public bool EnableExternalProviders { get; init; }
     public bool AllowInsecureHttp { get; init; }

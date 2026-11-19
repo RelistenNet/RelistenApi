@@ -1,8 +1,8 @@
 # Let listeners delete their account
 
-Status: planned 2026-11-18, revised after review the same day; not started. This
-plan replaces the account-deletion design in Milestone 2 of the
-[July implementation plan](2026-07-18-relisten-identity-user-data-and-sonos-implementation.md).
+Status: server implementation complete locally. Apple token revocation, mobile,
+web, and deployment are pending. This plan replaces the account-deletion design
+in Milestone 2 of the [July implementation plan](2026-07-18-relisten-identity-user-data-and-sonos-implementation.md).
 It must ship before accounts reach an external beta or a public store build.
 
 ## Purpose / Big Picture
@@ -62,21 +62,24 @@ change the account. It records the job and starts the workflow:
    workflow ID `account-deletion-<job id>`, passing the job ID and user ID as
    input. If a workflow with that ID is already running or finished, treat the
    start as successful.
-3. If the start fails, return `503`. The account is unchanged and the session
-   still works, so the client retries and step 1 reuses the job.
+3. If the User Service cannot confirm the start, return `503`. A definite
+   rejection leaves the account and session active. A lost reply can mean the
+   workflow is already running. A retry with a valid session reuses the job.
 4. Otherwise return `202 {state: "deleting"}`.
 
-The session stays valid until the purge runs, usually within seconds, so a retry
-after a lost response gets the same `202`. The username stays held until the
-purge removes the user row. A `disabled` user can't reach the endpoint, and an
-operator deletes that account by hand.
+The session stays valid until the purge runs. A retry after a lost response
+gets `202` while the session is still valid and `401` once the purge completes.
+The username stays held until the purge removes the user row. A `disabled` user
+can't reach the endpoint. An operator can delete that account by hand.
 
 **Apple.** If the account has an Apple identity, mobile first runs Sign in with
 Apple to get a fresh authorization code and sends it with the request. After
 step 1, the User Service exchanges the code and calls Apple's token revocation
 endpoint, with a five-second limit. This is best effort. If the listener cancels
 the Apple prompt or Apple fails, deletion continues. This follows Apple's
-guidance for apps that never stored the tokens.
+guidance for apps that never stored the tokens. The current Apple configuration
+serves the browser client. Native code exchange needs the App ID and signing
+credentials for the mobile client.
 
 The User Service gets a Temporal client with the same address and namespace
 settings as the ingestion services. It only starts workflows and runs none.
@@ -126,7 +129,8 @@ One `relisten-flux` change, deployed before deletion is turned on:
 - Add `relisten-user-service` to Temporal's ingress allowlist.
 - Bind `ACCOUNTS_DATABASE_URL` on `relistenapi-ingestion-worker`.
 
-Keep the endpoint behind a configuration switch until the flux change is live.
+Enable the endpoint with `Accounts__EnableAccountDeletion=true` after the flux
+change is live. The switch defaults to off.
 
 ### 4. Mobile and web
 
@@ -134,7 +138,7 @@ Keep the endpoint behind a configuration switch until the flux change is live.
   that deletion is permanent and removes the listener's playlists for everyone,
   using the playlist count already in the local library.
   - On `202`, clear the account's scoped local data and return to anonymous mode.
-  - On a network error, retry. The session is still valid.
+  - On a network error, retry. The session is valid until the purge completes.
   - On `401`, the app can't tell a finished deletion from an expired session.
     Return to anonymous mode and keep the account's rows and pending edits, but
     clear `lastSignedInUserId`, so they are hidden. This differs from ordinary
@@ -149,8 +153,10 @@ Keep the endpoint behind a configuration switch until the flux change is live.
 
 - A request purges the account in the SDK-managed Temporal test server, and
   afterwards the old session gets `401`.
-- If the workflow start fails, the request returns `503`. The account still
-  works, and a retry on the same session starts the workflow and returns `202`.
+- A definite start rejection returns `503`. The account still works, and a
+  retry on the same session starts the workflow and returns `202`.
+- If Temporal accepts the workflow and its start reply is lost, the purge still
+  commits and marks the deletion job complete.
 - A repeated request before the purge returns `202` and starts no second
   workflow.
 - A purge activity that fails once succeeds on retry without duplicate effects.
@@ -199,10 +205,9 @@ Keep the endpoint behind a configuration switch until the flux change is live.
   worker. Drop the object-storage tombstone.
 - 2026-11-18, Alec: the User Service starts the workflow directly, with no outbox
   or backstop sweep. Deletions are rare.
-- 2026-11-18, review: the request no longer revokes anything. Committing the job
-  before starting the workflow removes the start-before-commit race, and the
-  session stays valid so a failed start can be retried. The purge deletes the
-  user row, which ends sessions.
+- 2026-11-18, review: the request leaves Relisten sessions active. Committing the
+  job before starting the workflow ensures the purge can find the job. The purge
+  deletes the user row, which ends sessions.
 - 2026-11-18, review: mobile destroys local data only on `202`. A `401` keeps the
   account's data but clears `lastSignedInUserId`, so it is hidden. Ordinary
   sign-out still leaves it visible.

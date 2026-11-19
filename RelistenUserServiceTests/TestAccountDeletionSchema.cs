@@ -1,0 +1,223 @@
+using Dapper;
+using FluentAssertions;
+using Npgsql;
+using NUnit.Framework;
+using Relisten.Accounts.Contracts.Identifiers;
+using Relisten.Identifiers;
+using RelistenIngestionWorker.AccountDeletion;
+
+namespace RelistenUserServiceTests;
+
+[TestFixture]
+[NonParallelizable]
+public sealed class TestAccountDeletionSchema
+{
+    [Test]
+    public async Task PurgeRemovesTheDeletedUsersRowsAndPreservesTheSurvivorsRows()
+    {
+        var database = new PostgresIntegrationDatabase();
+        try
+        {
+            await database.StartAsync();
+            // Use a fresh backend so pg_stat_xact_user_tables sees only the fixture writes.
+            var connectionString = new NpgsqlConnectionStringBuilder(database.ConnectionString)
+            {
+                Pooling = false,
+            }.ConnectionString;
+            await using var connection = new NpgsqlConnection(connectionString);
+            await connection.OpenAsync();
+
+            var tables = await GetUserOwnedTablesAsync(connection);
+            var survivor = await database.CreateUserAsync("surviving_listener");
+            var seeded = await SeedAccountDataAsync(connection, survivor);
+            tables
+                .Should()
+                .BeEquivalentTo(
+                    seeded.Append("identity.users"),
+                    "every fixture table should be discoverable by foreign key or subject"
+                );
+            var survivors = new Dictionary<string, string[]>();
+            foreach (var table in tables)
+            {
+                var rows = await ReadRowsAsync(connection, table);
+                rows.Should().NotBeEmpty("the surviving fixture needs a row in {0}", table);
+                survivors.Add(table, rows);
+            }
+
+            var deleted = await database.CreateUserAsync("deleted_listener");
+            await SeedAccountDataAsync(connection, deleted);
+            foreach (var table in tables)
+            {
+                var rows = await ReadRowsAsync(connection, table);
+                rows.Length.Should()
+                    .BeGreaterThan(
+                        survivors[table].Length,
+                        "the deleted fixture needs a row in {0}",
+                        table
+                    );
+            }
+
+            // Restore replay uses the same deletes without requiring a job. Running it
+            // twice also verifies that a missing user is safe to replay.
+            var purge = new AccountPurge(database.ConnectionString);
+            await purge.RunForUserAsync(deleted.ToString(), CancellationToken.None);
+            await purge.RunForUserAsync(deleted.ToString(), CancellationToken.None);
+
+            foreach (var table in tables)
+            {
+                var rows = await ReadRowsAsync(connection, table);
+                rows.Should()
+                    .Equal(
+                        survivors[table],
+                        "only the survivor's rows should remain in {0}",
+                        table
+                    );
+            }
+        }
+        finally
+        {
+            await database.StopAsync();
+        }
+    }
+
+    private static Task<IEnumerable<string>> GetUserOwnedTablesAsync(NpgsqlConnection connection) =>
+        connection.QueryAsync<string>(
+            """
+            WITH RECURSIVE owned(table_oid) AS (
+                SELECT unnest(ARRAY[
+                    'identity.users'::regclass,
+                    'identity.openiddict_authorizations'::regclass,
+                    'identity.openiddict_tokens'::regclass
+                ])::oid
+                UNION
+                SELECT fk.conrelid
+                FROM pg_constraint fk
+                JOIN owned ON fk.confrelid = owned.table_oid
+                WHERE fk.contype = 'f'
+            )
+            SELECT format('%I.%I', namespace.nspname, relation.relname)
+            FROM owned
+            JOIN pg_class relation ON relation.oid = owned.table_oid
+            JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
+            ORDER BY 1
+            """
+        );
+
+    private static async Task<string[]> ReadRowsAsync(NpgsqlConnection connection, string table) =>
+        (
+            await connection.QueryAsync<string>(
+                $"SELECT to_jsonb(owned_row)::text FROM {table} AS owned_row ORDER BY 1"
+            )
+        ).ToArray();
+
+    // Each call seeds all discovered tables for one user. Adding a user-owned table
+    // without extending this fixture fails the pre-purge assertions.
+    private static async Task<IEnumerable<string>> SeedAccountDataAsync(
+        NpgsqlConnection connection,
+        UserId user
+    )
+    {
+        await using var transaction = await connection.BeginTransactionAsync();
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO identity.external_identities
+                (id, user_id, issuer, provider_subject, last_login_at, created_at, updated_at)
+            VALUES (@IdentityId, @UserId, 'https://accounts.google.com', @UserId, now(), now(), now());
+
+            INSERT INTO identity.openiddict_authorizations (id, subject, status, type)
+            VALUES (@AuthorizationId, @UserId, 'valid', 'permanent');
+            INSERT INTO identity.openiddict_tokens (id, subject, status, type, authorization_id)
+            VALUES (@RefreshTokenId, @UserId, 'valid', 'refresh_token', @AuthorizationId),
+                   (@AccessTokenId, @UserId, 'valid', 'access_token', NULL);
+
+            INSERT INTO identity.native_sessions
+                (id, user_id, authorization_id, client_id, security_version, authenticated_at,
+                 last_used_at, absolute_expires_at, created_at, updated_at)
+            VALUES (@NativeSessionId, @UserId, @AuthorizationId, 'relisten-mobile-ios-dev', 1,
+                    now(), now(), now() + interval '1 day', now(), now());
+
+            INSERT INTO identity.sessions
+                (id, user_id, purpose, validator_hash, security_version, authenticated_at,
+                 created_at, updated_at, last_seen_at, sliding_expires_at, absolute_expires_at,
+                 auth_sso_session_id, web_origin, capabilities)
+            VALUES
+                (@AuthSsoSessionId, @UserId, 'auth_sso', @Hash, 1, now(), now(), now(), now(),
+                 now() + interval '1 day', now() + interval '1 day', NULL, NULL, 0),
+                (@WebSessionId, @UserId, 'web', @Hash, 1, now(), now(), now(), now(),
+                 now() + interval '1 day', now() + interval '1 day', @AuthSsoSessionId,
+                 'https://relisten.net', 7);
+
+            INSERT INTO identity.username_holds (id, user_id, username, release_at, created_at)
+            VALUES (@UsernameHoldId, @UserId, @OldUsername, now() + interval '1 day', now());
+            INSERT INTO identity.username_command_receipts
+                (id, user_id, expected_username_version, payload_hash, stored_result, created_at)
+            VALUES (@UsernameCommandId, @UserId, 1, @Hash, '{}'::jsonb, now());
+
+            INSERT INTO user_data.library_states (id, user_id, revision, created_at, updated_at)
+            VALUES (@LibraryStateId, @UserId, 1, now(), now());
+            INSERT INTO user_data.favorites (id, user_id, catalog_type, catalog_id, created_at, updated_at)
+            VALUES (@FavoriteId, @UserId, 'track', @TrackId, now(), now());
+            INSERT INTO user_data.favorite_mutation_receipts
+                (id, user_id, catalog_type, catalog_id, desired_state, submitted_favorite_id,
+                 payload_hash, changed, canonical_favorite_id, library_revision, created_at)
+            VALUES (@MutationId, @UserId, 'track', @TrackId, 'favorite', @FavoriteId, @Hash, true,
+                    @FavoriteId, 1, now());
+            INSERT INTO user_data.library_changes
+                (id, user_id, revision, change_type, favorite_id, catalog_type, catalog_id, changed_at)
+            VALUES (@ChangeId, @UserId, 1, 'favorite_added', @FavoriteId, 'track', @TrackId, now());
+
+            INSERT INTO user_data.playlists
+                (id, owner_id, name, archived, revision, entry_count, created_at, updated_at)
+            VALUES (@PlaylistId, @UserId, 'Test playlist', false, 2, 1, now(), now());
+            INSERT INTO user_data.playlist_segments (id, playlist_id, rank, deleted)
+            VALUES (@SegmentId, @PlaylistId, 'a', false);
+            INSERT INTO user_data.playlist_entries (id, playlist_id, segment_id, track_id, rank, deleted)
+            VALUES (@EntryId, @PlaylistId, @SegmentId, @TrackId, 'a', false);
+            INSERT INTO user_data.playlist_revisions
+                (playlist_id, revision, kind, change_count, changes_json)
+            VALUES (@PlaylistId, 2, 'content', 1, '[]'::jsonb);
+            INSERT INTO user_data.playlist_receipts
+                (id, actor_id, playlist_id, kind, payload_hash, status, revision, archived, changed, created_at)
+            VALUES (@PlaylistCommandId, @UserId, @PlaylistId, 'create', @Hash, 'active', 2, false, true, now());
+            """,
+            new
+            {
+                UserId = user.ToString(),
+                IdentityId = Guid.CreateVersion7(),
+                RefreshTokenId = Guid.CreateVersion7(),
+                AccessTokenId = Guid.CreateVersion7(),
+                UsernameHoldId = Guid.CreateVersion7(),
+                LibraryStateId = Guid.CreateVersion7(),
+                AuthorizationId = Guid.CreateVersion7(),
+                NativeSessionId = SessionId.New().ToString(),
+                AuthSsoSessionId = SessionId.New().ToString(),
+                WebSessionId = SessionId.New().ToString(),
+                OldUsername = $"old_{Guid.NewGuid():N}"[..30],
+                Hash = new byte[32],
+                UsernameCommandId = CommandId.New().ToString(),
+                FavoriteId = FavoriteId.New().ToString(),
+                TrackId = UuidTypeId.Format("track", Guid.NewGuid()),
+                MutationId = MutationId.New().ToString(),
+                ChangeId = LibraryChangeId.New().ToString(),
+                PlaylistId = PlaylistId.New().ToString(),
+                SegmentId = PlaylistSegmentId.New().ToString(),
+                EntryId = PlaylistEntryId.New().ToString(),
+                PlaylistCommandId = CommandId.New().ToString(),
+            },
+            transaction
+        );
+
+        // Compare the tables seeded by this transaction with the foreign key walk, so
+        // removing an existing foreign key cannot silently remove that table from coverage.
+        var seeded = await connection.QueryAsync<string>(
+            """
+            SELECT format('%I.%I', schemaname, relname)
+            FROM pg_stat_xact_user_tables
+            WHERE n_tup_ins > 0
+            """,
+            transaction: transaction
+        );
+        await transaction.CommitAsync();
+        return seeded;
+    }
+}

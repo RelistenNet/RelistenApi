@@ -7,6 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile
+      Include="../Shared/PostgresConnectionString.cs"
+      Link="Persistence/PostgresConnectionString.cs"
+    />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -16,6 +20,7 @@
       Version="10.0.10"
     />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+    <PackageReference Include="Temporalio.Extensions.Hosting" Version="1.20.0" />
     <PackageReference Include="OpenIddict.AspNetCore" Version="7.6.0" />
     <PackageReference Include="OpenIddict.Client.SystemNetHttp" Version="7.6.0" />
     <PackageReference Include="OpenIddict.Client.WebIntegration" Version="7.6.0" />

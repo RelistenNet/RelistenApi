@@ -13,6 +13,7 @@ public sealed class AccountsDbContext(DbContextOptions<AccountsDbContext> option
         IDataProtectionKeyContext
 {
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
+    public DbSet<AccountDeletionJob> AccountDeletionJobs => Set<AccountDeletionJob>();
     public DbSet<User> Users => Set<User>();
     public DbSet<ExternalIdentity> ExternalIdentities => Set<ExternalIdentity>();
     public DbSet<NativeSession> NativeSessions => Set<NativeSession>();

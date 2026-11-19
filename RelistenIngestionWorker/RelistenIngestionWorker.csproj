@@ -7,6 +7,11 @@
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
   </PropertyGroup>
   <ItemGroup>
+    <Compile
+      Include="../Shared/PostgresConnectionString.cs"
+      Link="Persistence/PostgresConnectionString.cs"
+    />
+    <ProjectReference Include="../Relisten.Accounts.Contracts/Relisten.Accounts.Contracts.csproj" />
     <ProjectReference Include="../RelistenApi/RelistenApi.csproj" />
   </ItemGroup>
 </Project>

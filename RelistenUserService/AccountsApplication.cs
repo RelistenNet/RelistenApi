@@ -9,8 +9,10 @@ using RelistenUserService.Authentication.Development;
 using RelistenUserService.Authentication.OpenIdConnect;
 using RelistenUserService.Configuration;
 using RelistenUserService.Http;
+using RelistenUserService.Identity.Deletion;
 using RelistenUserService.Persistence;
 using RelistenUserService.Playlists;
+using Temporalio.Extensions.Hosting;
 
 namespace RelistenUserService;
 
@@ -57,6 +59,13 @@ public static class AccountsApplication
                 options.ListenAnyIP(PreviewControlMiddleware.Port);
             });
         }
+
+        builder.Services.AddTemporalClient(
+            builder.Configuration["Temporal:Address"] ?? "localhost:7233",
+            builder.Configuration["Temporal:Namespace"] ?? "default"
+        );
+        builder.Services.AddScoped<AccountDeletionJobs>();
+        builder.Services.AddSingleton<AccountDeletionStarter>();
 
         var app = builder.Build();
         app.UseMiddleware<PreviewControlMiddleware>();
