@@ -26,7 +26,8 @@ internal static class McpEndpoints
     public static void AddMcpEndpoints(
         this IServiceCollection services,
         McpConfiguration mcp,
-        string? reviewSearchKey
+        string? reviewSearchKey,
+        string? writeIdKey
     )
     {
         if (string.IsNullOrWhiteSpace(reviewSearchKey) || reviewSearchKey.Length < 32)
@@ -36,8 +37,16 @@ internal static class McpEndpoints
             );
         }
 
+        if (string.IsNullOrWhiteSpace(writeIdKey) || writeIdKey.Length < 32)
+        {
+            throw new InvalidOperationException(
+                "Configure MCP_WRITE_ID_KEY with at least 32 characters when an MCP host is configured."
+            );
+        }
+
         services.AddHttpContextAccessor();
         services.AddSingleton(_ => new McpReviewSearchBudget(reviewSearchKey));
+        services.AddSingleton(new McpWriteIdKey(System.Text.Encoding.UTF8.GetBytes(writeIdKey)));
         services.AddScoped<McpToolAuthorization>();
         services
             .AddHttpClient<McpCatalogClient>(client => client.BaseAddress = mcp.Catalog)

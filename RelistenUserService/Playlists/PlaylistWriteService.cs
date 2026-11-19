@@ -150,14 +150,12 @@ public sealed partial class PlaylistWriteService(
         PlaylistId id,
         PlaylistBatchRequest request,
         CancellationToken cancellationToken,
-        long? expectedRevision = null
+        long? expectedRevision = null,
+        bool replayWholeBatch = false
     )
     {
         request = PlaylistValidation.Normalize(request);
-        var hashes = request.Operations.ToDictionary(
-            operation => operation.OperationId.Value,
-            operation => PlaylistHasher.Hash(id, request.ContractVersion, operation)
-        );
+        var hashes = PlaylistHasher.ReceiptHashes(id, request, expectedRevision, replayWholeBatch);
         var createdIds = request.Operations.SelectMany(PlaylistValidation.CreatedIds).ToArray();
         await using var transaction = await dbContext.Database.BeginTransactionAsync(
             cancellationToken

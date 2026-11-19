@@ -40,6 +40,7 @@ public sealed class TestMcpHttp
         "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~abc";
     private const string Challenge = "dYSqskoTcWrpu8GYY0XpWlzOc0c5rd9YO3uAgh_zmV4";
     private const string ReviewServiceKey = "synthetic-catalog-review-key-for-tests-only";
+    private const string WriteIdKey = "synthetic-mcp-write-id-key-for-tests-only";
     private const string ReadScopes = "openid offline_access user.read library.read";
 
     private readonly CatalogStub catalog = new();
@@ -608,6 +609,46 @@ public sealed class TestMcpHttp
             .Be("First rename");
     }
 
+    [Test]
+    public async Task A_keyed_edit_rejects_shorter_and_longer_retries()
+    {
+        await StartApp();
+        var tokens = await ConnectChatGpt("google-alice");
+        var created = await Call("create_playlist", Draft, tokens.Access);
+        var id = created.GetProperty("structuredContent").GetProperty("playlist_id").GetString();
+        var rename = new { operation_type = "update_metadata", payload = new { name = "Renamed" } };
+        var clearDescription = new
+        {
+            operation_type = "update_metadata",
+            payload = new { description = (string?)null },
+        };
+        var overwrite = new
+        {
+            operation_type = "update_metadata",
+            payload = new { name = "Overwritten" },
+        };
+        Task<JsonElement> Edit(params object[] changes) =>
+            Call(
+                "edit_playlist",
+                new
+                {
+                    id,
+                    changes,
+                    idempotency_key = "rename-and-clear",
+                },
+                tokens.Access
+            );
+
+        var first = await Edit(rename, clearDescription);
+        first.TryGetProperty("structuredContent", out _).Should().BeTrue(first.ToString());
+
+        ErrorText(await Edit(rename)).Should().Contain("operation ID was reused");
+        ErrorText(await Edit(rename, clearDescription, overwrite))
+            .Should()
+            .Contain("operation ID was reused");
+        PlaylistName(await Call("read_playlist", new { id }, tokens.Access)).Should().Be("Renamed");
+    }
+
     private static readonly object Draft = new
     {
         name = "Listening guide",
@@ -653,6 +694,7 @@ public sealed class TestMcpHttp
                 ["Accounts:McpHost"] = mountCatalog ? new Uri(McpOrigin).Authority : null,
                 ["Accounts:McpCatalogBaseUrl"] = "https://catalog.example.test",
                 ["MCP_REVIEW_SEARCH_KEY"] = ReviewServiceKey,
+                ["MCP_WRITE_ID_KEY"] = WriteIdKey,
             }
         );
         builder.Logging.ClearProviders();

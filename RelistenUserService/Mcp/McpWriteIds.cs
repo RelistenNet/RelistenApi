@@ -14,23 +14,35 @@ namespace RelistenUserService.Mcp;
 /// playlist service replays the stored result instead of writing twice. Without a key each
 /// ID is new, so a repeated call is a separate write.
 ///
-/// The account is part of the derivation so that one listener's key can never collide with
-/// another listener's receipts.
+/// The server key makes the derived IDs unpredictable in the global ID space, which also
+/// accepts IDs supplied by playlist clients. Keep it stable across deployments so retries
+/// keep finding their receipts.
 /// </remarks>
 internal sealed class McpWriteIds
 {
     public const int MaximumKeyLength = 200;
 
+    private readonly byte[] signingKey;
     private readonly string? derivationPrefix;
 
-    private McpWriteIds(string? derivationPrefix) => this.derivationPrefix = derivationPrefix;
+    private McpWriteIds(McpWriteIdKey key, string? derivationPrefix)
+    {
+        signingKey = key.Bytes;
+        this.derivationPrefix = derivationPrefix;
+    }
 
     /// <param name="target">
     /// What the key is scoped to: the tool name for a creation, or the playlist being edited.
     /// It must not contain a line break.
     /// </param>
-    public static McpWriteIds For(UserId actor, string target, string? idempotencyKey) =>
+    public static McpWriteIds For(
+        McpWriteIdKey key,
+        UserId actor,
+        string target,
+        string? idempotencyKey
+    ) =>
         new(
+            key,
             idempotencyKey is null
                 ? null
                 : $"relisten-mcp-write-v1\n{actor.Value}\n{target}\n{idempotencyKey}\n"
@@ -50,7 +62,7 @@ internal sealed class McpWriteIds
         // The key is the only caller-controlled part and may contain line breaks, so the
         // fixed-format role and position follow it and are the last line of the hash input.
         var input = $"{derivationPrefix}{role}/{string.Join('/', position)}";
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(input)).AsSpan(0, 16);
+        var bytes = HMACSHA256.HashData(signingKey, Encoding.UTF8.GetBytes(input)).AsSpan(0, 16);
 
         // Account IDs must parse as UUIDv7. Only the version and variant bits are checked,
         // so the timestamp field carries hash bits here.
@@ -59,3 +71,5 @@ internal sealed class McpWriteIds
         return new Guid(bytes, bigEndian: true);
     }
 }
+
+internal sealed record McpWriteIdKey(byte[] Bytes);

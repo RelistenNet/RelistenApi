@@ -71,10 +71,11 @@ existing v4 endpoint or to one of the backend additions below.
 
 **Retries.** Unlike mobile, the model can't keep IDs between calls. Both write
 tools take an optional `idempotency_key`. The server derives the command,
-operation and created IDs from the account, the target and the key, so a call
-repeated with the same key and arguments replays the stored result. The same
-key with different arguments returns a conflict. Without a key the server
-generates fresh UUIDv7 IDs and a retried call is a new write.
+operation and created IDs with HMAC using the account, target and caller's key.
+An identical call replays its receipts. A keyed edit stores a fingerprint of
+the complete ordered batch and `expected_revision` in its operation receipts.
+Reusing the key with different arguments returns a conflict. Without a key,
+the server generates fresh UUIDv7 IDs and a retried call is a new write.
 
 **Stale edits.** `read_playlist` returns the playlist's `revision`.
 `edit_playlist` takes an optional `expected_revision` and refuses the edit when
@@ -437,6 +438,10 @@ In `clusters/relisten3-k3s/apps/relisten-user-service.yaml`:
   443 egress rule. In-cluster routing avoids the Cloudflare round trip and
   needs matching egress and ingress rules. The catalog rate limiter applies
   over either path.
+- Provision a separate, high-entropy `MCP_WRITE_ID_KEY` in the
+  `default/relisten-mcp-write-id` Secret on the User Service. Keep it the same
+  across replicas and deployments so a retry can find its receipts. Changing
+  this key makes old retries look like new writes.
 
 Outside flux: add the `mcp.relisten.net` DNS record in Cloudflare, then bypass
 caching, allow long streamed responses, and add MCP rate limits for that host.
@@ -448,8 +453,9 @@ caching, allow long streamed responses, and add MCP rate limits for that host.
 2. Before the PR 2 catalog image, prebuild and verify the review-search index.
    Test the User Service locally with the MCP Inspector and ChatGPT developer
    mode against a temporary public HTTPS URL.
-3. Provision the shared review-search Secret. Roll the Catalog API with the
-   Secret before the User Service starts serving MCP. Add the Cloudflare DNS
+3. Provision the shared review-search Secret and the User Service write-ID
+   Secret. Roll the Catalog API with the review-search Secret before the User
+   Service starts serving MCP. Add the Cloudflare DNS
    and cache and rate-limit rules, then deploy PR 3's User Service manifests.
    The configured hostname exposes anonymous and signed-in tools together.
 4. In ChatGPT developer mode, call an anonymous catalog tool, then test

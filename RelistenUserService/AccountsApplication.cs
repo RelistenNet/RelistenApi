@@ -70,7 +70,11 @@ public static class AccountsApplication
         {
             // The SDK's trace logs contain complete JSON-RPC messages.
             builder.Logging.AddFilter("ModelContextProtocol", LogLevel.Information);
-            builder.Services.AddMcpEndpoints(mcp, builder.Configuration["MCP_REVIEW_SEARCH_KEY"]);
+            builder.Services.AddMcpEndpoints(
+                mcp,
+                builder.Configuration["MCP_REVIEW_SEARCH_KEY"],
+                builder.Configuration["MCP_WRITE_ID_KEY"]
+            );
         }
 
         var app = builder.Build();

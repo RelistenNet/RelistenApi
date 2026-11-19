@@ -11,6 +11,38 @@ namespace RelistenUserService.Playlists;
 /// </summary>
 public static class PlaylistHasher
 {
+    internal static Dictionary<string, byte[]> ReceiptHashes(
+        PlaylistId playlist,
+        PlaylistBatchRequest request,
+        long? expectedRevision,
+        bool replayWholeBatch
+    )
+    {
+        var operations = request.Operations;
+        var hashes = operations.ToDictionary(
+            operation => operation.OperationId.Value,
+            operation => Hash(playlist, request.ContractVersion, operation)
+        );
+        if (!replayWholeBatch)
+        {
+            return hashes;
+        }
+
+        // Keyed MCP calls always derive the same first operation ID. Give every receipt
+        // the whole edit's hash so even that first receipt rejects a shorter, longer or
+        // reordered edit. Mobile can still replay arbitrary subsets of its operations.
+        var lines = Header("edit-batch", request.ContractVersion, playlist, "edit");
+        Value(lines, expectedRevision);
+        foreach (var operation in operations)
+        {
+            var id = operation.OperationId.Value;
+            lines.Add($"{id}|{Convert.ToHexString(hashes[id])}");
+        }
+
+        var batchHash = Digest(lines);
+        return operations.ToDictionary(operation => operation.OperationId.Value, _ => batchHash);
+    }
+
     public static byte[] Hash(CreatePlaylistRequest request)
     {
         var lines = Header("create", request.ContractVersion, request.PlaylistId, "create");

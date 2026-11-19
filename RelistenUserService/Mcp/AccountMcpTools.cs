@@ -18,7 +18,8 @@ internal sealed class AccountMcpTools(
     LibraryReadService library,
     PlaylistReadService playlists,
     PlaylistWriteService writes,
-    AccountsDbContext db
+    AccountsDbContext db,
+    McpWriteIdKey writeIdKey
 )
 {
     [McpServerTool(
@@ -249,7 +250,8 @@ internal sealed class AccountMcpTools(
                     playlist,
                     new(1, operations),
                     cancellationToken,
-                    expected_revision
+                    expected_revision,
+                    replayWholeBatch: idempotency_key is not null
                 );
             }
         );
@@ -335,9 +337,9 @@ internal sealed class AccountMcpTools(
     private static string NewSegmentId(McpWriteIds ids, int operationIndex) =>
         PlaylistSegmentId.FromUuid(ids.Create("segment", operationIndex)).Value;
 
-    private static McpWriteIds WriteIds(UserId actor, string target, string? idempotencyKey) =>
+    private McpWriteIds WriteIds(UserId actor, string target, string? idempotencyKey) =>
         McpWriteIds.IsValidKey(idempotencyKey)
-            ? McpWriteIds.For(actor, target, idempotencyKey)
+            ? McpWriteIds.For(writeIdKey, actor, target, idempotencyKey)
             : throw new PlaylistException(
                 422,
                 "invalid_idempotency_key",
