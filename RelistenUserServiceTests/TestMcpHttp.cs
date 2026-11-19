@@ -16,6 +16,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using NUnit.Framework;
+using OpenIddict.Abstractions;
 using RelistenIngestionWorker.AccountDeletion;
 using RelistenUserService;
 using RelistenUserService.Authentication;
@@ -96,6 +97,35 @@ public sealed class TestMcpHttp
             .TryGetProperty("client_id_metadata_document_supported", out _)
             .Should()
             .BeFalse();
+    }
+
+    [Test]
+    public async Task PersistedMcpRegistrationWithoutACodeAllowlistEntryCannotAuthorize()
+    {
+        await StartApp();
+        const string clientId = "https://client.example.test/metadata.json";
+        const string callback = "http://127.0.0.1:51059/callback";
+        await using var scope = app.Services.CreateAsyncScope();
+        var applications =
+            scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
+        await applications.CreateAsync(
+            new OpenIddictApplicationDescriptor
+            {
+                ClientId = clientId,
+                ClientType = OpenIddictConstants.ClientTypes.Public,
+                RedirectUris = { new Uri(callback) },
+                Permissions =
+                {
+                    OpenIddictConstants.Permissions.Endpoints.Authorization,
+                    OpenIddictConstants.Permissions.GrantTypes.AuthorizationCode,
+                    OpenIddictConstants.Permissions.ResponseTypes.Code,
+                },
+            }
+        );
+
+        var fields = AuthorizeFields(clientId, callback, "openid");
+        using var response = await Authorize(fields, await SignIn(fields));
+        (await OAuthError(response)).Should().Be("unauthorized_client");
     }
 
     [Test]

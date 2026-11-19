@@ -90,7 +90,12 @@ internal static class McpOAuth
     {
         if (request.ClientId != ClientId)
         {
-            return null;
+            // A client metadata URL is reserved for MCP. A registration that survives a
+            // rollback must never fall through to the first-party native account flow.
+            return
+                request.ClientId?.StartsWith("https://", StringComparison.OrdinalIgnoreCase) == true
+                ? Errors.UnauthorizedClient
+                : null;
         }
         if (mcp is null)
         {
