@@ -21,6 +21,7 @@ serve cache and popularity jobs.
 | `Temporal__Address` | Temporal gRPC endpoint; default `localhost:7233` |
 | `Temporal__Namespace` | Namespace; default `default` |
 | `Temporal__WebUrl` | Browser UI base URL for admin execution links; default `http://localhost:8233`, with the private Tailscale UI configured in production |
+| `ACCOUNTS_DATABASE_URL` | Accounts PostgreSQL URL. Enables the `user-data` queue (account deletion) and the `purge-account` command. Without it the worker logs a warning and does not poll `user-data`. |
 | `Ingestion__Concurrency__ingest-archive=10` | Example provider activity concurrency override; each provider defaults to ten |
 | `Ingestion__Rate__ingest-archive` | Optional queue activities-per-second limit |
 
@@ -38,6 +39,7 @@ These are separate bounds; another host multiplies worker concurrency.
 Provider queues are `ingest-archive`, `ingest-phishin`, `ingest-phishnet`,
 `ingest-setlistfm`, `ingest-phantasytour`, `ingest-jerry`, and `ingest-local`.
 Shared catalog activities use `ingest-db`; workflows use `ingest-workflows`.
+Account deletion uses `user-data`, which runs only with `ACCOUNTS_DATABASE_URL`.
 PanicStream is unsupported. Eager activity execution is disabled so item work
 passes through the configured queues.
 
@@ -111,6 +113,10 @@ dotnet run --project RelistenIngestionWorker -- --register-schedules
 
 # Intentionally cancel the current execution using this artist workflow ID.
 dotnet run --project RelistenIngestionWorker -- --cancel=ingest/artist/ARTIST_UUID
+
+# After a backup restore, purge an account deleted after the backup was taken.
+# Runs the account-deletion SQL by user ID without a job row. Needs ACCOUNTS_DATABASE_URL.
+dotnet run --project RelistenIngestionWorker -- purge-account --user user_XXXXXXXX
 ```
 
 `--item` implies Archive. Combining it with another provider or with `--year` is
@@ -284,7 +290,12 @@ and payload Redis. Infrastructure manifests and their runbook live in the
    and `relistenapi-ingestion-worker`. Keep the existing Hangfire worker serving
    its `default` cache queue. Follow the infrastructure runbook for rollout and
    schema checks; the Temporal development test server is not a production service.
+   Account deletion also needs `ACCOUNTS_DATABASE_URL` on the ingestion worker and
+   `Temporal__Address` and `Temporal__Namespace` on `relisten-user-service`, which
+   refuses to start in Production without them. Roll out the worker first so a
+   deletion request is never accepted with no `user-data` poller.
 5. Verify API readiness and a targeted Archive import; resume schedules if paused.
+   Confirm the worker polls `user-data` in the Temporal UI.
    Compare source/track UUIDs, set order, playable URLs, and show/year counts
    through listener APIs. Admission only starts work; wait for its typed result.
    Repeat the import to check stable identities, then run a standalone rebuild.

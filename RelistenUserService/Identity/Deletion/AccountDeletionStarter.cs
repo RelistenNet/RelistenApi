@@ -26,14 +26,16 @@ public sealed class AccountDeletionStarter(ITemporalClient client)
                 )
                 {
                     IdConflictPolicy = WorkflowIdConflictPolicy.Fail,
-                    IdReusePolicy = WorkflowIdReusePolicy.RejectDuplicate,
+                    // A completed run deleted the user, so only a failed, cancelled, terminated,
+                    // or timed-out run may be replaced by a new start for the same job.
+                    IdReusePolicy = WorkflowIdReusePolicy.AllowDuplicateFailedOnly,
                     Rpc = new RpcOptions { CancellationToken = deadline.Token },
                 }
             );
         }
         catch (WorkflowAlreadyStartedException)
         {
-            // Both an open workflow and a retained closed workflow satisfy this request.
+            // An open workflow or a retained completed workflow satisfies this request.
         }
     }
 }

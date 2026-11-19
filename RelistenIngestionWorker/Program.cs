@@ -24,7 +24,7 @@ var purgeAccount = args.FirstOrDefault() == "purge-account";
 UserId purgeUser = default;
 if (purgeAccount && (args is not [_, "--user", var user] || !UserId.TryParse(user, out purgeUser)))
 {
-    Console.Error.WriteLine("Usage: purge-account --user <user_ id>");
+    Console.Error.WriteLine("Usage: purge-account --user <user_id>");
     Environment.ExitCode = 1;
     return;
 }
@@ -89,6 +89,17 @@ try
 {
     if (operations.Length == 0)
     {
+        if (host.Services.GetService<AccountPurge>() is null)
+        {
+            // The User Service still accepts deletion requests; they wait in Temporal
+            // until a worker with the accounts database polls this queue.
+            host.Services.GetRequiredService<ILogger<AccountDeletionWorkflow>>()
+                .LogWarning(
+                    "ACCOUNTS_DATABASE_URL is not set; not polling the {TaskQueue} task queue. Account deletions will not run.",
+                    AccountDeletionInput.TaskQueue
+                );
+        }
+
         await host.RunAsync();
         return;
     }

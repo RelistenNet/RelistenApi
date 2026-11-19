@@ -23,8 +23,11 @@ recent-authentication step.
 
 - Every user-owned table currently cascades from `identity.users`:
   external identities, sessions, native sessions, username holds and receipts,
-  favorites and their receipts, library state and changes, playlists and their
-  receipts. Playlist segments, entries and revisions cascade from playlists.
+  favorites and their receipts, library state and changes, plays, playlists and
+  their receipts, and the user's playlist follows and reports. Playlist segments,
+  entries, revisions and reports cascade from playlists. Follows reference the
+  playlist by ID only, so a survivor's follow of a deleted playlist remains and
+  reads as unavailable.
   OpenIddict authorizations and tokens reference the user only by `subject` text,
   so they need an explicit delete. User IDs are `text` holding a `user_` TypeID.
 - Session checks and sign-in already refuse a user who is missing or not
@@ -60,8 +63,10 @@ change the account. It records the job and starts the workflow:
    Commit.
 2. Start the `AccountDeletion` workflow on the `user-data` task queue with
    workflow ID `account-deletion-<job id>`, passing the job ID and user ID as
-   input. If a workflow with that ID is already running or finished, treat the
-   start as successful.
+   input. If a workflow with that ID is already running or completed, treat the
+   start as successful. A failed, cancelled, terminated or timed-out run may be
+   replaced by a new start (`AllowDuplicateFailedOnly`). A completed run means the
+   user row is gone.
 3. If the User Service cannot confirm the start, return `503`. A definite
    rejection leaves the account and session active. A lost reply can mean the
    workflow is already running. A retry with a valid session reuses the job.
@@ -96,7 +101,9 @@ returns. The activity runs one transaction:
 5. Set `completed_at` and commit.
 
 The job row always commits before the workflow starts, so the activity never has
-to wait for it.
+to wait for it. If the job row is missing anyway, for example after a backup
+restore, the activity purges by user ID like `purge-account` instead of failing
+every retry.
 
 **Issuance race.** OAuth issuance takes the same user row `FOR SHARE` inside its
 transaction and rechecks that the user exists and is `active`. If issuance holds
@@ -104,7 +111,9 @@ the lock first, the purge waits, then deletes the authorization issuance just
 committed. If the purge holds it first, issuance finds no user and fails.
 
 **Retries.** A failure rolls the transaction back. The activity retries with no
-attempt limit and backoff capped at one hour, and reports each failure to Sentry.
+attempt limit and backoff capped at one hour. It reports the first failed
+attempt to Sentry and then every 24th, about once a day at the capped interval.
+A start-to-close timeout counts as a failure. Worker shutdown doesn't.
 While a purge is failing, the account still works. A stuck deletion shows up as
 an open `AccountDeletion` workflow in the Temporal UI.
 
@@ -128,10 +137,16 @@ account deletion:
 - Allow egress from `relisten-user-service` to `app: relisten-temporal` on TCP
   7233.
 - Add `relisten-user-service` to Temporal's ingress allowlist.
-- Bind `ACCOUNTS_DATABASE_URL` on `relistenapi-ingestion-worker`.
+- Bind `ACCOUNTS_DATABASE_URL` on `relistenapi-ingestion-worker`. Without it the
+  worker logs a warning and doesn't poll `user-data`, so deletions return `202`
+  but never run.
+- Set `Temporal__Address` and `Temporal__Namespace` on `relisten-user-service`.
+  In Production the User Service refuses to start without both.
 
-Verify the worker is polling the `user-data` queue and the User Service can
-reach Temporal before rolling out the endpoint.
+Deploy the worker with `ACCOUNTS_DATABASE_URL` first. Verify it is polling the
+`user-data` queue and the User Service can reach Temporal before rolling out the
+endpoint. After a backup restore, use the worker's `purge-account --user <id>`
+command (see Known limitations).
 
 ### 4. Mobile and web
 

@@ -6,7 +6,10 @@ namespace RelistenUserService.Identity.Deletion;
 
 public sealed class AccountDeletionJobs(AccountsDbContext database, TimeProvider clock)
 {
-    /// <summary>Commits a reusable job before a worker can be started, or returns null if the account is inactive.</summary>
+    /// <summary>
+    /// Commits the account's deletion job before a worker can be started; a repeated
+    /// request returns the same job. Returns null if the account is inactive.
+    /// </summary>
     public async Task<Guid?> RequestAsync(UserId userId, CancellationToken cancellationToken)
     {
         await using var transaction = await database.Database.BeginTransactionAsync(

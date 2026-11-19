@@ -61,10 +61,8 @@ public static class AccountsApplication
             });
         }
 
-        builder.Services.AddTemporalClient(
-            builder.Configuration["Temporal:Address"] ?? "localhost:7233",
-            builder.Configuration["Temporal:Namespace"] ?? "default"
-        );
+        var (temporalAddress, temporalNamespace) = ReadTemporalSettings(builder);
+        builder.Services.AddTemporalClient(temporalAddress, temporalNamespace);
         builder.Services.AddScoped<AccountDeletionJobs>();
         builder.Services.AddSingleton<AccountDeletionStarter>();
 
@@ -161,5 +159,26 @@ public static class AccountsApplication
                 .Services.GetRequiredService<DevelopmentDatabaseInitializer>()
                 .InitializeAsync(cancellationToken);
         }
+    }
+
+    // The client connects lazily, so a wrong default would surface only as a 503 on
+    // every deletion request. Production must name its Temporal service explicitly.
+    private static (string Address, string Namespace) ReadTemporalSettings(
+        WebApplicationBuilder builder
+    )
+    {
+        var address = builder.Configuration["Temporal:Address"];
+        var temporalNamespace = builder.Configuration["Temporal:Namespace"];
+        if (
+            builder.Environment.IsProduction()
+            && (string.IsNullOrWhiteSpace(address) || string.IsNullOrWhiteSpace(temporalNamespace))
+        )
+        {
+            throw new InvalidOperationException(
+                "Temporal__Address and Temporal__Namespace are required in Production to start account deletions."
+            );
+        }
+
+        return (address ?? "localhost:7233", temporalNamespace ?? "default");
     }
 }

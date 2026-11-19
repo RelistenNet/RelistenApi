@@ -4,7 +4,7 @@
 - `RelistenApi/` contains the ASP.NET Core API (controllers, services, models, importers, views, and `wwwroot/` assets).
 - `RelistenApiTests/` holds NUnit tests and fixtures (HTML snapshots in `RelistenApiTests/Fixtures/`).
 - `RelistenApi/Migrations/` includes database schema and data migrations.
-- `RelistenIngestionWorker/` hosts Temporal ingestion and operator commands without starting the API or Hangfire. Workflows, activities, and contracts live in `RelistenApi/Services/Ingestion/`.
+- `RelistenIngestionWorker/` hosts Temporal ingestion and operator commands without starting the API or Hangfire. Workflows, activities, and contracts live in `RelistenApi/Services/Ingestion/`. With `ACCOUNTS_DATABASE_URL` it also polls the `user-data` queue for account deletion (`RelistenIngestionWorker/AccountDeletion/`) and runs `purge-account --user <id>`; the User Service needs `Temporal__Address` and `Temporal__Namespace` to start deletions.
 - `docs/ingestion/README.md` explains ingestion architecture and shared contracts, with links to provider rules and operations. Read the relevant contracts before changing workflow behavior.
 - `local-dev/` contains Docker Compose for Postgres/Redis; helper scripts live at the repo root (`start-local-databases.sh`, `stop-local-databases.sh`).
 - Root files like `RelistenApi.sln`, `Dockerfile`, and `Jenkinsfile` describe solution/build entry points.

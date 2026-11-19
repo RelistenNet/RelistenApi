@@ -6,8 +6,9 @@ namespace RelistenUserService.Playlists;
 
 internal static class PlaylistAccountLock
 {
-    // Account purge takes FOR UPDATE. Acquire this before any library or playlist
+    // Account purge takes FOR UPDATE. Acquire this before any library or playlist row
     // lock so an authenticated write either commits before purge or sees the account gone.
+    // Advisory locks on operation IDs may come first; purge never takes them.
     internal static Task<bool> AcquireAsync(
         AccountsDbContext database,
         UserId actor,

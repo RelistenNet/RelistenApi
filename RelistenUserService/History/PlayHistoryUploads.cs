@@ -24,14 +24,15 @@ public sealed class PlayHistoryUploads(AccountsDbContext database, TimeProvider 
         RespectRequiredConstructorParameters = true,
     };
 
-    // The purge locks the user FOR UPDATE. Recheck activity under the conflicting
-    // lock so a request authenticated before purge cannot create a new play after it.
-    // Only rows returned by the account insert can contribute to popularity.
+    // No explicit user lock: the plays foreign key already makes an upload and a purge
+    // atomic. An upload racing a purge either commits first and is cascaded away, or
+    // fails its key check and inserts nothing, including popularity rows, which come
+    // only from rows the account insert returns. That rare race surfaces as a 500 and the
+    // client's retry then fails authentication.
     private const string InsertPlaysSql = """
         WITH owner AS MATERIALIZED (
             SELECT id FROM identity.users
             WHERE id = @user_id AND status = @active_status
-            FOR SHARE
         ), submitted AS MATERIALIZED (
             SELECT * FROM jsonb_to_recordset(@plays) AS play (
                 play_id text, qualified_at timestamptz, started_at timestamptz,

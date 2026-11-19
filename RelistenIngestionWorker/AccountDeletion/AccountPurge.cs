@@ -4,7 +4,11 @@ using Relisten.Accounts.Contracts.Deletion;
 
 namespace RelistenIngestionWorker.AccountDeletion;
 
-/// <summary>Deletes account data in one transaction for either a workflow or a restore replay.</summary>
+/// <summary>
+/// Deletes an account in one transaction for either a workflow or a restore replay.
+/// Only identity rows are deleted here; library, playlist and history rows go with the
+/// user through ON DELETE CASCADE foreign keys, so a new user-owned table needs one.
+/// </summary>
 public sealed class AccountPurge(string connectionString)
 {
     public Task RunJobAsync(AccountDeletionInput input, CancellationToken cancellationToken) =>
@@ -27,7 +31,11 @@ public sealed class AccountPurge(string connectionString)
         {
             // The job outlives the account and serializes retries, including a retry after
             // the database committed but Temporal did not record the activity result.
-            var completed = await connection.QuerySingleAsync<bool>(
+            // A missing job (for example after a backup restore) still purges by user ID,
+            // like a restore replay, instead of failing every retry of the workflow. Then
+            // only the user row lock serializes, which is enough: once the user is gone,
+            // a second purge deletes nothing.
+            var completed = await connection.QuerySingleOrDefaultAsync<bool?>(
                 Command(
                     """
                     SELECT completed_at IS NOT NULL
@@ -37,7 +45,7 @@ public sealed class AccountPurge(string connectionString)
                     """
                 )
             );
-            if (completed)
+            if (completed == true)
             {
                 return;
             }

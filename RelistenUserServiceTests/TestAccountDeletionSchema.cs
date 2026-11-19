@@ -28,14 +28,36 @@ public sealed class TestAccountDeletionSchema
             await connection.OpenAsync();
 
             var tables = await GetUserOwnedTablesAsync(connection);
+            var survivorPlaylist = PlaylistId.New().ToString();
+            var deletedPlaylist = PlaylistId.New().ToString();
             var survivor = await database.CreateUserAsync("surviving_listener");
-            var seeded = await SeedAccountDataAsync(connection, survivor);
+            var seeded = await SeedAccountDataAsync(connection, survivor, survivorPlaylist);
             tables
                 .Should()
                 .BeEquivalentTo(
                     seeded.Append("identity.users"),
                     "every fixture table should be discoverable by foreign key or subject"
                 );
+
+            // Follows reference a playlist by ID only, so the survivor's follow of the
+            // deleted user's playlist remains and reads as unavailable. The survivor's
+            // grant to the shared MCP client must not depend on the deleted user's grant.
+            var mcpApplication = await CreateMcpApplicationAsync(connection);
+            await connection.ExecuteAsync(
+                """
+                INSERT INTO user_data.playlist_follows (user_id, playlist_id, created_at)
+                VALUES (@UserId, @DeletedPlaylist, now());
+                INSERT INTO identity.openiddict_authorizations (id, application_id, subject, status, type)
+                VALUES (@AuthorizationId, @McpApplication, @UserId, 'valid', 'permanent');
+                """,
+                new
+                {
+                    UserId = survivor.ToString(),
+                    DeletedPlaylist = deletedPlaylist,
+                    AuthorizationId = Guid.CreateVersion7(),
+                    McpApplication = mcpApplication,
+                }
+            );
             var survivors = new Dictionary<string, string[]>();
             foreach (var table in tables)
             {
@@ -45,7 +67,31 @@ public sealed class TestAccountDeletionSchema
             }
 
             var deleted = await database.CreateUserAsync("deleted_listener");
-            await SeedAccountDataAsync(connection, deleted);
+            await SeedAccountDataAsync(connection, deleted, deletedPlaylist);
+            // Cross-account rows that must go: the deleted user's follow, report and MCP
+            // grant, and the survivor's report on the deleted user's playlist.
+            await connection.ExecuteAsync(
+                """
+                INSERT INTO user_data.playlist_follows (user_id, playlist_id, created_at)
+                VALUES (@DeletedUser, @SurvivorPlaylist, now());
+                INSERT INTO user_data.playlist_reports (id, user_id, playlist_id, reason, created_at)
+                VALUES (@DeletedUsersReport, @DeletedUser, @SurvivorPlaylist, 'Fixture report', now()),
+                       (@SurvivorsReport, @Survivor, @DeletedPlaylist, 'Fixture report', now());
+                INSERT INTO identity.openiddict_authorizations (id, application_id, subject, status, type)
+                VALUES (@AuthorizationId, @McpApplication, @DeletedUser, 'valid', 'permanent');
+                """,
+                new
+                {
+                    DeletedUser = deleted.ToString(),
+                    Survivor = survivor.ToString(),
+                    SurvivorPlaylist = survivorPlaylist,
+                    DeletedPlaylist = deletedPlaylist,
+                    DeletedUsersReport = PlaylistReportId.New().ToString(),
+                    SurvivorsReport = PlaylistReportId.New().ToString(),
+                    AuthorizationId = Guid.CreateVersion7(),
+                    McpApplication = mcpApplication,
+                }
+            );
             foreach (var table in tables)
             {
                 var rows = await ReadRowsAsync(connection, table);
@@ -67,10 +113,13 @@ public sealed class TestAccountDeletionSchema
                 new { chunk }
             );
 
-            // Restore replay uses the same deletes without requiring a job. Running it
-            // twice also verifies that a missing user is safe to replay.
+            // A workflow whose job row is missing, as after a backup restore, purges by
+            // user ID. The restore replay then verifies that a missing user is safe.
             var purge = new AccountPurge(database.ConnectionString);
-            await purge.RunForUserAsync(deleted.ToString(), CancellationToken.None);
+            await purge.RunJobAsync(
+                new(Guid.CreateVersion7(), deleted.ToString()),
+                CancellationToken.None
+            );
             await purge.RunForUserAsync(deleted.ToString(), CancellationToken.None);
 
             foreach (var table in tables)
@@ -83,6 +132,14 @@ public sealed class TestAccountDeletionSchema
                         table
                     );
             }
+            (
+                await connection.QuerySingleAsync<bool>(
+                    "SELECT EXISTS (SELECT FROM identity.openiddict_applications WHERE id = @mcpApplication)",
+                    new { mcpApplication }
+                )
+            )
+                .Should()
+                .BeTrue("the MCP client is shared by every account that authorized it");
         }
         finally
         {
@@ -114,6 +171,16 @@ public sealed class TestAccountDeletionSchema
             """
         );
 
+    private static Task<Guid> CreateMcpApplicationAsync(NpgsqlConnection connection) =>
+        connection.QuerySingleAsync<Guid>(
+            """
+            INSERT INTO identity.openiddict_applications (id, client_id, client_type, display_name)
+            VALUES (@Id, 'https://chatgpt.com/oauth/client.json', 'public', 'ChatGPT')
+            RETURNING id
+            """,
+            new { Id = Guid.CreateVersion7() }
+        );
+
     private static async Task<string[]> ReadRowsAsync(NpgsqlConnection connection, string table) =>
         (
             await connection.QueryAsync<string>(
@@ -125,7 +192,8 @@ public sealed class TestAccountDeletionSchema
     // without extending this fixture fails the pre-purge assertions.
     private static async Task<IEnumerable<string>> SeedAccountDataAsync(
         NpgsqlConnection connection,
-        UserId user
+        UserId user,
+        string playlistId
     )
     {
         await using var transaction = await connection.BeginTransactionAsync();
@@ -219,7 +287,7 @@ public sealed class TestAccountDeletionSchema
                 TrackId = UuidTypeId.Format("track", Guid.NewGuid()),
                 MutationId = MutationId.New().ToString(),
                 ChangeId = LibraryChangeId.New().ToString(),
-                PlaylistId = PlaylistId.New().ToString(),
+                PlaylistId = playlistId,
                 SegmentId = PlaylistSegmentId.New().ToString(),
                 EntryId = PlaylistEntryId.New().ToString(),
                 PlaylistCommandId = CommandId.New().ToString(),

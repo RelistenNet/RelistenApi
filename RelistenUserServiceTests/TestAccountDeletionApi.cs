@@ -155,6 +155,26 @@ public sealed class TestAccountDeletionApi
     }
 
     [Test]
+    public async Task ARetryAfterATerminatedWorkflowStartsANewRun()
+    {
+        await StartAppAsync();
+        var session = await SignInAsync();
+        using var response = await _accounts.PostAsync("/v1/account-deletions", null);
+        response.StatusCode.Should().Be(HttpStatusCode.Accepted);
+        var job = await GetJobAsync(session.UserId);
+        var handle = _temporal.Client.GetWorkflowHandle(AccountDeletionInput.WorkflowId(job.Id));
+        var terminatedRunId = (await handle.DescribeAsync()).RunId;
+        await handle.TerminateAsync("operator stopped the deletion");
+
+        using var retry = await _accounts.PostAsync("/v1/account-deletions", null);
+
+        retry.StatusCode.Should().Be(HttpStatusCode.Accepted);
+        (await handle.DescribeAsync()).RunId.Should().NotBe(terminatedRunId);
+        await RunPurgeAsync(job.Id);
+        (await GetJobAsync(session.UserId)).CompletedAt.Should().NotBeNull();
+    }
+
+    [Test]
     public async Task AWorkflowCompletesItsJobAfterTheStartReplyIsLost()
     {
         await StartAppAsync();
