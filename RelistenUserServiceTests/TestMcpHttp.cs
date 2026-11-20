@@ -21,7 +21,6 @@ using RelistenIngestionWorker.AccountDeletion;
 using RelistenUserService;
 using RelistenUserService.Authentication;
 using RelistenUserService.Mcp;
-using RelistenUserService.Sonos;
 
 namespace RelistenUserServiceTests;
 
@@ -835,6 +834,25 @@ public sealed partial class TestMcpHttp
                 ["Sonos:ServiceId"] = sonos is null ? null : "270",
             }
         );
+        if (sonos is not null)
+        {
+            foreach (
+                var client in new[]
+                {
+                    nameof(RelistenUserService.Sonos.SonosProtocol),
+                    "SonosCatalog",
+                }
+            )
+            {
+                builder.Services.PostConfigure<Microsoft.Extensions.Http.HttpClientFactoryOptions>(
+                    client,
+                    options =>
+                        options.HttpMessageHandlerBuilderActions.Add(handler =>
+                            handler.PrimaryHandler = sonos
+                        )
+                );
+            }
+        }
         builder.Logging.ClearProviders();
         builder.WebHost.UseTestServer();
         builder
@@ -849,19 +867,6 @@ public sealed partial class TestMcpHttp
                     handler.PrimaryHandler = catalog
                 )
         );
-        if (sonos is not null)
-        {
-            foreach (var client in new[] { nameof(SonosProtocol), "SonosCatalog" })
-            {
-                builder.Services.PostConfigure<Microsoft.Extensions.Http.HttpClientFactoryOptions>(
-                    client,
-                    options =>
-                        options.HttpMessageHandlerBuilderActions.Add(handler =>
-                            handler.PrimaryHandler = sonos
-                        )
-                );
-            }
-        }
         app = AccountsApplication.Build(builder);
         await AccountsApplication.InitializeAsync(app, CancellationToken.None);
         await app.StartAsync();

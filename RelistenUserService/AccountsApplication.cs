@@ -73,6 +73,17 @@ public static class AccountsApplication
                 new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false }
             );
 
+        if (runtime.Mcp is { } mcp)
+        {
+            // The SDK's trace logs contain complete JSON-RPC messages.
+            builder.Logging.AddFilter("ModelContextProtocol", LogLevel.Information);
+            builder.Services.AddMcpEndpoints(
+                mcp,
+                builder.Configuration["MCP_REVIEW_SEARCH_KEY"],
+                builder.Configuration["MCP_WRITE_ID_KEY"]
+            );
+        }
+
         var sonos = SonosConfiguration.Read(builder.Configuration, runtime);
         builder.Services.AddSingleton(new SonosIntegration(sonos));
         if (runtime.IsLocalDevelopment && sonos is not null)
@@ -104,17 +115,6 @@ public static class AccountsApplication
                 client.Timeout = TimeSpan.FromSeconds(5);
             }
         );
-
-        if (runtime.Mcp is { } mcp)
-        {
-            // The SDK's trace logs contain complete JSON-RPC messages.
-            builder.Logging.AddFilter("ModelContextProtocol", LogLevel.Information);
-            builder.Services.AddMcpEndpoints(
-                mcp,
-                builder.Configuration["MCP_REVIEW_SEARCH_KEY"],
-                builder.Configuration["MCP_WRITE_ID_KEY"]
-            );
-        }
 
         var app = builder.Build();
         app.UseMiddleware<PreviewControlMiddleware>();
