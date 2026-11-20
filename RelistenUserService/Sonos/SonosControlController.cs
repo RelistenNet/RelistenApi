@@ -21,8 +21,6 @@ public sealed class SonosControlController(
     TimeProvider clock
 ) : ControllerBase
 {
-    private const int MaximumQueueOccurrences = 5_000;
-
     private SonosConfiguration? Config => development.Configuration;
 
     [HttpPost("connect")]
@@ -104,14 +102,25 @@ public sealed class SonosControlController(
             return NotFound();
         }
 
+        var trackIds = request.TrackIds;
+        if (request.Occurrences is { } occurrences)
+        {
+            if (trackIds is not null || !SonosHandoff.ValidOccurrences(occurrences))
+            {
+                return Problem(statusCode: 422, title: "Invalid Sonos occurrences.");
+            }
+
+            trackIds = occurrences.Select(entry => entry.TrackId).ToArray();
+        }
+
         if (
             request.RequestId == Guid.Empty
             || string.IsNullOrWhiteSpace(request.GroupId)
             || request.GroupId.Length > 128
-            || request.TrackIds is not { Length: > 0 and <= MaximumQueueOccurrences }
-            || request.TrackIds.Any(id => !TrackId.TryParse(id, out _))
+            || trackIds is not { Length: > 0 and <= SonosHandoff.MaximumQueueOccurrences }
+            || trackIds.Any(id => !TrackId.TryParse(id, out _))
             || request.StartIndex < 0
-            || request.StartIndex >= request.TrackIds.Length
+            || request.StartIndex >= trackIds.Length
             || request.PositionMillis < 0
         )
         {
@@ -148,7 +157,7 @@ public sealed class SonosControlController(
                 return NotFound();
             }
 
-            var items = await handoff.ResolveTracksAsync(config.ServiceId, request.TrackIds, ct);
+            var items = await handoff.ResolveTracksAsync(config.ServiceId, trackIds, ct);
             if (items is null)
             {
                 return Problem(
@@ -183,7 +192,17 @@ public sealed class SonosControlController(
                 HouseholdId = group.HouseholdId,
                 RequestHash = requestHash,
                 CredentialHash = SonosProtocol.Hash(credential),
-                ItemsJson = JsonSerializer.Serialize(items, SonosHandoff.QueueJson),
+                ItemsJson = JsonSerializer.Serialize(
+                    items.Select(
+                        (item, i) =>
+                            item with
+                            {
+                                OccurrenceId = request.Occurrences?[i].OccurrenceId ?? item.Id,
+                                SourceTrackId = trackIds[i],
+                            }
+                    ),
+                    SonosHandoff.QueueJson
+                ),
                 // One listening day accommodates complete shows and multi-show queues.
                 ExpiresAt = clock.GetUtcNow().AddHours(24),
             };

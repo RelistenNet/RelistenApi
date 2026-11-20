@@ -10,12 +10,30 @@ namespace RelistenUserService.Sonos;
 public sealed record SonosHandoffRequest(
     Guid RequestId,
     string GroupId,
-    string[] TrackIds,
+    string[]? TrackIds,
     int StartIndex,
-    int PositionMillis
+    int PositionMillis,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        SonosOccurrenceInput[]? Occurrences = null
 );
 
-internal sealed record QueueTrack(string Id, QueueTrackMetadata Track);
+public sealed record SonosOccurrenceInput(string OccurrenceId, string TrackId);
+
+internal sealed record QueueTrack(
+    string Id,
+    QueueTrackMetadata Track,
+    string? OccurrenceId = null,
+    string? SourceTrackId = null
+)
+{
+    [JsonIgnore]
+    public string OccurrenceKey => OccurrenceId ?? Id;
+
+    [JsonIgnore]
+    public string CatalogTrackId => SourceTrackId ?? Track.Id.ObjectId["TrackU:".Length..];
+}
+
+internal sealed record RemovedQueueTrack(QueueTrack Item, string? AfterItemId);
 
 internal sealed record QueueTrackMetadata(
     MusicObjectId Id,
@@ -46,6 +64,18 @@ public sealed class SonosHandoff(
 )
 {
     internal static readonly JsonSerializerOptions QueueJson = new(JsonSerializerDefaults.Web);
+    internal const int MaximumQueueOccurrences = 5_000;
+
+    internal static bool ValidOccurrences(SonosOccurrenceInput[]? entries) =>
+        entries is { Length: > 0 and <= MaximumQueueOccurrences }
+        && entries.All(entry =>
+            entry is not null
+            && !string.IsNullOrWhiteSpace(entry.OccurrenceId)
+            && entry.OccurrenceId.Length <= 128
+            && TrackId.TryParse(entry.TrackId, out _)
+        )
+        && entries.Select(entry => entry.OccurrenceId).Distinct(StringComparer.Ordinal).Count()
+            == entries.Length;
 
     private const int CatalogBatchSize = 500;
     private static readonly TimeSpan DispatchWindow = TimeSpan.FromSeconds(45);

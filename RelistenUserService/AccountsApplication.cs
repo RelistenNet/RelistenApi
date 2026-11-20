@@ -94,6 +94,8 @@ public static class AccountsApplication
         }
         builder.Services.AddScoped<SonosAccountLink>();
         builder.Services.AddScoped<SonosHandoff>();
+        builder.Services.AddScoped<SonosQueueRefresh>();
+        builder.Services.AddHostedService<SonosQueueRefreshWorker>();
         builder
             .Services.AddHttpClient<SonosProtocol>(client =>
                 client.Timeout = TimeSpan.FromSeconds(10)

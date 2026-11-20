@@ -1329,6 +1329,10 @@ namespace RelistenUserService.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("play_on_completion");
 
+                    b.Property<long?>("QueueVersion")
+                        .HasColumnType("bigint")
+                        .HasColumnName("queue_version");
+
                     b.Property<string>("RequestHash")
                         .IsRequired()
                         .HasColumnType("text")
@@ -1455,6 +1459,23 @@ namespace RelistenUserService.Persistence.Migrations
                     b.Property<string>("PlaybackEventState")
                         .HasColumnType("text")
                         .HasColumnName("playback_event_state");
+
+                    b.Property<long>("QueueVersion")
+                        .HasColumnType("bigint")
+                        .HasColumnName("queue_version");
+
+                    b.Property<DateTimeOffset?>("RefreshAfter")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("refresh_after");
+
+                    b.Property<long>("RefreshedQueueVersion")
+                        .HasColumnType("bigint")
+                        .HasColumnName("refreshed_queue_version");
+
+                    b.Property<string>("RemovedItemsJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("removed_items_json");
 
                     b.Property<string>("RequestHash")
                         .IsRequired()

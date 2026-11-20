@@ -1,5 +1,7 @@
+using System.Globalization;
 using System.Net;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,7 +13,9 @@ public sealed record SonosTransportRequest(
     string? ExpectedItemId = null,
     int? PositionMillis = null,
     int? Volume = null,
-    bool? Muted = null
+    bool? Muted = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        long? ExpectedQueueVersion = null
 );
 
 public sealed partial class SonosPlaybackController
@@ -175,6 +179,11 @@ public sealed partial class SonosPlaybackController
             return (null, Conflict(new { code = "sonos_playback_changed" }), false);
         }
 
+        if (request.ExpectedQueueVersion is { } expected && expected != queue.QueueVersion)
+        {
+            return (null, QueueChanged(queue), false);
+        }
+
         var receipt = new SonosCommand
         {
             QueueId = queue.Id,
@@ -182,6 +191,7 @@ public sealed partial class SonosPlaybackController
             RequestHash = hash,
             Action = request.Action,
             ExpectedItemId = current.ItemId,
+            QueueVersion = request.Action is "next" or "previous" ? queue.QueueVersion : null,
         };
         if (!ResolveCommandTarget(receipt, request, queue, playback, current))
         {
@@ -231,10 +241,7 @@ public sealed partial class SonosPlaybackController
                     || request.PositionMillis < current.DurationMillis;
             case "next":
             case "previous":
-                var items = JsonSerializer.Deserialize<QueueTrack[]>(
-                    queue.ItemsJson,
-                    SonosHandoff.QueueJson
-                )!;
+                var items = queue.ReadItems();
                 var index = current.QueueIndex + (request.Action == "next" ? 1 : -1);
                 if (index < 0 || index >= items.Length)
                 {
@@ -283,6 +290,13 @@ public sealed partial class SonosPlaybackController
                 queue is null ? "sonos_playback_inactive" : "sonos_command_superseded",
                 ct
             );
+            await transaction.CommitAsync(ct);
+            return;
+        }
+
+        if (receipt.QueueVersion is { } version && queue.QueueVersion != version)
+        {
+            await FinishCommandAsync(receipt, "rejected", "sonos_queue_changed", ct);
             await transaction.CommitAsync(ct);
             return;
         }
@@ -365,6 +379,7 @@ public sealed partial class SonosPlaybackController
                 body = new
                 {
                     itemId = receipt.TargetItemId,
+                    queueVersion = queue.QueueVersion.ToString(CultureInfo.InvariantCulture),
                     positionMillis = receipt.TargetValue ?? playback.PositionMillis,
                     playOnCompletion = shouldPlay,
                 };
@@ -481,6 +496,10 @@ public sealed partial class SonosPlaybackController
             if (observed)
             {
                 await FinishCommandAsync(receipt, "confirmed", null, ct);
+            }
+            else if (receipt.QueueVersion is { } expected && expected != queue.QueueVersion)
+            {
+                await FinishCommandAsync(receipt, "rejected", "sonos_queue_changed", ct);
             }
 
             await transaction.CommitAsync(ct);
@@ -624,6 +643,7 @@ public sealed partial class SonosPlaybackController
     {
         if (
             request.CommandId == Guid.Empty
+            || request.ExpectedQueueVersion is < 1
             || (request.ExpectedItemId is { } id && !Guid.TryParseExact(id, "D", out _))
         )
         {

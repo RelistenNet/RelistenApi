@@ -189,7 +189,19 @@ public sealed partial class SonosPlaybackController(
                 && millis >= 0
                     ? millis
                     : null;
-            return new RoomPlayback(state.GetString()!, itemId, position, clock.GetUtcNow());
+            var queueVersion =
+                status.TryGetProperty("queueVersion", out var version)
+                && version.ValueKind == JsonValueKind.String
+                && long.TryParse(version.GetString(), out var parsed)
+                    ? parsed
+                    : (long?)null;
+            return new RoomPlayback(
+                state.GetString()!,
+                itemId,
+                position,
+                clock.GetUtcNow(),
+                queueVersion
+            );
         }
         catch (SonosRequestException error)
             when (error.Status is HttpStatusCode.Gone or HttpStatusCode.NotFound
@@ -212,20 +224,25 @@ public sealed partial class SonosPlaybackController(
             return Inactive(queue, "unconfirmed");
         }
 
-        var items = JsonSerializer.Deserialize<QueueTrack[]>(
-            queue.ItemsJson,
-            SonosHandoff.QueueJson
-        )!;
+        var items = queue.ReadItems();
         var index = room is null ? -1 : Array.FindIndex(items, item => item.Id == room.ItemId);
         if (room is null || index < 0)
         {
-            if (queue.Status == "dispatching")
+            if (
+                queue.Status == "dispatching"
+                || (
+                    room is not null
+                    && queue.ReadRemovedItems().Any(entry => entry.Item.Id == room.ItemId)
+                )
+            )
             {
                 return Inactive(queue, "unconfirmed");
             }
 
-            await MarkEvictedAsync(queue.Id, ct);
-            return Inactive(queue, "evicted");
+            // An edit may have committed after discovery read its snapshot and before
+            // the speaker reported an item first introduced in that edit.
+            var evicted = await MarkEvictedAsync(queue.Id, ct, queue.QueueVersion);
+            return Inactive(queue, evicted == 1 ? "evicted" : "unconfirmed");
         }
 
         if (queue.Status == "dispatching")
@@ -246,25 +263,25 @@ public sealed partial class SonosPlaybackController(
             queue.GroupName ?? queue.GroupId,
             "active",
             room.State,
-            new PlaybackOccurrence(
-                item.Id,
-                index,
-                item.Track.Id.ObjectId["TrackU:".Length..],
-                item.Track.Name,
-                item.Track.DurationMillis,
-                item.Track.Artist?.Name,
-                item.Track.Album?.Name,
-                item.Track.ImageUrl
-            ),
+            QueueOccurrence(item, index) with
+            {
+                TrackId = item.Track.Id.ObjectId["TrackU:".Length..],
+            },
             room.PositionMillis,
             room.ObservedAt,
-            items.Length
+            items.Length,
+            queue.QueueVersion,
+            room.QueueVersion
         );
     }
 
-    private Task<int> MarkEvictedAsync(Guid id, CancellationToken ct) =>
+    private Task<int> MarkEvictedAsync(Guid id, CancellationToken ct, long? version = null) =>
         db.Set<SonosQueue>()
-            .Where(row => row.Id == id && row.Status == "loaded")
+            .Where(row =>
+                row.Id == id
+                && row.Status == "loaded"
+                && (version == null || row.QueueVersion == version)
+            )
             .ExecuteUpdateAsync(set => set.SetProperty(row => row.Status, "evicted"), ct);
 
     private static PlaybackView Inactive(SonosQueue queue, string status) =>
@@ -276,7 +293,8 @@ public sealed partial class SonosPlaybackController(
             null,
             null,
             null,
-            null
+            null,
+            QueueVersion: queue.QueueVersion
         );
 
     private static string PlaybackUrl(Guid handle) => $"/v1/integrations/sonos/playback/{handle}";
@@ -294,7 +312,8 @@ public sealed partial class SonosPlaybackController(
         string State,
         string? ItemId,
         int? PositionMillis,
-        DateTimeOffset ObservedAt
+        DateTimeOffset ObservedAt,
+        long? QueueVersion
     );
 
     private sealed record PlaybackView(
@@ -306,7 +325,9 @@ public sealed partial class SonosPlaybackController(
         PlaybackOccurrence? CurrentOccurrence,
         int? PositionMillis,
         DateTimeOffset? ObservedAt,
-        int? QueueLength = null
+        int? QueueLength = null,
+        long? QueueVersion = null,
+        long? SonosQueueVersion = null
     );
 
     private sealed record PlaybackOccurrence(
@@ -317,6 +338,7 @@ public sealed partial class SonosPlaybackController(
         int? DurationMillis,
         string? Artist,
         string? Album,
-        string? ImageUrl
+        string? ImageUrl,
+        string OccurrenceId
     );
 }

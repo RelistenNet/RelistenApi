@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using RelistenUserService.Identity.Entities;
@@ -32,11 +33,21 @@ internal sealed class SonosQueue
     public string RequestHash { get; set; } = "";
     public string CredentialHash { get; set; } = "";
     public string ItemsJson { get; set; } = "";
+    public string RemovedItemsJson { get; set; } = "[]";
+    public long QueueVersion { get; set; } = 1;
+    public long RefreshedQueueVersion { get; set; } = 1;
+    public DateTimeOffset? RefreshAfter { get; set; }
     public DateTimeOffset ExpiresAt { get; set; }
     public DateTimeOffset? DispatchUntil { get; set; }
     public string Status { get; set; } = "dispatching";
     public long? PlaybackEventSequence { get; set; }
     public string? PlaybackEventState { get; set; }
+
+    public QueueTrack[] ReadItems() =>
+        JsonSerializer.Deserialize<QueueTrack[]>(ItemsJson, SonosHandoff.QueueJson)!;
+
+    public RemovedQueueTrack[] ReadRemovedItems() =>
+        JsonSerializer.Deserialize<RemovedQueueTrack[]>(RemovedItemsJson, SonosHandoff.QueueJson)!;
 }
 
 internal sealed class SonosGrantConfiguration : IEntityTypeConfiguration<SonosGrant>
@@ -96,6 +107,7 @@ internal sealed class SonosCommand
     public int? TargetValue { get; set; }
     public bool? TargetMuted { get; set; }
     public bool? PlayOnCompletion { get; set; }
+    public long? QueueVersion { get; set; }
 }
 
 internal sealed class SonosCommandConfiguration : IEntityTypeConfiguration<SonosCommand>

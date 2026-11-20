@@ -187,3 +187,32 @@ The User Service issues a session-scoped `skipToItem` for the observed occurrenc
 On November 19, Alec’s Office reported “Loser” paused after the local server restarted. Discovery recovered the same queue and playhead. The API resumed it and paused it again. After a replacement handoff in the same room, the old handle returned `409` and the replacement kept playing until its own handle paused it. The test suite separately simulated Sonos rejecting the original session between the status read and command.
 
 The Office also loaded a 24-occurrence queue made from real catalog IDs. Starting at the 20th occurrence, the local client paused, sought to 0:42, and moved to the 21st occurrence of the same recording. Repeating the Next request with the same command ID left playback on the 21st occurrence. Previous returned to the 20th. After a seek near its end and resume, Sonos advanced to the 21st without another transport command. The room also reported muted at its new volume and returned to its original level and mute state after the test.
+
+### Editable Sonos queue for mobile
+
+Use the same native bearer token and accounts origin as the playback API. The paths below are relative to `/v1/integrations/sonos`. For Sonos output, render the server queue. The phone queue supplies the initial handoff order.
+
+1. Send `POST /handoffs` with `request_id`, `group_id`, `start_index`, `position_millis`, and `occurrences`. Each occurrence contains `occurrence_id` and `track_id`. Use mobile's stable occurrence identifier, including for duplicated recordings. Send either `occurrences` or `track_ids`. Legacy handoffs still accept `track_ids` and the server assigns occurrence IDs.
+2. After adopting a playback handle, load `GET /playback/{handle}/queue`. The response has `queue_version` (integer), `queue_length`, `refresh_pending` (boolean), and ordered `occurrences`. Each row has `occurrence_id`, `item_id`, `track_id`, `queue_index`, `name`, and optional display values `duration_millis`, `artist`, `album`, and `image_url`. Use the queue response's `track_id` when building edits. A playback response can report a canonical catalog ID after a redirect.
+3. Read `GET /playback/{handle}` for the current item and playhead. `current_occurrence.occurrence_id` joins playback to the queue row. `queue_version` reports the server's version and `sonos_queue_version` reports the version Sonos says it has cached, when available. Refresh the queue when the server version changes or the handle changes.
+
+Submit `PUT /playback/{handle}/queue` for one edit at a time. For example:
+
+```json
+{
+  "command_id": "fc172a6f-5c47-4c8c-b2bb-9bc59b39f19a",
+  "expected_version": 1,
+  "expected_item_id": "7c98ac17-3ff4-40a9-81d2-0f8ff9e3261e",
+  "occurrences": [
+    {"occurrence_id": "playing-entry", "track_id": "track_4rc5e1za2bvsrnnr0edzzj8rfs"},
+    {"occurrence_id": "new-up-next-entry", "track_id": "track_55z7a4qtqec6d5cssxwz7z8cvb"}
+  ]
+}
+```
+
+- Send the full order through the end of the queue. Take `expected_item_id` from playback's `current_occurrence.item_id` and wait to edit until there is a confirmed current item. Keep the prefix through the current track unchanged. **Clear Upcoming** submits just that prefix. Use a fresh occurrence ID for an addition. A removed occurrence ID cannot be reused on that handle, and an existing occurrence cannot switch recordings. The queue accepts up to 5,000 rows.
+- A successful PUT returns `200` with `command_id`, `queue_version`, and `queue_length` for the saved edit. Retry a lost response with the same command ID and body. An identical replay returns the original receipt, including if a later edit has saved a newer version. Read the queue again for the latest order.
+- A `409 sonos_queue_changed` means a newer edit won. A `409 sonos_playback_changed` means the observed track changed before the server checked the edit. Fetch both resources again and let the listener retry their intent. `sonos_queue_current_protected` means the proposed order changes the prefix through the current item. `sonos_queue_history_full` means a new handoff is needed because the current session reached its retained removal limit. Invalid or unavailable occurrences return `422`.
+- Use `expected_queue_version` alongside `expected_item_id` on Next and Previous commands. The server also checks the version between preparing and dispatching these commands.
+- `refresh_pending` means the server still needs to notify Sonos. A delivered notification alone does not confirm that the player loaded the edited window. When Sonos reports an older version or no version, keep the saved order in the tray and treat room synchronization as unconfirmed. Keep every request and retry bound to the initiating account.
+- The server checks the playhead before saving. Sonos can still advance before fetching the edited window. Keep removal of the current item out of the UI. Qualify the boundary race on a speaker before promising that all upcoming edits preserve uninterrupted playback.

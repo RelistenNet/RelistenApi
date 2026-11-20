@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
@@ -23,25 +24,7 @@ public sealed partial class TestMcpHttp
         using var firstCode = await Authorize(fields, cookie);
         var first = await Exchange(Native, NativeRedirect, ReadCode(firstCode));
 
-        using var connect = await Send(
-            new(HttpMethod.Post, nativeBase + "/connect?return_to=mobile")
-            {
-                Headers = { Authorization = new("Bearer", first.Access) },
-            }
-        );
-        var authorization = new Uri(
-            (await Json(connect)).GetProperty("authorization_url").GetString()!
-        );
-        var state = QueryHelpers.ParseQuery(authorization.Query)["state"].ToString();
-        using var callback = await http.GetAsync(
-            QueryHelpers.AddQueryString(
-                sonosOrigin + "/sonos/oauth/callback",
-                new Dictionary<string, string?> { ["state"] = state, ["code"] = "fake-sonos-code" }
-            )
-        );
-        callback
-            .Headers.Location!.OriginalString.Should()
-            .Be("net.relisten.mobile:/sonos/callback?result=connected");
+        await LinkSonos(nativeBase, sonosOrigin, first.Access);
 
         var id = Guid.NewGuid();
         using var started = await PostSonosHandoff(nativeBase, first.Access, id);
@@ -121,6 +104,212 @@ public sealed partial class TestMcpHttp
         using var fourthCode = await Authorize(fields, cookie);
         var fourth = await Exchange(Native, NativeRedirect, ReadCode(fourthCode));
         await VerifyExpiredHandoffCannotTakeOver(upstream, nativeBase, fourth.Access);
+    }
+
+    [Test]
+    public async Task Sonos_queue_edits_preserve_occurrences_and_retry_refresh()
+    {
+        const string sonosOrigin = "https://sonos.example.test";
+        const string nativeBase = AccountsOrigin + "/v1/integrations/sonos";
+        const string track = "track_4rc5e1za2bvsrnnr0edzzj8rfs";
+        using var upstream = new TestSonosDevelopment.TestUpstream { RejectFirstRefresh = true };
+        await StartApp(mountCatalog: false, sonos: upstream);
+        var fields = AuthorizeFields(Native, NativeRedirect, ReadScopes + " account.manage");
+        using var code = await Authorize(fields, await SignIn(fields));
+        var login = await Exchange(Native, NativeRedirect, ReadCode(code));
+        await LinkSonos(nativeBase, sonosOrigin, login.Access);
+
+        var handle = Guid.NewGuid();
+        var queueUrl = $"{nativeBase}/playback/{handle}/queue";
+        var playerUrl = $"{sonosOrigin}/sonos/cloud-queue/{handle}/v2.3";
+        using var started = await SendJson(
+            HttpMethod.Post,
+            nativeBase + "/handoffs",
+            login.Access,
+            new
+            {
+                request_id = handle,
+                group_id = "office",
+                start_index = 0,
+                position_millis = 1000,
+                occurrences = new[] { "a", "b", "c" }.Select(key => new
+                {
+                    occurrence_id = key,
+                    track_id = track,
+                }),
+            }
+        );
+        started.StatusCode.Should().Be(HttpStatusCode.OK);
+        var credential = upstream.Load.GetProperty("httpAuthorization").GetString()!;
+        using var initial = await Get(queueUrl, login.Access);
+        var oldItems = (await Json(initial)).GetProperty("occurrences");
+        var a = oldItems[0].GetProperty("item_id").GetString()!;
+        var b = oldItems[1].GetProperty("item_id").GetString()!;
+        var c = oldItems[2].GetProperty("item_id").GetString()!;
+        a.Should().NotBe(b);
+
+        var edit = new
+        {
+            command_id = Guid.NewGuid(),
+            expected_version = 1,
+            expected_item_id = a,
+            occurrences = new[] { "a", "c", "d" }.Select(key => new
+            {
+                occurrence_id = key,
+                track_id = track,
+            }),
+        };
+        upstream.RoomItem = b;
+        using var moved = await SendJson(HttpMethod.Put, queueUrl, login.Access, edit);
+        moved.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await moved.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("code")
+            .GetString()
+            .Should()
+            .Be("sonos_playback_changed");
+        upstream.RoomItem = a;
+        using var saved = await SendJson(HttpMethod.Put, queueUrl, login.Access, edit);
+        saved.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await Json(saved)).GetProperty("queue_version").GetInt64().Should().Be(2);
+        using var replay = await SendJson(HttpMethod.Put, queueUrl, login.Access, edit);
+        (await Json(replay)).GetProperty("queue_version").GetInt64().Should().Be(2);
+        using var stale = await SendJson(
+            HttpMethod.Put,
+            queueUrl,
+            login.Access,
+            edit with
+            {
+                command_id = Guid.NewGuid(),
+            }
+        );
+        stale.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await stale.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("code")
+            .GetString()
+            .Should()
+            .Be("sonos_queue_changed");
+        using var protectedCurrent = await SendJson(
+            HttpMethod.Put,
+            queueUrl,
+            login.Access,
+            edit with
+            {
+                command_id = Guid.NewGuid(),
+                expected_version = 2,
+                occurrences = edit.occurrences.Skip(1),
+            }
+        );
+        (await protectedCurrent.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("code")
+            .GetString()
+            .Should()
+            .Be("sonos_queue_current_protected");
+
+        using var edited = await Get(queueUrl, login.Access);
+        var items = (await Json(edited)).GetProperty("occurrences");
+        items
+            .EnumerateArray()
+            .Select(item => item.GetProperty("occurrence_id").GetString())
+            .Should()
+            .Equal("a", "c", "d");
+        items[0].GetProperty("item_id").GetString().Should().Be(a);
+        items[1].GetProperty("item_id").GetString().Should().Be(c);
+        using var version = await Get(playerUrl + "/version", credential);
+        (await Json(version)).GetProperty("queueVersion").GetString().Should().Be("2");
+        using var deletedAnchor = await Get(
+            playerUrl + "/itemWindow?itemId=" + b + "&previousWindowSize=1",
+            credential
+        );
+        var playerItems = (await Json(deletedAnchor)).GetProperty("items");
+        playerItems[0].GetProperty("id").GetString().Should().Be(a);
+        playerItems[1].GetProperty("id").GetString().Should().Be(b);
+        playerItems[1].GetProperty("deleted").GetBoolean().Should().BeTrue();
+        playerItems[2].GetProperty("id").GetString().Should().Be(c);
+
+        using var staleNext = await SendJson(
+            HttpMethod.Post,
+            $"{nativeBase}/playback/{handle}/commands",
+            login.Access,
+            new
+            {
+                action = "next",
+                command_id = Guid.NewGuid(),
+                expected_item_id = a,
+                expected_queue_version = 1,
+            }
+        );
+        staleNext.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await staleNext.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("code")
+            .GetString()
+            .Should()
+            .Be("sonos_queue_changed");
+        upstream.TransportPaths.Should().BeEmpty();
+
+        upstream.RoomItem = b;
+        using var removedItem = await Get($"{nativeBase}/playback/{handle}", login.Access);
+        (await Json(removedItem)).GetProperty("status").GetString().Should().Be("unconfirmed");
+        upstream.RoomItem = c;
+        using var successor = await Get($"{nativeBase}/playback/{handle}", login.Access);
+        (await Json(successor))
+            .GetProperty("current_occurrence")
+            .GetProperty("occurrence_id")
+            .GetString()
+            .Should()
+            .Be("c");
+
+        var deadline = DateTime.UtcNow.AddSeconds(18);
+        bool refreshPending;
+        do
+        {
+            using var observed = await Get(queueUrl, login.Access);
+            refreshPending = (await Json(observed)).GetProperty("refresh_pending").GetBoolean();
+            if (refreshPending)
+            {
+                await Task.Delay(250);
+            }
+        } while (refreshPending && DateTime.UtcNow < deadline);
+        refreshPending.Should().BeFalse();
+        upstream.RefreshCount.Should().Be(2);
+        upstream.LoadCount.Should().Be(1);
+        upstream.RoomPosition.Should().Be(1000);
+    }
+
+    private Task<HttpResponseMessage> SendJson(
+        HttpMethod method,
+        string url,
+        string token,
+        object body
+    ) =>
+        Send(
+            new HttpRequestMessage(method, url)
+            {
+                Headers = { Authorization = new("Bearer", token) },
+                Content = JsonContent.Create(body),
+            }
+        );
+
+    private async Task LinkSonos(string nativeBase, string sonosOrigin, string token)
+    {
+        using var connect = await Send(
+            new(HttpMethod.Post, nativeBase + "/connect?return_to=mobile")
+            {
+                Headers = { Authorization = new("Bearer", token) },
+            }
+        );
+        var authorization = new Uri(
+            (await Json(connect)).GetProperty("authorization_url").GetString()!
+        );
+        var state = QueryHelpers.ParseQuery(authorization.Query)["state"].ToString();
+        using var callback = await http.GetAsync(
+            QueryHelpers.AddQueryString(
+                sonosOrigin + "/sonos/oauth/callback",
+                new Dictionary<string, string?> { ["state"] = state, ["code"] = "fake-sonos-code" }
+            )
+        );
+        callback
+            .Headers.Location!.OriginalString.Should()
+            .Be("net.relisten.mobile:/sonos/callback?result=connected");
     }
 
     private async Task VerifyExpiredHandoffCannotTakeOver(

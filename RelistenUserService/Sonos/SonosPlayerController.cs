@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -75,13 +76,13 @@ public sealed class SonosPlayerController(
 
     [HttpGet("cloud-queue/{queueId:guid}/v2.3/context")]
     public async Task<IActionResult> Context(Guid queueId, CancellationToken ct) =>
-        await AuthorizedQueueAsync(queueId, ct) is null
+        await AuthorizedQueueAsync(queueId, ct) is not { } queue
             ? NotFound()
             : PlayerJson(
                 new
                 {
                     contextVersion = "1",
-                    queueVersion = "1",
+                    queueVersion = queue.QueueVersion.ToString(CultureInfo.InvariantCulture),
                     container = new { name = "Relisten Dev", type = "trackList" },
                     playbackPolicies = new { canShuffle = false, canCrossfade = false },
                 }
@@ -89,9 +90,15 @@ public sealed class SonosPlayerController(
 
     [HttpGet("cloud-queue/{queueId:guid}/v2.3/version")]
     public async Task<IActionResult> Version(Guid queueId, CancellationToken ct) =>
-        await AuthorizedQueueAsync(queueId, ct) is null
+        await AuthorizedQueueAsync(queueId, ct) is not { } queue
             ? NotFound()
-            : PlayerJson(new { contextVersion = "1", queueVersion = "1" });
+            : PlayerJson(
+                new
+                {
+                    contextVersion = "1",
+                    queueVersion = queue.QueueVersion.ToString(CultureInfo.InvariantCulture),
+                }
+            );
 
     [HttpGet("cloud-queue/{queueId:guid}/v2.3/itemWindow")]
     public async Task<IActionResult> ItemWindow(
@@ -108,30 +115,52 @@ public sealed class SonosPlayerController(
             return NotFound();
         }
 
-        var items = JsonSerializer.Deserialize<QueueTrack[]>(
-            queue.ItemsJson,
-            SonosHandoff.QueueJson
-        )!;
-        var center = string.IsNullOrEmpty(itemId)
-            ? 0
-            : Array.FindIndex(items, item => item.Id == itemId);
+        var items = queue.ReadItems().ToList();
+        var center = string.IsNullOrEmpty(itemId) ? 0 : items.FindIndex(item => item.Id == itemId);
+        string? deletedId = null;
         if (center < 0)
         {
-            return NotFound();
+            var removed = queue
+                .ReadRemovedItems()
+                .ToDictionary(entry => entry.Item.Id, StringComparer.Ordinal);
+            if (itemId is null || !removed.TryGetValue(itemId, out var deleted))
+            {
+                return NotFound();
+            }
+
+            // Insert the requested tombstone after its closest surviving predecessor.
+            // Later removals can retire that predecessor, so follow their anchors too.
+            var afterId = deleted.AfterItemId;
+            while (afterId is not null && removed.TryGetValue(afterId, out var predecessor))
+            {
+                afterId = predecessor.AfterItemId;
+            }
+
+            center = afterId is null ? 0 : items.FindIndex(item => item.Id == afterId) + 1;
+            items.Insert(center, deleted.Item);
+            deletedId = itemId;
         }
 
         var before = Math.Clamp(previousWindowSize, 0, center);
-        var after = Math.Clamp(upcomingWindowSize, 0, items.Length - center - 1);
+        var after = Math.Clamp(upcomingWindowSize, 0, items.Count - center - 1);
         var start = center - before;
         var end = center + after + 1;
         return PlayerJson(
             new
             {
                 contextVersion = "1",
-                queueVersion = "1",
-                items = items[start..end],
+                queueVersion = queue.QueueVersion.ToString(CultureInfo.InvariantCulture),
+                items = items
+                    .Skip(start)
+                    .Take(end - start)
+                    .Select(item => new
+                    {
+                        item.Id,
+                        item.Track,
+                        deleted = item.Id == deletedId,
+                    }),
                 includesBeginningOfQueue = start == 0,
-                includesEndOfQueue = end == items.Length,
+                includesEndOfQueue = end == items.Count,
             }
         );
     }

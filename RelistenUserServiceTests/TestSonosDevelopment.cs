@@ -557,6 +557,8 @@ public sealed class TestSonosDevelopment
         public JsonElement Load { get; private set; }
         public int LoadCount { get; private set; }
         public int CreateCount { get; private set; }
+        public int RefreshCount { get; private set; }
+        public bool RejectFirstRefresh { get; set; }
         public bool LoseNextCreateResponse { get; set; }
         public bool RejectNextLoad { get; set; }
         public HttpStatusCode MissingRoomStatus { get; set; } = HttpStatusCode.NotFound;
@@ -570,7 +572,7 @@ public sealed class TestSonosDevelopment
         public string RoomState { get; set; } = "PLAYBACK_STATE_PLAYING";
         public bool EvictOnNextCommand { get; set; }
         public bool LoseNextTransportResponse { get; set; }
-        public string? RoomItem { get; private set; }
+        public string? RoomItem { get; set; }
         public int RoomPosition { get; private set; }
         public int RoomVolume { get; private set; } = 17;
         public bool RoomMuted { get; set; }
@@ -620,6 +622,16 @@ public sealed class TestSonosDevelopment
                 }
 
                 return new HttpResponseMessage(HttpStatusCode.OK);
+            }
+
+            if (path.EndsWith("/refreshCloudQueue", StringComparison.Ordinal))
+            {
+                RefreshCount++;
+                return new HttpResponseMessage(
+                    RejectFirstRefresh && RefreshCount == 1
+                        ? HttpStatusCode.ServiceUnavailable
+                        : HttpStatusCode.OK
+                );
             }
 
             if (path == "/control/api/v1/playbackSessions/test-session/playbackSession/skipToItem")
