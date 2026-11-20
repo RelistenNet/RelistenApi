@@ -7,9 +7,15 @@ namespace RelistenUserService.Persistence.Migrations
     /// <inheritdoc />
     public partial class DropUserDataEnumChecks : Migration
     {
+        // Account deletion writes to identity.users before cascading into these tables.
+        // Wait for it at the parent table before taking exclusive locks on the children.
+        private const string LockAgainstAccountDeletion =
+            "LOCK TABLE identity.users IN SHARE MODE;";
+
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.Sql(LockAgainstAccountDeletion);
             ReplacePlaylistRevisionCheck(migrationBuilder, "revision > 1 AND change_count > 0");
 
             migrationBuilder.DropCheckConstraint(
@@ -53,6 +59,7 @@ namespace RelistenUserService.Persistence.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.Sql(LockAgainstAccountDeletion);
             ReplacePlaylistRevisionCheck(
                 migrationBuilder,
                 "revision > 1 AND change_count > 0 AND kind IN ('content', 'rebalance')"
