@@ -132,7 +132,7 @@ Use the local User Service on `codex/sonos-direct-control` with its accounts mig
 | `GET /groups` | Lists `household_id`, `id`, and `name` for each authorized group. Use the group ID the listener chose. |
 | `POST /handoffs` | Submits the ordered catalog track IDs and current position. See the body and receipt below. |
 | `GET /handoffs/{request_id}` | Follows a pending handoff. The same selection and request UUID can also be submitted again after a lost response. |
-| `GET /playback` | Lists currently confirmed Relisten-owned playback. Use this to restore the room when the app reopens. |
+| `GET /playback` | Returns a JSON array of currently confirmed Relisten-owned playback objects. An empty array means there are no confirmed rooms. Use this to restore playback when the app reopens. |
 | `GET /playback/{handle}` | Returns `playback_handle`, `group_id`, `group_name`, `status`, and `queue_length`. An active result includes `playback_state`, `position_millis`, `observed_at`, and `current_occurrence` with `item_id`, zero-based `queue_index`, `track_id`, and display metadata. Disable transport during `unconfirmed` and release the destination on `evicted`. |
 | `GET /playback/{handle}/volume` | Returns `volume` (0–100), `muted`, and `fixed`. These describe the entire selected group. |
 | `POST /playback/{handle}/commands` | Submit a command with a client-generated UUID in `command_id`. A `202` returns a receipt and its URL in `Location`. |
@@ -154,7 +154,7 @@ Send the mobile queue's effective order after segment-aware shuffle, including r
 
 Handoff receipts contain `request_id` (UUID), `status`, `playback_handle` (UUID or null), and `playback_event_state` (string or null). On `202 dispatching`, poll `Location` and keep local playback paused while the outcome is unknown. On `200 loaded`, adopt the returned handle and refresh its playback state. Resume the prior local source automatically only on a definitive refusal before takeover, such as `failed` or a first submission rejected with `422`. Treat `interrupted`, `evicted`, `revoked`, lost responses, and unrecognized success bodies conservatively. Check the receipt or discovery again before letting the listener explicitly choose a room or resume on the phone.
 
-A `409 sonos_handoff_busy` means a request already reserves the room. The dispatch reservation lasts 45 seconds. A Sonos call already in flight may finish or time out under the room lock. After the reservation expires, receipt polling can still recognize a load that reached Sonos. An identical POST returns the saved status, and `GET /handoffs/{request_id}` reads the room to reconcile it. A new UUID represents a new listener action. Queue access and receipts expire after 24 hours for newly created queues. Bind every retry and poll to the initiating Relisten account scope and discard its results on account switch.
+A `409 sonos_handoff_busy` means a request already reserves the room. The busy response proves this submission did not take over. Resume the phone after a busy response only if there is no earlier attempt whose outcome remains uncertain. If there is one, keep the phone paused and check that receipt and discovery. The dispatch reservation lasts 45 seconds. A Sonos call already in flight may finish or time out under the room lock. After the reservation expires, receipt polling can still recognize a load that reached Sonos. An identical POST returns the saved status, and `GET /handoffs/{request_id}` reads the room to reconcile it. A new UUID represents a new listener action. Queue access and receipts expire after 24 hours for newly created queues. Bind every retry and poll to the initiating Relisten account scope and discard its results on account switch.
 
 An active playback response includes `current_occurrence` with `item_id`, `queue_index`, `track_id`, `name`, `duration_millis`, `artist`, `album`, and `image_url`. Duration, artist, album and art can be null. `position_millis` can also be null. Use `observed_at` (ISO 8601) for playhead estimation. Inactive responses may have null `playback_state`, `position_millis`, `observed_at`, `queue_length`, and `current_occurrence`. Treat `unconfirmed` as temporary and disable controls. Release local ownership of the handle on `evicted`, `revoked`, `failed`, `interrupted`, or when a direct read returns `404`.
 
@@ -164,6 +164,19 @@ Command fields by action:
 - `seek` requires `expected_item_id` and an absolute `position_millis` within the track.
 - `next` and `previous` require `expected_item_id`. The server moves one position in the submitted queue and preserves the room’s playing or paused state. Disable either action at its queue boundary.
 - `volume` requires an integer `volume` from 0 to 100. `mute` requires boolean `muted`. Send the final slider value and refresh the group's volume after a change. These commands target the group. A switch of sources after the server reads the room can affect the new source, and a volume update can overwrite a simultaneous external mute change.
+
+For example, send this body to `POST /playback/{handle}/commands` for an absolute seek:
+
+```json
+{
+  "action": "seek",
+  "command_id": "49290543-f7ef-4a77-b935-656082697e74",
+  "expected_item_id": "f2918294-eb5b-47cf-93c8-c45e34df2fb7",
+  "position_millis": 42000
+}
+```
+
+Use the current occurrence's actual `item_id`. Errors can return a JSON object with a `code` and, for some rejected commands, `command_id`. Other errors can return Problem Details or an empty response. Branch on the HTTP status and the optional `code`.
 
 A receipt contains `command_id`, `status`, `code`, `target_item_id`, and `playback_url`. `accepted` means Sonos acknowledged the request. `confirmed` means the server observed the desired state. `pending` means the effect is unknown, so refresh the visible controls from the room. An ambiguous seek can stay pending if the playhead has already moved. Retry an interrupted request with the same UUID and body. This retrieves or reconciles the receipt without reissuing a recorded command. Reusing the UUID with a different body returns `409 sonos_command_id_conflict`. Refresh the room on `409 sonos_playback_changed` or `sonos_playback_inactive`. Disable seek if position or duration is unavailable, and disable volume if `fixed` is true. Send one change at a time. A newer valid command for the same queue can supersede an unresolved receipt. On `sonos_reconnect_required`, refresh the link and offer Connect Sonos again.
 
