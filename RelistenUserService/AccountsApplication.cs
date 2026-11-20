@@ -13,6 +13,7 @@ using RelistenUserService.Identity.Deletion;
 using RelistenUserService.Mcp;
 using RelistenUserService.Persistence;
 using RelistenUserService.Playlists;
+using RelistenUserService.Sonos;
 using Temporalio.Extensions.Hosting;
 
 namespace RelistenUserService;
@@ -77,6 +78,38 @@ public static class AccountsApplication
             client.BaseAddress = new Uri(runtime.Options.CatalogBaseUrl.TrimEnd('/') + "/");
             client.Timeout = TimeSpan.FromSeconds(10);
         });
+
+        var sonos = runtime.IsLocalDevelopment
+            ? SonosConfiguration.Read(builder.Configuration, builder.Environment)
+            : null;
+        builder.Services.AddSingleton(new SonosDevelopment(sonos));
+        if (sonos is not null)
+        {
+            builder.Services.PostConfigure<Microsoft.AspNetCore.HostFiltering.HostFilteringOptions>(
+                options => options.AllowedHosts = [.. options.AllowedHosts, sonos.PublicBase.Host]
+            );
+            builder.Services.Configure<ForwardedHeadersOptions>(options =>
+                options.AllowedHosts.Add(sonos.PublicBase.Host)
+            );
+        }
+        builder.Services.AddScoped<SonosAccountLink>();
+        builder.Services.AddScoped<SonosHandoff>();
+        builder
+            .Services.AddHttpClient<SonosProtocol>(client =>
+                client.Timeout = TimeSpan.FromSeconds(10)
+            )
+            .RemoveAllLoggers()
+            .ConfigurePrimaryHttpMessageHandler(() =>
+                new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false }
+            );
+        builder.Services.AddHttpClient(
+            "SonosCatalog",
+            client =>
+            {
+                client.BaseAddress = new Uri(runtime.Options.CatalogBaseUrl.TrimEnd('/') + "/");
+                client.Timeout = TimeSpan.FromSeconds(5);
+            }
+        );
 
         builder.Services.AddScoped<PlaylistDurationBackfill>();
         builder.Services.AddHostedService<PlaylistDurationStartupBackfill>();

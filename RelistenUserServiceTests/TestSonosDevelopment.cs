@@ -1,0 +1,264 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using FluentAssertions;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.EntityFrameworkCore;
+using NUnit.Framework;
+using OpenIddict.EntityFrameworkCore.Models;
+using RelistenUserService.Authentication.Authorization;
+using RelistenUserService.Identity.Entities;
+using RelistenUserService.Persistence;
+using RelistenUserService.Sonos;
+
+namespace RelistenUserServiceTests;
+
+[TestFixture]
+public sealed class TestSonosDevelopment
+{
+    private const string Track = "track_4rc5e1za2bvsrnnr0edzzj8rfs";
+    private const string Host = "sonos-dev.example";
+    private static readonly CancellationToken Ct = CancellationToken.None;
+
+    [Test]
+    public async Task Linked_account_loads_an_ordered_queue_and_observes_a_signed_pause()
+    {
+        var database = new PostgresIntegrationDatabase();
+        try
+        {
+            await database.StartAsync();
+            await ExerciseAsync(database);
+        }
+        finally
+        {
+            await database.StopAsync();
+        }
+    }
+
+    private static async Task ExerciseAsync(PostgresIntegrationDatabase database)
+    {
+        var userId = await database.CreateUserAsync("sonos_test");
+        var nativeId = SessionId.New();
+        await using var db = database.CreateContext();
+        var user = await db.Users.SingleAsync(row => row.Id == userId);
+        var authorizationId = Guid.CreateVersion7();
+        db.Add(new OpenIddictEntityFrameworkCoreAuthorization<Guid> { Id = authorizationId });
+        db.NativeSessions.Add(
+            new NativeSession
+            {
+                Id = nativeId,
+                UserId = userId,
+                AuthorizationId = authorizationId,
+                SecurityVersion = user.SecurityVersion,
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow,
+                LastUsedAt = DateTimeOffset.UtcNow,
+                AbsoluteExpiresAt = DateTimeOffset.UtcNow.AddDays(1),
+            }
+        );
+        await db.SaveChangesAsync();
+
+        var upstream = new TestUpstream();
+        using var http = new HttpClient(upstream);
+        using var catalog = new HttpClient(upstream, disposeHandler: false)
+        {
+            BaseAddress = new Uri("https://catalog.example/"),
+        };
+        var protocol = new SonosProtocol(http);
+        var locks = new AdvisoryLockService(db);
+        var link = new SonosAccountLink(
+            db,
+            protocol,
+            new EphemeralDataProtectionProvider(),
+            locks,
+            TimeProvider.System
+        );
+        var handoff = new SonosHandoff(
+            db,
+            locks,
+            protocol,
+            new ClientFactory(catalog),
+            TimeProvider.System
+        );
+        var development = new SonosDevelopment(
+            new SonosConfiguration("dev-id", "dev-secret", new Uri($"https://{Host}/"), "270")
+        );
+        var account = new CurrentAccountContext();
+        account.SetNative(user, nativeId);
+        var control = new SonosControlController(
+            account,
+            development,
+            link,
+            handoff,
+            db,
+            TimeProvider.System
+        );
+        var player = new SonosPlayerController(db, link, TimeProvider.System, development)
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
+        };
+        player.Request.Host = new HostString(Host);
+
+        var authorization = AsJson((OkObjectResult)await control.Connect(Ct))
+            .GetProperty("authorization_url")
+            .GetString()!;
+        var state = QueryHelpers.ParseQuery(new Uri(authorization).Query)["state"].ToString();
+        (await player.Callback(state, "one-time-code", Ct)).Should().BeOfType<ContentResult>();
+        (await player.Callback(state, "one-time-code", Ct))
+            .Should()
+            .BeOfType<BadRequestObjectResult>();
+
+        var groups = AsJson((OkObjectResult)await control.Groups(Ct));
+        groups[0].GetProperty("name").GetString().Should().Be("Office");
+        var request = new SonosHandoffRequest(
+            Guid.CreateVersion7(),
+            "office",
+            [Track, Track],
+            1,
+            1234
+        );
+        (await control.Start(request, Ct)).Should().BeOfType<OkObjectResult>();
+        (await control.Start(request, Ct)).Should().BeOfType<OkObjectResult>();
+        upstream.LoadCount.Should().Be(1);
+        upstream.Load.GetProperty("positionMillis").GetInt32().Should().Be(1234);
+        upstream
+            .Load.GetProperty("queueBaseUrl")
+            .GetString()
+            .Should()
+            .Be($"https://{Host}/sonos/cloud-queue/{request.RequestId}/v2.3/");
+
+        (await player.ItemWindow(request.RequestId, null, ct: Ct))
+            .Should()
+            .BeOfType<NotFoundResult>();
+        player.Request.Headers.Authorization = upstream
+            .Load.GetProperty("httpAuthorization")
+            .GetString();
+        var window = (JsonResult)await player.ItemWindow(request.RequestId, null, ct: Ct);
+        var items = JsonSerializer
+            .SerializeToElement(window.Value, (JsonSerializerOptions)window.SerializerSettings!)
+            .GetProperty("items");
+        items.GetArrayLength().Should().Be(2);
+        items[0].GetProperty("id").Should().NotBe(items[1].GetProperty("id"));
+        items[1]
+            .GetProperty("id")
+            .GetString()
+            .Should()
+            .Be(upstream.Load.GetProperty("itemId").GetString());
+        items[0]
+            .GetProperty("track")
+            .GetProperty("id")
+            .GetProperty("objectId")
+            .GetString()
+            .Should()
+            .Be($"TrackU:{Track}");
+
+        player.Request.Headers["X-Sonos-Event-Seq-Id"] = "9";
+        player.Request.Headers["X-Sonos-Namespace"] = "playback";
+        player.Request.Headers["X-Sonos-Type"] = "playbackStatus";
+        player.Request.Headers["X-Sonos-Target-Type"] = "groupId";
+        player.Request.Headers["X-Sonos-Target-Value"] = "office";
+        player.Request.Headers["X-Sonos-Household-Id"] = "home";
+        var pause = JsonSerializer.SerializeToElement(
+            new
+            {
+                playbackState = "PLAYBACK_STATE_PAUSED",
+                itemId = upstream.Load.GetProperty("itemId").GetString(),
+            }
+        );
+        (await player.Events(pause, Ct)).Should().BeOfType<UnauthorizedResult>();
+        player.Request.Headers["X-Sonos-Event-Signature"] = WebEncoders.Base64UrlEncode(
+            SHA256.HashData(
+                Encoding.UTF8.GetBytes("9playbackplaybackStatusgroupIdofficedev-iddev-secret")
+            )
+        );
+        (await player.Events(pause, Ct)).Should().BeOfType<OkResult>();
+        var playback = AsJson((OkObjectResult)await control.GetHandoff(request.RequestId, Ct));
+        playback
+            .GetProperty("playback_event_state")
+            .GetString()
+            .Should()
+            .Be("PLAYBACK_STATE_PAUSED");
+
+        upstream.LoseNextLoadResponse = true;
+        var interrupted = request with { RequestId = Guid.CreateVersion7() };
+        (await control.Start(interrupted, Ct)).Should().BeOfType<AcceptedAtActionResult>();
+        (await control.Start(interrupted, Ct)).Should().BeOfType<AcceptedAtActionResult>();
+        var recovered = AsJson((OkObjectResult)await control.GetHandoff(interrupted.RequestId, Ct));
+        recovered.GetProperty("status").GetString().Should().Be("loaded");
+        upstream.LoadCount.Should().Be(2);
+
+        await db
+            .NativeSessions.Where(row => row.Id == nativeId)
+            .ExecuteUpdateAsync(update =>
+                update.SetProperty(row => row.RevokedAt, DateTimeOffset.UtcNow)
+            );
+        (await player.ItemWindow(request.RequestId, null, ct: Ct))
+            .Should()
+            .BeOfType<NotFoundResult>();
+    }
+
+    private static JsonElement AsJson(OkObjectResult response) =>
+        JsonSerializer.SerializeToElement(
+            response.Value,
+            new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower }
+        );
+
+    private sealed class ClientFactory(HttpClient catalog) : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => catalog;
+    }
+
+    private sealed class TestUpstream : HttpMessageHandler
+    {
+        public JsonElement Load { get; private set; }
+        public int LoadCount { get; private set; }
+        public bool LoseNextLoadResponse { get; set; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken ct
+        )
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            if (path.EndsWith("/loadCloudQueue", StringComparison.Ordinal))
+            {
+                LoadCount++;
+                Load = await request.Content!.ReadFromJsonAsync<JsonElement>(ct);
+                if (LoseNextLoadResponse)
+                {
+                    LoseNextLoadResponse = false;
+                    throw new HttpRequestException("The load response was interrupted.");
+                }
+
+                return new HttpResponseMessage(HttpStatusCode.OK);
+            }
+
+            var content = path switch
+            {
+                "/login/v3/oauth/access" =>
+                    """{"access_token":"access","refresh_token":"refresh","expires_in":3600}""",
+                "/control/api/v1/households" => """{"households":[{"id":"home"}]}""",
+                "/control/api/v1/households/home/groups" =>
+                    """{"groups":[{"id":"office","name":"Office"}]}""",
+                "/control/api/v1/groups/office/playback" => JsonSerializer.Serialize(
+                    new { itemId = Load.GetProperty("itemId").GetString() }
+                ),
+                "/control/api/v1/groups/office/playback/subscription" => "{}",
+                "/control/api/v1/groups/office/playbackSession" =>
+                    """{"sessionId":"test-session"}""",
+                $"/api/v4/source-tracks/{Track}" =>
+                    $$"""{"id":"{{Track}}","title":"Minglewood Blues","duration":381,"mp3_url":"https://archive.example/track.mp3"}""",
+                _ => throw new InvalidOperationException($"Unexpected upstream request {path}"),
+            };
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(content, Encoding.UTF8, "application/json"),
+            };
+        }
+    }
+}

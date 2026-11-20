@@ -1301,6 +1301,119 @@ namespace RelistenUserService.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("RelistenUserService.Sonos.SonosGrant", b =>
+                {
+                    b.Property<string>("UserId")
+                        .HasColumnType("text")
+                        .HasColumnName("user_id");
+
+                    b.Property<string>("ProtectedToken")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("protected_token");
+
+                    b.HasKey("UserId");
+
+                    b.ToTable("sonos_grants", "user_data");
+                });
+
+            modelBuilder.Entity("RelistenUserService.Sonos.SonosOAuthState", b =>
+                {
+                    b.Property<string>("Hash")
+                        .HasColumnType("text")
+                        .HasColumnName("hash");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<string>("SessionId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("session_id");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Hash");
+
+                    b.HasIndex("ExpiresAt");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("sonos_oauth_states", "user_data");
+                });
+
+            modelBuilder.Entity("RelistenUserService.Sonos.SonosQueue", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("CredentialHash")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("credential_hash");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<string>("GroupId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("group_id");
+
+                    b.Property<string>("HouseholdId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("household_id");
+
+                    b.Property<string>("ItemsJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("items_json");
+
+                    b.Property<long?>("PlaybackEventSequence")
+                        .HasColumnType("bigint")
+                        .HasColumnName("playback_event_sequence");
+
+                    b.Property<string>("PlaybackEventState")
+                        .HasColumnType("text")
+                        .HasColumnName("playback_event_state");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("request_hash");
+
+                    b.Property<string>("SessionId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("session_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GroupId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("sonos_queues", "user_data");
+                });
+
             modelBuilder.Entity("OpenIddict.EntityFrameworkCore.Models.OpenIddictEntityFrameworkCoreAuthorization<System.Guid>", b =>
                 {
                     b.HasOne("OpenIddict.EntityFrameworkCore.Models.OpenIddictEntityFrameworkCoreApplication<System.Guid>", "Application")
@@ -1500,6 +1613,33 @@ namespace RelistenUserService.Persistence.Migrations
                     b.HasOne("RelistenUserService.Playlists.Entities.Playlist", null)
                         .WithMany()
                         .HasForeignKey("PlaylistId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("RelistenUserService.Sonos.SonosGrant", b =>
+                {
+                    b.HasOne("RelistenUserService.Identity.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("RelistenUserService.Sonos.SonosOAuthState", b =>
+                {
+                    b.HasOne("RelistenUserService.Identity.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("RelistenUserService.Sonos.SonosQueue", b =>
+                {
+                    b.HasOne("RelistenUserService.Identity.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
