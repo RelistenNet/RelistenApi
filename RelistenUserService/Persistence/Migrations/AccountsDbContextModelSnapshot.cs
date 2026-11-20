@@ -1367,6 +1367,10 @@ namespace RelistenUserService.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("group_id");
 
+                    b.Property<string>("GroupName")
+                        .HasColumnType("text")
+                        .HasColumnName("group_name");
+
                     b.Property<string>("HouseholdId")
                         .IsRequired()
                         .HasColumnType("text")
@@ -1394,6 +1398,10 @@ namespace RelistenUserService.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("session_id");
+
+                    b.Property<string>("SonosSessionId")
+                        .HasColumnType("text")
+                        .HasColumnName("sonos_session_id");
 
                     b.Property<string>("Status")
                         .IsRequired()

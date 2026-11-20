@@ -201,10 +201,80 @@ public sealed class TestSonosDevelopment
             .Should()
             .Be("PLAYBACK_STATE_PAUSED");
 
+        var playbackApi = new SonosPlaybackController(
+            account,
+            development,
+            link,
+            protocol,
+            db,
+            locks,
+            TimeProvider.System
+        )
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
+        };
+        var handle = request.RequestId;
+        playback.GetProperty("playback_handle").GetGuid().Should().Be(handle);
+        upstream.RoomState = "PLAYBACK_STATE_PAUSED";
+        var active = AsJson((OkObjectResult)await playbackApi.List(Ct));
+        active.GetArrayLength().Should().Be(1);
+        active[0].GetProperty("group_name").GetString().Should().Be("Office");
+        active[0].GetProperty("playback_state").GetString().Should().Be("PLAYBACK_STATE_PAUSED");
+        active[0]
+            .GetProperty("current_occurrence")
+            .GetProperty("queue_index")
+            .GetInt32()
+            .Should()
+            .Be(1);
+        active[0]
+            .GetProperty("current_occurrence")
+            .GetProperty("track_id")
+            .GetString()
+            .Should()
+            .Be(Track);
+        active[0].GetProperty("position_millis").GetInt32().Should().Be(1234);
+
+        (await playbackApi.Command(handle, new("play"), Ct)).Should().BeOfType<AcceptedResult>();
+        AsJson((OkObjectResult)await playbackApi.GetPlayback(handle, Ct))
+            .GetProperty("playback_state")
+            .GetString()
+            .Should()
+            .Be("PLAYBACK_STATE_PLAYING");
+        (await playbackApi.Command(handle, new("pause"), Ct)).Should().BeOfType<AcceptedResult>();
+        AsJson((OkObjectResult)await playbackApi.GetPlayback(handle, Ct))
+            .GetProperty("playback_state")
+            .GetString()
+            .Should()
+            .Be("PLAYBACK_STATE_PAUSED");
+
+        // Change the room after the ownership read. Sonos must receive the old
+        // session ID and get the opportunity to reject it rather than pause that room.
+        upstream.EvictOnNextCommand = true;
+        (await playbackApi.Command(handle, new("play"), Ct))
+            .Should()
+            .BeOfType<ConflictObjectResult>();
+        (await playbackApi.Command(handle, new("pause"), Ct))
+            .Should()
+            .BeOfType<ConflictObjectResult>();
+        upstream.TransportPaths.Should().Equal("play", "pause", "play");
+        AsJson((OkObjectResult)await playbackApi.GetPlayback(handle, Ct))
+            .GetProperty("status")
+            .GetString()
+            .Should()
+            .Be("evicted");
+        AsJson((OkObjectResult)await playbackApi.List(Ct)).GetArrayLength().Should().Be(0);
+
         upstream.LoseNextLoadResponse = true;
         var interrupted = request with { RequestId = Guid.CreateVersion7() };
         (await control.Start(interrupted, Ct)).Should().BeOfType<AcceptedAtActionResult>();
         (await control.Start(interrupted, Ct)).Should().BeOfType<AcceptedAtActionResult>();
+        var recoveredAfterReconnect = AsJson((OkObjectResult)await playbackApi.List(Ct));
+        recoveredAfterReconnect.GetArrayLength().Should().Be(1);
+        recoveredAfterReconnect[0]
+            .GetProperty("playback_handle")
+            .GetGuid()
+            .Should()
+            .Be(interrupted.RequestId);
         var recovered = AsJson((OkObjectResult)await control.GetHandoff(interrupted.RequestId, Ct));
         recovered.GetProperty("status").GetString().Should().Be("loaded");
         upstream.LoadCount.Should().Be(2);
@@ -305,6 +375,9 @@ public sealed class TestSonosDevelopment
         public string? UnavailableTrack { get; set; }
         public bool ArtistCatalogUnavailable { get; set; }
         public List<int> CatalogBatchSizes { get; } = [];
+        public List<string> TransportPaths { get; } = [];
+        public string RoomState { get; set; } = "PLAYBACK_STATE_PLAYING";
+        public bool EvictOnNextCommand { get; set; }
 
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
@@ -322,6 +395,30 @@ public sealed class TestSonosDevelopment
                     throw new HttpRequestException("The load response was interrupted.");
                 }
 
+                return new HttpResponseMessage(HttpStatusCode.OK);
+            }
+
+            if (path == "/control/api/v1/playbackSessions/test-session/playbackSession/skipToItem")
+            {
+                var command = await request.Content!.ReadFromJsonAsync<JsonElement>(ct);
+                command
+                    .GetProperty("itemId")
+                    .GetString()
+                    .Should()
+                    .Be(Load.GetProperty("itemId").GetString());
+                command.GetProperty("positionMillis").GetInt32().Should().Be(1234);
+                var play = command.GetProperty("playOnCompletion").GetBoolean();
+                TransportPaths.Add(play ? "play" : "pause");
+                if (EvictOnNextCommand)
+                {
+                    EvictOnNextCommand = false;
+                    return new HttpResponseMessage((HttpStatusCode)499)
+                    {
+                        Content = JsonContent.Create(new { errorCode = "ERROR_SESSION_EVICTED" }),
+                    };
+                }
+
+                RoomState = play ? "PLAYBACK_STATE_PLAYING" : "PLAYBACK_STATE_PAUSED";
                 return new HttpResponseMessage(HttpStatusCode.OK);
             }
 
@@ -421,9 +518,16 @@ public sealed class TestSonosDevelopment
                 "/control/api/v1/households/home/groups" =>
                     """{"groups":[{"id":"office","name":"Office"}]}""",
                 "/control/api/v1/groups/office/playback" => JsonSerializer.Serialize(
-                    new { itemId = Load.GetProperty("itemId").GetString() }
+                    new
+                    {
+                        itemId = Load.GetProperty("itemId").GetString(),
+                        positionMillis = Load.GetProperty("positionMillis").GetInt32(),
+                        playbackState = RoomState,
+                    }
                 ),
                 "/control/api/v1/groups/office/playback/subscription" => "{}",
+                "/control/api/v1/playbackSessions/test-session/playbackSession/subscription" =>
+                    "{}",
                 "/control/api/v1/groups/office/playbackSession" =>
                     """{"sessionId":"test-session"}""",
                 _ => throw new InvalidOperationException($"Unexpected upstream request {path}"),

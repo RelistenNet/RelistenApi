@@ -164,6 +164,27 @@ public sealed class SonosPlayerController(
         }
 
         if (
+            fields[1] == "playbackSession"
+            && fields[2] == "sessionError"
+            && fields[3] is "sessionId" or "playbackSessionId"
+            && body.ValueKind == JsonValueKind.Object
+            && body.TryGetProperty("errorCode", out var errorCode)
+            && errorCode.ValueKind == JsonValueKind.String
+            && errorCode.GetString() == "ERROR_SESSION_EVICTED"
+        )
+        {
+            // The target session is covered by the signature. A group-targeted event
+            // cannot by itself prove which session ended.
+            await db.Set<SonosQueue>()
+                .Where(row =>
+                    row.SonosSessionId == fields[4]
+                    && (row.Status == "loaded" || row.Status == "dispatching")
+                )
+                .ExecuteUpdateAsync(set => set.SetProperty(row => row.Status, "evicted"), ct);
+            return Ok();
+        }
+
+        if (
             fields[1] == "playback"
             && fields[2] == "playbackStatus"
             && fields[3] == "groupId"

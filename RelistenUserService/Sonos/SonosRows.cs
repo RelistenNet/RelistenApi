@@ -24,6 +24,8 @@ internal sealed class SonosQueue
     public UserId UserId { get; set; }
     public SessionId SessionId { get; set; }
     public string GroupId { get; set; } = "";
+    public string? GroupName { get; set; }
+    public string? SonosSessionId { get; set; }
     public string HouseholdId { get; set; } = "";
     public string RequestHash { get; set; } = "";
     public string CredentialHash { get; set; } = "";

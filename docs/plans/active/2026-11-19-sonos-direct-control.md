@@ -120,3 +120,17 @@ The development test uses a disposable PostgreSQL database and simulated Sonos a
 On November 19, 2026, the local .NET User Service exchanged the Sonos authorization code for the Relisten Dev Control key through the HTTPS tunnel. It discovered Alec’s Office and loaded a two-track Cloud Queue using the published Relisten SMAPI service 270. The Era 300 reported PLAYING for the `TrackU` item for “Minglewood Blues,” starting at the submitted 350-second position, and advanced on its own to the `TrackU` item for “Loser.” After a pause from the Sonos app, the speaker reported paused at 0:31 into “Loser” and the local handoff receipt reported `PLAYBACK_STATE_PAUSED` from the verified Sonos event. The Redirect URI and Event Callback URL on the development key point to the local User Service through the tunnel.
 
 The Office System card showed the track title and a generic image during that run. The queue payload then carried only the title, duration, media type and track ID. New snapshots include the artist name, show date and venue in the album label, and a public show artwork URL. The integration test checks those fields in the player’s item window. Verify their rendering in the Sonos app after a fresh handoff.
+
+### Local playback API for mobile
+
+Use the same native Relisten bearer token and accounts origin as handoff. A newly loaded handoff includes `playback_handle`. Queues created before session persistence keep serving their existing windows and need a fresh handoff before the new controls can address them.
+
+| Route | Result |
+| --- | --- |
+| `GET /v1/integrations/sonos/playback` | Lists currently confirmed Relisten-owned playback. Use this to restore the room when the app reopens. |
+| `GET /v1/integrations/sonos/playback/{handle}` | Returns `playback_handle`, `group_id`, `group_name`, and `status`. An active result includes `playback_state`, `position_millis`, `observed_at`, and `current_occurrence` with `item_id`, zero-based `queue_index`, `track_id`, and display metadata. A temporarily unavailable current item can return `unconfirmed`. An ended session returns `evicted`. |
+| `POST /v1/integrations/sonos/playback/{handle}/commands` | Send `{"action":"play"}` or `{"action":"pause"}`. On `202`, refresh the playback URL in `Location` to confirm state. On an ambiguous response, refresh before offering a retry. A known inactive handle returns `409 sonos_playback_inactive`. |
+
+The User Service issues a session-scoped `skipToItem` for the observed occurrence and offset, with `playOnCompletion` set to the requested state. This keeps a command on the original session during a takeover. Within that session, a seek or track change between the status read and command can move playback back to the sampled occurrence or offset. Measure that behavior before production.
+
+On November 19, Alec’s Office reported “Loser” paused after the local server restarted. Discovery recovered the same queue and playhead. The API resumed it and paused it again. After a replacement handoff in the same room, the old handle returned `409` and the replacement kept playing until its own handle paused it. The test suite separately simulated Sonos rejecting the original session between the status read and command.

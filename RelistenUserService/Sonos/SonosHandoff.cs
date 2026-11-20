@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
@@ -376,20 +377,33 @@ public sealed class SonosHandoff(
                         or JsonException
             )
         {
-            await db.Set<SonosQueue>()
-                .Where(row => row.Id == queue.Id && row.Status == "dispatching")
-                .ExecuteUpdateAsync(
-                    set => set.SetProperty(row => row.Status, "failed"),
-                    CancellationToken.None
-                );
+            await FailDispatchAsync(queue.Id);
             throw;
         }
-        var result = await protocol.ControlAsync(
-            token,
-            $"{groupPath}/playbackSession",
-            new { appId = "net.relisten.sonos.dev", appContext = queue.Id.ToString("N") },
-            ct
-        );
+        JsonElement result;
+        try
+        {
+            result = await protocol.ControlAsync(
+                token,
+                $"{groupPath}/playbackSession",
+                new { appId = "net.relisten.sonos.dev", appContext = queue.Id.ToString("N") },
+                ct
+            );
+        }
+        catch (SonosRequestException error)
+            when (error.Status
+                    is HttpStatusCode.BadRequest
+                        or HttpStatusCode.Unauthorized
+                        or HttpStatusCode.Forbidden
+                        or HttpStatusCode.NotFound
+                        or HttpStatusCode.Gone
+                || error.Code is "ERROR_INVALID_OBJECT_ID" or "ERROR_INVALID_PARAMETER"
+            )
+        {
+            await FailDispatchAsync(queue.Id);
+            throw;
+        }
+
         var sessionId = result.TryGetProperty("sessionId", out var direct)
             ? direct.GetString()
             : result.GetProperty("sessionStatus").GetProperty("sessionId").GetString();
@@ -398,26 +412,81 @@ public sealed class SonosHandoff(
             throw new JsonException("Sonos did not return a playback session ID.");
         }
 
-        await protocol.ControlAsync(
-            token,
-            $"playbackSessions/{Uri.EscapeDataString(sessionId)}/playbackSession/loadCloudQueue",
-            new
-            {
-                queueBaseUrl = new Uri(config.PublicBase, $"sonos/cloud-queue/{queue.Id}/v2.3/"),
-                httpAuthorization = credential,
-                useHttpAuthorizationForMedia = false,
-                itemId,
-                positionMillis,
-                playOnCompletion = true,
-            },
-            ct
-        );
+        var sessionPath = SonosProtocol.SessionPath(sessionId);
+        var recorded = await db.Set<SonosQueue>()
+            .Where(row => row.Id == queue.Id && row.Status == "dispatching")
+            .ExecuteUpdateAsync(set => set.SetProperty(row => row.SonosSessionId, sessionId), ct);
+        if (recorded != 1)
+        {
+            return;
+        }
+
+        // A lost subscription can be recovered by reading the room before each command.
+        try
+        {
+            await protocol.ControlAsync(
+                token,
+                $"{sessionPath}/playbackSession/subscription",
+                new { },
+                ct
+            );
+        }
+        catch (Exception error)
+            when (!ct.IsCancellationRequested
+                && error
+                    is SonosRequestException
+                        or HttpRequestException
+                        or JsonException
+                        or OperationCanceledException
+            )
+        {
+            logger.LogWarning(error, "Could not subscribe to Sonos session events");
+        }
+
+        try
+        {
+            await protocol.ControlAsync(
+                token,
+                $"{sessionPath}/playbackSession/loadCloudQueue",
+                new
+                {
+                    queueBaseUrl = new Uri(
+                        config.PublicBase,
+                        $"sonos/cloud-queue/{queue.Id}/v2.3/"
+                    ),
+                    httpAuthorization = credential,
+                    useHttpAuthorizationForMedia = false,
+                    itemId,
+                    positionMillis,
+                    playOnCompletion = true,
+                },
+                ct
+            );
+        }
+        catch (SonosRequestException error) when (error.SessionEnded)
+        {
+            await db.Set<SonosQueue>()
+                .Where(row => row.Id == queue.Id && row.Status == "dispatching")
+                .ExecuteUpdateAsync(
+                    set => set.SetProperty(row => row.Status, "evicted"),
+                    CancellationToken.None
+                );
+            throw;
+        }
 
         // Account revocation can end a queue while the load is in flight.
         await db.Set<SonosQueue>()
             .Where(row => row.Id == queue.Id && row.Status == "dispatching")
             .ExecuteUpdateAsync(set => set.SetProperty(row => row.Status, "loaded"), ct);
     }
+
+    private Task<int> FailDispatchAsync(Guid id) =>
+        db.Set<SonosQueue>()
+            .Where(row => row.Id == id && row.Status == "dispatching")
+            .ExecuteUpdateAsync(
+                set => set.SetProperty(row => row.Status, "failed"),
+                CancellationToken.None
+            );
 
     internal async Task ObserveLoadedAsync(string token, SonosQueue queue, CancellationToken ct)
     {

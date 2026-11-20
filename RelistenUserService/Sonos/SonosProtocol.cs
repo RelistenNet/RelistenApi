@@ -67,6 +67,8 @@ public sealed class SonosProtocol(HttpClient http)
             Encoding.UTF8.GetBytes(expected)
         );
 
+    internal static string SessionPath(string id) => $"playbackSessions/{Uri.EscapeDataString(id)}";
+
     internal static string AuthorizeUrl(SonosConfiguration config, string state) =>
         QueryHelpers.AddQueryString(
             LoginBase,
@@ -127,7 +129,27 @@ public sealed class SonosProtocol(HttpClient http)
         using var response = await http.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
-            throw new SonosRequestException(response.StatusCode);
+            string? code = null;
+            try
+            {
+                var error = await response.Content.ReadFromJsonAsync<JsonElement>(
+                    cancellationToken
+                );
+                if (
+                    error.ValueKind == JsonValueKind.Object
+                    && error.TryGetProperty("errorCode", out var value)
+                    && value.ValueKind == JsonValueKind.String
+                )
+                {
+                    code = value.GetString();
+                }
+            }
+            catch (JsonException)
+            {
+                // An intermediary can return an empty or non-JSON error response.
+            }
+
+            throw new SonosRequestException(response.StatusCode, code);
         }
 
         var body = await response.Content.ReadAsByteArrayAsync(cancellationToken);
@@ -135,10 +157,14 @@ public sealed class SonosProtocol(HttpClient http)
     }
 }
 
-internal sealed class SonosRequestException(HttpStatusCode status)
+internal sealed class SonosRequestException(HttpStatusCode status, string? code)
     : Exception("Sonos rejected the request.")
 {
     public HttpStatusCode Status { get; } = status;
+    public string? Code { get; } = code;
+    public bool SessionEnded =>
+        Status == HttpStatusCode.Gone
+        || Code is "ERROR_SESSION_EVICTED" or "ERROR_INVALID_OBJECT_ID";
 }
 
 internal sealed record SonosToken(

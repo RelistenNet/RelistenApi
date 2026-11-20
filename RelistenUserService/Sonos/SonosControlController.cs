@@ -138,6 +138,7 @@ public sealed class SonosControlController(
                 UserId = account.User.Id,
                 SessionId = account.NativeSessionId,
                 GroupId = group.Id,
+                GroupName = group.Name,
                 HouseholdId = group.HouseholdId,
                 RequestHash = requestHash,
                 CredentialHash = SonosProtocol.Hash(credential),
@@ -225,6 +226,9 @@ public sealed class SonosControlController(
         var result = new
         {
             requestId = queue.Id,
+            playbackHandle = queue.SonosSessionId is not null && queue.Status == "loaded"
+                ? (Guid?)queue.Id
+                : null,
             status = queue.Status,
             playbackEventState = queue.PlaybackEventState,
         };
