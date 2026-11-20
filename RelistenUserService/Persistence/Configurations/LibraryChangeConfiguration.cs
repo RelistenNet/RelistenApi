@@ -23,10 +23,6 @@ public sealed class LibraryChangeConfiguration : IEntityTypeConfiguration<Librar
                     AccountIdConstraint.Sql("favorite", "favorite_id")
                 );
                 table.HasCheckConstraint(
-                    "ck_library_changes_catalog_type",
-                    CatalogTypeConstraint.Sql
-                );
-                table.HasCheckConstraint(
                     "ck_library_changes_change_type",
                     """
                     (change_type IN ('favorite_added', 'favorite_removed') AND favorite_id IS NOT NULL

@@ -761,8 +761,6 @@ namespace RelistenUserService.Persistence.Migrations
 
                     b.ToTable("favorites", "user_data", t =>
                         {
-                            t.HasCheckConstraint("ck_favorites_catalog_type", "catalog_type IN ('artist', 'show', 'source', 'track', 'imported_song', 'imported_venue', 'song', 'tour', 'venue')");
-
                             t.HasCheckConstraint("ck_favorites_id_typed_id", "id ~ '^favorite_[0-7][0-9a-hjkmnp-tv-z]{9}[ef][0-9a-hjkmnp-tv-z]{15}$'");
                         });
                 });
@@ -830,10 +828,6 @@ namespace RelistenUserService.Persistence.Migrations
                         {
                             t.HasCheckConstraint("ck_favorite_mutation_receipts_canonical_favorite_id", "canonical_favorite_id IS NULL OR canonical_favorite_id ~ '^favorite_[0-7][0-9a-hjkmnp-tv-z]{9}[ef][0-9a-hjkmnp-tv-z]{15}$'");
 
-                            t.HasCheckConstraint("ck_favorite_mutation_receipts_catalog_type", "catalog_type IN ('artist', 'show', 'source', 'track', 'imported_song', 'imported_venue', 'song', 'tour', 'venue')");
-
-                            t.HasCheckConstraint("ck_favorite_mutation_receipts_desired_state", "desired_state IN ('favorite', 'not_favorite')");
-
                             t.HasCheckConstraint("ck_favorite_mutation_receipts_id_typed_id", "id ~ '^mutation_[0-7][0-9a-hjkmnp-tv-z]{9}[ef][0-9a-hjkmnp-tv-z]{15}$'");
 
                             t.HasCheckConstraint("ck_favorite_mutation_receipts_payload", "octet_length(payload_hash) = 32 AND ((desired_state = 'favorite' AND submitted_favorite_id IS NOT NULL) OR (desired_state = 'not_favorite' AND submitted_favorite_id IS NULL)) AND (desired_state <> 'favorite' OR canonical_favorite_id IS NOT NULL) AND library_revision >= 0");
@@ -900,8 +894,6 @@ namespace RelistenUserService.Persistence.Migrations
 
                     b.ToTable("library_changes", "user_data", t =>
                         {
-                            t.HasCheckConstraint("ck_library_changes_catalog_type", "catalog_type IN ('artist', 'show', 'source', 'track', 'imported_song', 'imported_venue', 'song', 'tour', 'venue')");
-
                             t.HasCheckConstraint("ck_library_changes_change_type", "(change_type IN ('favorite_added', 'favorite_removed') AND favorite_id IS NOT NULL\n    AND catalog_type IS NOT NULL AND catalog_id IS NOT NULL AND playlist_json IS NULL AND followed_playlist_id IS NULL)\nOR (change_type = 'playlist_summary' AND favorite_id IS NULL\n    AND catalog_type IS NULL AND catalog_id IS NULL AND playlist_json IS NOT NULL AND followed_playlist_id IS NULL)\nOR (change_type IN ('playlist_followed', 'playlist_unfollowed') AND favorite_id IS NULL\n    AND catalog_type IS NULL AND catalog_id IS NULL AND playlist_json IS NULL AND followed_playlist_id IS NOT NULL)");
 
                             t.HasCheckConstraint("ck_library_changes_favorite_id_typed_id", "favorite_id ~ '^favorite_[0-7][0-9a-hjkmnp-tv-z]{9}[ef][0-9a-hjkmnp-tv-z]{15}$'");
@@ -1177,8 +1169,6 @@ namespace RelistenUserService.Persistence.Migrations
                             t.HasCheckConstraint("ck_playlist_receipts_hash", "octet_length(payload_hash) = 32");
 
                             t.HasCheckConstraint("ck_playlist_receipts_id", "(id ~ '^command_[0-7][0-9a-hjkmnp-tv-z]{9}[ef][0-9a-hjkmnp-tv-z]{15}$') OR (id ~ '^playlist_operation_[0-7][0-9a-hjkmnp-tv-z]{9}[ef][0-9a-hjkmnp-tv-z]{15}$')");
-
-                            t.HasCheckConstraint("ck_playlist_receipts_kind", "kind IN ('create', 'archive', 'copy', 'operation')");
                         });
                 });
 
@@ -1257,7 +1247,7 @@ namespace RelistenUserService.Persistence.Migrations
 
                     b.ToTable("playlist_revisions", "user_data", t =>
                         {
-                            t.HasCheckConstraint("ck_playlist_revisions_state", "revision > 1 AND change_count > 0 AND kind IN ('content', 'rebalance')");
+                            t.HasCheckConstraint("ck_playlist_revisions_state", "revision > 1 AND change_count > 0");
                         });
                 });
 

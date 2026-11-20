@@ -13,13 +13,10 @@ public sealed class FavoriteConfiguration : IEntityTypeConfiguration<Favorite>
             "favorites",
             "user_data",
             table =>
-            {
                 table.HasCheckConstraint(
                     "ck_favorites_id_typed_id",
                     AccountIdConstraint.Sql("favorite")
-                );
-                table.HasCheckConstraint("ck_favorites_catalog_type", CatalogTypeConstraint.Sql);
-            }
+                )
         );
         builder.HasKey(favorite => favorite.Id);
         builder.Property(favorite => favorite.CatalogType).HasMaxLength(16);
@@ -37,10 +34,4 @@ public sealed class FavoriteConfiguration : IEntityTypeConfiguration<Favorite>
             .HasForeignKey(favorite => favorite.UserId)
             .OnDelete(DeleteBehavior.Cascade);
     }
-}
-
-internal static class CatalogTypeConstraint
-{
-    public const string Sql =
-        "catalog_type IN ('artist', 'show', 'source', 'track', 'imported_song', 'imported_venue', 'song', 'tour', 'venue')";
 }

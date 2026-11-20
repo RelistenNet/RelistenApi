@@ -20,14 +20,6 @@ public sealed class FavoriteMutationReceiptConfiguration
                     AccountIdConstraint.Sql("mutation")
                 );
                 table.HasCheckConstraint(
-                    "ck_favorite_mutation_receipts_catalog_type",
-                    CatalogTypeConstraint.Sql
-                );
-                table.HasCheckConstraint(
-                    "ck_favorite_mutation_receipts_desired_state",
-                    "desired_state IN ('favorite', 'not_favorite')"
-                );
-                table.HasCheckConstraint(
                     "ck_favorite_mutation_receipts_submitted_favorite_id",
                     "submitted_favorite_id IS NULL OR "
                         + AccountIdConstraint.Sql("favorite", "submitted_favorite_id")
