@@ -263,6 +263,20 @@ public sealed class TestAccountDeletionSchema
             INSERT INTO user_data.playlist_reports (id, user_id, playlist_id, reason, created_at)
             VALUES (@ReportId, @UserId, @PlaylistId, 'Fixture report', now());
 
+            INSERT INTO user_data.sonos_grants (user_id, protected_token)
+            VALUES (@UserId, 'fixture');
+            INSERT INTO user_data.sonos_oauth_states (hash, user_id, session_id, expires_at)
+            VALUES (@NativeSessionId, @UserId, @NativeSessionId, now() + interval '10 minutes');
+            INSERT INTO user_data.sonos_queues
+                (id, user_id, session_id, group_id, household_id, request_hash, credential_hash,
+                 items_json, expires_at, status)
+            VALUES (@SonosQueueId, @UserId, @NativeSessionId, 'office', 'home', 'request', 'credential',
+                    '[]', now() + interval '2 hours', 'loaded');
+
+            INSERT INTO user_data.sonos_commands
+                (id, queue_id, request_hash, action, status, expected_item_id)
+            VALUES (@SonosCommandId, @SonosQueueId, 'request', 'pause', 'accepted', 'item');
+
             INSERT INTO user_data.plays
                 (user_id, play_id, track_id, qualified_at, started_at, received_at, app_type, offline, origin)
             VALUES (@UserId, @PlayId, @TrackId, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z',
@@ -293,6 +307,8 @@ public sealed class TestAccountDeletionSchema
                 PlaylistCommandId = CommandId.New().ToString(),
                 ReportId = PlaylistReportId.New().ToString(),
                 PlayId = PlayId.New().Value,
+                SonosQueueId = Guid.CreateVersion7(),
+                SonosCommandId = Guid.CreateVersion7(),
             },
             transaction
         );

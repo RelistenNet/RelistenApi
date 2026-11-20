@@ -26,7 +26,7 @@ namespace RelistenUserServiceTests;
 
 [TestFixture]
 [NonParallelizable]
-public sealed class TestMcpHttp
+public sealed partial class TestMcpHttp
 {
     private const string AuthOrigin = "https://auth.relisten.localhost:5443";
     private const string AccountsOrigin = "https://accounts.relisten.localhost:5443";
@@ -786,7 +786,8 @@ public sealed class TestMcpHttp
 
     private async Task StartApp(
         bool mountCatalog = true,
-        Func<Uri, object?>? catalogResponse = null
+        Func<Uri, object?>? catalogResponse = null,
+        HttpMessageHandler? sonos = null
     )
     {
         catalog = new(catalogResponse);
@@ -827,8 +828,31 @@ public sealed class TestMcpHttp
                 ["Accounts:McpCatalogBaseUrl"] = "https://catalog.example.test",
                 ["MCP_REVIEW_SEARCH_KEY"] = ReviewServiceKey,
                 ["MCP_WRITE_ID_KEY"] = WriteIdKey,
+                ["Sonos:PublicBaseUrl"] = sonos is null ? null : "https://sonos.example.test/",
+                ["Sonos:ClientId"] = sonos is null ? null : "test-id",
+                ["Sonos:ClientSecret"] = sonos is null ? null : "test-secret",
+                ["Sonos:ServiceId"] = sonos is null ? null : "270",
             }
         );
+        if (sonos is not null)
+        {
+            foreach (
+                var client in new[]
+                {
+                    nameof(RelistenUserService.Sonos.SonosProtocol),
+                    "SonosCatalog",
+                }
+            )
+            {
+                builder.Services.PostConfigure<Microsoft.Extensions.Http.HttpClientFactoryOptions>(
+                    client,
+                    options =>
+                        options.HttpMessageHandlerBuilderActions.Add(handler =>
+                            handler.PrimaryHandler = sonos
+                        )
+                );
+            }
+        }
         builder.Logging.ClearProviders();
         builder.WebHost.UseTestServer();
         builder
