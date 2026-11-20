@@ -90,7 +90,7 @@ public sealed class TestSonosDevelopment
             clock,
             NullLogger<SonosHandoff>.Instance
         );
-        var development = new SonosDevelopment(
+        var development = new SonosIntegration(
             new SonosConfiguration("dev-id", "dev-secret", new Uri($"https://{Host}/"), "270")
         );
         var account = new CurrentAccountContext();

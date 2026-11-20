@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.WebUtilities;
+using RelistenUserService.Configuration;
 
 namespace RelistenUserService.Sonos;
 
@@ -17,21 +18,31 @@ internal sealed record SonosConfiguration(
 {
     public Uri RedirectUri => new(PublicBase, "sonos/oauth/callback");
 
-    public static SonosConfiguration? Read(IConfiguration config, IHostEnvironment environment)
+    public static SonosConfiguration? Read(
+        IConfiguration config,
+        AccountsRuntimeConfiguration runtime
+    )
     {
-        if (!environment.IsDevelopment() || !config.GetValue<bool>("Sonos:Enabled"))
-        {
-            return null;
-        }
-
         var section = config.GetSection("Sonos");
         var clientId = section["ClientId"];
         var secret = section["ClientSecret"];
         var serviceId = section["ServiceId"];
+        var publicBaseUrl = section["PublicBaseUrl"];
+        if (clientId is null && secret is null && serviceId is null && publicBaseUrl is null)
+        {
+            return null;
+        }
+
+        var accountsOrigin = new Uri($"https://{runtime.Options.AccountsHost}/");
+        if (!runtime.IsLocalDevelopment)
+        {
+            publicBaseUrl ??= accountsOrigin.AbsoluteUri;
+        }
+
         if (
             string.IsNullOrWhiteSpace(clientId)
             || string.IsNullOrWhiteSpace(secret)
-            || !Uri.TryCreate(section["PublicBaseUrl"], UriKind.Absolute, out var publicBase)
+            || !Uri.TryCreate(publicBaseUrl, UriKind.Absolute, out var publicBase)
             || publicBase.Scheme != Uri.UriSchemeHttps
             || publicBase.AbsolutePath != "/"
             || publicBase.UserInfo != ""
@@ -42,7 +53,14 @@ internal sealed record SonosConfiguration(
         )
         {
             throw new InvalidOperationException(
-                "Sonos development configuration requires credentials, an HTTPS origin, and a service ID."
+                "Sonos configuration requires credentials, an HTTPS origin, and a service ID."
+            );
+        }
+
+        if (!runtime.IsLocalDevelopment && publicBase != accountsOrigin)
+        {
+            throw new InvalidOperationException(
+                "Outside local development, the Sonos public origin must match the accounts host."
             );
         }
 
@@ -179,9 +197,9 @@ internal sealed record StoredSonosToken(
     DateTimeOffset ExpiresAt
 );
 
-public sealed class SonosDevelopment
+public sealed class SonosIntegration
 {
-    internal SonosDevelopment(SonosConfiguration? configuration) => Configuration = configuration;
+    internal SonosIntegration(SonosConfiguration? configuration) => Configuration = configuration;
 
     internal SonosConfiguration? Configuration { get; }
 }

@@ -15,7 +15,7 @@ public sealed class SonosPlayerController(
     AccountsDbContext db,
     SonosAccountLink link,
     TimeProvider clock,
-    SonosDevelopment development
+    SonosIntegration integration
 ) : ControllerBase
 {
     private static readonly string[] SignedHeaders =
@@ -28,7 +28,7 @@ public sealed class SonosPlayerController(
     ];
 
     private SonosConfiguration? Config =>
-        development.Configuration is { } config
+        integration.Configuration is { } config
         && config.PublicBase.Authority.Equals(
             Request.Host.Value,
             StringComparison.OrdinalIgnoreCase
@@ -62,7 +62,7 @@ public sealed class SonosPlayerController(
             }
 
             return result is { Connected: true }
-                ? Content("Sonos connected. Return to the Relisten test client.", "text/plain")
+                ? Content("Sonos connected. Return to Relisten.", "text/plain")
                 : BadRequest("Sonos authorization did not complete.");
         }
         catch (Exception ex)
@@ -83,7 +83,7 @@ public sealed class SonosPlayerController(
                 {
                     contextVersion = "1",
                     queueVersion = queue.QueueVersion.ToString(CultureInfo.InvariantCulture),
-                    container = new { name = "Relisten Dev", type = "trackList" },
+                    container = new { name = "Relisten", type = "trackList" },
                     playbackPolicies = new { canShuffle = false, canCrossfade = false },
                 }
             );

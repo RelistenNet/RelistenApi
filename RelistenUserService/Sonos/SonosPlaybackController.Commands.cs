@@ -26,7 +26,7 @@ public sealed partial class SonosPlaybackController
     public async Task<IActionResult> GetVolume(Guid handle, CancellationToken ct)
     {
         if (
-            development.Configuration is not { } config
+            integration.Configuration is not { } config
             || await ReadOwnedQueueAsync(handle, ct) is not { } queue
         )
         {
@@ -69,7 +69,7 @@ public sealed partial class SonosPlaybackController
     )
     {
         if (
-            development.Configuration is not { } config
+            integration.Configuration is not { } config
             || await ReadOwnedQueueAsync(handle, ct) is not { } queue
         )
         {
@@ -129,7 +129,7 @@ public sealed partial class SonosPlaybackController
     public async Task<IActionResult> GetCommand(Guid handle, Guid commandId, CancellationToken ct)
     {
         if (
-            development.Configuration is not { } config
+            integration.Configuration is not { } config
             || await ReadOwnedQueueAsync(handle, ct) is not { } queue
             || await FindCommandAsync(handle, commandId, ct) is not { } receipt
         )

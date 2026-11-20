@@ -79,11 +79,9 @@ public static class AccountsApplication
             client.Timeout = TimeSpan.FromSeconds(10);
         });
 
-        var sonos = runtime.IsLocalDevelopment
-            ? SonosConfiguration.Read(builder.Configuration, builder.Environment)
-            : null;
-        builder.Services.AddSingleton(new SonosDevelopment(sonos));
-        if (sonos is not null)
+        var sonos = SonosConfiguration.Read(builder.Configuration, runtime);
+        builder.Services.AddSingleton(new SonosIntegration(sonos));
+        if (runtime.IsLocalDevelopment && sonos is not null)
         {
             builder.Services.PostConfigure<Microsoft.AspNetCore.HostFiltering.HostFilteringOptions>(
                 options => options.AllowedHosts = [.. options.AllowedHosts, sonos.PublicBase.Host]

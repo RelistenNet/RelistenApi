@@ -12,7 +12,7 @@ namespace RelistenUserService.Authentication.Browser;
 public sealed class HostBoundaryMiddleware(
     RequestDelegate next,
     AccountsRuntimeConfiguration runtime,
-    SonosDevelopment? sonos = null
+    SonosIntegration? sonos = null
 )
 {
     public async Task InvokeAsync(HttpContext context)

@@ -5,14 +5,14 @@ namespace RelistenUserService.Sonos;
 
 internal sealed class SonosQueueRefreshWorker(
     IServiceScopeFactory scopes,
-    SonosDevelopment development,
+    SonosIntegration integration,
     TimeProvider clock,
     ILogger<SonosQueueRefreshWorker> logger
 ) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
-        if (development.Configuration is not { } config)
+        if (integration.Configuration is not { } config)
         {
             return;
         }

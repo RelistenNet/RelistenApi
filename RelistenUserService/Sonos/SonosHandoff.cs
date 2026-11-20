@@ -476,7 +476,7 @@ public sealed class SonosHandoff(
             var result = await protocol.ControlAsync(
                 token,
                 $"{GroupPath(queue.GroupId)}/playbackSession",
-                new { appId = "net.relisten.sonos.dev", appContext = queue.Id.ToString("N") },
+                new { appId = "net.relisten.sonos", appContext = queue.Id.ToString("N") },
                 ct
             );
             var sessionId = ReadSessionId(result);

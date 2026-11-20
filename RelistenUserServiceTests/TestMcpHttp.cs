@@ -830,11 +830,10 @@ public sealed partial class TestMcpHttp
                 ["Accounts:McpCatalogBaseUrl"] = "https://catalog.example.test",
                 ["MCP_REVIEW_SEARCH_KEY"] = ReviewServiceKey,
                 ["MCP_WRITE_ID_KEY"] = WriteIdKey,
-                ["Sonos:Enabled"] = sonos is null ? null : "true",
-                ["Sonos:PublicBaseUrl"] = "https://sonos.example.test/",
-                ["Sonos:ClientId"] = "test-id",
-                ["Sonos:ClientSecret"] = "test-secret",
-                ["Sonos:ServiceId"] = "270",
+                ["Sonos:PublicBaseUrl"] = sonos is null ? null : "https://sonos.example.test/",
+                ["Sonos:ClientId"] = sonos is null ? null : "test-id",
+                ["Sonos:ClientSecret"] = sonos is null ? null : "test-secret",
+                ["Sonos:ServiceId"] = sonos is null ? null : "270",
             }
         );
         builder.Logging.ClearProviders();

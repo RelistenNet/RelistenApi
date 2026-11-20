@@ -14,14 +14,14 @@ namespace RelistenUserService.Sonos;
 [Authorize(Policy = AuthenticationConstants.AccountManagePolicy)]
 public sealed class SonosControlController(
     CurrentAccountContext account,
-    SonosDevelopment development,
+    SonosIntegration integration,
     SonosAccountLink link,
     SonosHandoff handoff,
     AccountsDbContext db,
     TimeProvider clock
 ) : ControllerBase
 {
-    private SonosConfiguration? Config => development.Configuration;
+    private SonosConfiguration? Config => integration.Configuration;
 
     [HttpPost("connect")]
     public async Task<IActionResult> Connect(
@@ -124,7 +124,7 @@ public sealed class SonosControlController(
             || request.PositionMillis < 0
         )
         {
-            return Problem(statusCode: 422, title: "Invalid local Sonos handoff.");
+            return Problem(statusCode: 422, title: "Invalid Sonos handoff.");
         }
 
         var requestHash = SonosProtocol.Hash(JsonSerializer.Serialize(request));
@@ -160,10 +160,7 @@ public sealed class SonosControlController(
             var items = await handoff.ResolveTracksAsync(config.ServiceId, trackIds, ct);
             if (items is null)
             {
-                return Problem(
-                    statusCode: 422,
-                    title: "Every track in the local test must be streamable."
-                );
+                return Problem(statusCode: 422, title: "Every track must be streamable on Sonos.");
             }
 
             if (
@@ -286,7 +283,7 @@ public sealed class SonosControlController(
     {
         if (queue.ExpiresAt <= clock.GetUtcNow())
         {
-            return Problem(statusCode: 410, title: "The local Sonos handoff expired.");
+            return Problem(statusCode: 410, title: "The Sonos handoff expired.");
         }
 
         var status =

@@ -17,7 +17,7 @@ public sealed partial class SonosPlaybackController
     public async Task<IActionResult> GetQueue(Guid handle, CancellationToken ct)
     {
         if (
-            development.Configuration is null
+            integration.Configuration is null
             || await ReadOwnedQueueAsync(handle, ct) is not { } queue
         )
         {
@@ -51,7 +51,7 @@ public sealed partial class SonosPlaybackController
     )
     {
         if (
-            development.Configuration is not { } config
+            integration.Configuration is not { } config
             || await ReadOwnedQueueAsync(handle, ct) is not { } original
         )
         {

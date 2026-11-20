@@ -14,7 +14,7 @@ namespace RelistenUserService.Sonos;
 [Route("v1/integrations/sonos/playback")]
 public sealed partial class SonosPlaybackController(
     CurrentAccountContext account,
-    SonosDevelopment development,
+    SonosIntegration integration,
     SonosAccountLink link,
     SonosProtocol protocol,
     AccountsDbContext db,
@@ -25,7 +25,7 @@ public sealed partial class SonosPlaybackController(
     [HttpGet]
     public async Task<IActionResult> List(CancellationToken ct)
     {
-        if (development.Configuration is not { } config)
+        if (integration.Configuration is not { } config)
         {
             return NotFound();
         }
@@ -106,7 +106,7 @@ public sealed partial class SonosPlaybackController(
     public async Task<IActionResult> GetPlayback(Guid handle, CancellationToken ct)
     {
         if (
-            development.Configuration is not { } config
+            integration.Configuration is not { } config
             || await ReadOwnedQueueAsync(handle, ct) is not { } queue
         )
         {
