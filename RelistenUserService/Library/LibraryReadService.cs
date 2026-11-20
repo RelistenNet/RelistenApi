@@ -166,8 +166,7 @@ public sealed class LibraryReadService(
             ? null
             : summary with
             {
-                DurationSeconds =
-                    change.PlaylistDurationSeconds ?? (summary.TrackCount == 0 ? 0L : null),
+                DurationSeconds = change.PlaylistDurationSeconds,
             };
     }
 

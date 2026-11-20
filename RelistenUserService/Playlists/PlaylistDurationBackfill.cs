@@ -11,46 +11,57 @@ internal sealed class PlaylistDurationBackfill(
     TimeProvider clock
 )
 {
-    internal async Task<(int UpdatedPlaylists, int IncompletePlaylists)> RunAsync(
-        CancellationToken cancellationToken
-    )
+    internal async Task<int> RunAsync(CancellationToken cancellationToken)
     {
+        var liveTracks = database
+            .PlaylistEntries.AsNoTracking()
+            .Where(entry => !entry.Deleted && entry.TrackId != null);
+        // After a rollback, older writers can remove tracks without updating the total.
         var pending = await database
             .Playlists.AsNoTracking()
+            .Select(playlist => new
+            {
+                playlist.Id,
+                playlist.OwnerId,
+                TotalIsStale = liveTracks
+                    .Where(entry => entry.PlaylistId == playlist.Id)
+                    .Sum(entry => (long)(entry.TrackDurationSeconds ?? 0))
+                    != playlist.DurationSeconds,
+                HasMissingDuration = liveTracks.Any(entry =>
+                    entry.PlaylistId == playlist.Id && entry.TrackDurationSeconds == null
+                ),
+            })
+            .Where(playlist => playlist.TotalIsStale || playlist.HasMissingDuration)
             .OrderBy(playlist => playlist.Id)
-            .Select(playlist => new { playlist.Id, playlist.OwnerId })
             .ToArrayAsync(cancellationToken);
+
         var updated = 0;
-        var incomplete = 0;
         foreach (var playlist in pending)
         {
-            var ids = await database
-                .PlaylistEntries.AsNoTracking()
+            var ids = await liveTracks
                 .Where(entry =>
-                    entry.PlaylistId == playlist.Id
-                    && !entry.Deleted
-                    && entry.TrackId != null
-                    && entry.TrackDurationSeconds == null
+                    entry.PlaylistId == playlist.Id && entry.TrackDurationSeconds == null
                 )
                 .Select(entry => entry.TrackId)
                 .Distinct()
                 .ToArrayAsync(cancellationToken);
             var resolved = await durations.ResolveAsync(ids, cancellationToken, backfill: true);
-            var result = await ApplyAsync(
-                playlist.OwnerId,
-                playlist.Id,
-                resolved,
-                cancellationToken
-            );
-            updated += result.Updated ? 1 : 0;
-            incomplete += result.Incomplete ? 1 : 0;
+            if (resolved.Count == 0 && !playlist.TotalIsStale)
+            {
+                continue;
+            }
+
+            if (await ApplyAsync(playlist.OwnerId, playlist.Id, resolved, cancellationToken))
+            {
+                updated++;
+            }
             database.ChangeTracker.Clear();
         }
 
-        return (updated, incomplete);
+        return updated;
     }
 
-    private async Task<(bool Updated, bool Incomplete)> ApplyAsync(
+    private async Task<bool> ApplyAsync(
         UserId owner,
         PlaylistId id,
         IReadOnlyDictionary<string, int> resolved,
@@ -69,7 +80,7 @@ internal sealed class PlaylistDurationBackfill(
             )
         )
         {
-            return (false, false);
+            return false;
         }
 
         var now = clock.GetUtcNow();
@@ -82,9 +93,7 @@ internal sealed class PlaylistDurationBackfill(
             cancellationToken
         );
 
-        var previousDuration = playlist.DurationSeconds;
-        var previousTrackCount = playlist.TrackCount;
-        // An edit may have committed during resolution. Count the current live entries under the lock.
+        // An edit may have committed during resolution. Use the live entries under the lock.
         var entries = await database
             .PlaylistEntries.Where(entry =>
                 entry.PlaylistId == id && !entry.Deleted && entry.TrackId != null
@@ -103,26 +112,19 @@ internal sealed class PlaylistDurationBackfill(
             }
         }
 
-        var knownCount = entries.Count(entry => entry.TrackDurationSeconds.HasValue);
-        var knownSeconds = entries.Sum(entry => (long)(entry.TrackDurationSeconds ?? 0));
-        updated |=
-            knownCount != playlist.TracksWithDuration
-            || knownSeconds != playlist.KnownDurationSeconds;
-        playlist.TrackCount = entries.Length;
-        playlist.TracksWithDuration = knownCount;
-        playlist.KnownDurationSeconds = knownSeconds;
+        var total = entries.Sum(entry => (long)(entry.TrackDurationSeconds ?? 0));
+        if (total != playlist.DurationSeconds)
+        {
+            playlist.DurationSeconds = total;
+            stateStore.Append(state, PlaylistWriteService.SummaryChange(playlist, now));
+            updated = true;
+        }
+
         if (updated)
         {
-            if (
-                playlist.TrackCount != previousTrackCount
-                || playlist.DurationSeconds != previousDuration
-            )
-            {
-                stateStore.Append(state, PlaylistWriteService.SummaryChange(playlist, now));
-            }
             await database.SaveChangesAsync(cancellationToken);
         }
         await transaction.CommitAsync(cancellationToken);
-        return (updated, playlist.DurationSeconds is null);
+        return updated;
     }
 }

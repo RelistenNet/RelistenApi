@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using RelistenUserService;
-using RelistenUserService.Configuration;
 using RelistenUserService.Persistence;
 using RelistenUserService.Playlists;
 
@@ -12,37 +11,6 @@ if (args.FirstOrDefault() == "playlist-moderation")
         Console.Out,
         Console.Error,
         CancellationToken.None
-    );
-    return;
-}
-
-if (args is ["backfill-playlist-durations"])
-{
-    var builder = WebApplication.CreateBuilder([]);
-    await using var database = AccountsDbContextFactory.CreateMigrationContext(
-        builder.Configuration
-    );
-    var catalog = builder.Configuration.GetValue(
-        "Accounts:CatalogBaseUrl",
-        AccountsOptions.DefaultCatalogBaseUrl
-    )!;
-    using var http = new HttpClient
-    {
-        BaseAddress = new Uri(catalog.TrimEnd('/') + "/"),
-        Timeout = TimeSpan.FromSeconds(10),
-    };
-    using var logging = LoggerFactory.Create(options => options.AddSimpleConsole());
-    var durations = new PlaylistTrackDurations(
-        http,
-        logging.CreateLogger<PlaylistTrackDurations>()
-    );
-    var result = await new PlaylistDurationBackfill(
-        database,
-        durations,
-        TimeProvider.System
-    ).RunAsync(CancellationToken.None);
-    Console.WriteLine(
-        $"Updated {result.UpdatedPlaylists} playlists. {result.IncompletePlaylists} still have unknown durations."
     );
     return;
 }

@@ -374,28 +374,18 @@ they do not establish latency budgets or production capacity.
 
 ## Playlist duration summaries
 
-Owned playlist summaries and available followed heads include `duration_seconds`
-once every live track entry has a captured duration. A playlist with no tracks has
-duration zero. A repeated track contributes once per entry. Text blocks contribute
-only to the entry count. Unavailable followed heads omit the duration.
+Owned playlist summaries and available followed heads include `duration_seconds`,
+the sum of known track durations. Tracks without a captured duration contribute
+zero. A repeated track contributes once per entry. Text blocks contribute only to
+the entry count. Unavailable followed heads omit the duration.
 
-New tracks use a best-effort lookup through the Catalog resolver. An edit can
-complete with an unknown duration, and a public copy reuses the source entries'
-captured durations. Capture happens once per entry, so later corrections in Catalog
-do not recalculate existing playlists.
+New tracks use a best-effort lookup through the Catalog resolver. Edits can proceed
+when the lookup fails. A public copy reuses the source entries' captured durations.
+Catalog corrections do not recalculate previously captured durations.
 
-After applying the schema migration and switching all playlist writers to this
-build, run the User Service command to fill missing durations and rebuild the
-stored totals.
-
-```sh
-dotnet RelistenUserService.dll backfill-playlist-durations
-```
-
-The command uses the User Service migration database connection and
-`Accounts:CatalogBaseUrl` (defaults to `https://api.relisten.net/`). It makes Catalog
-requests before taking write locks. It publishes an owner library change when a
-total becomes available, without changing the playlist content revision. Rerun
-the command to retry unresolved tracks or after any rollback that allowed older
-writers to edit playlists. Refresh the library snapshot on clients that synced
-through a rollback to recover duration summaries.
+The User Service starts the backfill in the background after schema migration,
+so existing playlists can show zero until their durations are filled. The
+backfill uses `Accounts:CatalogBaseUrl` (defaults to `https://api.relisten.net/`).
+It resolves tracks before taking write locks and sends an owner library change
+when the total changes, without changing the playlist content revision. Each
+startup retries unresolved durations and repairs totals after a rollback.

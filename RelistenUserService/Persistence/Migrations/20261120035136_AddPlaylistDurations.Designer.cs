@@ -873,7 +873,7 @@ namespace RelistenUserService.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("followed_playlist_id");
 
-                    b.Property<long?>("PlaylistDurationSeconds")
+                    b.Property<long>("PlaylistDurationSeconds")
                         .HasColumnType("bigint")
                         .HasColumnName("playlist_duration_seconds");
 
@@ -987,13 +987,13 @@ namespace RelistenUserService.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("description");
 
+                    b.Property<long>("DurationSeconds")
+                        .HasColumnType("bigint")
+                        .HasColumnName("duration_seconds");
+
                     b.Property<int>("EntryCount")
                         .HasColumnType("integer")
                         .HasColumnName("entry_count");
-
-                    b.Property<long>("KnownDurationSeconds")
-                        .HasColumnType("bigint")
-                        .HasColumnName("known_duration_seconds");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -1024,10 +1024,6 @@ namespace RelistenUserService.Persistence.Migrations
                     b.Property<int>("TrackCount")
                         .HasColumnType("integer")
                         .HasColumnName("track_count");
-
-                    b.Property<int>("TracksWithDuration")
-                        .HasColumnType("integer")
-                        .HasColumnName("tracks_with_duration");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")

@@ -13,6 +13,6 @@ public sealed class LibraryChange
     public string? PlaylistJson { get; set; }
 
     // Keep the durable playlist JSON readable by servers from before duration summaries.
-    public long? PlaylistDurationSeconds { get; set; }
+    public long PlaylistDurationSeconds { get; set; }
     public DateTimeOffset ChangedAt { get; set; }
 }

@@ -2,7 +2,9 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using NUnit.Framework;
 using Relisten.Accounts.Contracts.Library;
 using Relisten.Accounts.Contracts.Playlists;
@@ -23,7 +25,7 @@ public sealed partial class TestPlaylistApi
         var replacement = UuidTypeId.Format("track", Guid.NewGuid());
         var redirect = UuidTypeId.Format("track", Guid.NewGuid());
         _catalogDurations[Track] = (Track, 300);
-        _catalogDurations[replacement] = (redirect, 0);
+        _catalogDurations[replacement] = (redirect, 120);
         var created = await Create(2);
         var segment = created.Segments.Single();
         var before = await SharingLibrary(_user);
@@ -48,44 +50,57 @@ public sealed partial class TestPlaylistApi
         var list = await ReadResponse<PlaylistList>(HttpMethod.Get, "/v1/playlists");
         var summary = list.Playlists.Single();
         summary.TrackCount.Should().Be(2);
-        summary.DurationSeconds.Should().Be(300);
+        summary.DurationSeconds.Should().Be(420);
         var changes = await PullSharingLibrary(_user, before.NextCursor);
         changes.Changes.Should().ContainSingle().Which.Playlist.Should().BeEquivalentTo(summary);
     }
 
     [Test]
-    public async Task A_failed_lookup_allows_creation_and_backfill_publishes_the_completed_summary_once()
+    public async Task Missing_durations_count_as_zero_until_startup_backfills_them()
     {
+        await WaitForDurationBackfill(_app);
+        _catalogDurations[Track] = (Track, 300);
         var unknownTrack = UuidTypeId.Format("track", Guid.NewGuid());
         var request = NewPlaylist(1);
         var segment = request.Segments.Single();
         request = request with
         {
-            Segments = [segment with { Entries = [new(PlaylistEntryId.New(), unknownTrack)] }],
+            Segments =
+            [
+                segment with
+                {
+                    Entries = [.. segment.Entries, new(PlaylistEntryId.New(), unknownTrack)],
+                },
+            ],
         };
-        _durationCatalogUnavailable = true;
         await ReadResponse<PlaylistCreated>(HttpMethod.Post, "/v1/playlists", request);
         var before = await SharingLibrary(_user);
-        before.Playlists.Single().TrackCount.Should().Be(1);
-        before.Playlists.Single().DurationSeconds.Should().BeNull();
+        before.Playlists.Single().TrackCount.Should().Be(2);
+        before.Playlists.Single().DurationSeconds.Should().Be(300);
 
-        _durationCatalogUnavailable = false;
         _catalogDurations[unknownTrack] = (unknownTrack, 430);
-        await using var db = _database.CreateContext();
-        var backfill = new PlaylistDurationBackfill(
-            db,
-            _app.Services.GetRequiredService<PlaylistTrackDurations>(),
-            TimeProvider.System
-        );
-        (await backfill.RunAsync(CancellationToken.None)).UpdatedPlaylists.Should().Be(1);
-        (await backfill.RunAsync(CancellationToken.None)).UpdatedPlaylists.Should().Be(0);
+        await using (var restarted = await StartApp())
+        {
+            await WaitForDurationBackfill(restarted);
+        }
+        await using (var restarted = await StartApp())
+        {
+            await WaitForDurationBackfill(restarted);
+        }
 
         var changes = await PullSharingLibrary(_user, before.NextCursor);
         var backfilled = changes.Changes.Should().ContainSingle().Which.Playlist!;
-        backfilled.DurationSeconds.Should().Be(430);
+        backfilled.DurationSeconds.Should().Be(730);
         backfilled.Revision.Should().Be(before.Playlists.Single().Revision);
         (await SharingLibrary(_user)).Playlists.Single().Should().BeEquivalentTo(backfilled);
     }
+
+    private static Task WaitForDurationBackfill(WebApplication app) =>
+        app
+            .Services.GetServices<IHostedService>()
+            .OfType<PlaylistDurationStartupBackfill>()
+            .Single()
+            .ExecuteTask!.WaitAsync(TimeSpan.FromSeconds(15));
 
     private sealed class DurationCatalogHandler(TestPlaylistApi fixture) : HttpMessageHandler
     {

@@ -16,21 +16,12 @@ namespace RelistenUserService.Persistence.Migrations
         {
             migrationBuilder.Sql(LockAgainstAccountDeletion);
             migrationBuilder.AddColumn<long>(
-                name: "known_duration_seconds",
+                name: "duration_seconds",
                 schema: "user_data",
                 table: "playlists",
                 type: "bigint",
                 nullable: false,
                 defaultValue: 0L
-            );
-
-            migrationBuilder.AddColumn<int>(
-                name: "tracks_with_duration",
-                schema: "user_data",
-                table: "playlists",
-                type: "integer",
-                nullable: false,
-                defaultValue: 0
             );
 
             migrationBuilder.AddColumn<int>(
@@ -46,7 +37,8 @@ namespace RelistenUserService.Persistence.Migrations
                 schema: "user_data",
                 table: "library_changes",
                 type: "bigint",
-                nullable: true
+                nullable: false,
+                defaultValue: 0L
             );
         }
 
@@ -55,13 +47,7 @@ namespace RelistenUserService.Persistence.Migrations
         {
             migrationBuilder.Sql(LockAgainstAccountDeletion);
             migrationBuilder.DropColumn(
-                name: "known_duration_seconds",
-                schema: "user_data",
-                table: "playlists"
-            );
-
-            migrationBuilder.DropColumn(
-                name: "tracks_with_duration",
+                name: "duration_seconds",
                 schema: "user_data",
                 table: "playlists"
             );

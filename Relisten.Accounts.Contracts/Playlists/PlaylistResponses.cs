@@ -15,9 +15,8 @@ public sealed record PlaylistSummary(
     // Library changes stored before guide content have only track entries.
     public int TrackCount { get; init; } = EntryCount;
 
-    /// <summary>Total in seconds when all track entries have a known duration.</summary>
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public long? DurationSeconds { get; init; }
+    /// <summary>Sum of known track durations in seconds.</summary>
+    public long DurationSeconds { get; init; }
     public string? PublicCode { get; init; }
     public bool Published { get; init; }
     public bool TakenDown { get; init; }
