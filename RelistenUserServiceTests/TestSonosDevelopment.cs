@@ -569,6 +569,11 @@ public sealed class TestSonosDevelopment
         public bool ArtistCatalogUnavailable { get; set; }
         public List<int> CatalogBatchSizes { get; } = [];
         public List<string> TransportPaths { get; } = [];
+        public List<JsonElement> PlayModeWrites { get; } = [];
+        public Dictionary<string, bool> RoomPlayModes { get; } = [];
+        public Dictionary<string, bool> RoomPlaybackActions { get; } = [];
+        public bool LoseNextPlayModeResponse { get; set; }
+        public bool RejectPlayModeByPolicy { get; set; }
         public string RoomState { get; set; } = "PLAYBACK_STATE_PLAYING";
         public bool EvictOnNextCommand { get; set; }
         public bool LoseNextTransportResponse { get; set; }
@@ -632,6 +637,36 @@ public sealed class TestSonosDevelopment
                         ? HttpStatusCode.ServiceUnavailable
                         : HttpStatusCode.OK
                 );
+            }
+
+            if (path == "/control/api/v1/groups/office/playback/playMode")
+            {
+                request.Method.Should().Be(HttpMethod.Post);
+                var command = await request.Content!.ReadFromJsonAsync<JsonElement>(ct);
+                var modes = command.GetProperty("playModes");
+                PlayModeWrites.Add(modes);
+                if (RejectPlayModeByPolicy)
+                {
+                    return new HttpResponseMessage((HttpStatusCode)499)
+                    {
+                        Content = JsonContent.Create(
+                            new { errorCode = "ERROR_DISALLOWED_BY_POLICY" }
+                        ),
+                    };
+                }
+
+                foreach (var mode in modes.EnumerateObject())
+                {
+                    RoomPlayModes[mode.Name] = mode.Value.GetBoolean();
+                }
+
+                if (LoseNextPlayModeResponse)
+                {
+                    LoseNextPlayModeResponse = false;
+                    throw new HttpRequestException("The play mode response was interrupted.");
+                }
+
+                return new HttpResponseMessage(HttpStatusCode.OK);
             }
 
             if (path == "/control/api/v1/playbackSessions/test-session/playbackSession/skipToItem")
@@ -792,6 +827,8 @@ public sealed class TestSonosDevelopment
                         itemId = RoomItem,
                         positionMillis = RoomPosition,
                         playbackState = RoomState,
+                        playModes = RoomPlayModes,
+                        availablePlaybackActions = RoomPlaybackActions,
                     }
                 ),
                 "/control/api/v1/groups/office/groupVolume" => JsonSerializer.Serialize(

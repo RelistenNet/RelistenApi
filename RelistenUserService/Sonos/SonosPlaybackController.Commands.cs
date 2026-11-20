@@ -17,7 +17,10 @@ public sealed record SonosTransportRequest(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         long? ExpectedQueueVersion = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        string? TargetOccurrenceId = null
+        string? TargetOccurrenceId = null,
+    // Omit new optional fields from the serialized hash of existing commands.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? RepeatMode =
+        null
 );
 
 public sealed partial class SonosPlaybackController
@@ -275,6 +278,10 @@ public sealed partial class SonosPlaybackController
             case "mute":
                 receipt.TargetMuted = request.Muted;
                 return true;
+            case "repeat":
+                var mode = ParseRepeatMode(request.RepeatMode)!.Value;
+                receipt.TargetValue = (int)mode;
+                return CanSetRepeatMode(state, mode);
             default:
                 return false;
         }
@@ -383,6 +390,26 @@ public sealed partial class SonosPlaybackController
                 path = $"{groupPath}/groupVolume/mute";
                 body = new { muted = receipt.TargetMuted };
                 break;
+            case "repeat":
+                var mode = (SonosRepeatMode)receipt.TargetValue!.Value;
+                if (!CanSetRepeatMode(playback, mode))
+                {
+                    await FinishCommandAsync(receipt, "rejected", "sonos_command_unavailable", ct);
+                    return;
+                }
+
+                // Sonos only offers a group setter. The preceding room read checks ownership,
+                // but Sonos cannot make the write conditional on that session still playing.
+                path = $"{groupPath}/playback/playMode";
+                body = new
+                {
+                    playModes = new
+                    {
+                        repeat = mode == SonosRepeatMode.All,
+                        repeatOne = mode == SonosRepeatMode.One,
+                    },
+                };
+                break;
             case "seek":
                 path = $"{sessionPath}/playbackSession/seek";
                 body = new { itemId = receipt.TargetItemId, positionMillis = receipt.TargetValue };
@@ -409,6 +436,12 @@ public sealed partial class SonosPlaybackController
         try
         {
             await protocol.ControlAsync(token, path, body, ct);
+        }
+        catch (SonosRequestException error)
+            when (receipt.Action == "repeat" && error.Code == "ERROR_DISALLOWED_BY_POLICY")
+        {
+            await FinishCommandAsync(receipt, "rejected", "sonos_command_unavailable", ct);
+            return;
         }
         catch (SonosRequestException error)
             when (receipt.Action == "seek" && error.Code == "ERROR_INVALID_OBJECT_ID")
@@ -512,6 +545,7 @@ public sealed partial class SonosPlaybackController
                     == receipt.TargetValue,
                 "mute" => (await ReadVolumeAsync(access.Token, queue.GroupId, ct)).Muted
                     == receipt.TargetMuted,
+                "repeat" => state.RepeatMode is { } repeat && (int)repeat == receipt.TargetValue,
                 _ => false,
             };
             if (observed)
@@ -669,6 +703,7 @@ public sealed partial class SonosPlaybackController
                 : request.TargetOccurrenceId is null;
         if (
             !validTarget
+            || (request.Action != "repeat" && request.RepeatMode is not null)
             || request.CommandId == Guid.Empty
             || request.ExpectedQueueVersion is < 1
             || (request.ExpectedItemId is { } id && !Guid.TryParseExact(id, "D", out _))
@@ -700,11 +735,36 @@ public sealed partial class SonosPlaybackController
                 && request.Muted != null
                 && request.PositionMillis is null
                 && request.Volume is null,
+            "repeat" => request.CommandId != null
+                && ParseRepeatMode(request.RepeatMode) is not null
+                && request.ExpectedItemId is null
+                && request.ExpectedQueueVersion is null
+                && request.PositionMillis is null
+                && request.Volume is null
+                && request.Muted is null,
             _ => false,
         };
     }
 
-    private static bool GroupCommand(string action) => action is "volume" or "mute";
+    private static bool GroupCommand(string action) => action is "volume" or "mute" or "repeat";
+
+    private static SonosRepeatMode? ParseRepeatMode(string? mode) =>
+        mode switch
+        {
+            "off" => SonosRepeatMode.Off,
+            "all" => SonosRepeatMode.All,
+            "one" => SonosRepeatMode.One,
+            _ => null,
+        };
+
+    private static bool CanSetRepeatMode(PlaybackView playback, SonosRepeatMode mode) =>
+        mode switch
+        {
+            SonosRepeatMode.Off => true,
+            SonosRepeatMode.All => playback.CanRepeat == true,
+            SonosRepeatMode.One => playback.CanRepeatOne == true,
+            _ => false,
+        };
 
     private sealed record GroupVolume(int Volume, bool Muted, bool Fixed);
 }
