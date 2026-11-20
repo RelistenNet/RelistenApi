@@ -19,11 +19,24 @@ survivor favorite may coexist. Each removal addresses its own stored target;
 new favorites use the currently displayed target. A global venue favorite covers
 the physical venue across artists and never implicitly favorites its shows.
 
+Playlist favorites use `{"kind":"playlist","id":"playlist_01h455vb4pex5vsknk084sn04j"}`
+as the target in the existing favorites batch, snapshot, and changes. The ID is a
+playlist UUIDv7. A private bookmark stores only that ID. It can sync before an
+offline-created playlist reaches the server and can be removed while the
+playlist is unavailable. Playlist reads enforce access separately. Following
+and publishing use their own routes. Clients should skip unsupported favorite
+kinds and continue advancing the library cursor.
+
 A snapshot establishes account membership; changes apply explicit ordered events
 and advance the protected cursor atomically. Invalid/expired cursors require a
 new snapshot. Retrying a mutation with the same identity and payload replays its
 receipt; changing the payload under that identity is a conflict. These guarantees
 belong to account persistence and do not depend on catalog ETags or availability.
+
+Leave the enum-check migration applied when rolling back the User Service.
+Reinstating the old target checks fails while a favorite, library change, or
+mutation receipt still contains a `playlist` target. Unfavoriting preserves
+the existing changes and receipts.
 
 ## Application identity and authentication
 

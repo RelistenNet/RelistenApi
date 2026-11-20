@@ -306,6 +306,10 @@ shapes unchanged (Alec, 2026-11-16). Favorites are dev-alpha only, so no
 compatibility layer is needed for alpha builds that reject unknown change types.
 The mobile change to `relisten/library/favorite_sync_service.ts` ships with it.
 
+A playlist heart is a [private favorite bookmark](../../api/accounts.md#membership-survives-unavailable-catalog-data).
+It uses the existing favorites sync, even if the heart arrives before an
+offline-created playlist. Following a public playlist remains a separate action.
+
 Use domain phases at orchestration entrypoints: authorize/lock, claim receipts,
 apply intent, publish revisions, commit. Explain retry ownership and locks beside
 the implementing code. Introduce no interface merely to make a test mockable.

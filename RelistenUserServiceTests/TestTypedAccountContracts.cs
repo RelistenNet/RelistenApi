@@ -21,6 +21,7 @@ public sealed class TestTypedAccountContracts
     [TestCase("venue", "venue_fp4h900f")]
     [TestCase("song", "song_62mhvjyd")]
     [TestCase("imported_venue", "imported_venue_78331pxdqjdg434rrgm1d2pnrj")]
+    [TestCase("playlist", "playlist_01h455vb4pex5vsknk084sn04j")]
     public void Canonical_target_survives_the_JSON_and_validation_boundary(string kind, string id)
     {
         var original = new FavoriteMutationBatchRequest(
@@ -44,6 +45,8 @@ public sealed class TestTypedAccountContracts
     [TestCase("song", "777f627f-442e-9a6f-a366-ac734827dcc5")]
     [TestCase("source_track", "track_0gmtpk4g0pf5yfayb76m0j0k7g")]
     [TestCase("imported_venue", "venue_fp4h900f")]
+    [TestCase("playlist", "show_01h455vb4pex5vsknk084sn04j")]
+    [TestCase("playlist", "playlist_01h455vb4p8x5vsknk084sn04j")]
     public void Wrong_target_kind_or_format_is_rejected(string kind, string id)
     {
         var request = new FavoriteMutationBatchRequest(

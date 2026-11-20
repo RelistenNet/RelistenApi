@@ -501,6 +501,75 @@ public sealed partial class TestPlaylistApi
         await AssertHiddenFollow(playlist.PlaylistId, listener);
     }
 
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task Playlist_favorite_syncs_as_a_bookmark_without_granting_access(
+        bool existsAsPrivatePlaylist
+    )
+    {
+        var playlistId = existsAsPrivatePlaylist ? (await Create(1)).PlaylistId : PlaylistId.New();
+        var listener = await NewSharingListener();
+        var before = await SharingLibrary(listener);
+        var target = new FavoriteTarget(FavoriteCatalogTypes.Playlist, playlistId.Value);
+        var favoriteId = FavoriteId.New();
+        var add = new FavoriteMutationRequestItem(
+            MutationId.New(),
+            target,
+            FavoriteDesiredStates.Favorite,
+            favoriteId
+        );
+        const string mutations = "/v1/library/favorite-mutations:batch";
+        var addBatch = new FavoriteMutationBatchRequest(1, [add]);
+
+        var added = await Read<FavoriteMutationBatchResponse>(
+            await Send(HttpMethod.Post, mutations, addBatch, actor: listener)
+        );
+        var replay = await Read<FavoriteMutationBatchResponse>(
+            await Send(HttpMethod.Post, mutations, addBatch, actor: listener)
+        );
+        replay.Should().BeEquivalentTo(added);
+
+        var snapshot = await SharingLibrary(listener);
+        var bookmark = snapshot.Favorites.Should().ContainSingle().Which;
+        bookmark.FavoriteId.Should().Be(favoriteId);
+        bookmark.Target.Should().Be(target);
+        snapshot.Playlists.Should().BeEmpty();
+        snapshot.FollowedPlaylists.Should().BeEmpty();
+        (await Send(HttpMethod.Get, $"/v1/playlists/{playlistId}/snapshot", actor: listener))
+            .StatusCode.Should()
+            .Be(HttpStatusCode.NotFound);
+        if (existsAsPrivatePlaylist)
+        {
+            var ownerView = await Snapshot(playlistId);
+            ownerView.Published.Should().BeFalse();
+            ownerView.PublicCode.Should().BeNull();
+        }
+
+        var remove = new FavoriteMutationRequestItem(
+            MutationId.New(),
+            target,
+            FavoriteDesiredStates.NotFavorite,
+            null
+        );
+        using var removed = await Send(
+            HttpMethod.Post,
+            mutations,
+            new FavoriteMutationBatchRequest(1, [remove]),
+            actor: listener
+        );
+        removed.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await SharingLibrary(listener)).Favorites.Should().BeEmpty();
+
+        var changes = await PullSharingLibrary(listener, before.NextCursor);
+        changes
+            .Changes.Select(change => (change.ChangeType, change.FavoriteId, change.Target))
+            .Should()
+            .Equal(
+                (FavoriteChangeTypes.Added, favoriteId, target),
+                (FavoriteChangeTypes.Removed, favoriteId, target)
+            );
+    }
+
     private Task<UserId> NewSharingListener() =>
         _database.CreateUserAsync($"l_{Guid.NewGuid():N}"[..30]);
 
