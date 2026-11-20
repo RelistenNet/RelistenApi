@@ -253,7 +253,7 @@ public sealed partial class SonosPlaybackController
                     "previous" => current.QueueIndex - 1,
                     _ => Array.FindIndex(
                         items,
-                        item => item.OccurrenceId == request.TargetOccurrenceId
+                        item => item.OccurrenceKey == request.TargetOccurrenceId
                     ),
                 };
                 if (index < 0 || index >= items.Length)
@@ -388,6 +388,8 @@ public sealed partial class SonosPlaybackController
                 body = new { itemId = receipt.TargetItemId, positionMillis = receipt.TargetValue };
                 break;
             default:
+                // Target the queue's session so Play/Pause cannot affect a replacement session.
+                // In the same session, this can restore the sampled playhead after a seek or skip.
                 path = $"{sessionPath}/playbackSession/skipToItem";
                 var shouldPlay =
                     receipt.PlayOnCompletion

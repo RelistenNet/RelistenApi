@@ -149,6 +149,7 @@ public sealed partial class SonosPlaybackController(
                     && row.ExpiresAt > now,
                 ct
             );
+        // Other devices on this account can control the queue while the creating login is valid.
         return queue is not null && await link.SessionActiveAsync(queue.UserId, queue.SessionId, ct)
             ? queue
             : null;

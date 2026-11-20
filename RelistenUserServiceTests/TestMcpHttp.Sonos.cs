@@ -275,8 +275,11 @@ public sealed partial class TestMcpHttp
         upstream.RoomPosition.Should().Be(1000);
     }
 
-    [Test]
-    public async Task Sonos_skip_targets_the_selected_occurrence_and_reconciles_a_lost_response()
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task Sonos_skip_targets_the_selected_occurrence_and_reconciles_a_lost_response(
+        bool legacyQueue
+    )
     {
         const string nativeBase = AccountsOrigin + "/v1/integrations/sonos";
         const string track = "track_4rc5e1za2bvsrnnr0edzzj8rfs";
@@ -306,19 +309,38 @@ public sealed partial class TestMcpHttp
             }
         );
         started.StatusCode.Should().Be(HttpStatusCode.OK);
+        if (legacyQueue)
+        {
+            // Older snapshots stored the Sonos item ID as their only occurrence identity.
+            await using var db = database.CreateContext();
+            var stored = await db.Set<SonosQueue>().SingleAsync(row => row.Id == handle);
+            stored.ItemsJson = JsonSerializer.Serialize(
+                stored
+                    .ReadItems()
+                    .Select(item => item with { OccurrenceId = null, SourceTrackId = null }),
+                SonosHandoff.QueueJson
+            );
+            await db.SaveChangesAsync();
+        }
+
         var playbackUrl = $"{nativeBase}/playback/{handle}";
         var commandsUrl = playbackUrl + "/commands";
         using var queue = await Get(playbackUrl + "/queue", login.Access);
         var items = (await Json(queue)).GetProperty("occurrences");
         var first = items[0].GetProperty("item_id").GetString()!;
         var last = items[2].GetProperty("item_id").GetString()!;
+        var firstOccurrence = items[0].GetProperty("occurrence_id").GetString()!;
+        var middleOccurrence = items[1].GetProperty("occurrence_id").GetString()!;
+        var lastOccurrence = items[2].GetProperty("occurrence_id").GetString()!;
+        firstOccurrence.Should().Be(legacyQueue ? first : "first");
+        lastOccurrence.Should().Be(legacyQueue ? last : "last");
         var skip = new
         {
             action = "skip",
             command_id = Guid.NewGuid(),
             expected_item_id = first,
             expected_queue_version = (long?)1,
-            target_occurrence_id = "last",
+            target_occurrence_id = lastOccurrence,
         };
 
         Task<HttpResponseMessage> PostSkip(object body) =>
@@ -345,7 +367,7 @@ public sealed partial class TestMcpHttp
             skip with
             {
                 command_id = Guid.NewGuid(),
-                target_occurrence_id = "first",
+                target_occurrence_id = firstOccurrence,
             }
         );
         current.StatusCode.Should().Be(HttpStatusCode.Accepted);
@@ -379,8 +401,13 @@ public sealed partial class TestMcpHttp
             .GetProperty("occurrence_id")
             .GetString()
             .Should()
-            .Be("last");
-        using var differentTarget = await PostSkip(skip with { target_occurrence_id = "middle" });
+            .Be(lastOccurrence);
+        using var differentTarget = await PostSkip(
+            skip with
+            {
+                target_occurrence_id = middleOccurrence,
+            }
+        );
         differentTarget.StatusCode.Should().Be(HttpStatusCode.Conflict);
         (await differentTarget.Content.ReadFromJsonAsync<JsonElement>())
             .GetProperty("code")

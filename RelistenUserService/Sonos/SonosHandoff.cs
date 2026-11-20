@@ -19,6 +19,9 @@ public sealed record SonosHandoffRequest(
 
 public sealed record SonosOccurrenceInput(string OccurrenceId, string TrackId);
 
+// Id is Sonos's item ID for this queue occurrence. OccurrenceId identifies the
+// same entry to mobile across edits. Keep the requested SourceTrackId alongside
+// the resolved TrackU ID in Track.Id so catalog redirects don't change edit identity.
 internal sealed record QueueTrack(
     string Id,
     QueueTrackMetadata Track,
@@ -26,6 +29,7 @@ internal sealed record QueueTrack(
     string? SourceTrackId = null
 )
 {
+    // Queues stored before edits used the Sonos ID and the resolved recording ID.
     [JsonIgnore]
     public string OccurrenceKey => OccurrenceId ?? Id;
 
@@ -103,6 +107,12 @@ public sealed class SonosHandoff(
         CatalogArtist[]? Artists
     );
 
+    private sealed record PlayableTracks(
+        Dictionary<string, CatalogTrack> ByRequestedId,
+        Dictionary<string, CatalogRecording> Shows,
+        Dictionary<string, CatalogRecording> Sources
+    );
+
     private sealed record CatalogTrack(
         string Id,
         string Title,
@@ -158,6 +168,24 @@ public sealed class SonosHandoff(
     )
     {
         var catalog = clients.CreateClient("SonosCatalog");
+        var playable = await ResolvePlayableTracksAsync(catalog, trackIds, ct);
+        if (playable is null)
+        {
+            return null;
+        }
+
+        var artists = await ResolveArtistNamesAsync(catalog, playable.ByRequestedId.Values, ct);
+
+        // Rebuild from the original order so repeated recordings get distinct Sonos item IDs.
+        return trackIds.Select(id => CreateQueueTrack(serviceId, id, playable, artists)).ToArray();
+    }
+
+    private static async Task<PlayableTracks?> ResolvePlayableTracksAsync(
+        HttpClient catalog,
+        string[] trackIds,
+        CancellationToken ct
+    )
+    {
         var resolved = new Dictionary<string, CatalogTrack>(StringComparer.Ordinal);
         var shows = new Dictionary<string, CatalogRecording>(StringComparer.Ordinal);
         var sources = new Dictionary<string, CatalogRecording>(StringComparer.Ordinal);
@@ -200,45 +228,45 @@ public sealed class SonosHandoff(
             }
         }
 
-        var artists = await ResolveArtistNamesAsync(catalog, resolved.Values, ct);
+        return new PlayableTracks(resolved, shows, sources);
+    }
 
-        return trackIds
-            .Select(id =>
-            {
-                var track = resolved[id];
-                var show = track.ShowId is { } showKey ? shows.GetValueOrDefault(showKey) : null;
-                var source = track.SourceId is { } sourceKey
-                    ? sources.GetValueOrDefault(sourceKey)
-                    : null;
-                var date = show?.DisplayDate ?? source?.DisplayDate;
-                var venue = source?.ImportedVenue?.Name ?? show?.ImportedVenue?.Name;
-                var album = string.Join(
-                    " · ",
-                    new[] { date, venue }.Where(value => !string.IsNullOrWhiteSpace(value))
-                );
-                var imageUrl = ShowId.TryParse(track.ShowId, out var showId)
-                    ? $"https://relisten.net/album-art/{showId.Value:D}.png"
-                    : null;
-                return new QueueTrack(
-                    Guid.CreateVersion7().ToString(),
-                    new QueueTrackMetadata(
-                        new MusicObjectId(serviceId, $"TrackU:{track.Id}"),
-                        track.Title,
-                        track.Duration is >= 0 and <= int.MaxValue / 1000
-                            ? track.Duration * 1000
-                            : null,
-                        "audio/mpeg",
-                        DisplayName(
-                            track.ArtistId is { } artistKey
-                                ? artists.GetValueOrDefault(artistKey)
-                                : null
-                        ),
-                        DisplayName(album),
-                        imageUrl
-                    )
-                );
-            })
-            .ToArray();
+    private static QueueTrack CreateQueueTrack(
+        string serviceId,
+        string requestedId,
+        PlayableTracks playable,
+        Dictionary<string, string> artists
+    )
+    {
+        var track = playable.ByRequestedId[requestedId];
+        var show = track.ShowId is { } showKey ? playable.Shows.GetValueOrDefault(showKey) : null;
+        var source = track.SourceId is { } sourceKey
+            ? playable.Sources.GetValueOrDefault(sourceKey)
+            : null;
+        var date = show?.DisplayDate ?? source?.DisplayDate;
+        var venue = source?.ImportedVenue?.Name ?? show?.ImportedVenue?.Name;
+        var album = string.Join(
+            " · ",
+            new[] { date, venue }.Where(value => !string.IsNullOrWhiteSpace(value))
+        );
+        var imageUrl = ShowId.TryParse(track.ShowId, out var showId)
+            ? $"https://relisten.net/album-art/{showId.Value:D}.png"
+            : null;
+
+        return new QueueTrack(
+            Guid.CreateVersion7().ToString(),
+            new QueueTrackMetadata(
+                new MusicObjectId(serviceId, $"TrackU:{track.Id}"),
+                track.Title,
+                track.Duration is >= 0 and <= int.MaxValue / 1000 ? track.Duration * 1000 : null,
+                "audio/mpeg",
+                DisplayName(
+                    track.ArtistId is { } artistKey ? artists.GetValueOrDefault(artistKey) : null
+                ),
+                DisplayName(album),
+                imageUrl
+            )
+        );
     }
 
     private async Task<Dictionary<string, string>> ResolveArtistNamesAsync(

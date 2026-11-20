@@ -303,6 +303,7 @@ public sealed class SonosPlayerController(
                     && (row.Status == "loaded" || row.Status == "dispatching"),
                 ct
             );
+        // The speaker's queue credential inherits the creating login's lifetime.
         return
             queue is not null
             && SonosProtocol.SecretMatches(SonosProtocol.Hash(credential), queue.CredentialHash)

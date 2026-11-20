@@ -35,9 +35,13 @@ internal sealed class SonosQueue
     public string ItemsJson { get; set; } = "";
     public string RemovedItemsJson { get; set; } = "[]";
     public long QueueVersion { get; set; } = 1;
+
+    // Sonos acknowledged the refresh request. Playback status separately reports its cached version.
     public long RefreshedQueueVersion { get; set; } = 1;
     public DateTimeOffset? RefreshAfter { get; set; }
     public DateTimeOffset ExpiresAt { get; set; }
+
+    // After this reservation ends, receipt polling can still recover a load that reached the room.
     public DateTimeOffset? DispatchUntil { get; set; }
     public string Status { get; set; } = "dispatching";
     public long? PlaybackEventSequence { get; set; }
