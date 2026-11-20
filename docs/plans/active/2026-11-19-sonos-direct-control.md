@@ -114,3 +114,7 @@ Start the normal local account stack. Set `Sonos__Enabled=true`, `Sonos__PublicB
 3. Confirm the Office plays both tracks. Pause from the Sonos app and check `GET /v1/integrations/sonos/handoffs/{request_id}` for `playback_event_state`. The development receipt records the last matching playback event. For an uncertain dispatch, poll the receipt. The server checks whether the room reports an item from that queue and never resends the takeover. If the room cannot confirm the load, the receipt remains pending until expiry.
 
 The development test uses a disposable PostgreSQL database and simulated Sonos and Catalog responses. Real speaker qualification needs the updated test SMAPI service and a dev key with both the OAuth redirect and event callback registered.
+
+### Office verification
+
+On November 19, 2026, the local .NET User Service exchanged the Sonos authorization code for the Relisten Dev Control key through the HTTPS tunnel. It discovered Alec’s Office and loaded a two-track Cloud Queue using the published Relisten SMAPI service 270. The Era 300 reported PLAYING for the `TrackU` item for “Minglewood Blues,” starting at the submitted 350-second position, and advanced on its own to the `TrackU` item for “Loser.” After a pause from the Sonos app, the speaker reported paused at 0:31 into “Loser” and the local handoff receipt reported `PLAYBACK_STATE_PAUSED` from the verified Sonos event. The Redirect URI and Event Callback URL on the development key point to the local User Service through the tunnel.
