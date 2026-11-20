@@ -157,6 +157,21 @@ public sealed class SonosControlController(
                 );
             }
 
+            if (
+                items[request.StartIndex].Track.DurationMillis is > 0 and var duration
+                && request.PositionMillis >= duration
+            )
+            {
+                return Problem(
+                    statusCode: 422,
+                    title: "Sonos start position is outside the track.",
+                    extensions: new Dictionary<string, object?>
+                    {
+                        ["code"] = "sonos_start_position_invalid",
+                    }
+                );
+            }
+
             var credential = SonosProtocol.NewSecret();
             var queue = new SonosQueue
             {
@@ -169,10 +184,16 @@ public sealed class SonosControlController(
                 RequestHash = requestHash,
                 CredentialHash = SonosProtocol.Hash(credential),
                 ItemsJson = JsonSerializer.Serialize(items, SonosHandoff.QueueJson),
-                ExpiresAt = clock.GetUtcNow().AddHours(2),
+                // One listening day accommodates complete shows and multi-show queues.
+                ExpiresAt = clock.GetUtcNow().AddHours(24),
             };
             if (!await handoff.TryPrepareAsync(queue, token.GrantVersion, ct))
             {
+                if (!await link.SessionActiveAsync(queue.UserId, queue.SessionId, ct))
+                {
+                    return Unauthorized();
+                }
+
                 var existing = await ReadQueueAsync(queue.Id, ct);
                 return
                     existing is not null
@@ -216,7 +237,7 @@ public sealed class SonosControlController(
             return NotFound();
         }
 
-        if (queue.Status == "dispatching")
+        if (queue is { Status: "dispatching", SonosSessionId: not null })
         {
             try
             {
@@ -249,16 +270,20 @@ public sealed class SonosControlController(
             return Problem(statusCode: 410, title: "The local Sonos handoff expired.");
         }
 
+        var status =
+            queue.Status == "dispatching" && !(queue.DispatchUntil > clock.GetUtcNow())
+                ? "interrupted"
+                : queue.Status;
         var result = new
         {
             requestId = queue.Id,
             playbackHandle = queue.SonosSessionId is not null && queue.Status == "loaded"
                 ? (Guid?)queue.Id
                 : null,
-            status = queue.Status,
+            status,
             playbackEventState = queue.PlaybackEventState,
         };
-        return queue.Status == "dispatching"
+        return status == "dispatching"
             ? AcceptedAtAction(nameof(GetHandoff), new { queueId = queue.Id }, result)
             : Ok(result);
     }

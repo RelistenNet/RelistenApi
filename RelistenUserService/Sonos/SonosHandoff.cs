@@ -40,6 +40,7 @@ public sealed class SonosHandoff(
     AdvisoryLockService locks,
     SonosProtocol protocol,
     IHttpClientFactory clients,
+    SonosAccountLink link,
     TimeProvider clock,
     ILogger<SonosHandoff> logger
 )
@@ -47,6 +48,7 @@ public sealed class SonosHandoff(
     internal static readonly JsonSerializerOptions QueueJson = new(JsonSerializerDefaults.Web);
 
     private const int CatalogBatchSize = 500;
+    private static readonly TimeSpan DispatchWindow = TimeSpan.FromSeconds(45);
 
     private static readonly JsonSerializerOptions CatalogJson = new()
     {
@@ -326,7 +328,7 @@ public sealed class SonosHandoff(
                         || (
                             row.GroupId == queue.GroupId
                             && row.Status == "dispatching"
-                            && row.ExpiresAt > now
+                            && row.DispatchUntil > now
                         ),
                     ct
                 )
@@ -336,7 +338,8 @@ public sealed class SonosHandoff(
         }
 
         if (
-            !await db.Set<SonosGrant>()
+            !await link.SessionActiveAsync(queue.UserId, queue.SessionId, ct)
+            || !await db.Set<SonosGrant>()
                 .AnyAsync(
                     row => row.UserId == queue.UserId && row.ProtectedToken == grantVersion,
                     ct
@@ -346,6 +349,7 @@ public sealed class SonosHandoff(
             return false;
         }
 
+        queue.DispatchUntil = now + DispatchWindow;
         db.Add(queue);
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
@@ -377,7 +381,7 @@ public sealed class SonosHandoff(
                         or JsonException
             )
         {
-            await FailDispatchAsync(queue.Id);
+            await EndDispatchAsync(queue.Id, "failed");
             throw;
         }
         var sessionId = await OpenSessionAsync(token, queue, ct);
@@ -430,9 +434,10 @@ public sealed class SonosHandoff(
         try
         {
             await using var transaction = await db.Database.BeginTransactionAsync(ct);
-            await locks.LockAsync($"sonos-grant:{queue.UserId}", ct);
-            if (!await IsDispatchingAsync(queue.Id, ct))
+            await LockDestinationAsync(queue, ct);
+            if (!await CanDispatchAsync(queue, "failed", ct))
             {
+                await transaction.CommitAsync(ct);
                 return null;
             }
 
@@ -442,9 +447,7 @@ public sealed class SonosHandoff(
                 new { appId = "net.relisten.sonos.dev", appContext = queue.Id.ToString("N") },
                 ct
             );
-            var sessionId = result.TryGetProperty("sessionId", out var direct)
-                ? direct.GetString()
-                : result.GetProperty("sessionStatus").GetProperty("sessionId").GetString();
+            var sessionId = ReadSessionId(result);
             if (string.IsNullOrWhiteSpace(sessionId))
             {
                 throw new JsonException("Sonos did not return a playback session ID.");
@@ -470,9 +473,31 @@ public sealed class SonosHandoff(
                 || error.Code is "ERROR_INVALID_OBJECT_ID" or "ERROR_INVALID_PARAMETER"
             )
         {
-            await FailDispatchAsync(queue.Id);
+            await EndDispatchAsync(queue.Id, "failed");
             throw;
         }
+    }
+
+    private static string? ReadSessionId(JsonElement result)
+    {
+        if (result.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        if (
+            result.TryGetProperty("sessionStatus", out var status)
+            && status.ValueKind == JsonValueKind.Object
+        )
+        {
+            result = status;
+        }
+
+        return
+            result.TryGetProperty("sessionId", out var sessionId)
+            && sessionId.ValueKind == JsonValueKind.String
+            ? sessionId.GetString()
+            : null;
     }
 
     private async Task LoadQueueAsync(
@@ -489,9 +514,10 @@ public sealed class SonosHandoff(
         // Disconnect serializes with each effect. The player can still read the prepared
         // snapshot while the advisory lock is held.
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        await locks.LockAsync($"sonos-grant:{queue.UserId}", ct);
-        if (!await IsDispatchingAsync(queue.Id, ct))
+        await LockDestinationAsync(queue, ct);
+        if (!await CanDispatchAsync(queue, "interrupted", ct))
         {
+            await transaction.CommitAsync(ct);
             return;
         }
 
@@ -517,12 +543,22 @@ public sealed class SonosHandoff(
         }
         catch (SonosRequestException error) when (error.SessionEnded)
         {
-            await db.Set<SonosQueue>()
-                .Where(row => row.Id == queue.Id && row.Status == "dispatching")
-                .ExecuteUpdateAsync(
-                    set => set.SetProperty(row => row.Status, "evicted"),
-                    CancellationToken.None
-                );
+            await EndDispatchAsync(queue.Id, "evicted");
+            await transaction.CommitAsync(CancellationToken.None);
+            throw;
+        }
+        catch (SonosRequestException error)
+            when (error.Status
+                    is HttpStatusCode.BadRequest
+                        or HttpStatusCode.Unauthorized
+                        or HttpStatusCode.Forbidden
+                        or HttpStatusCode.NotFound
+                || error.Code is "ERROR_INVALID_PARAMETER" or "ERROR_DISALLOWED_BY_POLICY"
+            )
+        {
+            // Create already succeeded. A declined load releases the room but cannot
+            // promise that the source playing before create is still there.
+            await EndDispatchAsync(queue.Id, "interrupted");
             await transaction.CommitAsync(CancellationToken.None);
             throw;
         }
@@ -533,14 +569,47 @@ public sealed class SonosHandoff(
         await transaction.CommitAsync(ct);
     }
 
-    private Task<bool> IsDispatchingAsync(Guid id, CancellationToken ct) =>
-        db.Set<SonosQueue>().AnyAsync(row => row.Id == id && row.Status == "dispatching", ct);
+    private Task LockDestinationAsync(SonosQueue queue, CancellationToken ct) =>
+        locks.LockAllAsync([$"sonos-group:{queue.GroupId}", $"sonos-grant:{queue.UserId}"], ct);
 
-    private Task<int> FailDispatchAsync(Guid id) =>
+    private async Task<bool> CanDispatchAsync(
+        SonosQueue queue,
+        string invalidSessionOutcome,
+        CancellationToken ct
+    )
+    {
+        // Disconnect, relink and rejected refresh revoke the queue under the grant lock.
+        // Native logout uses a separate transaction, so check the initiating session here too.
+        var now = clock.GetUtcNow();
+        if (
+            !await db.Set<SonosQueue>()
+                .AnyAsync(
+                    row =>
+                        row.Id == queue.Id
+                        && row.Status == "dispatching"
+                        && row.DispatchUntil > now
+                        && row.ExpiresAt > now,
+                    ct
+                )
+        )
+        {
+            return false;
+        }
+
+        if (await link.SessionActiveAsync(queue.UserId, queue.SessionId, ct))
+        {
+            return true;
+        }
+
+        await EndDispatchAsync(queue.Id, invalidSessionOutcome);
+        return false;
+    }
+
+    private Task<int> EndDispatchAsync(Guid id, string status) =>
         db.Set<SonosQueue>()
             .Where(row => row.Id == id && row.Status == "dispatching")
             .ExecuteUpdateAsync(
-                set => set.SetProperty(row => row.Status, "failed"),
+                set => set.SetProperty(row => row.Status, status),
                 CancellationToken.None
             );
 
@@ -553,7 +622,8 @@ public sealed class SonosHandoff(
             ct
         );
         if (
-            !status.TryGetProperty("itemId", out var current)
+            status.ValueKind != JsonValueKind.Object
+            || !status.TryGetProperty("itemId", out var current)
             || current.ValueKind != JsonValueKind.String
         )
         {

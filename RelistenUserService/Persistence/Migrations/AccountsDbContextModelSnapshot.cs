@@ -1417,6 +1417,10 @@ namespace RelistenUserService.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("credential_hash");
 
+                    b.Property<DateTimeOffset?>("DispatchUntil")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("dispatch_until");
+
                     b.Property<DateTimeOffset>("ExpiresAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("expires_at");

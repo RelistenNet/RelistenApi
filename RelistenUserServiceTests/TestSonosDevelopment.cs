@@ -66,6 +66,7 @@ public sealed class TestSonosDevelopment
         await db.SaveChangesAsync();
 
         var upstream = new TestUpstream();
+        var clock = new TestClock();
         using var http = new HttpClient(upstream);
         using var catalog = new HttpClient(upstream, disposeHandler: false)
         {
@@ -85,7 +86,8 @@ public sealed class TestSonosDevelopment
             locks,
             protocol,
             new ClientFactory(catalog),
-            TimeProvider.System,
+            link,
+            clock,
             NullLogger<SonosHandoff>.Instance
         );
         var development = new SonosDevelopment(
@@ -93,15 +95,8 @@ public sealed class TestSonosDevelopment
         );
         var account = new CurrentAccountContext();
         account.SetNative(user, nativeId);
-        var control = new SonosControlController(
-            account,
-            development,
-            link,
-            handoff,
-            db,
-            TimeProvider.System
-        );
-        var player = new SonosPlayerController(db, link, TimeProvider.System, development)
+        var control = new SonosControlController(account, development, link, handoff, db, clock);
+        var player = new SonosPlayerController(db, link, clock, development)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };
@@ -356,6 +351,46 @@ public sealed class TestSonosDevelopment
             .Should()
             .Equal(queueIds.Skip(500).Take(3).Select(id => $"TrackU:{id}"));
 
+        (
+            await player.TimePlayed(
+                longQueue.RequestId,
+                JsonSerializer.SerializeToElement(new { }),
+                Ct
+            )
+        )
+            .Should()
+            .BeOfType<NoContentResult>();
+        var missingQueue = new SonosQueue
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            SessionId = nativeId,
+            GroupId = "missing",
+            SonosSessionId = "stale",
+            Status = "loaded",
+            ItemsJson = "[]",
+            ExpiresAt = clock.GetUtcNow().AddHours(1),
+        };
+        db.Add(missingQueue);
+        await db.SaveChangesAsync(Ct);
+        upstream.MissingRoomStatus = HttpStatusCode.ServiceUnavailable;
+        AsJson((OkObjectResult)await playbackApi.List(Ct))
+            .EnumerateArray()
+            .Select(room => room.GetProperty("playback_handle").GetGuid())
+            .Should()
+            .Equal(longQueue.RequestId);
+        ((ObjectResult)await playbackApi.GetPlayback(missingQueue.Id, Ct))
+            .StatusCode.Should()
+            .Be(502);
+        upstream.MissingRoomStatus = HttpStatusCode.NotFound;
+        AsJson((OkObjectResult)await playbackApi.GetPlayback(missingQueue.Id, Ct))
+            .GetProperty("status")
+            .GetString()
+            .Should()
+            .Be("evicted");
+
+        await ExerciseHandoffRecoveryAsync(control, upstream, clock, request);
+
         var pending = AsJson((OkObjectResult)await control.Connect(Ct, "mobile"))
             .GetProperty("authorization_url")
             .GetString()!;
@@ -372,15 +407,54 @@ public sealed class TestSonosDevelopment
         (await player.ItemWindow(longQueue.RequestId, null, ct: Ct))
             .Should()
             .BeOfType<NotFoundResult>();
+    }
 
-        await db
-            .NativeSessions.Where(row => row.Id == nativeId)
-            .ExecuteUpdateAsync(update =>
-                update.SetProperty(row => row.RevokedAt, DateTimeOffset.UtcNow)
-            );
-        (await player.ItemWindow(longQueue.RequestId, null, ct: Ct))
+    private static async Task ExerciseHandoffRecoveryAsync(
+        SonosControlController control,
+        TestUpstream upstream,
+        TestClock clock,
+        SonosHandoffRequest request
+    )
+    {
+        var creates = upstream.CreateCount;
+        var invalid = request with { RequestId = Guid.NewGuid(), PositionMillis = 381_000 };
+        ((ObjectResult)await control.Start(invalid, Ct)).StatusCode.Should().Be(422);
+        upstream.CreateCount.Should().Be(creates);
+
+        var lostCreate = request with { RequestId = Guid.NewGuid() };
+        upstream.LoseNextCreateResponse = true;
+        (await control.Start(lostCreate, Ct)).Should().BeOfType<AcceptedAtActionResult>();
+        (await control.Start(lostCreate, Ct)).Should().BeOfType<AcceptedAtActionResult>();
+        upstream.CreateCount.Should().Be(creates + 1);
+        var replacement = request with { RequestId = Guid.NewGuid() };
+        (await control.Start(replacement, Ct)).Should().BeOfType<ConflictObjectResult>();
+
+        clock.Advance(TimeSpan.FromSeconds(45));
+        HandoffStatus(await control.GetHandoff(lostCreate.RequestId, Ct))
             .Should()
-            .BeOfType<NotFoundResult>();
+            .Be("interrupted");
+        HandoffStatus(await control.Start(replacement, Ct)).Should().Be("loaded");
+        HandoffStatus(await control.Start(lostCreate, Ct)).Should().Be("interrupted");
+        upstream.CreateCount.Should().Be(creates + 2);
+
+        upstream.RejectNextLoad = true;
+        var rejectedLoad = request with { RequestId = Guid.NewGuid() };
+        HandoffStatus(await control.Start(rejectedLoad, Ct)).Should().Be("interrupted");
+        HandoffStatus(await control.Start(request with { RequestId = Guid.NewGuid() }, Ct))
+            .Should()
+            .Be("loaded");
+    }
+
+    private static string? HandoffStatus(IActionResult result) =>
+        AsJson((OkObjectResult)result).GetProperty("status").GetString();
+
+    private sealed class TestClock : TimeProvider
+    {
+        private DateTimeOffset _now = DateTimeOffset.UtcNow;
+
+        public override DateTimeOffset GetUtcNow() => _now;
+
+        public void Advance(TimeSpan delta) => _now += delta;
     }
 
     private static async Task ExerciseFullCommandsAsync(
@@ -475,10 +549,15 @@ public sealed class TestSonosDevelopment
         public HttpClient CreateClient(string name) => catalog;
     }
 
-    private sealed class TestUpstream : HttpMessageHandler
+    internal sealed class TestUpstream : HttpMessageHandler
     {
         public JsonElement Load { get; private set; }
         public int LoadCount { get; private set; }
+        public int CreateCount { get; private set; }
+        public bool LoseNextCreateResponse { get; set; }
+        public bool RejectNextLoad { get; set; }
+        public HttpStatusCode MissingRoomStatus { get; set; } = HttpStatusCode.NotFound;
+        public Func<string, Task>? BeforeRequest { get; set; }
         public bool LoseNextLoadResponse { get; set; }
         public bool IncompleteToken { get; set; }
         public string? UnavailableTrack { get; set; }
@@ -499,9 +578,35 @@ public sealed class TestSonosDevelopment
         )
         {
             var path = request.RequestUri!.AbsolutePath;
+            if (BeforeRequest is { } before)
+            {
+                await before(path).WaitAsync(ct);
+            }
+
+            if (path == "/control/api/v1/groups/missing/playback")
+            {
+                return new HttpResponseMessage(MissingRoomStatus);
+            }
+
+            if (path == "/control/api/v1/groups/office/playbackSession")
+            {
+                CreateCount++;
+                if (LoseNextCreateResponse)
+                {
+                    LoseNextCreateResponse = false;
+                    throw new HttpRequestException("The create response was interrupted.");
+                }
+            }
+
             if (path.EndsWith("/loadCloudQueue", StringComparison.Ordinal))
             {
                 LoadCount++;
+                if (RejectNextLoad)
+                {
+                    RejectNextLoad = false;
+                    return new HttpResponseMessage(HttpStatusCode.BadRequest);
+                }
+
                 Load = await request.Content!.ReadFromJsonAsync<JsonElement>(ct);
                 RoomItem = Load.GetProperty("itemId").GetString();
                 RoomPosition = Load.GetProperty("positionMillis").GetInt32();

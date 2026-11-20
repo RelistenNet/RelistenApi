@@ -420,7 +420,10 @@ public sealed partial class SonosPlaybackController
         try
         {
             var access = await link.AccessAsync(config, queue.UserId, ct);
-            if (access is null || queue.Status is "evicted" or "revoked" or "failed")
+            if (
+                access is null
+                || queue.Status is "evicted" or "revoked" or "failed" or "interrupted"
+            )
             {
                 await FinishCommandAsync(receipt, "rejected", "sonos_playback_inactive", ct);
                 return receipt;
@@ -505,7 +508,7 @@ public sealed partial class SonosPlaybackController
                     row =>
                         row.GroupId == queue.GroupId
                         && row.Status == "dispatching"
-                        && row.ExpiresAt > now,
+                        && row.DispatchUntil > now,
                     ct
                 )
             || !await db.Set<SonosGrant>()

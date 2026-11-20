@@ -33,6 +33,7 @@ internal sealed class SonosQueue
     public string CredentialHash { get; set; } = "";
     public string ItemsJson { get; set; } = "";
     public DateTimeOffset ExpiresAt { get; set; }
+    public DateTimeOffset? DispatchUntil { get; set; }
     public string Status { get; set; } = "dispatching";
     public long? PlaybackEventSequence { get; set; }
     public string? PlaybackEventState { get; set; }

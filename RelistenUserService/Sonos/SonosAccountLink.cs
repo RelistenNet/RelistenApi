@@ -93,7 +93,7 @@ public sealed class SonosAccountLink(
                     queue =>
                         queue.UserId == owner.UserId
                         && queue.Status == "dispatching"
-                        && queue.ExpiresAt > now,
+                        && queue.DispatchUntil > now,
                     ct
                 )
         )

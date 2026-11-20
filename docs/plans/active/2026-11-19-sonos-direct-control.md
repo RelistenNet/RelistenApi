@@ -111,7 +111,7 @@ Start the normal local account stack. Set `Sonos__Enabled=true`, `Sonos__PublicB
 
 1. Call `POST /v1/integrations/sonos/connect` with a native account bearer token. Open the returned `authorization_url` and consent. Verify the redirect on the tunnel and check `GET /v1/integrations/sonos/connection`.
 2. Call `GET /v1/integrations/sonos/groups` and use the exact Office group ID. Submit `POST /v1/integrations/sonos/handoffs` with `request_id` (a fresh UUID), `group_id`, `track_ids` (the ordered V4 IDs), `start_index` (zero-based), and `position_millis`. The dev endpoint accepts up to 5,000 MP3-playable occurrences. The User Service resolves distinct catalog references in batches of at most 500 and preserves the submitted order and duplicates. The speaker controls its window size independently. Reuse the request ID for a retry of the same handoff.
-3. Confirm the Office plays both tracks. Pause from the Sonos app and check `GET /v1/integrations/sonos/handoffs/{request_id}` for `playback_event_state`. The development receipt records the last matching playback event. For an uncertain dispatch, poll the receipt. The server checks whether the room reports an item from that queue and never resends the takeover. If the room cannot confirm the load, the receipt remains pending until expiry.
+3. Confirm the Office plays both tracks. Pause from the Sonos app and check `GET /v1/integrations/sonos/handoffs/{request_id}` for `playback_event_state`. The development receipt records the last matching playback event. For an uncertain dispatch, poll the receipt. The server checks whether the room reports an item from that queue. A repeated request ID never resends the takeover. The dispatch reservation expires after 45 seconds so the listener can explicitly try again.
 
 The development test uses a disposable PostgreSQL database and simulated Sonos and Catalog responses. Real speaker qualification needs the updated test SMAPI service and a dev key with both the OAuth redirect and event callback registered.
 
@@ -129,21 +129,45 @@ Use the local User Service on `codex/sonos-direct-control` with its accounts mig
 | --- | --- |
 | `POST /connect?return_to=mobile` | Open the returned `authorization_url` in the system authorization session. Wait for `net.relisten.mobile:/sonos/callback?result=connected\|failed`, then refresh `GET /connection`. Refresh after browser cancellation too. The callback carries no credentials. |
 | `GET /connection`, `DELETE /connection` | Read `linked`. Disconnect returns `204` and clears Relisten’s grant, pending links, and queue access. The speaker may finish buffered audio. |
-| `GET /groups`, `POST /handoffs` | Pick a group and submit the ordered catalog track IDs. A loaded handoff includes `playback_handle`. Preexisting queues without a persisted speaker session require a fresh handoff for controls. |
+| `GET /groups` | Lists `household_id`, `id`, and `name` for each authorized group. Use the group ID the listener chose. |
+| `POST /handoffs` | Submits the ordered catalog track IDs and current position. See the body and receipt below. |
+| `GET /handoffs/{request_id}` | Follows a pending handoff. The same selection and request UUID can also be submitted again after a lost response. |
 | `GET /playback` | Lists currently confirmed Relisten-owned playback. Use this to restore the room when the app reopens. |
 | `GET /playback/{handle}` | Returns `playback_handle`, `group_id`, `group_name`, `status`, and `queue_length`. An active result includes `playback_state`, `position_millis`, `observed_at`, and `current_occurrence` with `item_id`, zero-based `queue_index`, `track_id`, and display metadata. Disable transport during `unconfirmed` and release the destination on `evicted`. |
 | `GET /playback/{handle}/volume` | Returns `volume` (0–100), `muted`, and `fixed`. These describe the entire selected group. |
 | `POST /playback/{handle}/commands` | Submit a command with a client-generated UUID in `command_id`. A `202` returns a receipt and its URL in `Location`. |
 | `GET /playback/{handle}/commands/{commandId}` | Reads the receipt. Use the receipt’s `playback_url` to refresh what the room is doing. |
 
+Submit a handoff with this body:
+
+```json
+{
+  "request_id": "2c05ca2f-3b84-4fc8-8b39-8fa8cc793730",
+  "group_id": "<id returned by GET /groups>",
+  "track_ids": ["track_4rc5e1za2bvsrnnr0edzzj8rfs", "track_55z7a4qtqec6d5cssxwz7z8cvb"],
+  "start_index": 0,
+  "position_millis": 42000
+}
+```
+
+Send the mobile queue's effective order after segment-aware shuffle, including repeated track IDs. Use the zero-based index of the selected occurrence. The local API accepts 1 to 5,000 streamable occurrences and returns `422` for an unavailable recording or an invalid position. A known-duration track requires a starting position strictly below its duration.
+
+Handoff receipts contain `request_id` (UUID), `status`, `playback_handle` (UUID or null), and `playback_event_state` (string or null). On `202 dispatching`, poll `Location` and keep local playback paused while the outcome is unknown. On `200 loaded`, adopt the returned handle and refresh its playback state. Resume the prior local source automatically only on a definitive refusal before takeover, such as `failed` or a first submission rejected with `422`. Treat `interrupted`, `evicted`, `revoked`, lost responses, and unrecognized success bodies conservatively. Check the receipt or discovery again before letting the listener explicitly choose a room or resume on the phone.
+
+A `409 sonos_handoff_busy` means a request already reserves the room. The dispatch reservation lasts 45 seconds. A Sonos call already in flight may finish or time out under the room lock. After the reservation expires, receipt polling can still recognize a load that reached Sonos. An identical POST returns the saved status, and `GET /handoffs/{request_id}` reads the room to reconcile it. A new UUID represents a new listener action. Queue access and receipts expire after 24 hours for newly created queues. Bind every retry and poll to the initiating Relisten account scope and discard its results on account switch.
+
+An active playback response includes `current_occurrence` with `item_id`, `queue_index`, `track_id`, `name`, `duration_millis`, `artist`, `album`, and `image_url`. Duration, artist, album and art can be null. `position_millis` can also be null. Use `observed_at` (ISO 8601) for playhead estimation. Inactive responses may have null `playback_state`, `position_millis`, `observed_at`, `queue_length`, and `current_occurrence`. Treat `unconfirmed` as temporary and disable controls. Release local ownership of the handle on `evicted`, `revoked`, `failed`, `interrupted`, or when a direct read returns `404`.
+
 Command fields by action:
 
 - `play` and `pause` should include `expected_item_id` from the current occurrence. The legacy action-only body still returns a playback URL in `Location`.
 - `seek` requires `expected_item_id` and an absolute `position_millis` within the track.
 - `next` and `previous` require `expected_item_id`. The server moves one position in the submitted queue and preserves the room’s playing or paused state. Disable either action at its queue boundary.
-- `volume` requires an integer `volume` from 0 to 100. `mute` requires boolean `muted`. Send the final slider value and refresh the group's volume after a change.
+- `volume` requires an integer `volume` from 0 to 100. `mute` requires boolean `muted`. Send the final slider value and refresh the group's volume after a change. These commands target the group. A switch of sources after the server reads the room can affect the new source, and a volume update can overwrite a simultaneous external mute change.
 
-A receipt contains `command_id`, `status`, `code`, `target_item_id`, and `playback_url`. `accepted` means Sonos acknowledged the request. `confirmed` means the server observed the desired state after an uncertain response. `pending` means the effect is unknown, so refresh the visible controls from the room. An ambiguous seek can stay pending if the playhead has already moved. Retry an interrupted request with the same UUID and body. This retrieves or reconciles the receipt without reissuing a recorded command. Reusing the UUID with a different body returns `409 sonos_command_id_conflict`. Refresh the room on `409 sonos_playback_changed` or `sonos_playback_inactive`. Send one change at a time from the UI. A newer valid command for the same queue can supersede an unresolved receipt.
+A receipt contains `command_id`, `status`, `code`, `target_item_id`, and `playback_url`. `accepted` means Sonos acknowledged the request. `confirmed` means the server observed the desired state. `pending` means the effect is unknown, so refresh the visible controls from the room. An ambiguous seek can stay pending if the playhead has already moved. Retry an interrupted request with the same UUID and body. This retrieves or reconciles the receipt without reissuing a recorded command. Reusing the UUID with a different body returns `409 sonos_command_id_conflict`. Refresh the room on `409 sonos_playback_changed` or `sonos_playback_inactive`. Disable seek if position or duration is unavailable, and disable volume if `fixed` is true. Send one change at a time. A newer valid command for the same queue can supersede an unresolved receipt. On `sonos_reconnect_required`, refresh the link and offer Connect Sonos again.
+
+Command receipt `code` and `target_item_id` can be null. A rejected POST can return `409` immediately. A subsequent receipt GET may return `200 rejected` with its reason. `sonos_command_unavailable` covers an out-of-range seek or a queue boundary, `sonos_volume_fixed` means the current group rejected volume changes, and `sonos_command_superseded` means a newer command was prepared before the prior result could be confirmed. Refresh the current state and require a fresh listener action for a new UUID.
 
 The User Service issues a session-scoped `skipToItem` for the observed occurrence and offset, with `playOnCompletion` set to the requested state. This keeps a command on the original session during a takeover. Within that session, a seek or track change between the status read and command can move playback back to the sampled occurrence or offset. Measure that behavior before production.
 

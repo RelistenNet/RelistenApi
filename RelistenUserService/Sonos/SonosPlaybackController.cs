@@ -54,23 +54,47 @@ public sealed partial class SonosPlaybackController(
             }
 
             var active = new List<PlaybackView>();
+            var roomUnavailable = false;
             foreach (var group in queues.GroupBy(row => row.GroupId))
             {
-                var observed = await ReadRoomAsync(token.Token, group.Key, ct);
+                var eligible = new List<SonosQueue>();
                 foreach (var queue in group)
                 {
                     if (await link.SessionActiveAsync(queue.UserId, queue.SessionId, ct))
                     {
-                        var state = await ReconcileAsync(queue, observed, ct);
-                        if (state.Status == "active")
-                        {
-                            active.Add(state);
-                        }
+                        eligible.Add(queue);
+                    }
+                }
+
+                if (eligible.Count == 0)
+                {
+                    continue;
+                }
+
+                RoomPlayback? observed;
+                try
+                {
+                    observed = await ReadRoomAsync(token.Token, group.Key, ct);
+                }
+                catch (Exception error) when (Unavailable(error, ct))
+                {
+                    roomUnavailable = true;
+                    continue;
+                }
+
+                foreach (var queue in eligible)
+                {
+                    var state = await ReconcileAsync(queue, observed, ct);
+                    if (state.Status == "active")
+                    {
+                        active.Add(state);
                     }
                 }
             }
 
-            return Ok(active);
+            return active.Count == 0 && roomUnavailable
+                ? Problem(statusCode: 502, title: "Could not read Sonos playback.")
+                : Ok(active);
         }
         catch (Exception error) when (Unavailable(error, ct))
         {
@@ -167,7 +191,10 @@ public sealed partial class SonosPlaybackController(
                     : null;
             return new RoomPlayback(state.GetString()!, itemId, position, clock.GetUtcNow());
         }
-        catch (SonosRequestException error) when (error.Status == HttpStatusCode.Gone)
+        catch (SonosRequestException error)
+            when (error.Status is HttpStatusCode.Gone or HttpStatusCode.NotFound
+                || error.Code == "ERROR_INVALID_OBJECT_ID"
+            )
         {
             return null;
         }

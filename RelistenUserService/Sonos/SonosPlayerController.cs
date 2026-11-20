@@ -142,7 +142,7 @@ public sealed class SonosPlayerController(
         Guid queueId,
         [FromBody] JsonElement report,
         CancellationToken ct
-    ) => await AuthorizedQueueAsync(queueId, ct) is null ? NotFound() : Ok();
+    ) => await AuthorizedQueueAsync(queueId, ct) is null ? NotFound() : NoContent();
 
     [HttpPost("events/{**path}")]
     [RequestSizeLimit(64 * 1024)]
