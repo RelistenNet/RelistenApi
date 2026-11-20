@@ -17,7 +17,8 @@ public sealed partial class PlaylistWriteService(
     AccountsDbContext dbContext,
     AdvisoryLockService advisoryLocks,
     LibraryStateStore stateStore,
-    TimeProvider timeProvider
+    TimeProvider timeProvider,
+    PlaylistTrackDurations trackDurations
 )
 {
     public async Task<(PlaylistCreated Response, bool Replayed)> CreateAsync(
@@ -37,6 +38,7 @@ public sealed partial class PlaylistWriteService(
             )
             .ToArray();
         var hash = PlaylistHasher.Hash(request);
+        var entryDurations = await ResolveCreateDurationsAsync(request, cancellationToken);
         await using var transaction = await dbContext.Database.BeginTransactionAsync(
             cancellationToken
         );
@@ -74,6 +76,7 @@ public sealed partial class PlaylistWriteService(
             request,
             "create",
             hash,
+            entryDurations,
             cancellationToken
         );
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -87,6 +90,7 @@ public sealed partial class PlaylistWriteService(
         CreatePlaylistRequest request,
         string receiptKind,
         byte[] hash,
+        IReadOnlyDictionary<PlaylistEntryId, int> entryDurations,
         CancellationToken cancellationToken
     )
     {
@@ -117,12 +121,11 @@ public sealed partial class PlaylistWriteService(
             Description = request.Metadata.Description,
             Revision = 1,
             EntryCount = count,
-            TrackCount = entries.Count(entry => entry.TrackId is not null),
             CreatedAt = now,
             UpdatedAt = now,
         };
         dbContext.Playlists.Add(playlist);
-        AddInitialStructure(request);
+        AddInitialStructure(playlist, request, entryDurations);
         dbContext.PlaylistReceipts.Add(
             new()
             {
@@ -151,6 +154,7 @@ public sealed partial class PlaylistWriteService(
         request = PlaylistValidation.Normalize(request);
         var hashes = PlaylistHasher.ReceiptHashes(id, request, replayWholeBatch);
         var createdIds = request.Operations.SelectMany(PlaylistValidation.CreatedIds).ToArray();
+        var durations = await ResolveEditDurationsAsync(actor, id, request, cancellationToken);
         await using var transaction = await dbContext.Database.BeginTransactionAsync(
             cancellationToken
         );
@@ -200,8 +204,8 @@ public sealed partial class PlaylistWriteService(
             operation.Payload is UpdatePlaylistMetadata { Description.IsPresent: false }
         );
         var editor = editsOnlyName
-            ? new PlaylistEditor(Copy(playlist), [], [], [])
-            : await LoadEditorAsync(playlist, newOperations, cancellationToken);
+            ? new PlaylistEditor(Copy(playlist), [], [], [], durations)
+            : await LoadEditorAsync(playlist, newOperations, durations, cancellationToken);
         var results = new List<PlaylistOperationResult>();
         foreach (var operation in request.Operations)
         {
@@ -393,6 +397,7 @@ public sealed partial class PlaylistWriteService(
     private async Task<PlaylistEditor> LoadEditorAsync(
         Playlist playlist,
         IReadOnlyList<PlaylistOperation> operations,
+        IReadOnlyDictionary<string, int> durations,
         CancellationToken cancellationToken
     )
     {
@@ -439,7 +444,8 @@ public sealed partial class PlaylistWriteService(
             await ExistingIdsAsync(
                 operations.SelectMany(PlaylistValidation.CreatedIds),
                 cancellationToken
-            )
+            ),
+            durations
         );
     }
 
@@ -571,7 +577,11 @@ public sealed partial class PlaylistWriteService(
         }
     }
 
-    private void AddInitialStructure(CreatePlaylistRequest request)
+    private void AddInitialStructure(
+        Playlist playlist,
+        CreatePlaylistRequest request,
+        IReadOnlyDictionary<PlaylistEntryId, int> entryDurations
+    )
     {
         var ranks = PlaylistRanks.Between(null, null, request.Segments.Count);
         for (var index = 0; index < request.Segments.Count; index++)
@@ -590,6 +600,13 @@ public sealed partial class PlaylistWriteService(
             for (var entryIndex = 0; entryIndex < segment.Entries.Count; entryIndex++)
             {
                 var entry = segment.Entries[entryIndex];
+                int? duration = entryDurations.TryGetValue(entry.EntryId, out var seconds)
+                    ? seconds
+                    : null;
+                if (entry.TrackId is not null)
+                {
+                    playlist.AddTrack(duration);
+                }
                 dbContext.PlaylistEntries.Add(
                     new()
                     {
@@ -597,6 +614,7 @@ public sealed partial class PlaylistWriteService(
                         PlaylistId = request.PlaylistId,
                         SegmentId = segment.SegmentId,
                         TrackId = entry.TrackId,
+                        TrackDurationSeconds = duration,
                         Description = entry.Description,
                         Rank = entryRanks[entryIndex],
                     }
@@ -611,6 +629,7 @@ public sealed partial class PlaylistWriteService(
         {
             ChangeType = "playlist_summary",
             ChangedAt = now,
+            PlaylistDurationSeconds = playlist.DurationSeconds,
             PlaylistJson = JsonSerializer.Serialize(
                 new PlaylistSummary(
                     playlist.Id,

@@ -21,6 +21,7 @@ using RelistenIngestionWorker.AccountDeletion;
 using RelistenUserService;
 using RelistenUserService.Authentication;
 using RelistenUserService.Mcp;
+using RelistenUserService.Playlists;
 
 namespace RelistenUserServiceTests;
 
@@ -843,6 +844,9 @@ public sealed class TestMcpHttp
                     handler.PrimaryHandler = catalog
                 )
         );
+        builder
+            .Services.AddHttpClient(nameof(PlaylistTrackDurations))
+            .ConfigurePrimaryHttpMessageHandler(() => new CatalogStub(_ => null));
         app = AccountsApplication.Build(builder);
         await AccountsApplication.InitializeAsync(app, CancellationToken.None);
         await app.StartAsync();

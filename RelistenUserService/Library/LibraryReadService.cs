@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Relisten.Accounts.Contracts.Library;
 using Relisten.Accounts.Contracts.Playlists;
+using RelistenUserService.Library.Entities;
 using RelistenUserService.Persistence;
 using RelistenUserService.Playlists;
 
@@ -136,12 +137,7 @@ public sealed class LibraryReadService(
                         ? null
                         : new FavoriteTarget(change.CatalogType!, change.CatalogId!),
                     change.ChangedAt,
-                    change.PlaylistJson is null
-                        ? null
-                        : JsonSerializer.Deserialize<PlaylistSummary>(
-                            change.PlaylistJson,
-                            PlaylistJson.Options
-                        ),
+                    ReadPlaylistSummary(change),
                     change.FollowedPlaylistId
                 ))
                 .ToArray(),
@@ -153,6 +149,26 @@ public sealed class LibraryReadService(
             FollowedPlaylists = followedPlaylists,
         };
         return LibraryChangesExecution.Succeeded(response);
+    }
+
+    private static PlaylistSummary? ReadPlaylistSummary(LibraryChange change)
+    {
+        if (change.PlaylistJson is null)
+        {
+            return null;
+        }
+
+        var summary = JsonSerializer.Deserialize<PlaylistSummary>(
+            change.PlaylistJson,
+            PlaylistJson.Options
+        );
+        return summary is null
+            ? null
+            : summary with
+            {
+                DurationSeconds =
+                    change.PlaylistDurationSeconds ?? (summary.TrackCount == 0 ? 0L : null),
+            };
     }
 
     private Task<LibraryHead> ReadHeadAsync(UserId userId, CancellationToken cancellationToken) =>

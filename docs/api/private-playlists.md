@@ -371,3 +371,31 @@ Single samples for the 5,000-entry playlist measured 508.7 ms to create,
 library summary, and 16.9 ms to read/serialize the resulting 500-revision delta
 page (55,995 bytes). These observations provide local size and timing examples;
 they do not establish latency budgets or production capacity.
+
+## Playlist duration summaries
+
+Owned playlist summaries and available followed heads include `duration_seconds`
+once every live track entry has a captured duration. A playlist with no tracks has
+duration zero. A repeated track contributes once per entry. Text blocks contribute
+only to the entry count. Unavailable followed heads omit the duration.
+
+New tracks use a best-effort lookup through the Catalog resolver. An edit can
+complete with an unknown duration, and a public copy reuses the source entries'
+captured durations. Capture happens once per entry, so later corrections in Catalog
+do not recalculate existing playlists.
+
+After applying the schema migration and switching all playlist writers to this
+build, run the User Service command to fill missing durations and rebuild the
+stored totals.
+
+```sh
+dotnet RelistenUserService.dll backfill-playlist-durations
+```
+
+The command uses the User Service migration database connection and
+`Accounts:CatalogBaseUrl` (defaults to `https://api.relisten.net/`). It makes Catalog
+requests before taking write locks. It publishes an owner library change when a
+total becomes available, without changing the playlist content revision. Rerun
+the command to retry unresolved tracks or after any rollback that allowed older
+writers to edit playlists. Refresh the library snapshot on clients that synced
+through a rollback to recover duration summaries.

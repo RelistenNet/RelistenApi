@@ -49,6 +49,8 @@ public sealed class PlaylistReadService(AccountsDbContext dbContext)
         )
         {
             TrackCount = row.TrackCount,
+            DurationSeconds =
+                row.TrackCount == row.TracksWithDuration ? row.KnownDurationSeconds : null,
             PublicCode = row.PublicCode,
             Published = row.Published,
             TakenDown = row.TakenDown,
@@ -73,6 +75,10 @@ public sealed class PlaylistReadService(AccountsDbContext dbContext)
                 Name = playlist == null ? null : playlist.Name,
                 Owner = playlist == null ? null : new(playlist.OwnerId, playlist.Owner.Username),
                 Revision = playlist == null ? null : playlist.Revision,
+                DurationSeconds =
+                    playlist != null && playlist.TrackCount == playlist.TracksWithDuration
+                        ? playlist.KnownDurationSeconds
+                        : null,
             }
         ).ToArrayAsync(cancellationToken);
     }

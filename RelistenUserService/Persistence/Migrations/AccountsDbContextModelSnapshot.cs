@@ -870,6 +870,10 @@ namespace RelistenUserService.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("followed_playlist_id");
 
+                    b.Property<long?>("PlaylistDurationSeconds")
+                        .HasColumnType("bigint")
+                        .HasColumnName("playlist_duration_seconds");
+
                     b.Property<string>("PlaylistJson")
                         .HasColumnType("jsonb")
                         .HasColumnName("playlist_json");
@@ -984,6 +988,10 @@ namespace RelistenUserService.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("entry_count");
 
+                    b.Property<long>("KnownDurationSeconds")
+                        .HasColumnType("bigint")
+                        .HasColumnName("known_duration_seconds");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text")
@@ -1013,6 +1021,10 @@ namespace RelistenUserService.Persistence.Migrations
                     b.Property<int>("TrackCount")
                         .HasColumnType("integer")
                         .HasColumnName("track_count");
+
+                    b.Property<int>("TracksWithDuration")
+                        .HasColumnType("integer")
+                        .HasColumnName("tracks_with_duration");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -1063,6 +1075,10 @@ namespace RelistenUserService.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("segment_id");
+
+                    b.Property<int?>("TrackDurationSeconds")
+                        .HasColumnType("integer")
+                        .HasColumnName("track_duration_seconds");
 
                     b.Property<string>("TrackId")
                         .HasColumnType("text")

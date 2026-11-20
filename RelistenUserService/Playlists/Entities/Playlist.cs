@@ -18,8 +18,36 @@ public sealed class Playlist
 
     // Live entries with a track, maintained beside EntryCount so summaries need no entry scan.
     public int TrackCount { get; set; }
+
+    // Duration snapshots can be incomplete. Keep the subtotal so a later removal or backfill
+    // can complete it without asking Catalog for the tracks we already know.
+    public long KnownDurationSeconds { get; set; }
+    public int TracksWithDuration { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
+
+    internal long? DurationSeconds =>
+        TrackCount == TracksWithDuration ? KnownDurationSeconds : null;
+
+    internal void AddTrack(int? duration)
+    {
+        TrackCount++;
+        if (duration is { } seconds)
+        {
+            KnownDurationSeconds += seconds;
+            TracksWithDuration++;
+        }
+    }
+
+    internal void RemoveTrack(int? duration)
+    {
+        TrackCount--;
+        if (duration is { } seconds)
+        {
+            KnownDurationSeconds -= seconds;
+            TracksWithDuration--;
+        }
+    }
 }
 
 public sealed class PlaylistSegment
@@ -37,6 +65,7 @@ public sealed class PlaylistEntry
     public PlaylistId PlaylistId { get; set; }
     public PlaylistSegmentId SegmentId { get; set; }
     public string? TrackId { get; set; }
+    public int? TrackDurationSeconds { get; set; }
     public string? Description { get; set; }
     public string? Rank { get; set; }
     public bool Deleted { get; set; }

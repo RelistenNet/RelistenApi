@@ -6,10 +6,14 @@ namespace RelistenUserService.Playlists;
 
 internal static partial class PlaylistCopy
 {
-    internal static CreatePlaylistRequest CreateRequest(
+    internal static (
+        CreatePlaylistRequest Request,
+        IReadOnlyDictionary<PlaylistEntryId, int> Durations
+    ) CreateRequest(
         CopyPublicPlaylistRequest request,
         Playlist source,
-        IReadOnlyList<PlaylistSegmentSnapshot> structure
+        IReadOnlyList<PlaylistSegmentSnapshot> structure,
+        IReadOnlyDictionary<PlaylistEntryId, int> sourceDurations
     )
     {
         var entryIds = structure
@@ -33,12 +37,15 @@ internal static partial class PlaylistCopy
             ))
             .ToArray();
 
-        return new(
-            request.ContractVersion,
-            request.CommandId,
-            PlaylistId.New(),
-            new(source.Name, Rewrite(source.Description, entryIds)),
-            segments
+        return (
+            new(
+                request.ContractVersion,
+                request.CommandId,
+                PlaylistId.New(),
+                new(source.Name, Rewrite(source.Description, entryIds)),
+                segments
+            ),
+            sourceDurations.ToDictionary(pair => entryIds[pair.Key.Value], pair => pair.Value)
         );
     }
 
