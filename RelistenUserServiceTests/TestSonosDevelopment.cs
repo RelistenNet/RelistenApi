@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using NUnit.Framework;
 using OpenIddict.EntityFrameworkCore.Models;
 using Relisten.Identifiers;
@@ -84,7 +85,8 @@ public sealed class TestSonosDevelopment
             locks,
             protocol,
             new ClientFactory(catalog),
-            TimeProvider.System
+            TimeProvider.System,
+            NullLogger<SonosHandoff>.Instance
         );
         var development = new SonosDevelopment(
             new SonosConfiguration("dev-id", "dev-secret", new Uri($"https://{Host}/"), "270")
@@ -158,6 +160,20 @@ public sealed class TestSonosDevelopment
             .Should()
             .Be($"TrackU:{Track}");
 
+        var track = items[1].GetProperty("track");
+        track.GetProperty("artist").GetProperty("name").GetString().Should().Be("Grateful Dead");
+        track
+            .GetProperty("album")
+            .GetProperty("name")
+            .GetString()
+            .Should()
+            .Be("1977-05-08 · Barton Hall, Cornell University");
+        track
+            .GetProperty("imageUrl")
+            .GetString()
+            .Should()
+            .Be("https://relisten.net/album-art/104c96e5-719f-366f-b72d-8d53709c80e0.png");
+
         player.Request.Headers["X-Sonos-Event-Seq-Id"] = "9";
         player.Request.Headers["X-Sonos-Namespace"] = "playback";
         player.Request.Headers["X-Sonos-Type"] = "playbackStatus";
@@ -195,6 +211,7 @@ public sealed class TestSonosDevelopment
 
         // Start near the catalog-batch boundary, then ask for the next window.
         upstream.CatalogBatchSizes.Clear();
+        upstream.ArtistCatalogUnavailable = true;
         var queueIds = Enumerable
             .Range(0, 5_000)
             .Select(_ => UuidTypeId.Format("track", Guid.NewGuid()))
@@ -286,6 +303,7 @@ public sealed class TestSonosDevelopment
         public int LoadCount { get; private set; }
         public bool LoseNextLoadResponse { get; set; }
         public string? UnavailableTrack { get; set; }
+        public bool ArtistCatalogUnavailable { get; set; }
         public List<int> CatalogBatchSizes { get; } = [];
 
         protected override async Task<HttpResponseMessage> SendAsync(
@@ -310,8 +328,46 @@ public sealed class TestSonosDevelopment
             if (path == "/api/v4/catalog/resolve")
             {
                 var requestBody = await request.Content!.ReadFromJsonAsync<JsonElement>(ct);
-                var ids = requestBody
-                    .GetProperty("references")
+                const string artistId = "artist_3qmp7zjbg1rpebhtyfy43096vj";
+                const string showId = "show_0g9jbeawcz6sqvebcdadr9s070";
+                const string sourceId = "source_7bbw2e16a0h9ssczd3bwzgv1wp";
+                var references = requestBody.GetProperty("references");
+                if (references[0].GetProperty("kind").GetString() == "artist")
+                {
+                    if (ArtistCatalogUnavailable)
+                    {
+                        return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
+                    }
+
+                    references.GetArrayLength().Should().Be(1);
+                    references[0].GetProperty("id").GetString().Should().Be(artistId);
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = JsonContent.Create(
+                            new
+                            {
+                                references = new[]
+                                {
+                                    new
+                                    {
+                                        id = artistId,
+                                        availability = "available",
+                                        target = new { kind = "artist", id = artistId },
+                                    },
+                                },
+                                entities = new
+                                {
+                                    artists = new[]
+                                    {
+                                        new { id = artistId, name = "Grateful Dead" },
+                                    },
+                                },
+                            }
+                        ),
+                    };
+                }
+
+                var ids = references
                     .EnumerateArray()
                     .Select(reference => reference.GetProperty("id").GetString())
                     .ToArray();
@@ -329,10 +385,25 @@ public sealed class TestSonosDevelopment
                             }),
                             entities = new
                             {
+                                shows = new[] { new { id = showId, display_date = "1977-05-08" } },
+                                sources = new[]
+                                {
+                                    new
+                                    {
+                                        id = sourceId,
+                                        imported_venue = new
+                                        {
+                                            name = "Barton Hall, Cornell University",
+                                        },
+                                    },
+                                },
                                 tracks = ids.Select(id => new
                                 {
                                     id,
                                     title = "Test recording",
+                                    artist_id = artistId,
+                                    show_id = showId,
+                                    source_id = sourceId,
                                     duration = 381,
                                     mp3_url = "https://archive.example/track.mp3",
                                 }),

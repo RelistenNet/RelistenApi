@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Relisten.Identifiers;
 using RelistenUserService.Persistence;
@@ -19,21 +20,27 @@ internal sealed record QueueTrackMetadata(
     MusicObjectId Id,
     string Name,
     int? DurationMillis,
-    string ContentType
+    string ContentType,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        QueueDisplayName? Artist = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        QueueDisplayName? Album = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ImageUrl = null
 );
+
+internal sealed record QueueDisplayName(string Name);
 
 internal sealed record MusicObjectId(string ServiceId, string ObjectId);
 
 internal sealed record SonosGroup(string HouseholdId, string Id, string Name);
-
-internal sealed record CatalogTrack(string Id, string Title, int? Duration, string? Mp3Url);
 
 public sealed class SonosHandoff(
     AccountsDbContext db,
     AdvisoryLockService locks,
     SonosProtocol protocol,
     IHttpClientFactory clients,
-    TimeProvider clock
+    TimeProvider clock,
+    ILogger<SonosHandoff> logger
 )
 {
     internal static readonly JsonSerializerOptions QueueJson = new(JsonSerializerDefaults.Web);
@@ -54,7 +61,32 @@ public sealed class SonosHandoff(
 
     private sealed record CatalogTarget(string Kind, string Id);
 
-    private sealed record CatalogEntities(CatalogTrack[]? Tracks);
+    private sealed record CatalogEntities(
+        CatalogTrack[]? Tracks,
+        CatalogRecording[]? Shows,
+        CatalogRecording[]? Sources,
+        CatalogArtist[]? Artists
+    );
+
+    private sealed record CatalogTrack(
+        string Id,
+        string Title,
+        int? Duration,
+        string? Mp3Url,
+        string? ArtistId,
+        string? ShowId,
+        string? SourceId
+    );
+
+    private sealed record CatalogRecording(
+        string Id,
+        string? DisplayDate,
+        CatalogVenue? ImportedVenue
+    );
+
+    private sealed record CatalogVenue(string? Name);
+
+    private sealed record CatalogArtist(string Id, string Name);
 
     internal async Task<IReadOnlyList<SonosGroup>> GroupsAsync(string token, CancellationToken ct)
     {
@@ -92,39 +124,31 @@ public sealed class SonosHandoff(
     {
         var catalog = clients.CreateClient("SonosCatalog");
         var resolved = new Dictionary<string, CatalogTrack>(StringComparer.Ordinal);
+        var shows = new Dictionary<string, CatalogRecording>(StringComparer.Ordinal);
+        var sources = new Dictionary<string, CatalogRecording>(StringComparer.Ordinal);
         foreach (var batch in trackIds.Distinct(StringComparer.Ordinal).Chunk(CatalogBatchSize))
         {
-            using var response = await catalog.PostAsJsonAsync(
-                "api/v4/catalog/resolve",
-                new
-                {
-                    references = batch.Select(id => new
-                    {
-                        kind = "track",
-                        scheme = "v4",
-                        id,
-                    }),
-                },
-                ct
-            );
-            response.EnsureSuccessStatusCode();
-            var result =
-                await response.Content.ReadFromJsonAsync<CatalogResolution>(CatalogJson, ct)
-                ?? throw new JsonException("Catalog returned an empty resolve response.");
-            if (
-                result.References is null
-                || result.Entities?.Tracks is null
-                || !batch.SequenceEqual(result.References.Select(reference => reference.Id))
-            )
+            var (references, entities) = await ResolveBatchAsync(catalog, "track", batch, ct);
+            if (entities.Tracks is null)
             {
-                throw new JsonException("Catalog returned an incomplete track batch.");
+                throw new JsonException("Catalog returned no track entities.");
             }
 
-            var tracksById = result.Entities.Tracks.ToDictionary(
+            foreach (var show in entities.Shows ?? [])
+            {
+                shows.TryAdd(show.Id, show);
+            }
+
+            foreach (var source in entities.Sources ?? [])
+            {
+                sources.TryAdd(source.Id, source);
+            }
+
+            var tracksById = entities.Tracks.ToDictionary(
                 track => track.Id,
                 StringComparer.Ordinal
             );
-            foreach (var reference in result.References)
+            foreach (var reference in references)
             {
                 if (
                     reference.Availability is not ("available" or "redirected")
@@ -141,10 +165,25 @@ public sealed class SonosHandoff(
             }
         }
 
+        var artists = await ResolveArtistNamesAsync(catalog, resolved.Values, ct);
+
         return trackIds
             .Select(id =>
             {
                 var track = resolved[id];
+                var show = track.ShowId is { } showKey ? shows.GetValueOrDefault(showKey) : null;
+                var source = track.SourceId is { } sourceKey
+                    ? sources.GetValueOrDefault(sourceKey)
+                    : null;
+                var date = show?.DisplayDate ?? source?.DisplayDate;
+                var venue = source?.ImportedVenue?.Name ?? show?.ImportedVenue?.Name;
+                var album = string.Join(
+                    " · ",
+                    new[] { date, venue }.Where(value => !string.IsNullOrWhiteSpace(value))
+                );
+                var imageUrl = ShowId.TryParse(track.ShowId, out var showId)
+                    ? $"https://relisten.net/album-art/{showId.Value:D}.png"
+                    : null;
                 return new QueueTrack(
                     Guid.CreateVersion7().ToString(),
                     new QueueTrackMetadata(
@@ -153,11 +192,113 @@ public sealed class SonosHandoff(
                         track.Duration is >= 0 and <= int.MaxValue / 1000
                             ? track.Duration * 1000
                             : null,
-                        "audio/mpeg"
+                        "audio/mpeg",
+                        DisplayName(
+                            track.ArtistId is { } artistKey
+                                ? artists.GetValueOrDefault(artistKey)
+                                : null
+                        ),
+                        DisplayName(album),
+                        imageUrl
                     )
                 );
             })
             .ToArray();
+    }
+
+    private async Task<Dictionary<string, string>> ResolveArtistNamesAsync(
+        HttpClient catalog,
+        IEnumerable<CatalogTrack> tracks,
+        CancellationToken ct
+    )
+    {
+        var artists = new Dictionary<string, string>(StringComparer.Ordinal);
+        var artistIds = tracks
+            .Select(track => track.ArtistId)
+            .OfType<string>()
+            .Where(id => ArtistId.TryParse(id, out _))
+            .Distinct(StringComparer.Ordinal);
+        foreach (var batch in artistIds.Chunk(CatalogBatchSize))
+        {
+            (CatalogReference[] references, CatalogEntities entities) result;
+            try
+            {
+                result = await ResolveBatchAsync(catalog, "artist", batch, ct);
+            }
+            catch (Exception error)
+                when (!ct.IsCancellationRequested
+                    && error is HttpRequestException or JsonException or OperationCanceledException
+                )
+            {
+                // The recordings already passed playback validation. Artist names are display-only.
+                logger.LogWarning(error, "Could not resolve Sonos artist names");
+                break;
+            }
+
+            var names = (result.entities.Artists ?? []).ToDictionary(
+                artist => artist.Id,
+                artist => artist.Name,
+                StringComparer.Ordinal
+            );
+            foreach (var reference in result.references)
+            {
+                if (
+                    reference.Target is { Kind: "artist" } target
+                    && names.TryGetValue(target.Id, out var name)
+                )
+                {
+                    artists.TryAdd(reference.Id, name);
+                }
+            }
+        }
+
+        return artists;
+    }
+
+    private static async Task<(
+        CatalogReference[] References,
+        CatalogEntities Entities
+    )> ResolveBatchAsync(HttpClient catalog, string kind, string[] batch, CancellationToken ct)
+    {
+        using var response = await catalog.PostAsJsonAsync(
+            "api/v4/catalog/resolve",
+            new
+            {
+                references = batch.Select(id => new
+                {
+                    kind,
+                    scheme = "v4",
+                    id,
+                }),
+            },
+            ct
+        );
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<CatalogResolution>(CatalogJson, ct);
+        if (
+            result?.References is null
+            || result.Entities is null
+            || !batch.SequenceEqual(result.References.Select(reference => reference.Id))
+        )
+        {
+            throw new JsonException("Catalog returned an incomplete Sonos resolve batch.");
+        }
+
+        return (result.References, result.Entities);
+    }
+
+    private static QueueDisplayName? DisplayName(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        // Sonos limits album and artist names to 76 characters.
+        const int limit = 76;
+        var length =
+            value.Length > limit && char.IsHighSurrogate(value[limit - 1]) ? limit - 1 : limit;
+        return new QueueDisplayName(value[..Math.Min(value.Length, length)]);
     }
 
     internal async Task<bool> TryPrepareAsync(
