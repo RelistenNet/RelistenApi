@@ -26,14 +26,28 @@ public sealed class SonosControlController(
     private SonosConfiguration? Config => development.Configuration;
 
     [HttpPost("connect")]
-    public async Task<IActionResult> Connect(CancellationToken ct)
+    public async Task<IActionResult> Connect(
+        CancellationToken ct,
+        [FromQuery(Name = "return_to")] string? returnTo = null
+    )
     {
         if (Config is not { } config)
         {
             return NotFound();
         }
 
-        var url = await link.BeginAsync(config, account.User.Id, account.NativeSessionId, ct);
+        if (returnTo is not (null or "mobile"))
+        {
+            return Problem(statusCode: 422, title: "Unknown Sonos return destination.");
+        }
+
+        var url = await link.BeginAsync(
+            config,
+            account.User.Id,
+            account.NativeSessionId,
+            returnTo == "mobile",
+            ct
+        );
         return Ok(new { authorizationUrl = url });
     }
 
@@ -46,6 +60,18 @@ public sealed class SonosControlController(
         }
 
         return Ok(new { linked = await link.IsLinkedAsync(account.User.Id, ct) });
+    }
+
+    [HttpDelete("connection")]
+    public async Task<IActionResult> Disconnect(CancellationToken ct)
+    {
+        if (Config is null)
+        {
+            return NotFound();
+        }
+
+        await link.DisconnectAsync(account.User.Id, ct);
+        return NoContent();
     }
 
     [HttpGet("groups")]

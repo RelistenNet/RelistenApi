@@ -51,7 +51,16 @@ public sealed class SonosPlayerController(
         Response.Headers["Referrer-Policy"] = "no-referrer";
         try
         {
-            return state is { Length: 43 } && await link.CompleteAsync(config, state, code, ct)
+            var result = state is { Length: 43 }
+                ? await link.CompleteAsync(config, state, code, ct)
+                : null;
+            if (result is { ReturnToMobile: true })
+            {
+                var outcome = result.Connected ? "connected" : "failed";
+                return Redirect($"net.relisten.mobile:/sonos/callback?result={outcome}");
+            }
+
+            return result is { Connected: true }
                 ? Content("Sonos connected. Return to the Relisten test client.", "text/plain")
                 : BadRequest("Sonos authorization did not complete.");
         }

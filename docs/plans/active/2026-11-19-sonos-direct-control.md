@@ -107,7 +107,7 @@ The listener confirmed hearing “El Paso.” After 30 seconds on the first trac
 
 ## Run the local User Service milestone
 
-Start the normal local account stack. Set `Sonos__Enabled=true`, `Sonos__PublicBaseUrl` to the HTTPS tunnel origin, `Sonos__ServiceId` to the test SMAPI service ID, and provide the development client ID and secret through `Sonos__ClientId` and `Sonos__ClientSecret`. Enable the feature only in the local Development profile. Preserve the tunnel authority and route only `/sonos/*` through it. Keep the regular local accounts host for the authenticated client calls. Point the User Service and test adapter at the same V4 catalog. For a local catalog, set `Accounts__CatalogBaseUrl=http://localhost:55368/` and the adapter’s corresponding catalog URL.
+Start the normal local account stack. Set `Sonos__Enabled=true`, `Sonos__PublicBaseUrl` to the HTTPS tunnel origin, `Sonos__ServiceId` to the test SMAPI service ID, and provide the development client ID and secret through `Sonos__ClientId` and `Sonos__ClientSecret`. Enable the feature only in the local Development profile. Preserve the tunnel authority, route only `/sonos/*` through it, and forward the callback response headers, including `Location` and `Cache-Control`. Keep the regular local accounts host for the authenticated client calls. Point the User Service and test adapter at the same V4 catalog. For a local catalog, set `Accounts__CatalogBaseUrl=http://localhost:55368/` and the adapter’s corresponding catalog URL.
 
 1. Call `POST /v1/integrations/sonos/connect` with a native account bearer token. Open the returned `authorization_url` and consent. Verify the redirect on the tunnel and check `GET /v1/integrations/sonos/connection`.
 2. Call `GET /v1/integrations/sonos/groups` and use the exact Office group ID. Submit `POST /v1/integrations/sonos/handoffs` with `request_id` (a fresh UUID), `group_id`, `track_ids` (the ordered V4 IDs), `start_index` (zero-based), and `position_millis`. The dev endpoint accepts up to 5,000 MP3-playable occurrences. The User Service resolves distinct catalog references in batches of at most 500 and preserves the submitted order and duplicates. The speaker controls its window size independently. Reuse the request ID for a retry of the same handoff.
@@ -123,14 +123,30 @@ The Office System card showed the track title and a generic image during that ru
 
 ### Local playback API for mobile
 
-Use the same native Relisten bearer token and accounts origin as handoff. A newly loaded handoff includes `playback_handle`. Queues created before session persistence keep serving their existing windows and need a fresh handoff before the new controls can address them.
+Use the local User Service on `codex/sonos-direct-control` with its accounts migrations applied. Use the same native Relisten bearer token and accounts origin as handoff. On the development Mac the accounts origin is `https://accounts.relisten.localhost:5443`, with the local development CA trusted. The HTTPS tunnel serves the Sonos callback and queue routes. All paths below are relative to `/v1/integrations/sonos`.
 
 | Route | Result |
 | --- | --- |
-| `GET /v1/integrations/sonos/playback` | Lists currently confirmed Relisten-owned playback. Use this to restore the room when the app reopens. |
-| `GET /v1/integrations/sonos/playback/{handle}` | Returns `playback_handle`, `group_id`, `group_name`, and `status`. An active result includes `playback_state`, `position_millis`, `observed_at`, and `current_occurrence` with `item_id`, zero-based `queue_index`, `track_id`, and display metadata. A temporarily unavailable current item can return `unconfirmed`. An ended session returns `evicted`. |
-| `POST /v1/integrations/sonos/playback/{handle}/commands` | Send `{"action":"play"}` or `{"action":"pause"}`. On `202`, refresh the playback URL in `Location` to confirm state. On an ambiguous response, refresh before offering a retry. A known inactive handle returns `409 sonos_playback_inactive`. |
+| `POST /connect?return_to=mobile` | Open the returned `authorization_url` in the system authorization session. Wait for `net.relisten.mobile:/sonos/callback?result=connected\|failed`, then refresh `GET /connection`. Refresh after browser cancellation too. The callback carries no credentials. |
+| `GET /connection`, `DELETE /connection` | Read `linked`. Disconnect returns `204` and clears Relisten’s grant, pending links, and queue access. The speaker may finish buffered audio. |
+| `GET /groups`, `POST /handoffs` | Pick a group and submit the ordered catalog track IDs. A loaded handoff includes `playback_handle`. Preexisting queues without a persisted speaker session require a fresh handoff for controls. |
+| `GET /playback` | Lists currently confirmed Relisten-owned playback. Use this to restore the room when the app reopens. |
+| `GET /playback/{handle}` | Returns `playback_handle`, `group_id`, `group_name`, `status`, and `queue_length`. An active result includes `playback_state`, `position_millis`, `observed_at`, and `current_occurrence` with `item_id`, zero-based `queue_index`, `track_id`, and display metadata. Disable transport during `unconfirmed` and release the destination on `evicted`. |
+| `GET /playback/{handle}/volume` | Returns `volume` (0–100), `muted`, and `fixed`. These describe the entire selected group. |
+| `POST /playback/{handle}/commands` | Submit a command with a client-generated UUID in `command_id`. A `202` returns a receipt and its URL in `Location`. |
+| `GET /playback/{handle}/commands/{commandId}` | Reads the receipt. Use the receipt’s `playback_url` to refresh what the room is doing. |
+
+Command fields by action:
+
+- `play` and `pause` should include `expected_item_id` from the current occurrence. The legacy action-only body still returns a playback URL in `Location`.
+- `seek` requires `expected_item_id` and an absolute `position_millis` within the track.
+- `next` and `previous` require `expected_item_id`. The server moves one position in the submitted queue and preserves the room’s playing or paused state. Disable either action at its queue boundary.
+- `volume` requires an integer `volume` from 0 to 100. `mute` requires boolean `muted`. Send the final slider value and refresh the group's volume after a change.
+
+A receipt contains `command_id`, `status`, `code`, `target_item_id`, and `playback_url`. `accepted` means Sonos acknowledged the request. `confirmed` means the server observed the desired state after an uncertain response. `pending` means the effect is unknown, so refresh the visible controls from the room. An ambiguous seek can stay pending if the playhead has already moved. Retry an interrupted request with the same UUID and body. This retrieves or reconciles the receipt without reissuing a recorded command. Reusing the UUID with a different body returns `409 sonos_command_id_conflict`. Refresh the room on `409 sonos_playback_changed` or `sonos_playback_inactive`. Send one change at a time from the UI. A newer valid command for the same queue can supersede an unresolved receipt.
 
 The User Service issues a session-scoped `skipToItem` for the observed occurrence and offset, with `playOnCompletion` set to the requested state. This keeps a command on the original session during a takeover. Within that session, a seek or track change between the status read and command can move playback back to the sampled occurrence or offset. Measure that behavior before production.
 
 On November 19, Alec’s Office reported “Loser” paused after the local server restarted. Discovery recovered the same queue and playhead. The API resumed it and paused it again. After a replacement handoff in the same room, the old handle returned `409` and the replacement kept playing until its own handle paused it. The test suite separately simulated Sonos rejecting the original session between the status read and command.
+
+The Office also loaded a 24-occurrence queue made from real catalog IDs. Starting at the 20th occurrence, the local client paused, sought to 0:42, and moved to the 21st occurrence of the same recording. Repeating the Next request with the same command ID left playback on the 21st occurrence. Previous returned to the 20th. After a seek near its end and resume, Sonos advanced to the 21st without another transport command. The room also reported muted at its new volume and returned to its original level and mute state after the test.

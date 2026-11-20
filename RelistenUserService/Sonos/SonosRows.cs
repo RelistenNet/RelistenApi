@@ -13,6 +13,7 @@ internal sealed class SonosGrant
 internal sealed class SonosOAuthState
 {
     public string Hash { get; set; } = "";
+    public bool ReturnToMobile { get; set; }
     public UserId UserId { get; set; }
     public SessionId SessionId { get; set; }
     public DateTimeOffset ExpiresAt { get; set; }
@@ -26,6 +27,7 @@ internal sealed class SonosQueue
     public string GroupId { get; set; } = "";
     public string? GroupName { get; set; }
     public string? SonosSessionId { get; set; }
+    public Guid? LatestCommandId { get; set; }
     public string HouseholdId { get; set; } = "";
     public string RequestHash { get; set; } = "";
     public string CredentialHash { get; set; } = "";
@@ -76,6 +78,35 @@ internal sealed class SonosQueueConfiguration : IEntityTypeConfiguration<SonosQu
             .HasOne<User>()
             .WithMany()
             .HasForeignKey(row => row.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+internal sealed class SonosCommand
+{
+    public Guid QueueId { get; set; }
+    public Guid Id { get; set; }
+    public string RequestHash { get; set; } = "";
+    public string Action { get; set; } = "";
+    public string Status { get; set; } = "pending";
+    public string? ErrorCode { get; set; }
+    public string ExpectedItemId { get; set; } = "";
+    public string? TargetItemId { get; set; }
+    public int? TargetValue { get; set; }
+    public bool? TargetMuted { get; set; }
+    public bool? PlayOnCompletion { get; set; }
+}
+
+internal sealed class SonosCommandConfiguration : IEntityTypeConfiguration<SonosCommand>
+{
+    public void Configure(EntityTypeBuilder<SonosCommand> builder)
+    {
+        builder.ToTable("sonos_commands", "user_data");
+        builder.HasKey(row => new { row.QueueId, row.Id });
+        builder
+            .HasOne<SonosQueue>()
+            .WithMany()
+            .HasForeignKey(row => row.QueueId)
             .OnDelete(DeleteBehavior.Cascade);
     }
 }

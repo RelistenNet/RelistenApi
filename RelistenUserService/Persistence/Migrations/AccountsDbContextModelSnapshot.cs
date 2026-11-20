@@ -1301,6 +1301,61 @@ namespace RelistenUserService.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("RelistenUserService.Sonos.SonosCommand", b =>
+                {
+                    b.Property<Guid>("QueueId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("queue_id");
+
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("action");
+
+                    b.Property<string>("ErrorCode")
+                        .HasColumnType("text")
+                        .HasColumnName("error_code");
+
+                    b.Property<string>("ExpectedItemId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("expected_item_id");
+
+                    b.Property<bool?>("PlayOnCompletion")
+                        .HasColumnType("boolean")
+                        .HasColumnName("play_on_completion");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("request_hash");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<string>("TargetItemId")
+                        .HasColumnType("text")
+                        .HasColumnName("target_item_id");
+
+                    b.Property<bool?>("TargetMuted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("target_muted");
+
+                    b.Property<int?>("TargetValue")
+                        .HasColumnType("integer")
+                        .HasColumnName("target_value");
+
+                    b.HasKey("QueueId", "Id");
+
+                    b.ToTable("sonos_commands", "user_data");
+                });
+
             modelBuilder.Entity("RelistenUserService.Sonos.SonosGrant", b =>
                 {
                     b.Property<string>("UserId")
@@ -1326,6 +1381,10 @@ namespace RelistenUserService.Persistence.Migrations
                     b.Property<DateTimeOffset>("ExpiresAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("expires_at");
+
+                    b.Property<bool>("ReturnToMobile")
+                        .HasColumnType("boolean")
+                        .HasColumnName("return_to_mobile");
 
                     b.Property<string>("SessionId")
                         .IsRequired()
@@ -1380,6 +1439,10 @@ namespace RelistenUserService.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("items_json");
+
+                    b.Property<Guid?>("LatestCommandId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("latest_command_id");
 
                     b.Property<long?>("PlaybackEventSequence")
                         .HasColumnType("bigint")
@@ -1621,6 +1684,15 @@ namespace RelistenUserService.Persistence.Migrations
                     b.HasOne("RelistenUserService.Playlists.Entities.Playlist", null)
                         .WithMany()
                         .HasForeignKey("PlaylistId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("RelistenUserService.Sonos.SonosCommand", b =>
+                {
+                    b.HasOne("RelistenUserService.Sonos.SonosQueue", null)
+                        .WithMany()
+                        .HasForeignKey("QueueId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

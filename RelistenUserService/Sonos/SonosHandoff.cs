@@ -380,47 +380,13 @@ public sealed class SonosHandoff(
             await FailDispatchAsync(queue.Id);
             throw;
         }
-        JsonElement result;
-        try
-        {
-            result = await protocol.ControlAsync(
-                token,
-                $"{groupPath}/playbackSession",
-                new { appId = "net.relisten.sonos.dev", appContext = queue.Id.ToString("N") },
-                ct
-            );
-        }
-        catch (SonosRequestException error)
-            when (error.Status
-                    is HttpStatusCode.BadRequest
-                        or HttpStatusCode.Unauthorized
-                        or HttpStatusCode.Forbidden
-                        or HttpStatusCode.NotFound
-                        or HttpStatusCode.Gone
-                || error.Code is "ERROR_INVALID_OBJECT_ID" or "ERROR_INVALID_PARAMETER"
-            )
-        {
-            await FailDispatchAsync(queue.Id);
-            throw;
-        }
-
-        var sessionId = result.TryGetProperty("sessionId", out var direct)
-            ? direct.GetString()
-            : result.GetProperty("sessionStatus").GetProperty("sessionId").GetString();
-        if (string.IsNullOrEmpty(sessionId))
-        {
-            throw new JsonException("Sonos did not return a playback session ID.");
-        }
-
-        var sessionPath = SonosProtocol.SessionPath(sessionId);
-        var recorded = await db.Set<SonosQueue>()
-            .Where(row => row.Id == queue.Id && row.Status == "dispatching")
-            .ExecuteUpdateAsync(set => set.SetProperty(row => row.SonosSessionId, sessionId), ct);
-        if (recorded != 1)
+        var sessionId = await OpenSessionAsync(token, queue, ct);
+        if (sessionId is null)
         {
             return;
         }
 
+        var sessionPath = SonosProtocol.SessionPath(sessionId);
         // A lost subscription can be recovered by reading the room before each command.
         try
         {
@@ -441,6 +407,92 @@ public sealed class SonosHandoff(
             )
         {
             logger.LogWarning(error, "Could not subscribe to Sonos session events");
+        }
+
+        await LoadQueueAsync(
+            config,
+            token,
+            queue,
+            credential,
+            itemId,
+            positionMillis,
+            sessionPath,
+            ct
+        );
+    }
+
+    private async Task<string?> OpenSessionAsync(
+        string token,
+        SonosQueue queue,
+        CancellationToken ct
+    )
+    {
+        try
+        {
+            await using var transaction = await db.Database.BeginTransactionAsync(ct);
+            await locks.LockAsync($"sonos-grant:{queue.UserId}", ct);
+            if (!await IsDispatchingAsync(queue.Id, ct))
+            {
+                return null;
+            }
+
+            var result = await protocol.ControlAsync(
+                token,
+                $"{GroupPath(queue.GroupId)}/playbackSession",
+                new { appId = "net.relisten.sonos.dev", appContext = queue.Id.ToString("N") },
+                ct
+            );
+            var sessionId = result.TryGetProperty("sessionId", out var direct)
+                ? direct.GetString()
+                : result.GetProperty("sessionStatus").GetProperty("sessionId").GetString();
+            if (string.IsNullOrWhiteSpace(sessionId))
+            {
+                throw new JsonException("Sonos did not return a playback session ID.");
+            }
+
+            // Persist before load so discovery can recover an acknowledged load with a lost response.
+            await db.Set<SonosQueue>()
+                .Where(row => row.Id == queue.Id && row.Status == "dispatching")
+                .ExecuteUpdateAsync(
+                    set => set.SetProperty(row => row.SonosSessionId, sessionId),
+                    ct
+                );
+            await transaction.CommitAsync(ct);
+            return sessionId;
+        }
+        catch (SonosRequestException error)
+            when (error.Status
+                    is HttpStatusCode.BadRequest
+                        or HttpStatusCode.Unauthorized
+                        or HttpStatusCode.Forbidden
+                        or HttpStatusCode.NotFound
+                        or HttpStatusCode.Gone
+                || error.Code is "ERROR_INVALID_OBJECT_ID" or "ERROR_INVALID_PARAMETER"
+            )
+        {
+            await FailDispatchAsync(queue.Id);
+            throw;
+        }
+    }
+
+    private async Task LoadQueueAsync(
+        SonosConfiguration config,
+        string token,
+        SonosQueue queue,
+        string credential,
+        string itemId,
+        int positionMillis,
+        string sessionPath,
+        CancellationToken ct
+    )
+    {
+        // Disconnect serializes with each effect. The player can still read the prepared
+        // snapshot while the advisory lock is held.
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await locks.LockAsync($"sonos-grant:{queue.UserId}", ct);
+        if (!await IsDispatchingAsync(queue.Id, ct))
+        {
+            return;
         }
 
         try
@@ -471,14 +523,18 @@ public sealed class SonosHandoff(
                     set => set.SetProperty(row => row.Status, "evicted"),
                     CancellationToken.None
                 );
+            await transaction.CommitAsync(CancellationToken.None);
             throw;
         }
 
-        // Account revocation can end a queue while the load is in flight.
         await db.Set<SonosQueue>()
             .Where(row => row.Id == queue.Id && row.Status == "dispatching")
             .ExecuteUpdateAsync(set => set.SetProperty(row => row.Status, "loaded"), ct);
+        await transaction.CommitAsync(ct);
     }
+
+    private Task<bool> IsDispatchingAsync(Guid id, CancellationToken ct) =>
+        db.Set<SonosQueue>().AnyAsync(row => row.Id == id && row.Status == "dispatching", ct);
 
     private Task<int> FailDispatchAsync(Guid id) =>
         db.Set<SonosQueue>()

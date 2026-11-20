@@ -9,12 +9,10 @@ using RelistenUserService.Persistence;
 
 namespace RelistenUserService.Sonos;
 
-public sealed record SonosTransportRequest(string Action);
-
 [ApiController]
 [Authorize(Policy = AuthenticationConstants.AccountManagePolicy)]
 [Route("v1/integrations/sonos/playback")]
-public sealed class SonosPlaybackController(
+public sealed partial class SonosPlaybackController(
     CurrentAccountContext account,
     SonosDevelopment development,
     SonosAccountLink link,
@@ -111,122 +109,6 @@ public sealed class SonosPlaybackController(
         catch (Exception error) when (Unavailable(error, ct))
         {
             return Problem(statusCode: 502, title: "Could not read Sonos playback.");
-        }
-    }
-
-    [HttpPost("{handle:guid}/commands")]
-    [RequestSizeLimit(4096)]
-    public async Task<IActionResult> Command(
-        Guid handle,
-        SonosTransportRequest request,
-        CancellationToken ct
-    )
-    {
-        if (
-            development.Configuration is not { } config
-            || await ReadOwnedQueueAsync(handle, ct) is not { } queue
-        )
-        {
-            return NotFound();
-        }
-
-        if (request.Action is not ("play" or "pause"))
-        {
-            return Problem(statusCode: 422, title: "Choose play or pause.");
-        }
-
-        try
-        {
-            var token = await link.AccessAsync(config, account.User.Id, ct);
-            if (token is null)
-            {
-                return ReconnectRequired();
-            }
-
-            // Use the same locks as handoff preparation. A pending replacement must settle
-            // before a command can use the previous room state.
-            await using var transaction = await db.Database.BeginTransactionAsync(ct);
-            await locks.LockAllAsync(
-                [$"sonos-group:{queue.GroupId}", $"sonos-grant:{queue.UserId}"],
-                ct
-            );
-            queue = await ReadOwnedQueueAsync(handle, ct);
-            var now = clock.GetUtcNow();
-            if (
-                queue is null
-                || queue.Status != "loaded"
-                || await db.Set<SonosQueue>()
-                    .AnyAsync(
-                        row =>
-                            row.GroupId == queue.GroupId
-                            && row.Status == "dispatching"
-                            && row.ExpiresAt > now,
-                        ct
-                    )
-                || !await db.Set<SonosGrant>()
-                    .AnyAsync(
-                        row =>
-                            row.UserId == account.User.Id
-                            && row.ProtectedToken == token.GrantVersion,
-                        ct
-                    )
-            )
-            {
-                return PlaybackInactive();
-            }
-
-            var state = await ReconcileAsync(
-                queue,
-                await ReadRoomAsync(token.Token, queue.GroupId, ct),
-                ct
-            );
-            if (state.Status != "active" || state.PositionMillis is null)
-            {
-                await transaction.CommitAsync(ct);
-                return PlaybackInactive();
-            }
-
-            var wantsPlay = request.Action == "play";
-            if (
-                state.PlaybackState
-                == (wantsPlay ? "PLAYBACK_STATE_PLAYING" : "PLAYBACK_STATE_PAUSED")
-            )
-            {
-                return Accepted(PlaybackUrl(handle));
-            }
-
-            try
-            {
-                // Reload the current occurrence at the observed offset. Sonos checks the
-                // session target, including a takeover after the room status read.
-                await protocol.ControlAsync(
-                    token.Token,
-                    $"{SonosProtocol.SessionPath(queue.SonosSessionId!)}/playbackSession/skipToItem",
-                    new
-                    {
-                        itemId = state.CurrentOccurrence!.ItemId,
-                        positionMillis = state.PositionMillis,
-                        playOnCompletion = wantsPlay,
-                    },
-                    ct
-                );
-            }
-            catch (SonosRequestException error) when (error.SessionEnded)
-            {
-                await MarkEvictedAsync(queue.Id, ct);
-                await transaction.CommitAsync(ct);
-                return PlaybackInactive();
-            }
-
-            await transaction.CommitAsync(ct);
-            return Accepted(PlaybackUrl(handle));
-        }
-        catch (Exception error) when (Unavailable(error, ct))
-        {
-            return Problem(
-                statusCode: 502,
-                title: "Could not confirm the Sonos command. Refresh playback before trying again."
-            );
         }
     }
 
@@ -348,7 +230,8 @@ public sealed class SonosPlaybackController(
                 item.Track.ImageUrl
             ),
             room.PositionMillis,
-            room.ObservedAt
+            room.ObservedAt,
+            items.Length
         );
     }
 
@@ -395,7 +278,8 @@ public sealed class SonosPlaybackController(
         string? PlaybackState,
         PlaybackOccurrence? CurrentOccurrence,
         int? PositionMillis,
-        DateTimeOffset? ObservedAt
+        DateTimeOffset? ObservedAt,
+        int? QueueLength = null
     );
 
     private sealed record PlaybackOccurrence(

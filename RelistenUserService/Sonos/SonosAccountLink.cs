@@ -24,9 +24,12 @@ public sealed class SonosAccountLink(
         SonosConfiguration config,
         UserId user,
         SessionId session,
+        bool returnToMobile,
         CancellationToken ct
     )
     {
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await locks.LockAsync($"sonos-grant:{user}", ct);
         var now = clock.GetUtcNow();
         await db.Set<SonosOAuthState>()
             .Where(row => row.UserId == user && row.ExpiresAt <= now)
@@ -38,54 +41,50 @@ public sealed class SonosAccountLink(
                 Hash = SonosProtocol.Hash(state),
                 UserId = user,
                 SessionId = session,
+                ReturnToMobile = returnToMobile,
                 ExpiresAt = now.AddMinutes(10),
             }
         );
         await db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
         return SonosProtocol.AuthorizeUrl(config, state);
     }
 
-    internal async Task<bool> CompleteAsync(
+    internal async Task<SonosLinkResult?> CompleteAsync(
         SonosConfiguration config,
         string state,
         string? code,
         CancellationToken ct
     )
     {
-        var now = clock.GetUtcNow();
         var hash = SonosProtocol.Hash(state);
-        var pending = db.Set<SonosOAuthState>()
-            .Where(row => row.Hash == hash && row.ExpiresAt > now);
-        var owner = await pending.AsNoTracking().SingleOrDefaultAsync(ct);
-        if (
-            owner is null
-            || await pending.ExecuteDeleteAsync(ct) != 1
-            || string.IsNullOrEmpty(code)
-        )
+        var owner = await db.Set<SonosOAuthState>()
+            .AsNoTracking()
+            .SingleOrDefaultAsync(row => row.Hash == hash, ct);
+        if (owner is null)
         {
-            return false;
+            return null;
         }
 
-        if (!await SessionActiveAsync(owner.UserId, owner.SessionId, ct))
-        {
-            return false;
-        }
-
-        var token = await protocol.TokenAsync(
-            config,
-            new()
-            {
-                ["grant_type"] = "authorization_code",
-                ["code"] = code,
-                ["redirect_uri"] = config.RedirectUri.AbsoluteUri,
-            },
-            ct
-        );
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
         await locks.LockAsync($"sonos-grant:{owner.UserId}", ct);
-        if (!await SessionActiveAsync(owner.UserId, owner.SessionId, ct))
+        var now = clock.GetUtcNow();
+        if (
+            await db.Set<SonosOAuthState>()
+                .Where(row => row.Hash == hash && row.ExpiresAt > now)
+                .ExecuteDeleteAsync(ct) != 1
+        )
         {
-            return false;
+            return null;
+        }
+
+        if (
+            string.IsNullOrEmpty(code)
+            || !await SessionActiveAsync(owner.UserId, owner.SessionId, ct)
+        )
+        {
+            await transaction.CommitAsync(ct);
+            return new SonosLinkResult(false, owner.ReturnToMobile);
         }
 
         if (
@@ -99,7 +98,42 @@ public sealed class SonosAccountLink(
                 )
         )
         {
-            return false;
+            await transaction.CommitAsync(ct);
+            return new SonosLinkResult(false, owner.ReturnToMobile);
+        }
+
+        StoredSonosToken stored;
+        try
+        {
+            var token = await protocol.TokenAsync(
+                config,
+                new()
+                {
+                    ["grant_type"] = "authorization_code",
+                    ["code"] = code,
+                    ["redirect_uri"] = config.RedirectUri.AbsoluteUri,
+                },
+                ct
+            );
+            stored = ValidateToken(token, null);
+        }
+        catch (Exception error)
+            when (!ct.IsCancellationRequested
+                && error
+                    is SonosRequestException
+                        or HttpRequestException
+                        or JsonException
+                        or OperationCanceledException
+            )
+        {
+            await transaction.CommitAsync(ct);
+            return new SonosLinkResult(false, owner.ReturnToMobile);
+        }
+
+        if (!await SessionActiveAsync(owner.UserId, owner.SessionId, ct))
+        {
+            await transaction.CommitAsync(ct);
+            return new SonosLinkResult(false, owner.ReturnToMobile);
         }
 
         var grant = await db.Set<SonosGrant>().FindAsync([owner.UserId], ct);
@@ -113,10 +147,22 @@ public sealed class SonosAccountLink(
         await db.Set<SonosQueue>()
             .Where(row => row.UserId == owner.UserId && row.Status != "revoked")
             .ExecuteUpdateAsync(set => set.SetProperty(row => row.Status, "revoked"), ct);
-        SaveToken(grant, token, null);
+        SaveToken(grant, stored);
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
-        return true;
+        return new SonosLinkResult(true, owner.ReturnToMobile);
+    }
+
+    internal async Task DisconnectAsync(UserId user, CancellationToken ct)
+    {
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await locks.LockAsync($"sonos-grant:{user}", ct);
+        await db.Set<SonosOAuthState>().Where(row => row.UserId == user).ExecuteDeleteAsync(ct);
+        await db.Set<SonosGrant>().Where(row => row.UserId == user).ExecuteDeleteAsync(ct);
+        await db.Set<SonosQueue>()
+            .Where(row => row.UserId == user)
+            .ExecuteUpdateAsync(set => set.SetProperty(row => row.Status, "revoked"), ct);
+        await transaction.CommitAsync(ct);
     }
 
     internal Task<bool> IsLinkedAsync(UserId user, CancellationToken ct) =>
@@ -152,7 +198,8 @@ public sealed class SonosAccountLink(
                     },
                     ct
                 );
-                stored = SaveToken(grant, token, stored.RefreshToken);
+                stored = ValidateToken(token, stored.RefreshToken);
+                SaveToken(grant, stored);
             }
             catch (SonosRequestException exception)
                 when (exception.Status == HttpStatusCode.BadRequest)
@@ -189,7 +236,7 @@ public sealed class SonosAccountLink(
         );
     }
 
-    private StoredSonosToken SaveToken(SonosGrant grant, SonosToken token, string? previousRefresh)
+    private StoredSonosToken ValidateToken(SonosToken token, string? previousRefresh)
     {
         var refresh = token.RefreshToken ?? previousRefresh;
         if (
@@ -201,14 +248,17 @@ public sealed class SonosAccountLink(
             throw new JsonException("Sonos returned incomplete credentials.");
         }
 
-        var stored = new StoredSonosToken(
+        return new StoredSonosToken(
             token.AccessToken,
             refresh,
             clock.GetUtcNow().AddSeconds(token.ExpiresIn)
         );
-        grant.ProtectedToken = _protector.Protect(JsonSerializer.Serialize(stored));
-        return stored;
     }
+
+    private void SaveToken(SonosGrant grant, StoredSonosToken stored) =>
+        grant.ProtectedToken = _protector.Protect(JsonSerializer.Serialize(stored));
 }
 
 internal sealed record SonosAccess(string Token, string GrantVersion);
+
+internal sealed record SonosLinkResult(bool Connected, bool ReturnToMobile);
