@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -196,12 +197,25 @@ public sealed partial class SonosPlaybackController(
                 && long.TryParse(version.GetString(), out var parsed)
                     ? parsed
                     : (long?)null;
+            status.TryGetProperty("playModes", out var modes);
+            status.TryGetProperty("availablePlaybackActions", out var actions);
+            var repeatMode = (ReadBoolean(modes, "repeat"), ReadBoolean(modes, "repeatOne")) switch
+            {
+                (_, true) => SonosRepeatMode.One,
+                (true, false) => SonosRepeatMode.All,
+                (false, false) => SonosRepeatMode.Off,
+                _ => (SonosRepeatMode?)null,
+            };
+
             return new RoomPlayback(
                 state.GetString()!,
                 itemId,
                 position,
                 clock.GetUtcNow(),
-                queueVersion
+                queueVersion,
+                repeatMode,
+                ReadBoolean(actions, "canRepeat"),
+                ReadBoolean(actions, "canRepeatOne")
             );
         }
         catch (SonosRequestException error)
@@ -212,6 +226,13 @@ public sealed partial class SonosPlaybackController(
             return null;
         }
     }
+
+    private static bool? ReadBoolean(JsonElement obj, string property) =>
+        obj.ValueKind == JsonValueKind.Object
+        && obj.TryGetProperty(property, out var value)
+        && value.ValueKind is JsonValueKind.True or JsonValueKind.False
+            ? value.GetBoolean()
+            : null;
 
     private async Task<PlaybackView> ReconcileAsync(
         SonosQueue queue,
@@ -272,7 +293,10 @@ public sealed partial class SonosPlaybackController(
             room.ObservedAt,
             items.Length,
             queue.QueueVersion,
-            room.QueueVersion
+            room.QueueVersion,
+            room.RepeatMode,
+            room.CanRepeat,
+            room.CanRepeatOne
         );
     }
 
@@ -309,12 +333,29 @@ public sealed partial class SonosPlaybackController(
         error is SonosRequestException or HttpRequestException or JsonException
         || (error is OperationCanceledException && !ct.IsCancellationRequested);
 
+    // Command receipts persist these values as the target of a repeat command.
+    [JsonConverter(typeof(JsonStringEnumConverter<SonosRepeatMode>))]
+    private enum SonosRepeatMode
+    {
+        [JsonStringEnumMemberName("off")]
+        Off = 0,
+
+        [JsonStringEnumMemberName("all")]
+        All = 1,
+
+        [JsonStringEnumMemberName("one")]
+        One = 2,
+    }
+
     private sealed record RoomPlayback(
         string State,
         string? ItemId,
         int? PositionMillis,
         DateTimeOffset ObservedAt,
-        long? QueueVersion
+        long? QueueVersion,
+        SonosRepeatMode? RepeatMode,
+        bool? CanRepeat,
+        bool? CanRepeatOne
     );
 
     private sealed record PlaybackView(
@@ -328,7 +369,10 @@ public sealed partial class SonosPlaybackController(
         DateTimeOffset? ObservedAt,
         int? QueueLength = null,
         long? QueueVersion = null,
-        long? SonosQueueVersion = null
+        long? SonosQueueVersion = null,
+        SonosRepeatMode? RepeatMode = null,
+        bool? CanRepeat = null,
+        bool? CanRepeatOne = null
     );
 
     private sealed record PlaybackOccurrence(

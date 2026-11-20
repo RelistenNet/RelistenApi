@@ -417,6 +417,169 @@ public sealed partial class TestMcpHttp
         upstream.TransportPaths.Should().ContainSingle();
     }
 
+    [Test]
+    public async Task Sonos_repeat_reads_the_room_mode_and_recovers_a_lost_reply_without_resending()
+    {
+        const string nativeBase = AccountsOrigin + "/v1/integrations/sonos";
+        using var upstream = new TestSonosDevelopment.TestUpstream();
+        await StartApp(mountCatalog: false, sonos: upstream);
+        var fields = AuthorizeFields(Native, NativeRedirect, ReadScopes + " account.manage");
+        using var code = await Authorize(fields, await SignIn(fields));
+        var login = await Exchange(Native, NativeRedirect, ReadCode(code));
+        await LinkSonos(nativeBase, "https://sonos.example.test", login.Access);
+
+        var handle = Guid.NewGuid();
+        using var started = await PostSonosHandoff(nativeBase, login.Access, handle);
+        started.StatusCode.Should().Be(HttpStatusCode.OK);
+        var playbackUrl = $"{nativeBase}/playback/{handle}";
+        var commandsUrl = playbackUrl + "/commands";
+
+        Task<HttpResponseMessage> SetRepeat(string mode, Guid id) =>
+            SendJson(
+                HttpMethod.Post,
+                commandsUrl,
+                login.Access,
+                new
+                {
+                    action = "repeat",
+                    command_id = id,
+                    repeat_mode = mode,
+                }
+            );
+
+        async Task<JsonElement> ReadPlayback()
+        {
+            using var response = await Get(playbackUrl, login.Access);
+            return await Json(response);
+        }
+
+        // An older status response can omit mode and capability fields.
+        var initial = await ReadPlayback();
+        initial.GetProperty("repeat_mode").ValueKind.Should().Be(JsonValueKind.Null);
+        initial.GetProperty("can_repeat").ValueKind.Should().Be(JsonValueKind.Null);
+
+        upstream.RoomPlaybackActions["canRepeat"] = true;
+        upstream.RoomPlaybackActions["canRepeatOne"] = false;
+        var capabilities = await ReadPlayback();
+        capabilities.GetProperty("can_repeat").GetBoolean().Should().BeTrue();
+        capabilities.GetProperty("can_repeat_one").GetBoolean().Should().BeFalse();
+        using var unavailable = await SetRepeat("one", Guid.NewGuid());
+        unavailable.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await unavailable.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("code")
+            .GetString()
+            .Should()
+            .Be("sonos_command_unavailable");
+        using var invalid = await SetRepeat("invalid", Guid.NewGuid());
+        ((int)invalid.StatusCode).Should().Be(422);
+        upstream.PlayModeWrites.Should().BeEmpty();
+
+        using var all = await SetRepeat("all", Guid.NewGuid());
+        all.StatusCode.Should().Be(HttpStatusCode.Accepted);
+        (await all.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("status")
+            .GetString()
+            .Should()
+            .Be("accepted");
+        (await ReadPlayback()).GetProperty("repeat_mode").GetString().Should().Be("all");
+
+        upstream.RoomPlaybackActions["canRepeatOne"] = true;
+        upstream.LoseNextPlayModeResponse = true;
+        var commandId = Guid.NewGuid();
+        using var lost = await SetRepeat("one", commandId);
+        lost.StatusCode.Should().Be(HttpStatusCode.Accepted);
+        lost.Headers.Location!.OriginalString.Should()
+            .Be($"/v1/integrations/sonos/playback/{handle}/commands/{commandId}");
+        (await lost.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("status")
+            .GetString()
+            .Should()
+            .Be("pending");
+        using var replay = await SetRepeat("one", commandId);
+        replay.StatusCode.Should().Be(HttpStatusCode.Accepted);
+        (await replay.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("status")
+            .GetString()
+            .Should()
+            .Be("confirmed");
+        (await ReadPlayback()).GetProperty("repeat_mode").GetString().Should().Be("one");
+
+        upstream.RoomPlaybackActions.Clear();
+        using var off = await SetRepeat("off", Guid.NewGuid());
+        off.StatusCode.Should().Be(HttpStatusCode.Accepted);
+        var playback = await ReadPlayback();
+        playback.GetProperty("repeat_mode").GetString().Should().Be("off");
+        playback.GetProperty("position_millis").GetInt32().Should().Be(1000);
+        playback.GetProperty("queue_version").GetInt64().Should().Be(1);
+
+        upstream
+            .PlayModeWrites.Select(modes =>
+                (
+                    modes.GetProperty("repeat").GetBoolean(),
+                    modes.GetProperty("repeatOne").GetBoolean()
+                )
+            )
+            .Should()
+            .Equal((true, false), (false, true), (false, false));
+        upstream.PlayModeWrites.Should().OnlyContain(modes => modes.EnumerateObject().Count() == 2);
+
+        // Another controller can change the effective mode between reads.
+        upstream.RoomPlayModes["repeat"] = true;
+        (await ReadPlayback()).GetProperty("repeat_mode").GetString().Should().Be("all");
+    }
+
+    [TestCase(true, "sonos_command_unavailable")]
+    [TestCase(false, "sonos_playback_inactive")]
+    public async Task Sonos_repeat_receipt_reports_definitive_rejection(
+        bool policyDenial,
+        string errorCode
+    )
+    {
+        const string nativeBase = AccountsOrigin + "/v1/integrations/sonos";
+        using var upstream = new TestSonosDevelopment.TestUpstream
+        {
+            RejectPlayModeByPolicy = policyDenial,
+            LoseNextPlayModeResponse = !policyDenial,
+        };
+        upstream.RoomPlaybackActions["canRepeat"] = true;
+        await StartApp(mountCatalog: false, sonos: upstream);
+        var fields = AuthorizeFields(Native, NativeRedirect, ReadScopes + " account.manage");
+        using var code = await Authorize(fields, await SignIn(fields));
+        var login = await Exchange(Native, NativeRedirect, ReadCode(code));
+        await LinkSonos(nativeBase, "https://sonos.example.test", login.Access);
+
+        var handle = Guid.NewGuid();
+        using var started = await PostSonosHandoff(nativeBase, login.Access, handle);
+        started.StatusCode.Should().Be(HttpStatusCode.OK);
+        var commandsUrl = $"{nativeBase}/playback/{handle}/commands";
+        var commandId = Guid.NewGuid();
+        using var submitted = await SendJson(
+            HttpMethod.Post,
+            commandsUrl,
+            login.Access,
+            new
+            {
+                action = "repeat",
+                command_id = commandId,
+                repeat_mode = "all",
+            }
+        );
+        submitted
+            .StatusCode.Should()
+            .Be(policyDenial ? HttpStatusCode.Conflict : HttpStatusCode.Accepted);
+        if (!policyDenial)
+        {
+            // The replacement can report the same repeat mode without confirming our command.
+            upstream.RoomItem = "replacement-source-item";
+        }
+
+        using var receipt = await Get($"{commandsUrl}/{commandId}", login.Access);
+        var body = await Json(receipt);
+        body.GetProperty("status").GetString().Should().Be("rejected");
+        body.GetProperty("code").GetString().Should().Be(errorCode);
+        upstream.PlayModeWrites.Should().ContainSingle();
+    }
+
     private Task<HttpResponseMessage> SendJson(
         HttpMethod method,
         string url,
