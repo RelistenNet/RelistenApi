@@ -52,4 +52,7 @@ public sealed record FollowedPlaylistHead(PlaylistId PlaylistId, bool Available)
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public long? Revision { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public long? DurationSeconds { get; init; }
 }

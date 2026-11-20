@@ -117,6 +117,7 @@ public sealed partial class TestPlaylistApi
     [Test]
     public async Task Copy_replays_after_moderation_and_owner_purge_and_preserves_authored_content()
     {
+        _catalogDurations[Track] = (Track, 180);
         var source = NewPlaylist(2);
         var segment = source.Segments.Single();
         var originalTrack = segment.Entries[0].EntryId;
@@ -157,6 +158,9 @@ public sealed partial class TestPlaylistApi
         followed.Available.Should().BeTrue();
         followed.PublicCode.Should().Be(publication.PublicCode);
 
+        followed.DurationSeconds.Should().Be(360);
+        _durationCatalogUnavailable = true;
+
         var copyCommand = new CopyPublicPlaylistRequest(1, CommandId.New());
         using var copied = await Send(
             HttpMethod.Post,
@@ -187,6 +191,7 @@ public sealed partial class TestPlaylistApi
         copiedSegment.Entries[1].Description.Should().Be($"[Again]({newTimestamp}2:00)");
         copiedSegment.Entries[2].Description.Should().Be($"[First]({newTimestamp}2:00)");
         authoredCopy.Segments[1].Description.Should().Be("Prose-only segment");
+        (await SharingLibrary(listener)).Playlists.Single().DurationSeconds.Should().Be(360);
         var copyPublication = await Publish(copy.PlaylistId, listener);
 
         await Moderate("take-down", source.PlaylistId.Value);

@@ -34,6 +34,10 @@ public static class PlaylistJson
     {
         if (type.Type == typeof(PlaylistSummary))
         {
+            // Duration lives in its own library change column so old readers can still pull.
+            type
+                .Properties.Single(property => property.Name == "duration_seconds")
+                .ShouldSerialize = (_, _) => false;
             type.Properties.Single(property => property.Name == "track_count").ShouldSerialize = (
                 value,
                 _

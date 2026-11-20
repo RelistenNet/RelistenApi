@@ -120,8 +120,33 @@ public sealed partial class PlaylistWriteService
             source.Id,
             cancellationToken
         );
-        var copy = PlaylistCopy.CreateRequest(request, source, structure);
-        var created = await AddPlaylistAsync(actor, state, copy, "copy", hash, cancellationToken);
+        var sourceDurations = await dbContext
+            .PlaylistEntries.AsNoTracking()
+            .Where(entry =>
+                entry.PlaylistId == source.Id
+                && !entry.Deleted
+                && entry.TrackDurationSeconds != null
+            )
+            .ToDictionaryAsync(
+                entry => entry.Id,
+                entry => entry.TrackDurationSeconds!.Value,
+                cancellationToken
+            );
+        var (copy, durations) = PlaylistCopy.CreateRequest(
+            request,
+            source,
+            structure,
+            sourceDurations
+        );
+        var created = await AddPlaylistAsync(
+            actor,
+            state,
+            copy,
+            "copy",
+            hash,
+            durations,
+            cancellationToken
+        );
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return (new(1, generation, created.Id, created.Revision), false);

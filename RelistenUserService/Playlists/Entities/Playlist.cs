@@ -18,8 +18,22 @@ public sealed class Playlist
 
     // Live entries with a track, maintained beside EntryCount so summaries need no entry scan.
     public int TrackCount { get; set; }
+
+    public long DurationSeconds { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
+
+    internal void AddTrack(int? duration)
+    {
+        TrackCount++;
+        DurationSeconds += duration ?? 0;
+    }
+
+    internal void RemoveTrack(int? duration)
+    {
+        TrackCount--;
+        DurationSeconds -= duration ?? 0;
+    }
 }
 
 public sealed class PlaylistSegment
@@ -37,6 +51,7 @@ public sealed class PlaylistEntry
     public PlaylistId PlaylistId { get; set; }
     public PlaylistSegmentId SegmentId { get; set; }
     public string? TrackId { get; set; }
+    public int? TrackDurationSeconds { get; set; }
     public string? Description { get; set; }
     public string? Rank { get; set; }
     public bool Deleted { get; set; }

@@ -371,3 +371,21 @@ Single samples for the 5,000-entry playlist measured 508.7 ms to create,
 library summary, and 16.9 ms to read/serialize the resulting 500-revision delta
 page (55,995 bytes). These observations provide local size and timing examples;
 they do not establish latency budgets or production capacity.
+
+## Playlist duration summaries
+
+Owned playlist summaries and available followed heads include `duration_seconds`,
+the sum of known track durations. Tracks without a captured duration contribute
+zero. A repeated track contributes once per entry. Text blocks contribute only to
+the entry count. Unavailable followed heads omit the duration.
+
+New tracks use a best-effort lookup through the Catalog resolver. Edits can proceed
+when the lookup fails. A public copy reuses the source entries' captured durations.
+Catalog corrections do not recalculate previously captured durations.
+
+The User Service starts the backfill in the background after schema migration,
+so existing playlists can show zero until their durations are filled. The
+backfill uses `Accounts:CatalogBaseUrl` (defaults to `https://api.relisten.net/`).
+It resolves tracks before taking write locks and sends an owner library change
+when the total changes, without changing the playlist content revision. Each
+startup retries unresolved durations and repairs totals after a rollback.

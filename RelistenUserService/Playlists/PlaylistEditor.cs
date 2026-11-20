@@ -11,7 +11,8 @@ internal sealed class PlaylistEditor(
     Playlist playlist,
     IEnumerable<PlaylistSegment> segments,
     IEnumerable<PlaylistEntry> entries,
-    HashSet<string> existingCreatedIds
+    HashSet<string> existingCreatedIds,
+    IReadOnlyDictionary<string, int> trackDurations
 )
 {
     public Playlist Playlist { get; } = playlist;
@@ -379,12 +380,18 @@ internal sealed class PlaylistEditor(
                 Description = input.Description,
                 Rank = ranks[index],
             };
+            if (entry.TrackId is { } trackId)
+            {
+                entry.TrackDurationSeconds = trackDurations.TryGetValue(trackId, out var seconds)
+                    ? seconds
+                    : null;
+                Playlist.AddTrack(entry.TrackDurationSeconds);
+            }
             Entries.Add(entry.Id, entry);
             existingCreatedIds.Add(input.EntryId.Value);
             changes.Add(Upsert(entry));
         }
         Playlist.EntryCount += entries.Count;
-        Playlist.TrackCount += entries.Count(entry => entry.TrackId is not null);
     }
 
     private void TombstoneEntry(PlaylistEntry entry)
@@ -394,7 +401,7 @@ internal sealed class PlaylistEditor(
         Playlist.EntryCount--;
         if (entry.TrackId is not null)
         {
-            Playlist.TrackCount--;
+            Playlist.RemoveTrack(entry.TrackDurationSeconds);
         }
     }
 

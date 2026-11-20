@@ -84,6 +84,9 @@ public sealed partial class TestPlaylistApi
             AuthenticationConstants.AccountCredentialScheme,
             options => options.ForwardDefaultSelector = _ => "proof"
         );
+        builder
+            .Services.AddHttpClient(nameof(PlaylistTrackDurations))
+            .ConfigurePrimaryHttpMessageHandler(() => new DurationCatalogHandler(this));
         var app = AccountsApplication.Build(builder);
         await AccountsApplication.InitializeAsync(app, CancellationToken.None);
         await app.StartAsync();
@@ -100,8 +103,12 @@ public sealed partial class TestPlaylistApi
     }
 
     [SetUp]
-    public async Task CreateUser() =>
+    public async Task CreateUser()
+    {
+        _catalogDurations.Clear();
+        _durationCatalogUnavailable = false;
         _user = await _database.CreateUserAsync($"p_{Guid.NewGuid():N}"[..30]);
+    }
 
     [OneTimeTearDown]
     public async Task Stop()
@@ -1049,7 +1056,13 @@ public sealed partial class TestPlaylistApi
             .AddInterceptors(new RejectSave())
             .Options;
         await using var db = new AccountsDbContext(options);
-        var service = new PlaylistWriteService(db, new(db), new(db), TimeProvider.System);
+        var service = new PlaylistWriteService(
+            db,
+            new(db),
+            new(db),
+            TimeProvider.System,
+            _app.Services.GetRequiredService<PlaylistTrackDurations>()
+        );
         var edit = Op(
             "move_entry",
             new MovePlaylistEntry(

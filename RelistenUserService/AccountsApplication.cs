@@ -73,6 +73,15 @@ public static class AccountsApplication
                 new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false }
             );
 
+        builder.Services.AddHttpClient<PlaylistTrackDurations>(client =>
+        {
+            client.BaseAddress = new Uri(runtime.Options.CatalogBaseUrl.TrimEnd('/') + "/");
+            client.Timeout = TimeSpan.FromSeconds(10);
+        });
+
+        builder.Services.AddScoped<PlaylistDurationBackfill>();
+        builder.Services.AddHostedService<PlaylistDurationStartupBackfill>();
+
         if (runtime.Mcp is { } mcp)
         {
             // The SDK's trace logs contain complete JSON-RPC messages.
