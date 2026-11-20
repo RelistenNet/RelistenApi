@@ -1,5 +1,7 @@
 # Build Relisten identity, user data, offline sync, history, and Sonos handoff
 
+> The [November Sonos Direct Control plan](2026-11-19-sonos-direct-control.md) supersedes the July Sonos rollout sequence, authenticated-content prerequisite, adapter-owned Cloud Queue design and unverified subscription renewal cadence. The mobile release uses bearer authentication. The same API contracts may later be exposed through the reviewed browser relay. The User Service serves Cloud Queue directly from its snapshots. The speaker uses the anonymous SMAPI catalog in `relisten-sonos` for track resolution.
+
 > Playlist guidance: the [November 6 playlist plan](2026-11-06-v4-playlists.md) supersedes this
 > document's playlist contracts and implementation requirements, including raw UUID
 > examples, availability-clock assumptions and the proposed Queue V2 rewrite.
@@ -478,6 +480,8 @@ Proof is recorded per slice through focused API checks and the manual simulator/
 
 ### Milestone 10: replace the Sonos adapter and ship mobile-only handoff
 
+Start with a sandbox household and the existing TypeScript SOAP server. Confirm the production service ID, Dev Portal owner, test Direct Control credentials, and the Cloud Queue version Sonos supports for Relisten. Prove browser linking, account matching, and playback of one preordered queue before deciding how much of the adapter to replace. [Sonos service testing](https://docs.sonos.com/docs/test-your-service) · [Sonos account matching](https://docs.sonos.com/docs/account-matching)
+
 Before restructuring `relisten-sonos`, capture sanitized compatibility fixtures for WSDL, browse, search, metadata, media URI, playback reports, faults, object IDs, and service-registration quirks. Make `pnpm test` a real contract suite. Keep a decoder for production object-ID shapes after UUID-based IDs begin.
 
 Separate `src/smapi/`, `src/cloudQueue/`, `src/clients/accounts.ts`, `src/clients/catalog.ts`, and validated configuration. The adapter owns the public Sonos protocol surface on `https://sonos.relisten.net`: SMAPI SOAP plus negotiated Cloud Queue context/version/item-window/report endpoints below `https://sonos.relisten.net/cloud-queue/{queue_uuid}/{negotiated-version}/...` called by Sonos players. Those are not User Service `/internal` routes. For durable state, the adapter uses the exact private base URL `http://relisten-user-service.default.svc.cluster.local/internal/sonos/v1`, requests audience `https://accounts.relisten.net/internal/sonos`, and receives only scopes `sonos.smapi`, `sonos.cloudqueue.read`, `sonos.playback.report`, and `sonos.events.write` as required by each named client. This plaintext in-cluster hop is an accepted launch tradeoff; short token lifetime, token-entry validation, route scopes, and pod-selected NetworkPolicy constrain it, but node/CNI compromise remains outside this boundary. The User Service rejects that token on `/v1/*`; public ingress never routes `/internal/sonos/v1/*`; NetworkPolicy admits it only from the adapter ServiceAccount/pod selector. The adapter owns no database credential or user state and remains horizontally replaceable.
@@ -643,6 +647,8 @@ From `/Users/alecgorge/code/relisten/relisten-sonos`:
     pnpm test
 
 Tests start the adapter on an ephemeral port and replay sanitized SOAP and negotiated public Cloud Queue fixtures. Verify the adapter's exact internal base URL, audience, per-client scopes, token-entry validation, and network source; verify `/internal/sonos/v1/*` is absent from public ingress. Preview uses a separate Deployment, backend, credentials, and Sonos test service ID. Record service/Cloud Queue version, app version, speaker model/firmware, auth mode, TTL behavior, and method matrix. A WSDL parse is not playback proof.
+
+On a real speaker, load a pre-shuffled snapshot with at least two multi-track recording segments and a repeated source track. Select the second occurrence of that track at a nonzero position. Use enough tracks to trigger another item-window fetch after the phone leaves the network. Verify the exact occurrence and position, in-segment transitions, and order across that fetch. Run once with native shuffle off and again with it already on. Check `playbackStatus.playModes.shuffle` after load and try enabling native shuffle from the Sonos app while the queue is active. If the initial mode affects order, test clearing it explicitly through `setPlayModes`. Check a live transition with crossfade off to verify the audio independently of queue order. [Sonos Cloud Queue playback](https://docs.sonos.com/docs/cloud-queue-play-audio) · [Playback policy list](https://docs.sonos.com/docs/playback-policy-list) · [setPlayModes](https://docs.sonos.com/reference/playback-setplaymodes-groupid)
 
 ### Validate manifests and deployment
 
@@ -888,7 +894,7 @@ Public mobile endpoints include Sonos connect/callback state, groups, `POST /v1/
 
 Handoff validates `current_occurrence_uuid` before room takeover and returns exact `422 current_item_unavailable` rather than silently advancing. Terminal success returns the stored `{playback_handle, occurrence_mappings, current_mapping, omitted_occurrences}` receipt, including queue-item UUID and ordinal for every retained occurrence and a reason for every omission. Each queue has a 24-hour idle and seven-day absolute TTL, bounded active count, tombstoned expiry, and immutable order. Commit ends the mobile local/Cast playback instance; the Sonos transport session records no listening history in this slice. Scope changes strictly clear local state and revoke server credentials; remote stop is a bounded command whose failure is visible because Relisten cannot prove speaker state through a Sonos outage. Transport returns exact final results only from terminal `committed`/`failed` rows; reconciled `202 outcome_unknown` and `409 playback_state_changed` never trigger a second skip.
 
-The Sonos protocol version is negotiated and recorded. Do not label v2.3 universally current. If the approved registration requires `reportId` or other reporting calls, acknowledge them according to the transport contract without writing user history or popularity. Queue authorization is separate from media authorization and is never logged.
+Record the Sonos protocol version confirmed for Relisten and validated on the target players. The API reference names v2.3 as current and the playback guide still describes v2.1. Acknowledge any required reporting calls according to that version's transport contract. Relisten history and popularity are outside the initial handoff. Keep queue authorization separate from media authorization and out of logs. [Cloud Queue API reference](https://docs.sonos.com/reference/about-cloud-queue-api) · [Cloud Queue playback](https://docs.sonos.com/docs/cloud-queue-play-audio)
 
 ### Dependency policy
 

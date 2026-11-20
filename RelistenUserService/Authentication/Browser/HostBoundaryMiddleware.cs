@@ -1,4 +1,5 @@
 using RelistenUserService.Configuration;
+using RelistenUserService.Sonos;
 
 namespace RelistenUserService.Authentication.Browser;
 
@@ -10,7 +11,8 @@ namespace RelistenUserService.Authentication.Browser;
 /// </summary>
 public sealed class HostBoundaryMiddleware(
     RequestDelegate next,
-    AccountsRuntimeConfiguration runtime
+    AccountsRuntimeConfiguration runtime,
+    SonosIntegration? sonos = null
 )
 {
     public async Task InvokeAsync(HttpContext context)
@@ -28,6 +30,12 @@ public sealed class HostBoundaryMiddleware(
     {
         var path = request.Path;
         var actual = request.Host;
+        if (path.StartsWithSegments("/sonos"))
+        {
+            return sonos?.Configuration is { } config
+                && Matches(actual, HostString.FromUriComponent(config.PublicBase));
+        }
+
         var mcpPath =
             path == "/mcp"
             || path == "/.well-known/oauth-protected-resource"

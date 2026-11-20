@@ -21,12 +21,13 @@ using RelistenIngestionWorker.AccountDeletion;
 using RelistenUserService;
 using RelistenUserService.Authentication;
 using RelistenUserService.Mcp;
+using RelistenUserService.Sonos;
 
 namespace RelistenUserServiceTests;
 
 [TestFixture]
 [NonParallelizable]
-public sealed class TestMcpHttp
+public sealed partial class TestMcpHttp
 {
     private const string AuthOrigin = "https://auth.relisten.localhost:5443";
     private const string AccountsOrigin = "https://accounts.relisten.localhost:5443";
@@ -786,7 +787,8 @@ public sealed class TestMcpHttp
 
     private async Task StartApp(
         bool mountCatalog = true,
-        Func<Uri, object?>? catalogResponse = null
+        Func<Uri, object?>? catalogResponse = null,
+        HttpMessageHandler? sonos = null
     )
     {
         catalog = new(catalogResponse);
@@ -827,6 +829,10 @@ public sealed class TestMcpHttp
                 ["Accounts:McpCatalogBaseUrl"] = "https://catalog.example.test",
                 ["MCP_REVIEW_SEARCH_KEY"] = ReviewServiceKey,
                 ["MCP_WRITE_ID_KEY"] = WriteIdKey,
+                ["Sonos:PublicBaseUrl"] = sonos is null ? null : "https://sonos.example.test/",
+                ["Sonos:ClientId"] = sonos is null ? null : "test-id",
+                ["Sonos:ClientSecret"] = sonos is null ? null : "test-secret",
+                ["Sonos:ServiceId"] = sonos is null ? null : "270",
             }
         );
         builder.Logging.ClearProviders();
@@ -843,6 +849,19 @@ public sealed class TestMcpHttp
                     handler.PrimaryHandler = catalog
                 )
         );
+        if (sonos is not null)
+        {
+            foreach (var client in new[] { nameof(SonosProtocol), "SonosCatalog" })
+            {
+                builder.Services.PostConfigure<Microsoft.Extensions.Http.HttpClientFactoryOptions>(
+                    client,
+                    options =>
+                        options.HttpMessageHandlerBuilderActions.Add(handler =>
+                            handler.PrimaryHandler = sonos
+                        )
+                );
+            }
+        }
         app = AccountsApplication.Build(builder);
         await AccountsApplication.InitializeAsync(app, CancellationToken.None);
         await app.StartAsync();

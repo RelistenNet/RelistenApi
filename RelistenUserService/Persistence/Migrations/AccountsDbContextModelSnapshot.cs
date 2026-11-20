@@ -1289,6 +1289,215 @@ namespace RelistenUserService.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("RelistenUserService.Sonos.SonosCommand", b =>
+                {
+                    b.Property<Guid>("QueueId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("queue_id");
+
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("action");
+
+                    b.Property<string>("ErrorCode")
+                        .HasColumnType("text")
+                        .HasColumnName("error_code");
+
+                    b.Property<string>("ExpectedItemId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("expected_item_id");
+
+                    b.Property<bool?>("PlayOnCompletion")
+                        .HasColumnType("boolean")
+                        .HasColumnName("play_on_completion");
+
+                    b.Property<long?>("QueueVersion")
+                        .HasColumnType("bigint")
+                        .HasColumnName("queue_version");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("request_hash");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<string>("TargetItemId")
+                        .HasColumnType("text")
+                        .HasColumnName("target_item_id");
+
+                    b.Property<bool?>("TargetMuted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("target_muted");
+
+                    b.Property<int?>("TargetValue")
+                        .HasColumnType("integer")
+                        .HasColumnName("target_value");
+
+                    b.HasKey("QueueId", "Id");
+
+                    b.ToTable("sonos_commands", "user_data");
+                });
+
+            modelBuilder.Entity("RelistenUserService.Sonos.SonosGrant", b =>
+                {
+                    b.Property<string>("UserId")
+                        .HasColumnType("text")
+                        .HasColumnName("user_id");
+
+                    b.Property<string>("ProtectedToken")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("protected_token");
+
+                    b.HasKey("UserId");
+
+                    b.ToTable("sonos_grants", "user_data");
+                });
+
+            modelBuilder.Entity("RelistenUserService.Sonos.SonosOAuthState", b =>
+                {
+                    b.Property<string>("Hash")
+                        .HasColumnType("text")
+                        .HasColumnName("hash");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<bool>("ReturnToMobile")
+                        .HasColumnType("boolean")
+                        .HasColumnName("return_to_mobile");
+
+                    b.Property<string>("SessionId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("session_id");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Hash");
+
+                    b.HasIndex("ExpiresAt");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("sonos_oauth_states", "user_data");
+                });
+
+            modelBuilder.Entity("RelistenUserService.Sonos.SonosQueue", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("CredentialHash")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("credential_hash");
+
+                    b.Property<DateTimeOffset?>("DispatchUntil")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("dispatch_until");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<string>("GroupId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("group_id");
+
+                    b.Property<string>("GroupName")
+                        .HasColumnType("text")
+                        .HasColumnName("group_name");
+
+                    b.Property<string>("HouseholdId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("household_id");
+
+                    b.Property<string>("ItemsJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("items_json");
+
+                    b.Property<Guid?>("LatestCommandId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("latest_command_id");
+
+                    b.Property<long?>("PlaybackEventSequence")
+                        .HasColumnType("bigint")
+                        .HasColumnName("playback_event_sequence");
+
+                    b.Property<string>("PlaybackEventState")
+                        .HasColumnType("text")
+                        .HasColumnName("playback_event_state");
+
+                    b.Property<long>("QueueVersion")
+                        .HasColumnType("bigint")
+                        .HasColumnName("queue_version");
+
+                    b.Property<DateTimeOffset?>("RefreshAfter")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("refresh_after");
+
+                    b.Property<long>("RefreshedQueueVersion")
+                        .HasColumnType("bigint")
+                        .HasColumnName("refreshed_queue_version");
+
+                    b.Property<string>("RemovedItemsJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("removed_items_json");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("request_hash");
+
+                    b.Property<string>("SessionId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("session_id");
+
+                    b.Property<string>("SonosSessionId")
+                        .HasColumnType("text")
+                        .HasColumnName("sonos_session_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GroupId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("sonos_queues", "user_data");
+                });
+
             modelBuilder.Entity("OpenIddict.EntityFrameworkCore.Models.OpenIddictEntityFrameworkCoreAuthorization<System.Guid>", b =>
                 {
                     b.HasOne("OpenIddict.EntityFrameworkCore.Models.OpenIddictEntityFrameworkCoreApplication<System.Guid>", "Application")
@@ -1488,6 +1697,42 @@ namespace RelistenUserService.Persistence.Migrations
                     b.HasOne("RelistenUserService.Playlists.Entities.Playlist", null)
                         .WithMany()
                         .HasForeignKey("PlaylistId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("RelistenUserService.Sonos.SonosCommand", b =>
+                {
+                    b.HasOne("RelistenUserService.Sonos.SonosQueue", null)
+                        .WithMany()
+                        .HasForeignKey("QueueId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("RelistenUserService.Sonos.SonosGrant", b =>
+                {
+                    b.HasOne("RelistenUserService.Identity.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("RelistenUserService.Sonos.SonosOAuthState", b =>
+                {
+                    b.HasOne("RelistenUserService.Identity.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("RelistenUserService.Sonos.SonosQueue", b =>
+                {
+                    b.HasOne("RelistenUserService.Identity.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

@@ -3,6 +3,7 @@ namespace RelistenUserService.Configuration;
 public sealed class AccountsOptions
 {
     public const string SectionName = "Accounts";
+    internal const string DefaultCatalogBaseUrl = "https://api.relisten.net/";
 
     public string Issuer { get; init; } = "";
     public string Audience { get; init; } = "https://accounts.relisten.net";
@@ -10,7 +11,8 @@ public sealed class AccountsOptions
     public string AccountsHost { get; init; } = "accounts.relisten.net";
     public string? McpHost { get; init; }
     public string? McpResourceUri { get; init; }
-    public string McpCatalogBaseUrl { get; init; } = "https://api.relisten.net/";
+    public string McpCatalogBaseUrl { get; init; } = DefaultCatalogBaseUrl;
+    public string CatalogBaseUrl { get; init; } = DefaultCatalogBaseUrl;
     public string[] WebOrigins { get; init; } =
     ["https://relisten.net", "https://web.relisten.localhost:5173"];
     public string[] TrustedProxyNetworks { get; init; } = [];
