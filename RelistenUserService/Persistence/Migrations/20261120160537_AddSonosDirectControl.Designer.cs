@@ -12,8 +12,8 @@ using RelistenUserService.Persistence;
 namespace RelistenUserService.Persistence.Migrations
 {
     [DbContext(typeof(AccountsDbContext))]
-    [Migration("20261120061429_AddSonosCommandReceipts")]
-    partial class AddSonosCommandReceipts
+    [Migration("20261120160537_AddSonosDirectControl")]
+    partial class AddSonosDirectControl
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -1320,6 +1320,10 @@ namespace RelistenUserService.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("play_on_completion");
 
+                    b.Property<long?>("QueueVersion")
+                        .HasColumnType("bigint")
+                        .HasColumnName("queue_version");
+
                     b.Property<string>("RequestHash")
                         .IsRequired()
                         .HasColumnType("text")
@@ -1408,6 +1412,10 @@ namespace RelistenUserService.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("credential_hash");
 
+                    b.Property<DateTimeOffset?>("DispatchUntil")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("dispatch_until");
+
                     b.Property<DateTimeOffset>("ExpiresAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("expires_at");
@@ -1442,6 +1450,23 @@ namespace RelistenUserService.Persistence.Migrations
                     b.Property<string>("PlaybackEventState")
                         .HasColumnType("text")
                         .HasColumnName("playback_event_state");
+
+                    b.Property<long>("QueueVersion")
+                        .HasColumnType("bigint")
+                        .HasColumnName("queue_version");
+
+                    b.Property<DateTimeOffset?>("RefreshAfter")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("refresh_after");
+
+                    b.Property<long>("RefreshedQueueVersion")
+                        .HasColumnType("bigint")
+                        .HasColumnName("refreshed_queue_version");
+
+                    b.Property<string>("RemovedItemsJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("removed_items_json");
 
                     b.Property<string>("RequestHash")
                         .IsRequired()

@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace RelistenUserService.Persistence.Migrations
 {
     /// <inheritdoc />
-    public partial class AddDevelopmentSonos : Migration
+    public partial class AddSonosDirectControl : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -33,12 +33,18 @@ namespace RelistenUserService.Persistence.Migrations
                 }
             );
 
+            // Keep the column defaults from the incremental migrations used by development.
             migrationBuilder.CreateTable(
                 name: "sonos_oauth_states",
                 schema: "user_data",
                 columns: table => new
                 {
                     hash = table.Column<string>(type: "text", nullable: false),
+                    return_to_mobile = table.Column<bool>(
+                        type: "boolean",
+                        nullable: false,
+                        defaultValue: false
+                    ),
                     user_id = table.Column<string>(type: "text", nullable: false),
                     session_id = table.Column<string>(type: "text", nullable: false),
                     expires_at = table.Column<DateTimeOffset>(
@@ -69,13 +75,39 @@ namespace RelistenUserService.Persistence.Migrations
                     user_id = table.Column<string>(type: "text", nullable: false),
                     session_id = table.Column<string>(type: "text", nullable: false),
                     group_id = table.Column<string>(type: "text", nullable: false),
+                    group_name = table.Column<string>(type: "text", nullable: true),
+                    sonos_session_id = table.Column<string>(type: "text", nullable: true),
+                    latest_command_id = table.Column<Guid>(type: "uuid", nullable: true),
                     household_id = table.Column<string>(type: "text", nullable: false),
                     request_hash = table.Column<string>(type: "text", nullable: false),
                     credential_hash = table.Column<string>(type: "text", nullable: false),
                     items_json = table.Column<string>(type: "text", nullable: false),
+                    removed_items_json = table.Column<string>(
+                        type: "text",
+                        nullable: false,
+                        defaultValue: "[]"
+                    ),
+                    queue_version = table.Column<long>(
+                        type: "bigint",
+                        nullable: false,
+                        defaultValue: 1L
+                    ),
+                    refreshed_queue_version = table.Column<long>(
+                        type: "bigint",
+                        nullable: false,
+                        defaultValue: 1L
+                    ),
+                    refresh_after = table.Column<DateTimeOffset>(
+                        type: "timestamp with time zone",
+                        nullable: true
+                    ),
                     expires_at = table.Column<DateTimeOffset>(
                         type: "timestamp with time zone",
                         nullable: false
+                    ),
+                    dispatch_until = table.Column<DateTimeOffset>(
+                        type: "timestamp with time zone",
+                        nullable: true
                     ),
                     status = table.Column<string>(type: "text", nullable: false),
                     playback_event_sequence = table.Column<long>(type: "bigint", nullable: true),
@@ -89,6 +121,38 @@ namespace RelistenUserService.Persistence.Migrations
                         column: x => x.user_id,
                         principalSchema: "identity",
                         principalTable: "users",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Cascade
+                    );
+                }
+            );
+
+            migrationBuilder.CreateTable(
+                name: "sonos_commands",
+                schema: "user_data",
+                columns: table => new
+                {
+                    queue_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
+                    request_hash = table.Column<string>(type: "text", nullable: false),
+                    action = table.Column<string>(type: "text", nullable: false),
+                    status = table.Column<string>(type: "text", nullable: false),
+                    error_code = table.Column<string>(type: "text", nullable: true),
+                    expected_item_id = table.Column<string>(type: "text", nullable: false),
+                    target_item_id = table.Column<string>(type: "text", nullable: true),
+                    target_value = table.Column<int>(type: "integer", nullable: true),
+                    target_muted = table.Column<bool>(type: "boolean", nullable: true),
+                    play_on_completion = table.Column<bool>(type: "boolean", nullable: true),
+                    queue_version = table.Column<long>(type: "bigint", nullable: true),
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_sonos_commands", x => new { x.queue_id, x.id });
+                    table.ForeignKey(
+                        name: "FK_sonos_commands_sonos_queues_queue_id",
+                        column: x => x.queue_id,
+                        principalSchema: "user_data",
+                        principalTable: "sonos_queues",
                         principalColumn: "id",
                         onDelete: ReferentialAction.Cascade
                     );
@@ -127,6 +191,8 @@ namespace RelistenUserService.Persistence.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.DropTable(name: "sonos_commands", schema: "user_data");
+
             migrationBuilder.DropTable(name: "sonos_grants", schema: "user_data");
 
             migrationBuilder.DropTable(name: "sonos_oauth_states", schema: "user_data");
