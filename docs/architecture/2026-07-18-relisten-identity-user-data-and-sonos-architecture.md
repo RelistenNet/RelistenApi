@@ -1,5 +1,7 @@
 # Relisten identity, user data, and Sonos architecture
 
+> The [November Sonos Direct Control plan](../plans/active/2026-11-19-sonos-direct-control.md) supersedes the July Sonos rollout sequence, authenticated-content prerequisite, adapter-owned Cloud Queue design and unverified subscription renewal cadence. The mobile release uses bearer authentication. The same API contracts may later be exposed through the reviewed browser relay. The User Service serves Cloud Queue directly from its snapshots. The speaker uses the anonymous SMAPI catalog in `relisten-sonos` for track resolution.
+
 > Playlist guidance: the [November 6 playlist plan](../plans/active/2026-11-06-v4-playlists.md) supersedes this
 > document's playlist contracts and implementation requirements, including raw UUID
 > examples, availability-clock assumptions and the proposed Queue V2 rewrite.
@@ -1432,9 +1434,9 @@ The target adds three capabilities:
 
 1. Authenticated SMAPI account linking so a Sonos household can identify a Relisten user.
 2. Sonos Control OAuth so Relisten mobile can discover and control a listener's Sonos groups.
-3. A Sonos Cloud Queue protocol baseline compatible with Sonos's published Play Audio flow (currently documented as v2.1), with negotiated v2.3 reporting where partner approval and player support permit, so a snapshot of the mobile queue continues on Sonos after the phone disconnects.
+3. A Sonos Cloud Queue that lets a snapshot of the mobile queue continue on Sonos after the phone disconnects.
 
-These capabilities justify replacing the internal Sonos server if a clean implementation is easier to verify. The existing repository and runtime are not an architectural constraint. The public SMAPI contract, service registration, media IDs, and current anonymous behavior are compatibility constraints until Sonos approves and users migrate. The Dev Portal registration and real-speaker validation decide which Cloud Queue version is advertised; this document does not label v2.3 unconditionally “latest.”
+These capabilities justify replacing the internal Sonos server if a clean implementation is easier to verify. The public SMAPI contract, service registration, media IDs, and current anonymous behavior are compatibility constraints until Sonos approves and users migrate. The Dev Portal registration and real-speaker validation determine which Cloud Queue version Relisten advertises.
 
 SMAPI authentication mode is integration-wide. An anonymous account cannot silently become a particular Relisten user. Follow Sonos's documented upgrade path: create a new OAuth version of the existing content service, and return blank credentials to upgrade-form `getDeviceAuthToken` requests so listeners reauthorize rather than being mapped to a guessed account. Announce the reauthorization requirement before Sonos activates the version. The previous anonymous adapter remains useful for pre-activation rollback, but it is not a second mode the same production registration can serve afterward. Sonos must approve the version plan before production Milestone 5.
 
@@ -1444,7 +1446,7 @@ The default plan is a clean TypeScript v2 implementation in `relisten-sonos` bec
 
 1. Capture real anonymous SMAPI request and response fixtures for every supported method.
 2. Add contract tests for WSDL shape, SOAP faults, metadata IDs, search, media resolution, and playback reporting.
-3. Create a genuinely isolated `relisten-sonos-preview` Deployment, Service, hostname, credentials, and test service ID; the current preview and production hosts must no longer share a backend.
+3. Give Sonos sandbox and customSD tests a separate Deployment, Service, hostname, credentials, and test service ID. The production ingress on `relisten3-k3s` routes to `relisten-sonos-srv`. [Sonos service testing](https://docs.sonos.com/docs/test-your-service)
 4. Add authenticated SMAPI and versioned Cloud Queue contract tests, including the negotiated reporting surface.
 5. Run Sonos sandbox tests and real-speaker playback.
 6. Cut production traffic only after the new adapter passes the compatibility suite.
@@ -1482,6 +1484,8 @@ flowchart LR
 - Sonos players are SMAPI clients of the Relisten content service.
 
 No token from one relationship is valid in another.
+
+Sonos Control OAuth lets Relisten discover and control groups. Sonos's account-matched handoff uses authenticated SMAPI with browser linking, `getUserInfo`, the `userInfo` capability, and working `getMediaURI`. The player can provision a guest service account if the household has never linked that Relisten account. App-to-app SMAPI sign-in can follow browser linking. Cloud Queue also supports tracks with direct media URLs. [Sonos authentication](https://docs.sonos.com/docs/add-authentication) · [Sonos account matching](https://docs.sonos.com/docs/account-matching) · [Cloud Queue playback](https://docs.sonos.com/docs/cloud-queue-play-audio)
 
 ### Ownership
 
@@ -1610,6 +1614,16 @@ Set `useHttpAuthorizationForMedia=false` so the queue credential is not forwarde
 
 The ordered `sonos_queue_items` snapshot is immutable. A separate availability overlay records a later loss of remote playability, its original ordinal, and `deleted_at`; it never rewrites occurrence order or identity. If Sonos already has the current media URL and is playing it, that buffered/current item may finish. Relisten issues no new URL for it, omits unavailable **future** items from subsequent windows, increments `queueVersion`, and calls `refreshCloudQueue` for active sessions. Retain overlay tombstones for at least 24 hours and while an active session may still center a window on them, so such a request can resolve the next surviving item. If no remotely playable current or future item remains, context/window responses terminate the queue cleanly instead of substituting catalog content.
 
+### Playlist shuffle
+
+On November 19, 2026, a personal Relisten Dev Control integration loaded a v2.3 Cloud Queue on one Sonos group. The test omitted the service `accountId` from `createSession` and used direct HTTPS MP3 URLs for all four synthetic tracks. The player requested queue context, item windows, and audio, and reported `PLAYING` for B1, B2, A1, and A2 in that order. This establishes direct-URL playback for the tested setup. Mobile handoff, production Control access, and the effect of a room's prior shuffle setting still need validation.
+
+The Sonos app's SMAPI **Shuffle All** shuffles individual tracks. Even if browse shows a playlist as recording folders, a recursively playable collection expands to a flat track list. Relisten Mobile shuffles contiguous runs of playlist segment occurrences and preserves track order inside each run. In an iOS build with playlists enabled, the listener can start playlist **Shuffle** in Relisten and select a compatible Sonos speaker over AirPlay. The phone still runs the queue. [Sonos Shuffle All](https://docs.sonos.com/docs/add-play-shuffle-all) · [SMAPI getMetadata](https://docs.sonos.com/docs/getmetadata) · [Sonos AirPlay](https://support.sonos.com/en/article/stream-airplay-audio-to-sonos)
+
+For **Play on Sonos**, snapshot the mobile player's effective playback order (`queue.orderedTracks`). Keep that order through availability filtering and in each Cloud Queue item window. Send the selected occurrence's queue item ID and playhead via `loadCloudQueue.itemId` and `positionMillis`. For a segment-shuffled snapshot, set the Cloud Queue context policy `canShuffle: false` and verify that shuffle is off when loading into a room that already had shuffle enabled. Sonos applies playback policies at load time. Preserve one queue item per occurrence so duplicate tracks stay independently addressable. [Cloud Queue playback](https://docs.sonos.com/docs/cloud-queue-play-audio) · [loadCloudQueue](https://docs.sonos.com/reference/playbacksession-loadcloudqueue-sessionid) · [Playback policies](https://docs.sonos.com/docs/set-playback-policies)
+
+A separate Sonos-app experiment could expose a **Shuffled by recording** SMAPI collection with a precomputed order. Listeners would choose **Play All** with native shuffle off. Start with a small collection because Sonos warns that Play All can be slow for hundreds of tracks. Verify that the Sonos app queues the supplied order. [Sonos Play All](https://docs.sonos.com/docs/add-play-shuffle-all)
+
 Transport commands use `POST /v1/integrations/sonos/playback/{playback_handle}/commands` with a UUIDv7 `client_command_uuid`, command contract version, expected playback version/current occurrence UUID, and an absolute desired state or target. Play, pause, seek, and volume are expressed as idempotent target values. Mobile's next/previous intent is resolved server-side against the immutable snapshot into an explicit target queue-item/occurrence UUID and dispatched as Sonos `skipToItem`, never as a blindly repeatable relative skip. `sonos_playback_commands` stores the canonical payload hash, resolved target, `prepared`/`dispatching`/`committed`/`failed`/`outcome_unknown` phase, and result before and after the external call.
 
 Only terminal `committed` or `failed` rows return a final command result/receipt. If the process loses the Sonos response, exact retry first reads fresh observed playback state. If the resolved target is current, it commits the original success. If a terminal failure is proven, it stores and returns that failure. If another item is observed, reconciliation returns `409 playback_state_changed`; if the effect remains unprovable, it returns `202 outcome_unknown`. Neither response is a terminal result receipt, and the command remains reconcilable. After any ambiguous external dispatch, Relisten never issues a second skip—even if the old expected item is still observed—because that observation cannot prove the first call was not accepted. Exact terminal retries return the stored result and changed reuse returns `409 idempotency_conflict`. Contract tests kill the process before dispatch, after Sonos applies the command, and before result commit, especially for next/previous.
@@ -1620,7 +1634,7 @@ Sonos listening history is a later, independent product slice. It must define it
 
 ### Sonos partner gate
 
-Cloud Queue is available to Sonos content integrations. Account matching requires authenticated SMAPI, stable `userInfo`, media resolution, and a service ID. Sonos's general Play Audio guide currently names Cloud Queue v2.1 while official v2.2/v2.3 endpoint documentation exists and v2.3 adds `reportId`. The repository does not prove the current production service ID, Dev Portal ownership, partner status, Direct Control approval, or the protocol/version combination enabled for Relisten.
+Sonos lists Relisten as a content service. The listing establishes public SMAPI availability. Dev Portal ownership, the production service ID, Direct Control access, and the player versions Relisten can target still need confirmation. The Cloud Queue API reference names v2.3 as current. The Play Audio guide still uses v2.1, and v2.3 reporting adds `reportId`. Record the version and endpoints Sonos confirms for Relisten, then validate them against the target players. [Relisten on Sonos](https://support.sonos.com/en/services/relisten) · [Cloud Queue API reference](https://docs.sonos.com/reference/about-cloud-queue-api) · [Play Audio guide](https://docs.sonos.com/docs/cloud-queue-play-audio) · [v2.3 reporting](https://docs.sonos.com/reference/v23-item-attributes)
 
 The first implementation task is therefore external discovery:
 
@@ -1630,7 +1644,7 @@ The first implementation task is therefore external discovery:
 - obtain test and production client credentials;
 - ask whether the new capability requires a new validation or preview cycle.
 
-This gate starts immediately and runs in parallel with Relisten auth work. It does not block user accounts or local Sonos fixtures, but production authenticated SMAPI, account matching, reporting, and **Play on Sonos** all wait for Sonos's written path. Sonos's published new-service stages total roughly 18–20 weeks; the timing for Relisten's existing-service update is unknown until its Solutions Architect classifies the change.
+Start with the existing registration and a sandbox household. Sonos may waive preview for an existing service update. Confirm how Sonos will classify the OAuth and Direct Control changes before scheduling public rollout. [Sonos service submission](https://docs.sonos.com/docs/submit-your-service)
 
 ## Security model
 
