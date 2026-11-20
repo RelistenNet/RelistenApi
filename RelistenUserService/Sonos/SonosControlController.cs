@@ -21,6 +21,8 @@ public sealed class SonosControlController(
     TimeProvider clock
 ) : ControllerBase
 {
+    private const int MaximumQueueOccurrences = 5_000;
+
     private SonosConfiguration? Config => development.Configuration;
 
     [HttpPost("connect")]
@@ -68,7 +70,7 @@ public sealed class SonosControlController(
     }
 
     [HttpPost("handoffs")]
-    [RequestSizeLimit(16 * 1024)]
+    [RequestSizeLimit(2 * 1024 * 1024)]
     public async Task<IActionResult> Start(SonosHandoffRequest request, CancellationToken ct)
     {
         if (Config is not { } config)
@@ -80,7 +82,7 @@ public sealed class SonosControlController(
             request.RequestId == Guid.Empty
             || string.IsNullOrWhiteSpace(request.GroupId)
             || request.GroupId.Length > 128
-            || request.TrackIds is not { Length: > 0 and <= 20 }
+            || request.TrackIds is not { Length: > 0 and <= MaximumQueueOccurrences }
             || request.TrackIds.Any(id => !TrackId.TryParse(id, out _))
             || request.StartIndex < 0
             || request.StartIndex >= request.TrackIds.Length

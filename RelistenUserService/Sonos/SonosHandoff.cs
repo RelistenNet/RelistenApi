@@ -1,4 +1,3 @@
-using System.Net;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Relisten.Identifiers;
@@ -39,6 +38,24 @@ public sealed class SonosHandoff(
 {
     internal static readonly JsonSerializerOptions QueueJson = new(JsonSerializerDefaults.Web);
 
+    private const int CatalogBatchSize = 500;
+
+    private static readonly JsonSerializerOptions CatalogJson = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+    };
+
+    private sealed record CatalogResolution(
+        CatalogReference[]? References,
+        CatalogEntities? Entities
+    );
+
+    private sealed record CatalogReference(string Id, string Availability, CatalogTarget? Target);
+
+    private sealed record CatalogTarget(string Kind, string Id);
+
+    private sealed record CatalogEntities(CatalogTrack[]? Tracks);
+
     internal async Task<IReadOnlyList<SonosGroup>> GroupsAsync(string token, CancellationToken ct)
     {
         var result = new List<SonosGroup>();
@@ -75,32 +92,53 @@ public sealed class SonosHandoff(
     {
         var catalog = clients.CreateClient("SonosCatalog");
         var resolved = new Dictionary<string, CatalogTrack>(StringComparer.Ordinal);
-        foreach (var id in trackIds.Distinct(StringComparer.Ordinal))
+        foreach (var batch in trackIds.Distinct(StringComparer.Ordinal).Chunk(CatalogBatchSize))
         {
-            using var response = await catalog.GetAsync($"api/v4/source-tracks/{id}", ct);
-            if (response.StatusCode == HttpStatusCode.NotFound)
-            {
-                return null;
-            }
-
-            response.EnsureSuccessStatusCode();
-            var track = await response.Content.ReadFromJsonAsync<CatalogTrack>(
-                new JsonSerializerOptions
+            using var response = await catalog.PostAsJsonAsync(
+                "api/v4/catalog/resolve",
+                new
                 {
-                    PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+                    references = batch.Select(id => new
+                    {
+                        kind = "track",
+                        scheme = "v4",
+                        id,
+                    }),
                 },
                 ct
             );
+            response.EnsureSuccessStatusCode();
+            var result =
+                await response.Content.ReadFromJsonAsync<CatalogResolution>(CatalogJson, ct)
+                ?? throw new JsonException("Catalog returned an empty resolve response.");
             if (
-                track is null
-                || !TrackId.TryParse(track.Id, out _)
-                || string.IsNullOrEmpty(track.Mp3Url)
+                result.References is null
+                || result.Entities?.Tracks is null
+                || !batch.SequenceEqual(result.References.Select(reference => reference.Id))
             )
             {
-                return null;
+                throw new JsonException("Catalog returned an incomplete track batch.");
             }
 
-            resolved.Add(id, track);
+            var tracksById = result.Entities.Tracks.ToDictionary(
+                track => track.Id,
+                StringComparer.Ordinal
+            );
+            foreach (var reference in result.References)
+            {
+                if (
+                    reference.Availability is not ("available" or "redirected")
+                    || reference.Target is not { Kind: "track" } target
+                    || !TrackId.TryParse(target.Id, out _)
+                    || !tracksById.TryGetValue(target.Id, out var track)
+                    || string.IsNullOrEmpty(track.Mp3Url)
+                )
+                {
+                    return null;
+                }
+
+                resolved.Add(reference.Id, track);
+            }
         }
 
         return trackIds

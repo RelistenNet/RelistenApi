@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using NUnit.Framework;
 using OpenIddict.EntityFrameworkCore.Models;
+using Relisten.Identifiers;
 using RelistenUserService.Authentication.Authorization;
 using RelistenUserService.Identity.Entities;
 using RelistenUserService.Persistence;
@@ -192,15 +193,81 @@ public sealed class TestSonosDevelopment
         recovered.GetProperty("status").GetString().Should().Be("loaded");
         upstream.LoadCount.Should().Be(2);
 
+        // Start near the catalog-batch boundary, then ask for the next window.
+        upstream.CatalogBatchSizes.Clear();
+        var queueIds = Enumerable
+            .Range(0, 5_000)
+            .Select(_ => UuidTypeId.Format("track", Guid.NewGuid()))
+            .ToArray();
+        var longQueue = request with
+        {
+            RequestId = Guid.CreateVersion7(),
+            TrackIds = queueIds,
+            StartIndex = 498,
+        };
+        (await control.Start(longQueue, Ct)).Should().BeOfType<OkObjectResult>();
+        upstream.CatalogBatchSizes.Should().Equal(Enumerable.Repeat(500, 10));
+        upstream.UnavailableTrack = queueIds[500];
+        var unavailable = longQueue with { RequestId = Guid.CreateVersion7() };
+        ((ObjectResult)await control.Start(unavailable, Ct)).StatusCode.Should().Be(422);
+        upstream.LoadCount.Should().Be(3);
+        (await control.GetHandoff(unavailable.RequestId, Ct)).Should().BeOfType<NotFoundResult>();
+        var oversized = longQueue with
+        {
+            RequestId = Guid.CreateVersion7(),
+            TrackIds = [.. queueIds, Track],
+        };
+        ((ObjectResult)await control.Start(oversized, Ct)).StatusCode.Should().Be(422);
+        player.Request.Headers.Authorization = upstream
+            .Load.GetProperty("httpAuthorization")
+            .GetString();
+        var first = await ReadWindowAsync(
+            player,
+            longQueue.RequestId,
+            upstream.Load.GetProperty("itemId").GetString()
+        );
+        first
+            .Select(ObjectId)
+            .Should()
+            .Equal(queueIds.Skip(498).Take(3).Select(id => $"TrackU:{id}"));
+        var later = await ReadWindowAsync(
+            player,
+            longQueue.RequestId,
+            first[^1].GetProperty("id").GetString()
+        );
+        later
+            .Select(ObjectId)
+            .Should()
+            .Equal(queueIds.Skip(500).Take(3).Select(id => $"TrackU:{id}"));
+
         await db
             .NativeSessions.Where(row => row.Id == nativeId)
             .ExecuteUpdateAsync(update =>
                 update.SetProperty(row => row.RevokedAt, DateTimeOffset.UtcNow)
             );
-        (await player.ItemWindow(request.RequestId, null, ct: Ct))
+        (await player.ItemWindow(longQueue.RequestId, null, ct: Ct))
             .Should()
             .BeOfType<NotFoundResult>();
     }
+
+    private static async Task<JsonElement[]> ReadWindowAsync(
+        SonosPlayerController player,
+        Guid queue,
+        string? center
+    )
+    {
+        var result = (JsonResult)
+            await player.ItemWindow(queue, center, upcomingWindowSize: 2, ct: Ct);
+        var body = JsonSerializer.SerializeToElement(
+            result.Value,
+            (JsonSerializerOptions)result.SerializerSettings!
+        );
+        body.GetProperty("includesEndOfQueue").GetBoolean().Should().BeFalse();
+        return body.GetProperty("items").EnumerateArray().ToArray();
+    }
+
+    private static string? ObjectId(JsonElement item) =>
+        item.GetProperty("track").GetProperty("id").GetProperty("objectId").GetString();
 
     private static JsonElement AsJson(OkObjectResult response) =>
         JsonSerializer.SerializeToElement(
@@ -218,6 +285,8 @@ public sealed class TestSonosDevelopment
         public JsonElement Load { get; private set; }
         public int LoadCount { get; private set; }
         public bool LoseNextLoadResponse { get; set; }
+        public string? UnavailableTrack { get; set; }
+        public List<int> CatalogBatchSizes { get; } = [];
 
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
@@ -238,6 +307,41 @@ public sealed class TestSonosDevelopment
                 return new HttpResponseMessage(HttpStatusCode.OK);
             }
 
+            if (path == "/api/v4/catalog/resolve")
+            {
+                var requestBody = await request.Content!.ReadFromJsonAsync<JsonElement>(ct);
+                var ids = requestBody
+                    .GetProperty("references")
+                    .EnumerateArray()
+                    .Select(reference => reference.GetProperty("id").GetString())
+                    .ToArray();
+                CatalogBatchSizes.Add(ids.Length);
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = JsonContent.Create(
+                        new
+                        {
+                            references = ids.Select(id => new
+                            {
+                                id,
+                                availability = id == UnavailableTrack ? "unavailable" : "available",
+                                target = new { kind = "track", id },
+                            }),
+                            entities = new
+                            {
+                                tracks = ids.Select(id => new
+                                {
+                                    id,
+                                    title = "Test recording",
+                                    duration = 381,
+                                    mp3_url = "https://archive.example/track.mp3",
+                                }),
+                            },
+                        }
+                    ),
+                };
+            }
+
             var content = path switch
             {
                 "/login/v3/oauth/access" =>
@@ -251,8 +355,6 @@ public sealed class TestSonosDevelopment
                 "/control/api/v1/groups/office/playback/subscription" => "{}",
                 "/control/api/v1/groups/office/playbackSession" =>
                     """{"sessionId":"test-session"}""",
-                $"/api/v4/source-tracks/{Track}" =>
-                    $$"""{"id":"{{Track}}","title":"Minglewood Blues","duration":381,"mp3_url":"https://archive.example/track.mp3"}""",
                 _ => throw new InvalidOperationException($"Unexpected upstream request {path}"),
             };
             return new HttpResponseMessage(HttpStatusCode.OK)
