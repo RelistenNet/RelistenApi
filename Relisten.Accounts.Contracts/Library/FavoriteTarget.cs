@@ -1,13 +1,17 @@
+using Relisten.Accounts.Contracts.Identifiers;
 using Relisten.Identifiers;
 
 namespace Relisten.Accounts.Contracts.Library;
 
-/// <summary>An exact catalog identity. Membership writes do not require catalog availability.</summary>
+/// <summary>
+/// An exact catalog or playlist identity saved independently of its availability.
+/// </summary>
 public sealed record FavoriteTarget(string Kind, string Id)
 {
     public bool IsValid() =>
         Kind switch
         {
+            FavoriteCatalogTypes.Playlist => PlaylistId.TryParse(Id, out _),
             FavoriteCatalogTypes.Song or FavoriteCatalogTypes.Venue => ShortTypeId.IsValid(
                 Id,
                 Kind

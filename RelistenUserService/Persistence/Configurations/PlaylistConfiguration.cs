@@ -122,7 +122,7 @@ public sealed class PlaylistConfiguration
             {
                 table.HasCheckConstraint(
                     "ck_playlist_revisions_state",
-                    "revision > 1 AND change_count > 0 AND kind IN ('content', 'rebalance')"
+                    "revision > 1 AND change_count > 0"
                 );
             }
         );
@@ -153,10 +153,6 @@ public sealed class PlaylistConfiguration
                 table.HasCheckConstraint(
                     "ck_playlist_receipts_hash",
                     "octet_length(payload_hash) = 32"
-                );
-                table.HasCheckConstraint(
-                    "ck_playlist_receipts_kind",
-                    "kind IN ('create', 'archive', 'copy', 'operation')"
                 );
             }
         );

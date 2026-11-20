@@ -281,7 +281,7 @@ public sealed class FavoriteMutationService(
     private static FavoriteMutationFailure FavoriteIdConflict(IReadOnlyList<FavoriteId> ids) =>
         new(
             FavoriteMutationFailureKind.FavoriteIdConflict,
-            "A favorite_id was already assigned to another account or catalog target.",
+            "A favorite_id was already assigned to another account or target.",
             ids.Select(id => id.Value).ToArray()
         );
 
