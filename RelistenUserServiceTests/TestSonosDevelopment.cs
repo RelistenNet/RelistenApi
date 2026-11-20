@@ -140,6 +140,10 @@ public sealed class TestSonosDevelopment
 
         var groups = AsJson((OkObjectResult)await control.Groups(Ct));
         groups[0].GetProperty("name").GetString().Should().Be("Office");
+        groups[0].GetProperty("household_name").GetString().Should().Be("Kitchen, Office");
+        groups[1].GetProperty("name").GetString().Should().Be("Office");
+        groups[1].GetProperty("household_name").GetString().Should().Be("Office");
+        groups[1].GetProperty("household_id").GetString().Should().Be("studio");
         var request = new SonosHandoffRequest(
             Guid.CreateVersion7(),
             "office",
@@ -765,9 +769,12 @@ public sealed class TestSonosDevelopment
                     """{"access_token":"access","expires_in":3600}""",
                 "/login/v3/oauth/access" =>
                     """{"access_token":"access","refresh_token":"refresh","expires_in":3600}""",
-                "/control/api/v1/households" => """{"households":[{"id":"home"}]}""",
+                "/control/api/v1/households" =>
+                    """{"households":[{"id":"home"},{"id":"studio"}]}""",
                 "/control/api/v1/households/home/groups" =>
-                    """{"groups":[{"id":"office","name":"Office"}]}""",
+                    """{"groups":[{"id":"office","name":"Office"}],"players":[{"name":"Office"},{"name":"Kitchen"}]}""",
+                "/control/api/v1/households/studio/groups" =>
+                    """{"groups":[{"id":"studio-office","name":"Office"}]}""",
                 "/control/api/v1/groups/office/playback" => JsonSerializer.Serialize(
                     new
                     {

@@ -129,7 +129,7 @@ Use the local User Service on `codex/sonos-direct-control` with its accounts mig
 | --- | --- |
 | `POST /connect?return_to=mobile` | Open the returned `authorization_url` in the system authorization session. Wait for `net.relisten.mobile:/sonos/callback?result=connected\|failed`, then refresh `GET /connection`. Refresh after browser cancellation too. The callback carries no credentials. |
 | `GET /connection`, `DELETE /connection` | Read `linked`. Disconnect returns `204` and clears Relisten’s grant, pending links, and queue access. The speaker may finish buffered audio. |
-| `GET /groups` | Lists `household_id`, `id`, and `name` for each authorized group. Use the group ID the listener chose. |
+| `GET /groups` | Lists `household_id`, `household_name`, `id`, and `name` for each authorized group. Group rows by `household_id`. The household display label comes from up to three room names because Sonos does not expose household names. It can change when rooms are renamed. Use the group ID the listener chose. |
 | `POST /handoffs` | Submits the ordered catalog track IDs and current position. See the body and receipt below. |
 | `GET /handoffs/{request_id}` | Follows a pending handoff. The same selection and request UUID can also be submitted again after a lost response. |
 | `GET /playback` | Returns a JSON array of currently confirmed Relisten-owned playback objects. An empty array means there are no confirmed rooms. Use this to restore playback when the app reopens. |
