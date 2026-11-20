@@ -140,9 +140,8 @@ public sealed class TestSonosDevelopment
 
         var groups = AsJson((OkObjectResult)await control.Groups(Ct));
         groups[0].GetProperty("name").GetString().Should().Be("Office");
-        groups[0].GetProperty("household_name").GetString().Should().Be("Kitchen, Office");
+        groups[0].GetProperty("household_id").GetString().Should().Be("home");
         groups[1].GetProperty("name").GetString().Should().Be("Office");
-        groups[1].GetProperty("household_name").GetString().Should().Be("Office");
         groups[1].GetProperty("household_id").GetString().Should().Be("studio");
         var request = new SonosHandoffRequest(
             Guid.CreateVersion7(),
@@ -772,7 +771,7 @@ public sealed class TestSonosDevelopment
                 "/control/api/v1/households" =>
                     """{"households":[{"id":"home"},{"id":"studio"}]}""",
                 "/control/api/v1/households/home/groups" =>
-                    """{"groups":[{"id":"office","name":"Office"}],"players":[{"name":"Office"},{"name":"Kitchen"}]}""",
+                    """{"groups":[{"id":"office","name":"Office"}]}""",
                 "/control/api/v1/households/studio/groups" =>
                     """{"groups":[{"id":"studio-office","name":"Office"}]}""",
                 "/control/api/v1/groups/office/playback" => JsonSerializer.Serialize(

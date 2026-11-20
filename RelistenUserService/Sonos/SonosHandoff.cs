@@ -33,7 +33,7 @@ internal sealed record QueueDisplayName(string Name);
 
 internal sealed record MusicObjectId(string ServiceId, string ObjectId);
 
-internal sealed record SonosGroup(string HouseholdId, string HouseholdName, string Id, string Name);
+internal sealed record SonosGroup(string HouseholdId, string Id, string Name);
 
 public sealed class SonosHandoff(
     AccountsDbContext db,
@@ -104,33 +104,11 @@ public sealed class SonosHandoff(
                 null,
                 ct
             );
-            var groups = response.GetProperty("groups");
-            // Sonos exposes room names, but no household display name.
-            var rooms =
-                response.TryGetProperty("players", out var players)
-                && players.ValueKind == JsonValueKind.Array
-                && players.GetArrayLength() > 0
-                    ? players
-                    : groups;
-            var roomNames = rooms
-                .EnumerateArray()
-                .Select(room =>
-                    room.TryGetProperty("name", out var name)
-                    && name.ValueKind == JsonValueKind.String
-                        ? name.GetString()?.Trim()
-                        : null
-                )
-                .Where(name => !string.IsNullOrEmpty(name))
-                .Distinct(StringComparer.Ordinal)
-                .Order(StringComparer.Ordinal)
-                .Take(3);
-            var householdName = string.Join(", ", roomNames);
-            foreach (var group in groups.EnumerateArray())
+            foreach (var group in response.GetProperty("groups").EnumerateArray())
             {
                 result.Add(
                     new(
                         householdId,
-                        householdName.Length > 0 ? householdName : "Sonos System",
                         group.GetProperty("id").GetString()!,
                         group.GetProperty("name").GetString()!
                     )
