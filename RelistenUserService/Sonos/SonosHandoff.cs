@@ -70,12 +70,14 @@ public sealed class SonosHandoff(
         entries is { Length: > 0 and <= MaximumQueueOccurrences }
         && entries.All(entry =>
             entry is not null
-            && !string.IsNullOrWhiteSpace(entry.OccurrenceId)
-            && entry.OccurrenceId.Length <= 128
+            && ValidOccurrenceId(entry.OccurrenceId)
             && TrackId.TryParse(entry.TrackId, out _)
         )
         && entries.Select(entry => entry.OccurrenceId).Distinct(StringComparer.Ordinal).Count()
             == entries.Length;
+
+    internal static bool ValidOccurrenceId(string? id) =>
+        !string.IsNullOrWhiteSpace(id) && id.Length <= 128;
 
     private const int CatalogBatchSize = 500;
     private static readonly TimeSpan DispatchWindow = TimeSpan.FromSeconds(45);

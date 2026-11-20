@@ -15,7 +15,9 @@ public sealed record SonosTransportRequest(
     int? Volume = null,
     bool? Muted = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        long? ExpectedQueueVersion = null
+        long? ExpectedQueueVersion = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        string? TargetOccurrenceId = null
 );
 
 public sealed partial class SonosPlaybackController
@@ -191,7 +193,9 @@ public sealed partial class SonosPlaybackController
             RequestHash = hash,
             Action = request.Action,
             ExpectedItemId = current.ItemId,
-            QueueVersion = request.Action is "next" or "previous" ? queue.QueueVersion : null,
+            QueueVersion = request.Action is "next" or "previous" or "skip"
+                ? queue.QueueVersion
+                : null,
         };
         if (!ResolveCommandTarget(receipt, request, queue, playback, current))
         {
@@ -241,8 +245,17 @@ public sealed partial class SonosPlaybackController
                     || request.PositionMillis < current.DurationMillis;
             case "next":
             case "previous":
+            case "skip":
                 var items = queue.ReadItems();
-                var index = current.QueueIndex + (request.Action == "next" ? 1 : -1);
+                var index = request.Action switch
+                {
+                    "next" => current.QueueIndex + 1,
+                    "previous" => current.QueueIndex - 1,
+                    _ => Array.FindIndex(
+                        items,
+                        item => item.OccurrenceId == request.TargetOccurrenceId
+                    ),
+                };
                 if (index < 0 || index >= items.Length)
                 {
                     return false;
@@ -250,6 +263,11 @@ public sealed partial class SonosPlaybackController
 
                 receipt.TargetItemId = items[index].Id;
                 receipt.TargetValue = 0;
+                if (receipt.TargetItemId == current.ItemId)
+                {
+                    receipt.Status = "confirmed";
+                }
+
                 return true;
             case "volume":
                 receipt.TargetValue = request.Volume;
@@ -484,7 +502,8 @@ public sealed partial class SonosPlaybackController
                     && state.PlaybackState == "PLAYBACK_STATE_PLAYING",
                 "pause" => state.CurrentOccurrence!.ItemId == receipt.TargetItemId
                     && state.PlaybackState == "PLAYBACK_STATE_PAUSED",
-                "next" or "previous" => state.CurrentOccurrence!.ItemId == receipt.TargetItemId,
+                "next" or "previous" or "skip" => state.CurrentOccurrence!.ItemId
+                    == receipt.TargetItemId,
                 "seek" => state.CurrentOccurrence!.ItemId == receipt.TargetItemId
                     && state.PositionMillis == receipt.TargetValue,
                 "volume" => (await ReadVolumeAsync(access.Token, queue.GroupId, ct)).Volume
@@ -641,8 +660,14 @@ public sealed partial class SonosPlaybackController
 
     private static bool ValidCommand(SonosTransportRequest request)
     {
+        var validTarget =
+            request.Action == "skip"
+                ? request.ExpectedQueueVersion.HasValue
+                    && SonosHandoff.ValidOccurrenceId(request.TargetOccurrenceId)
+                : request.TargetOccurrenceId is null;
         if (
-            request.CommandId == Guid.Empty
+            !validTarget
+            || request.CommandId == Guid.Empty
             || request.ExpectedQueueVersion is < 1
             || (request.ExpectedItemId is { } id && !Guid.TryParseExact(id, "D", out _))
         )
@@ -660,7 +685,7 @@ public sealed partial class SonosPlaybackController
                 && request.PositionMillis is >= 0
                 && request.Volume is null
                 && request.Muted is null,
-            "next" or "previous" => request.CommandId != null
+            "next" or "previous" or "skip" => request.CommandId != null
                 && request.ExpectedItemId != null
                 && request.PositionMillis is null
                 && request.Volume is null

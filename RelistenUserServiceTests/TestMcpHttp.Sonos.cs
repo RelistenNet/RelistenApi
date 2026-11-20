@@ -275,6 +275,121 @@ public sealed partial class TestMcpHttp
         upstream.RoomPosition.Should().Be(1000);
     }
 
+    [Test]
+    public async Task Sonos_skip_targets_the_selected_occurrence_and_reconciles_a_lost_response()
+    {
+        const string nativeBase = AccountsOrigin + "/v1/integrations/sonos";
+        const string track = "track_4rc5e1za2bvsrnnr0edzzj8rfs";
+        using var upstream = new TestSonosDevelopment.TestUpstream();
+        await StartApp(mountCatalog: false, sonos: upstream);
+        var fields = AuthorizeFields(Native, NativeRedirect, ReadScopes + " account.manage");
+        using var code = await Authorize(fields, await SignIn(fields));
+        var login = await Exchange(Native, NativeRedirect, ReadCode(code));
+        await LinkSonos(nativeBase, "https://sonos.example.test", login.Access);
+
+        var handle = Guid.NewGuid();
+        using var started = await SendJson(
+            HttpMethod.Post,
+            nativeBase + "/handoffs",
+            login.Access,
+            new
+            {
+                request_id = handle,
+                group_id = "office",
+                start_index = 0,
+                position_millis = 1000,
+                occurrences = new[] { "first", "middle", "last" }.Select(key => new
+                {
+                    occurrence_id = key,
+                    track_id = track,
+                }),
+            }
+        );
+        started.StatusCode.Should().Be(HttpStatusCode.OK);
+        var playbackUrl = $"{nativeBase}/playback/{handle}";
+        var commandsUrl = playbackUrl + "/commands";
+        using var queue = await Get(playbackUrl + "/queue", login.Access);
+        var items = (await Json(queue)).GetProperty("occurrences");
+        var first = items[0].GetProperty("item_id").GetString()!;
+        var last = items[2].GetProperty("item_id").GetString()!;
+        var skip = new
+        {
+            action = "skip",
+            command_id = Guid.NewGuid(),
+            expected_item_id = first,
+            expected_queue_version = (long?)1,
+            target_occurrence_id = "last",
+        };
+
+        Task<HttpResponseMessage> PostSkip(object body) =>
+            SendJson(HttpMethod.Post, commandsUrl, login.Access, body);
+
+        using var missingVersion = await PostSkip(skip with { expected_queue_version = null });
+        ((int)missingVersion.StatusCode).Should().Be(422);
+        using var stale = await PostSkip(skip with { expected_queue_version = 2 });
+        stale.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await stale.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("code")
+            .GetString()
+            .Should()
+            .Be("sonos_queue_changed");
+        using var missingTarget = await PostSkip(skip with { target_occurrence_id = "missing" });
+        missingTarget.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await missingTarget.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("code")
+            .GetString()
+            .Should()
+            .Be("sonos_command_unavailable");
+
+        using var current = await PostSkip(
+            skip with
+            {
+                command_id = Guid.NewGuid(),
+                target_occurrence_id = "first",
+            }
+        );
+        current.StatusCode.Should().Be(HttpStatusCode.Accepted);
+        (await current.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("status")
+            .GetString()
+            .Should()
+            .Be("confirmed");
+        upstream.RoomPosition.Should().Be(1000);
+        upstream.TransportPaths.Should().BeEmpty();
+
+        upstream.RoomState = "PLAYBACK_STATE_PAUSED";
+        upstream.LoseNextTransportResponse = true;
+        using var lost = await PostSkip(skip);
+        lost.StatusCode.Should().Be(HttpStatusCode.Accepted);
+        (await lost.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("status")
+            .GetString()
+            .Should()
+            .Be("pending");
+        using var retry = await PostSkip(skip);
+        retry.StatusCode.Should().Be(HttpStatusCode.Accepted);
+        var receipt = await retry.Content.ReadFromJsonAsync<JsonElement>();
+        receipt.GetProperty("status").GetString().Should().Be("confirmed");
+        receipt.GetProperty("target_item_id").GetString().Should().Be(last);
+        upstream.TransportPaths.Should().Equal("pause");
+        upstream.RoomPosition.Should().Be(0);
+        using var playback = await Get(playbackUrl, login.Access);
+        (await Json(playback))
+            .GetProperty("current_occurrence")
+            .GetProperty("occurrence_id")
+            .GetString()
+            .Should()
+            .Be("last");
+        using var differentTarget = await PostSkip(skip with { target_occurrence_id = "middle" });
+        differentTarget.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await differentTarget.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("code")
+            .GetString()
+            .Should()
+            .Be("sonos_command_id_conflict");
+        upstream.TransportPaths.Should().ContainSingle();
+    }
+
     private Task<HttpResponseMessage> SendJson(
         HttpMethod method,
         string url,
