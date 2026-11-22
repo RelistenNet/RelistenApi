@@ -2,15 +2,31 @@ using Microsoft.EntityFrameworkCore;
 using RelistenUserService;
 using RelistenUserService.Persistence;
 using RelistenUserService.Playlists;
+using RelistenUserService.Search;
+using Temporalio.Client;
 
 if (args.FirstOrDefault() == "playlist-moderation")
 {
+    var configuration = new ConfigurationBuilder().AddEnvironmentVariables().Build();
+    using var logging = LoggerFactory.Create(builder => builder.AddConsole());
+    var address = configuration["Temporal:Address"];
+    var temporalNamespace = configuration["Temporal:Namespace"];
+    var search =
+        address is null || temporalNamespace is null
+            ? null
+            : new PlaylistSearchNotifier(
+                TemporalClient.CreateLazy(
+                    new TemporalClientConnectOptions(address) { Namespace = temporalNamespace }
+                ),
+                logging.CreateLogger<PlaylistSearchNotifier>()
+            );
     Environment.ExitCode = await PlaylistModerationCommand.RunAsync(
         args[1..],
         () => new AccountsDbContextFactory().CreateDbContext([]),
         Console.Out,
         Console.Error,
-        CancellationToken.None
+        CancellationToken.None,
+        search
     );
     return;
 }

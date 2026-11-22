@@ -122,7 +122,23 @@ dotnet run --project RelistenIngestionWorker -- --cancel=ingest/artist/ARTIST_UU
 # After a backup restore, purge an account deleted after the backup was taken.
 # Runs the account-deletion SQL by user ID without a job row. Needs ACCOUNTS_DATABASE_URL.
 dotnet run --project RelistenIngestionWorker -- purge-account --user user_XXXXXXXX
+
+# Build playlist search from the accounts and catalog databases, then publish its alias.
+dotnet run --project RelistenIngestionWorker -- --playlist-search-build=true
 ```
+
+Playlist search writes use the `user-data` worker and both database connections.
+The User Service signals the playlist's workflow after saving changes. That
+workflow waits one minute after the playlist's latest signal. It reads the
+current playlist, updates its document or deletes it if gone, and exits.
+The nightly playlist build repairs missed
+signals and updates follow counts and catalog names. Schedule registration creates
+`relisten-playlist-search-build` paused.
+
+Account-deletion activities retry Typesense cleanup after the database commit.
+The restore replay command can run with the accounts database alone. Set
+`Search__Typesense__Url` and the writer key when the command should also remove
+documents from a live playlist index.
 
 `--item` implies Archive. Combining it with another provider or with `--year` is
 invalid. With an explicit provider, year applies only to Archive, Phish.in, or

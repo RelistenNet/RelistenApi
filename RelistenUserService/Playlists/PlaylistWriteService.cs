@@ -6,6 +6,7 @@ using RelistenUserService.Library;
 using RelistenUserService.Library.Entities;
 using RelistenUserService.Persistence;
 using RelistenUserService.Playlists.Entities;
+using RelistenUserService.Search;
 
 namespace RelistenUserService.Playlists;
 
@@ -18,7 +19,8 @@ public sealed partial class PlaylistWriteService(
     AdvisoryLockService advisoryLocks,
     LibraryStateStore stateStore,
     TimeProvider timeProvider,
-    PlaylistTrackResolver trackResolver
+    PlaylistTrackResolver trackResolver,
+    PlaylistSearchNotifier? search = null
 )
 {
     public async Task<(PlaylistCreated Response, bool Replayed)> CreateAsync(
@@ -86,6 +88,10 @@ public sealed partial class PlaylistWriteService(
         var created = AddPlaylist(actor, state, request, "create", hash, count);
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+        if (search is not null)
+        {
+            await search.Changed(created.Id);
+        }
         return (new(1, generation, created.Id, created.Revision), false);
     }
 
@@ -254,6 +260,10 @@ public sealed partial class PlaylistWriteService(
         await ReleaseChangedRanksAsync(cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+        if (search is not null && editor.Revisions.Count > 0)
+        {
+            await search.Changed(id);
+        }
         return new(1, generation, playlist.Revision, results);
     }
 
@@ -342,6 +352,10 @@ public sealed partial class PlaylistWriteService(
         );
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+        if (search is not null && changed)
+        {
+            await search.Changed(id);
+        }
         return new(1, generation, id, request.Archived, changed);
     }
 

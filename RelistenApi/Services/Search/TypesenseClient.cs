@@ -174,13 +174,23 @@ internal sealed class TypesenseClient(HttpClient http)
         // Keep the URL below normal request-line size limits.
         foreach (var batch in ids.Chunk(100))
         {
-            var filter = Uri.EscapeDataString($"id:=[{string.Join(',', batch)}]");
-            await Delete(
-                $"collections/{collection}/documents?filter_by={filter}",
+            await DeleteDocumentsMatching(
+                collection,
+                $"id:=[{string.Join(',', batch)}]",
                 cancellationToken
             );
         }
     }
+
+    public Task DeleteDocumentsMatching(
+        string collection,
+        string filter,
+        CancellationToken cancellationToken
+    ) =>
+        Delete(
+            $"collections/{collection}/documents?filter_by={Uri.EscapeDataString(filter)}",
+            cancellationToken
+        );
 
     public async Task<SearchDocument?> ReadDocument(
         string collection,

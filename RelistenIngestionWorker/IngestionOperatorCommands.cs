@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Relisten.Accounts.Contracts.Search;
 using Relisten.Api.Models;
 using Relisten.Data;
 using Relisten.Ingestion;
@@ -8,6 +9,7 @@ using Relisten.Ingestion.Workflows;
 using Relisten.Normalization;
 using Relisten.Normalization.Temporal;
 using Relisten.Search;
+using RelistenIngestionWorker.PlaylistSearch;
 using Temporalio.Client;
 
 namespace RelistenIngestionWorker;
@@ -24,6 +26,21 @@ internal sealed class IngestionOperatorCommands(
 {
     public async Task<string> RunAsync(string operation)
     {
+        if (operation == "playlist-search-build")
+        {
+            if (string.IsNullOrEmpty(configuration["ACCOUNTS_DATABASE_URL"]))
+            {
+                throw new InvalidImportRequest(
+                    "ACCOUNTS_DATABASE_URL is required for playlist indexing."
+                );
+            }
+            await temporal.ExecuteWorkflowAsync(
+                (PlaylistSearchRebuildWorkflow workflow) => workflow.RunAsync(),
+                new WorkflowOptions(PlaylistSearchJob.RebuildId, PlaylistSearchJob.Queue)
+            );
+            return "Playlist search index published.";
+        }
+
         if (operation == "search-build")
         {
             var path = configuration["search-plays-export"];

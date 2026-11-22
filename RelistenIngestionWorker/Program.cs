@@ -11,11 +11,14 @@ using Relisten.Api.Models;
 using Relisten.Data;
 using Relisten.Ingestion;
 using Relisten.Persistence;
+using Relisten.Search;
 using RelistenIngestionWorker;
 using RelistenIngestionWorker.AccountDeletion;
+using RelistenIngestionWorker.PlaylistSearch;
 using Sentry;
 using SimpleMigrations;
 using SimpleMigrations.DatabaseProvider;
+using Temporalio.Client;
 using Temporalio.Extensions.Hosting;
 
 // This host owns workers and operator commands. It deliberately does not construct
@@ -38,11 +41,17 @@ using var host = builder.Build();
 
 if (purgeAccount)
 {
-    var purge =
-        host.Services.GetService<AccountPurge>()
-        ?? throw new InvalidOperationException(
-            "ACCOUNTS_DATABASE_URL is required for purge-account."
-        );
+    var accountsUrl = builder.Configuration["ACCOUNTS_DATABASE_URL"];
+    if (string.IsNullOrEmpty(accountsUrl))
+    {
+        throw new InvalidOperationException("ACCOUNTS_DATABASE_URL is required for purge-account.");
+    }
+
+    // Restore replay can run with only an accounts database. Supply a Typesense
+    // URL when the operator also wants to remove documents from a live index.
+    var purge = builder.Configuration["Search:Typesense:Url"] is null
+        ? new AccountPurge(PostgresConnectionString.Normalize(accountsUrl))
+        : host.Services.GetRequiredService<AccountPurge>();
     await purge.RunForUserAsync(purgeUser.ToString(), CancellationToken.None);
     Console.WriteLine("Account purge completed.");
     return;
@@ -58,6 +67,7 @@ var operations = new[]
     "norm-venues",
     "repair-jerry-venues",
     "search-build",
+    "playlist-search-build",
 }
     .Where(key => builder.Configuration[key] != null)
     .ToArray();
@@ -83,6 +93,12 @@ if (registerSchedules)
         .RegisterSchedulesAsync(
             builder.Configuration.GetValue("Normalization:NightlyVenueCalls", 60)
         );
+    if (host.Services.GetService<PlaylistSearchIndex>() is not null)
+    {
+        await PlaylistSearchSchedule.RegisterAsync(
+            host.Services.GetRequiredService<ITemporalClient>()
+        );
+    }
     return;
 }
 
@@ -163,13 +179,29 @@ static HostApplicationBuilder CreateWorkerBuilder(string[] arguments)
     builder.Services.AddScoped<IngestionOperatorCommands>();
     if (builder.Configuration["ACCOUNTS_DATABASE_URL"] is { Length: > 0 } accountsUrl)
     {
-        builder.Services.AddSingleton(_ => new AccountPurge(
-            PostgresConnectionString.Normalize(accountsUrl)
+        var accounts = PostgresConnectionString.Normalize(accountsUrl);
+        builder.Services.AddSingleton(sp => new PlaylistSearchRows(
+            accounts,
+            sp.GetRequiredService<DbService>()
         ));
+        builder.Services.AddSingleton<PlaylistSearchIndex>();
+        builder.Services.AddSingleton(sp =>
+        {
+            var typesense = sp.GetRequiredService<TypesenseClient>();
+            var alias = PlaylistSearchIndex.ReadAliasName(builder.Configuration);
+            return new AccountPurge(
+                accounts,
+                (owner, token) => PlaylistSearchIndex.Purge(typesense, alias, owner, token)
+            );
+        });
         builder
             .Services.AddHostedTemporalWorker(AccountDeletionInput.TaskQueue)
             .AddWorkflow<AccountDeletionWorkflow>()
-            .AddScopedActivities<AccountDeletionActivities>();
+            .AddWorkflow<PlaylistSearchSyncWorkflow>()
+            .AddWorkflow<PlaylistSearchRebuildWorkflow>()
+            .AddWorkflow<ScheduledPlaylistSearchWorkflow>()
+            .AddScopedActivities<AccountDeletionActivities>()
+            .AddScopedActivities<PlaylistSearchActivities>();
     }
 
     return builder;

@@ -73,6 +73,8 @@ public sealed partial class TestPlaylistApi
                 ["AllowedHosts"] = "auth.relisten.net;accounts.relisten.net;relisten.net",
                 ["Accounts:Issuer"] = "https://auth.relisten.net/",
                 ["Accounts:WebClientSecret"] = "disposable-proof-secret",
+                // Successful playlist writes must survive an unavailable search wake-up.
+                ["Temporal:Address"] = "127.0.0.1:1",
             }
         );
         builder.Logging.ClearProviders();
