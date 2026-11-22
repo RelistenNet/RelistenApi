@@ -234,6 +234,9 @@ public static class AuthenticationServiceCollectionExtensions
         services.AddScoped<McpAccountAuthorization>();
         services.AddSingleton<WebBootstrapPrincipalFactory>();
         services.AddScoped<FavoriteMutationService>();
+        services.AddHttpClient<RelistenUserService.Playlists.PlaylistTrackResolver>(client =>
+            client.BaseAddress = new Uri(runtime.Options.CatalogBaseUrl.TrimEnd('/') + "/")
+        );
         services.AddScoped<RelistenUserService.Playlists.PlaylistWriteService>();
         services.AddScoped<RelistenUserService.Playlists.PlaylistSharingService>();
         services.AddScoped<RelistenUserService.Playlists.PlaylistReadService>();

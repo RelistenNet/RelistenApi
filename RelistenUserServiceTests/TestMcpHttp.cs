@@ -33,6 +33,7 @@ public sealed partial class TestMcpHttp
     private const string McpOrigin = "https://mcp.relisten.localhost:5443";
     private const string Resource = McpOrigin + "/mcp";
     private const string MetadataPath = "/.well-known/oauth-protected-resource/mcp";
+    private const string CatalogSearchPath = "/api/v4/search";
     private const string ChatGpt = "https://chatgpt.com/oauth/client.json";
     private const string ChatGptRedirect = "https://chatgpt.com/connector_platform_oauth_redirect";
     private const string Codex = "https://chatgpt.com/oauth/codex/client.json";
@@ -263,7 +264,7 @@ public sealed partial class TestMcpHttp
             .GetString()
             .Should()
             .Be("Synthetic Artist");
-        catalog.LastRequest!.AbsolutePath.Should().Be("/api/v4/search");
+        catalog.LastRequest!.AbsolutePath.Should().Be(CatalogSearchPath);
         var library = await Call("my_library", new { });
         ChallengeFrom(library)
             .Should()
@@ -295,40 +296,81 @@ public sealed partial class TestMcpHttp
     }
 
     [Test]
-    public async Task Find_returns_shows_for_an_imported_venue_and_year()
+    public async Task FindProjectsShowsFromPerformancesAndKeepsToursSeparate()
     {
+        const string artistId = "artist_example";
         const string venueId = "imported_venue_harbor";
         const string showId = "show_harbor_1998";
+        const string tourId = "tour_autumn_1998";
         await StartApp(catalogResponse: uri =>
-            (
-                uri.AbsolutePath,
-                QueryHelpers.ParseQuery(uri.Query).GetValueOrDefault("q").ToString()
-            ) switch
+        {
+            var query = QueryHelpers.ParseQuery(uri.Query);
+            uri.AbsolutePath.Should().Be(CatalogSearchPath);
+            query["q"].ToString().Should().Be("Harbor Hall 1998");
+            query["artist_id"].ToString().Should().Be(artistId);
+            return new
             {
-                ("/api/v4/search", "Harbor Hall 1998") => new { shows = Array.Empty<object>() },
-                ("/api/v4/search", "Harbor Hall") => new
+                availability = "full",
+                sections = new
                 {
-                    venues = new[]
+                    shows = new[]
                     {
-                        new { imported_venue = new { id = venueId, artist_id = "artist_example" } },
+                        new
+                        {
+                            kind = "tour",
+                            id = tourId,
+                            label = "Autumn Tour",
+                        },
                     },
+                    performances = new[]
+                    {
+                        new
+                        {
+                            kind = "performance",
+                            id = "perf_example",
+                            show_id = showId,
+                            date = 19981001,
+                            artist_id = artistId,
+                            artist_label = "Example Artist",
+                            venue_id = venueId,
+                            venue_label = "Harbor Hall",
+                        },
+                    },
+                    songs = new[]
+                    {
+                        new
+                        {
+                            id = "song_example",
+                            label = "The Harbor Song",
+                            artist_id = artistId,
+                        },
+                    },
+                    venues = new[] { new { id = venueId, label = "Harbor Hall" } },
                 },
-                ($"/api/v4/imported-venues/{venueId}", "") => new
-                {
-                    shows = new[] { new { id = showId, date = "1998-10-01" } },
-                },
-                _ => null,
-            }
-        );
+            };
+        });
+
+        var result = await Call("find", new { text = "Harbor Hall 1998", artist = artistId });
+
+        result.TryGetProperty("structuredContent", out var data).Should().BeTrue(result.ToString());
+        var show = data.GetProperty("shows").EnumerateArray().Should().ContainSingle().Subject;
+        show.GetProperty("id").GetString().Should().Be(showId);
+        show.GetProperty("date").GetString().Should().Be("1998-10-01");
+        show.GetProperty("artist_id").GetString().Should().Be(artistId);
+        show.GetProperty("venue").GetString().Should().Be("Harbor Hall");
+        data.GetProperty("songs")[0].GetProperty("name").GetString().Should().Be("The Harbor Song");
+        data.GetProperty("venues")[0].GetProperty("id").GetString().Should().Be(venueId);
+        data.GetProperty("tours")[0].GetProperty("id").GetString().Should().Be(tourId);
+    }
+
+    [Test]
+    public async Task FindReportsSearchUnavailability()
+    {
+        await StartApp(catalogResponse: _ => new { availability = "unavailable" });
 
         var result = await Call("find", new { text = "Harbor Hall 1998" });
 
-        result.TryGetProperty("structuredContent", out var data).Should().BeTrue(result.ToString());
-        data.GetProperty("shows")
-            .EnumerateArray()
-            .Select(show => show.GetProperty("id").GetString())
-            .Should()
-            .Equal(showId);
+        ErrorText(result).Should().Contain("catalog search is temporarily unavailable");
     }
 
     [Test]
@@ -1200,13 +1242,17 @@ public sealed partial class TestMcpHttp
             var body = respond is null
                 ? new
                 {
-                    artists = new[]
+                    availability = "full",
+                    sections = new
                     {
-                        new
+                        artists = new[]
                         {
-                            id = "artist_example",
-                            name = "Synthetic Artist",
-                            slug = "synthetic",
+                            new
+                            {
+                                id = "artist_example",
+                                label = "Synthetic Artist",
+                                artist_slug = "synthetic",
+                            },
                         },
                     },
                 }

@@ -13,6 +13,59 @@ public sealed partial class TestV4CatalogHttp
     private const string ResolvePath = "/api/v4/catalog/resolve";
 
     [Test]
+    public async Task Resolver_distinguishes_audio_availability_from_saved_track_identity()
+    {
+        await using var connection = await MigratedTestDatabase.OpenAsync();
+        var originalUrls = await connection.QuerySingleAsync<(string Mp3, string Flac)>(
+            "SELECT mp3_url,flac_url FROM source_tracks WHERE id=910004"
+        );
+        var reference = Reference("track", "v4", TrackId(4));
+        try
+        {
+            foreach (
+                var (mp3, flac, playable) in new[]
+                {
+                    (originalUrls.Mp3, "", true),
+                    ("", originalUrls.Flac, true),
+                    ("", null, false),
+                }
+            )
+            {
+                await connection.ExecuteAsync(
+                    "UPDATE source_tracks SET mp3_url=@mp3,flac_url=@flac WHERE id=910004",
+                    new { mp3, flac }
+                );
+                var result = await Resolve(reference);
+                var resolution = result["references"]![0]!;
+                resolution["availability"]!.GetValue<string>().Should().Be("available");
+                resolution["target"]!["id"]!.GetValue<string>().Should().Be(TrackId(4));
+                result["entities"]!["tracks"]![0]!["playable"]!
+                    .GetValue<bool>()
+                    .Should()
+                    .Be(playable);
+            }
+
+            await connection.ExecuteAsync(
+                "UPDATE source_tracks SET mp3_url=@Mp3,is_orphaned=true WHERE id=910004",
+                new { originalUrls.Mp3 }
+            );
+            var orphaned = await Resolve(reference);
+            orphaned["references"]![0]!["availability"]!
+                .GetValue<string>()
+                .Should()
+                .Be("unavailable");
+            orphaned["entities"]!["tracks"]!.AsArray().Should().BeEmpty();
+        }
+        finally
+        {
+            await connection.ExecuteAsync(
+                "UPDATE source_tracks SET mp3_url=@Mp3,flac_url=@Flac,is_orphaned=false WHERE id=910004",
+                new { originalUrls.Mp3, originalUrls.Flac }
+            );
+        }
+    }
+
+    [Test]
     public async Task Resolver_preserves_reference_order_and_deduplicates_shallow_entity_patches()
     {
         var trackReference = Reference("track", "v4", TrackId(4));

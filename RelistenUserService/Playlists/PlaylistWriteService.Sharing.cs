@@ -121,7 +121,8 @@ public sealed partial class PlaylistWriteService
             cancellationToken
         );
         var copy = PlaylistCopy.CreateRequest(request, source, structure);
-        var created = await AddPlaylistAsync(actor, state, copy, "copy", hash, cancellationToken);
+        var count = await CheckNewPlaylistQuotaAsync(actor, copy, cancellationToken);
+        var created = AddPlaylist(actor, state, copy, "copy", hash, count);
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return (new(1, generation, created.Id, created.Revision), false);

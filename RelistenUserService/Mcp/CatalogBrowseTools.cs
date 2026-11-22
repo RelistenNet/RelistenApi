@@ -29,126 +29,98 @@ internal sealed class CatalogBrowseTools(McpCatalogClient catalog)
                 throw new McpCatalogException("Use a search term between 3 and 200 characters.");
             }
 
-            var results = await Search(text, artist, cancellationToken);
-            var songs = Rows(results, "songs").ToArray();
-            var venues = Rows(results, "venues").ToArray();
-            var shows = Rows(results, "shows").ToArray();
-
-            // Interpret "Cornell 77" as a venue and year. Keep the original
-            // substring search for names, full dates, and tour titles.
-            var words = text.Split(
-                ' ',
-                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
+            var results = await catalog.Get(
+                "search",
+                cancellationToken,
+                ("q", text),
+                ("artist_id", artist)
             );
-            if (shows.Length == 0 && words.Length > 1 && TryYear(words[^1], out var year))
+            if (
+                String(results, "availability") != "full"
+                || Object(results, "sections") is not { } sections
+            )
             {
-                var venueSearch = await Search(
-                    string.Join(" ", words[..^1]),
-                    artist,
-                    cancellationToken
+                throw new McpCatalogException(
+                    "Relisten's catalog search is temporarily unavailable."
                 );
-                venues = Rows(venueSearch, "venues").ToArray();
-                shows = await ReadVenueShows(venues, year, cancellationToken);
-            }
-            else if (songs.Length == 0 && words.Length is 2 or 3)
-            {
-                var matches = await Task.WhenAll(
-                    words
-                        .Where(word => word.Length >= 3)
-                        .Select(word => Search(word, artist, cancellationToken, songsOnly: true))
-                );
-                songs = matches
-                    .SelectMany(match => Rows(match, "songs"))
-                    .DistinctBy(song => String(SongEntry(song), "id"))
-                    .ToArray();
             }
 
+            var showsAndTours = Rows(sections, "shows");
             return new
             {
-                artists = Rows(results, "artists")
+                artists = Rows(sections, "artists")
                     .Take(8)
-                    .Select(item => Fields(item, "id", "name", "slug")),
-                shows = shows.Take(8).Select(ShowSummary),
-                songs = songs
-                    .Take(8)
+                    .Select(item => new
+                    {
+                        id = String(item, "id"),
+                        name = String(item, "label"),
+                        slug = String(item, "artist_slug"),
+                    }),
+                // All search can lead a show with one of its performances.
+                shows = showsAndTours
+                    .Where(item => String(item, "kind") == "show")
+                    .Concat(Rows(sections, "performances"))
                     .Select(item =>
-                        Fields(
-                            SongEntry(item),
-                            "id",
-                            "name",
-                            "slug",
-                            "artist_id",
-                            "normalized_song_id"
-                        )
-                    ),
-                venues = venues.Take(8).Select(ProjectVenue),
-                tours = Rows(results, "tours")
+                    {
+                        var date = SearchDate(item);
+                        return new
+                        {
+                            id = String(item, "kind") == "performance"
+                                ? String(item, "show_id")
+                                : String(item, "id"),
+                            date,
+                            display_date = date,
+                            artist_id = String(item, "artist_id"),
+                            artist = String(item, "artist_label"),
+                            venue_id = String(item, "venue_id"),
+                            venue = String(item, "venue_label"),
+                        };
+                    })
+                    .DistinctBy(show => show.id)
+                    .Take(8),
+                songs = Rows(sections, "songs")
                     .Take(8)
-                    .Select(item => Fields(item, "id", "name", "show_count")),
+                    .Select(item => new
+                    {
+                        id = String(item, "id"),
+                        name = String(item, "label"),
+                        artist_id = String(item, "artist_id"),
+                        artist = String(item, "artist_label"),
+                    }),
+                venues = Rows(sections, "venues")
+                    .Take(8)
+                    .Select(item => new
+                    {
+                        id = String(item, "id"),
+                        name = String(item, "label"),
+                        venue_id = String(item, "venue_id"),
+                        city = String(item, "city_label"),
+                    }),
+                tours = showsAndTours
+                    .Where(item => String(item, "kind") == "tour")
+                    .Take(8)
+                    .Select(item => new
+                    {
+                        id = String(item, "id"),
+                        name = String(item, "label"),
+                        artist_id = String(item, "artist_id"),
+                    }),
             };
         });
 
-    private Task<JsonElement> Search(
-        string text,
-        string? artist,
-        CancellationToken cancellationToken,
-        bool songsOnly = false
-    ) =>
-        catalog.Get(
-            "search",
-            cancellationToken,
-            ("q", text),
-            ("artist_id", artist),
-            ("sources", "false"),
-            ("artists", songsOnly ? "false" : null),
-            ("shows", songsOnly ? "false" : null),
-            ("venues", songsOnly ? "false" : null),
-            ("tours", songsOnly ? "false" : null)
-        );
-
-    private async Task<JsonElement[]> ReadVenueShows(
-        JsonElement[] venues,
-        int year,
-        CancellationToken cancellationToken
-    )
-    {
-        var locations = venues
-            .Take(3)
-            .Select(venue =>
-            {
-                var canonical = Object(venue, "artist_venue");
-                var imported = Object(venue, "imported_venue");
-                return canonical is { } relationship
-                    ? $"artist-venues/{Segment(String(relationship, "id")!)}"
-                    : $"imported-venues/{Segment(String(imported!.Value, "id")!)}";
-            });
-        var results = await Task.WhenAll(
-            locations.Select(path => catalog.Get(path, cancellationToken))
-        );
-        return results
-            .SelectMany(result => Rows(result, "shows"))
-            .Where(show => ShowYear(show) == year)
-            .DistinctBy(show => String(show, "id"))
-            .ToArray();
-    }
-
-    private static bool TryYear(string value, out int year)
-    {
-        if (
-            value.Length is not (2 or 4)
-            || !int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out year)
+    private static string? SearchDate(JsonElement show) =>
+        show.TryGetProperty("date", out var value)
+        && value.ValueKind == JsonValueKind.Number
+        && value.TryGetInt32(out var date)
+        && DateOnly.TryParseExact(
+            date.ToString("D8", CultureInfo.InvariantCulture),
+            "yyyyMMdd",
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.None,
+            out var parsed
         )
-        {
-            year = 0;
-            return false;
-        }
-        if (value.Length == 2)
-        {
-            // Two digits in music search conventionally refer to 1950–2049.
-            year += year >= 50 ? 1900 : 2000;
-        }
-        return year > 0;
-    }
+            ? parsed.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+            : null;
 
     [McpServerTool(Name = "browse", ReadOnly = true, OpenWorld = false)]
     [McpMeta("securitySchemes", JsonValue = McpSecuritySchemes.NoAuth)]
@@ -391,9 +363,6 @@ internal sealed class CatalogBrowseTools(McpCatalogClient catalog)
             "flac_url",
             "normalization"
         );
-
-    private static JsonElement SongEntry(JsonElement row) =>
-        Object(row, "song") ?? row.GetProperty("imported_song");
 
     private static object ProjectVenue(JsonElement row)
     {

@@ -90,7 +90,7 @@ public sealed partial class TestV4CatalogHttp
     }
 
     [Test]
-    public async Task GraphQL_search_continues_past_the_rest_search_window()
+    public async Task GraphQL_search_pages_all_matching_sources_in_order()
     {
         await WithGraphReadFixture(async () =>
         {
@@ -101,14 +101,6 @@ public sealed partial class TestV4CatalogHttp
                     UuidTypeId.Format("source", Guid.Parse($"10000000-0000-0000-0002-{i:D12}"))
                 )
                 .ToArray();
-            var rest = await GetJson(
-                "/api/v4/search?q=graphql-boundary&artists=false&shows=false&songs=false&tours=false&venues=false"
-            );
-            rest["sources"]!
-                .AsArray()
-                .Select(source => source!["id"]!.GetValue<string>())
-                .Should()
-                .Equal(expected.Take(20));
             var actual = new List<string>();
             string? after = null;
             do

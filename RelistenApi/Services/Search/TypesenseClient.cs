@@ -143,6 +143,25 @@ internal sealed class TypesenseClient(HttpClient http)
     public Task DeleteDocument(string collection, string id, CancellationToken cancellationToken) =>
         Delete($"collections/{collection}/documents/{Uri.EscapeDataString(id)}", cancellationToken);
 
+    public async Task<SearchDocument?> ReadDocument(
+        string collection,
+        string id,
+        CancellationToken cancellationToken
+    )
+    {
+        using var response = await http.GetAsync(
+            $"collections/{collection}/documents/{Uri.EscapeDataString(id)}",
+            cancellationToken
+        );
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        await EnsureSuccess(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<SearchDocument>(Json, cancellationToken);
+    }
+
     public async Task<JsonDocument> MultiSearch(object request, CancellationToken cancellationToken)
     {
         using var response = await http.PostAsJsonAsync(

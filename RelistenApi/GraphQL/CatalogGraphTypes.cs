@@ -183,6 +183,7 @@ public sealed class SourceTrackType : ObjectType<TrackResource>
     {
         d.Name("SourceTrack");
         d.BindFieldsImplicitly();
+        d.Ignore(track => track.Playable);
         CatalogGraphFields.Entity<ArtistType>(
             d.Field("artist"),
             CatalogReferenceKind.Artist,

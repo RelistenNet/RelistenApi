@@ -30,6 +30,7 @@ public sealed partial class TestV4CatalogHttp
                 sets { id index tracks { id title mp3Url sourceId normalization { state } } }
               }
               sourceTrack(id: $track) { id source { id } sourceSet { id } show { id } }
+              __type(name: "SourceTrack") { fields { name } }
             }
             """,
             new { source = CatalogId("source", 321), track = CatalogId("track", 341) }
@@ -59,6 +60,11 @@ public sealed partial class TestV4CatalogHttp
             .GetValue<string>()
             .Should()
             .Be(CatalogId("source", 321));
+        data["__type"]!["fields"]!
+            .AsArray()
+            .Select(field => field!["name"]!.GetValue<string>())
+            .Should()
+            .NotContain("playable");
     }
 
     [Test]
@@ -320,13 +326,19 @@ public sealed partial class TestV4CatalogHttp
             .Equal(expected);
     }
 
-    [TestCase("Scarlet", 301)]
-    [TestCase("Historical", 14)]
-    [TestCase("Fixture taper", 14)]
-    [TestCase("Sc", 14)]
-    public async Task GraphQL_search_categories_preserve_rest_membership(string term, int artist)
+    [TestCase("Matched", "artists", "artist", 14)]
+    [TestCase("1995-12-31", "shows", "show", 4)]
+    [TestCase("Fixture taper", "sources", "source", 24)]
+    [TestCase("Winter", "tours", "tour", 84)]
+    [TestCase("Scarlet", "songs", "song", 3)]
+    [TestCase("Historical", "venues", "venue", 1)]
+    public async Task GraphQLSearchReturnsSeededCatalogMatches(
+        string term,
+        string category,
+        string kind,
+        int suffix
+    )
     {
-        var id = CatalogId("artist", artist);
         var data = await Graph(
             """
             query($q: String!, $artist: ID!) { search(q: $q,artistId: $artist) {
@@ -335,38 +347,28 @@ public sealed partial class TestV4CatalogHttp
               sources(first: 20) { nodes { id } }
               tours(first: 20) { nodes { id } }
               songs(first: 20) { nodes { song { id } importedSong { id } } }
-              venues(first: 20) { nodes { artistVenue { id } importedVenue { id } } }
+              venues(first: 20) { nodes { artistVenue { venue { id } } importedVenue { id } } }
             } }
             """,
-            new { q = term, artist = id }
+            new { q = term, artist = BrowseArtistId }
         );
-        var rest = await GetJson(
-            "/api/v4/search?q=" + Uri.EscapeDataString(term) + "&artist_id=" + id
-        );
-        foreach (var category in new[] { "artists", "shows", "sources", "tours" })
-        {
-            data["search"]![category]!["nodes"]!
-                .AsArray()
-                .Select(n => n!["id"]!.GetValue<string>())
-                .Should()
-                .Equal(rest[category]!.AsArray().Select(n => n!["id"]!.GetValue<string>()));
-        }
-        string? Entry(JsonNode? n, params string[] names) =>
-            names
-                .Select(name => n?[name]?["id"]?.GetValue<string>())
-                .FirstOrDefault(id => id is not null);
-        data["search"]!["songs"]!["nodes"]!
+        var expected = kind is "song" or "venue"
+            ? FormattableString.Invariant($"{kind}_{suffix:D8}")
+            : CatalogId(kind, suffix);
+        data["search"]![category]!["nodes"]!
             .AsArray()
-            .Select(n => Entry(n, "song", "importedSong"))
+            .Select(node =>
+                category switch
+                {
+                    "songs" => node!["song"]?["id"] ?? node["importedSong"]?["id"],
+                    "venues" => node!["artistVenue"]?["venue"]?["id"]
+                        ?? node["importedVenue"]?["id"],
+                    _ => node!["id"],
+                }
+            )
+            .Select(id => id!.GetValue<string>())
             .Should()
-            .Equal(rest["songs"]!.AsArray().Select(n => Entry(n, "song", "imported_song")));
-        data["search"]!["venues"]!["nodes"]!
-            .AsArray()
-            .Select(n => Entry(n, "artistVenue", "importedVenue"))
-            .Should()
-            .Equal(
-                rest["venues"]!.AsArray().Select(n => Entry(n, "artist_venue", "imported_venue"))
-            );
+            .Equal(expected);
     }
 
     [Test]

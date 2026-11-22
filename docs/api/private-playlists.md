@@ -77,6 +77,19 @@ so TestFlight 6055 updates. Then deploy the guide-capable User Service with its
 accounts migration. Once text entries exist, recovery builds must still read
 their snapshots, deltas and receipts.
 
+## Deploy playlist track validation
+
+Deploy the Catalog API with `playable` on the track entities returned by
+`POST /api/v4/catalog/resolve` before deploying the User Service that checks it.
+Fresh playlist creation returns `422 track_unavailable` when any submitted track
+is unavailable. A fresh `insert_segment` or `insert_entries` operation records
+`track_unavailable` without changing the playlist when any of its tracks is
+unavailable. Later operations in the same batch can still apply.
+
+A Catalog failure returns `503 catalog_unavailable` before any changes or new
+receipts are committed. Retry the same request after Catalog recovers. Existing
+receipts, saved playlist references and copies work independently of Catalog.
+
 ## Connection routing and sync cost
 
 Ordinary account traffic uses `ACCOUNTS_DATABASE_URL`, with its host replaced by

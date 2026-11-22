@@ -93,6 +93,7 @@ public sealed class CatalogTrack : CatalogTimestamps
     public int? duration { get; set; }
     public string title { get; set; } = null!;
     public string slug { get; set; } = null!;
+    public bool is_orphaned { get; set; }
     public string? mp3_url { get; set; }
     public string? mp3_md5 { get; set; }
     public string? flac_url { get; set; }

@@ -17,7 +17,8 @@ public sealed partial class PlaylistWriteService(
     AccountsDbContext dbContext,
     AdvisoryLockService advisoryLocks,
     LibraryStateStore stateStore,
-    TimeProvider timeProvider
+    TimeProvider timeProvider,
+    PlaylistTrackResolver trackResolver
 )
 {
     public async Task<(PlaylistCreated Response, bool Replayed)> CreateAsync(
@@ -68,25 +69,29 @@ public sealed partial class PlaylistWriteService(
                 conflicts.Order(StringComparer.Ordinal).ToArray()
             );
         }
-        var created = await AddPlaylistAsync(
-            actor,
-            state,
-            request,
-            "create",
-            hash,
+        var count = await CheckNewPlaylistQuotaAsync(actor, request, cancellationToken);
+        var unavailable = await trackResolver.ReadUnavailableAsync(
+            request.Segments.SelectMany(segment => segment.Entries),
             cancellationToken
         );
+        if (unavailable.Count > 0)
+        {
+            throw new PlaylistException(
+                422,
+                "track_unavailable",
+                "One or more tracks are unavailable."
+            );
+        }
+
+        var created = AddPlaylist(actor, state, request, "create", hash, count);
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return (new(1, generation, created.Id, created.Revision), false);
     }
 
-    private async Task<Playlist> AddPlaylistAsync(
+    private async Task<int> CheckNewPlaylistQuotaAsync(
         UserId actor,
-        LibraryState state,
         CreatePlaylistRequest request,
-        string receiptKind,
-        byte[] hash,
         CancellationToken cancellationToken
     )
     {
@@ -107,7 +112,18 @@ public sealed partial class PlaylistWriteService(
                 .Concat(entries.Select(entry => entry.Description))
                 .Append(request.Metadata.Description)
         );
+        return count;
+    }
 
+    private Playlist AddPlaylist(
+        UserId actor,
+        LibraryState state,
+        CreatePlaylistRequest request,
+        string receiptKind,
+        byte[] hash,
+        int count
+    )
+    {
         var now = timeProvider.GetUtcNow();
         var playlist = new Playlist
         {
@@ -117,7 +133,9 @@ public sealed partial class PlaylistWriteService(
             Description = request.Metadata.Description,
             Revision = 1,
             EntryCount = count,
-            TrackCount = entries.Count(entry => entry.TrackId is not null),
+            TrackCount = request.Segments.Sum(segment =>
+                segment.Entries.Count(entry => entry.TrackId is not null)
+            ),
             CreatedAt = now,
             UpdatedAt = now,
         };
@@ -202,13 +220,14 @@ public sealed partial class PlaylistWriteService(
         var editor = editsOnlyName
             ? new PlaylistEditor(Copy(playlist), [], [], [])
             : await LoadEditorAsync(playlist, newOperations, cancellationToken);
+        var entriesArePlayable = CreateBatchTrackCheck(newOperations, cancellationToken);
         var results = new List<PlaylistOperationResult>();
         foreach (var operation in request.Operations)
         {
             results.Add(
                 receipts.TryGetValue(operation.OperationId.Value, out var receipt)
                     ? Result(receipt)
-                    : editor.Apply(operation)
+                    : await editor.ApplyAsync(operation, entriesArePlayable)
             );
         }
 
@@ -236,6 +255,37 @@ public sealed partial class PlaylistWriteService(
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return new(1, generation, playlist.Revision, results);
+    }
+
+    private Func<IReadOnlyList<PlaylistEntryInput>, Task<bool>> CreateBatchTrackCheck(
+        PlaylistOperation[] operations,
+        CancellationToken cancellationToken
+    )
+    {
+        Task<HashSet<string>>? unavailable = null;
+        return async entries =>
+        {
+            if (entries.All(entry => entry.TrackId is null))
+            {
+                return true;
+            }
+
+            // The first track insert to pass its playlist guards resolves every fresh insert's
+            // track IDs together. Replayed operations and edits to stored entries never add IDs.
+            unavailable ??= trackResolver.ReadUnavailableAsync(
+                operations.SelectMany(operation =>
+                    operation.Payload switch
+                    {
+                        InsertPlaylistSegment insert => insert.Entries,
+                        InsertPlaylistEntries insert => insert.Entries,
+                        _ => [],
+                    }
+                ),
+                cancellationToken
+            );
+            var missing = await unavailable;
+            return entries.All(entry => entry.TrackId is null || !missing.Contains(entry.TrackId));
+        };
     }
 
     public async Task<PlaylistArchived> ArchiveAsync(
