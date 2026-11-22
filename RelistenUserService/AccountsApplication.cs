@@ -146,6 +146,7 @@ public static class AccountsApplication
         app.UseRouting();
         app.UseMiddleware<RefreshTokenReplayMiddleware>();
         app.UseAuthentication();
+        app.UseMiddleware<OptionalNativeBearerMiddleware>();
         app.UseAuthorization();
         app.UseMiddleware<BrowserMutationProtectionMiddleware>();
 

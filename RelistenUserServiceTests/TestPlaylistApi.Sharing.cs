@@ -75,11 +75,11 @@ public sealed partial class TestPlaylistApi
         );
         (await _client.GetAsync(publicUrl)).StatusCode.Should().Be(HttpStatusCode.OK);
 
-        using var credentialed = new HttpRequestMessage(HttpMethod.Get, publicUrl);
-        credentialed.Headers.Add("Authorization", "Bearer opaque");
-        using var privateResponse = await _client.SendAsync(credentialed);
-        privateResponse.StatusCode.Should().Be(HttpStatusCode.OK);
-        AssertNoStore(privateResponse);
+        using var invalidBearer = new HttpRequestMessage(HttpMethod.Get, publicUrl);
+        invalidBearer.Headers.Add("Authorization", "Bearer opaque");
+        using var rejected = await _client.SendAsync(invalidBearer);
+        rejected.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        AssertNoStore(rejected);
 
         await ReadResponse<PlaylistPublication>(
             HttpMethod.Put,

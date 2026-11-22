@@ -230,30 +230,87 @@ public sealed partial class TestMcpHttp
     }
 
     [Test]
-    public async Task SearchRejectsARevokedNativeSession()
+    public async Task RevokedNativeSessionsRequireRefreshAcrossAccountEndpoints()
     {
         await StartApp();
         var fields = AuthorizeFields(Native, NativeRedirect, "openid offline_access user.read");
         var cookie = await SignIn(fields);
         using var authorize = await Authorize(fields, cookie);
         var native = await Exchange(Native, NativeRedirect, ReadCode(authorize));
-        var path = AccountsOrigin + "/v1/search?q=synthetic&scope=artists";
-        using var valid = await Get(path, native.Access);
-        valid.StatusCode.Should().Be(HttpStatusCode.OK);
+
         using var profile = await Get(AccountsOrigin + "/v1/me", native.Access);
-        var id = SessionId.Parse(
-            (await Json(profile)).GetProperty("native_session_id").GetString()!
-        );
+        var identity = await Json(profile);
+        var sessionId = SessionId.Parse(identity.GetProperty("native_session_id").GetString()!);
+        var ownerId = await database.CreateUserAsync("publictapesowner");
 
         await using var db = database.CreateContext();
         var now = DateTimeOffset.UtcNow;
+        var code = Guid.NewGuid().ToString("N");
+        db.Playlists.Add(
+            new Playlist
+            {
+                Id = PlaylistId.New(),
+                OwnerId = ownerId,
+                Name = "Public tapes",
+                PublicCode = code,
+                Published = true,
+                Revision = 1,
+                CreatedAt = now,
+                UpdatedAt = now,
+            }
+        );
+        await db.SaveChangesAsync();
+
+        var search = AccountsOrigin + "/v1/search?q=synthetic&scope=artists";
+        var library = AccountsOrigin + "/v1/library/snapshot";
+        var publicPlaylist = AccountsOrigin + "/v1/public-playlists/" + code;
+
+        using var visibleSearch = await Get(search, native.Access);
+        visibleSearch.StatusCode.Should().Be(HttpStatusCode.OK);
+        using var missingScope = await Get(library, native.Access);
+        missingScope.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        using var authenticatedPublic = await Get(publicPlaylist, native.Access);
+        authenticatedPublic.StatusCode.Should().Be(HttpStatusCode.OK);
+        authenticatedPublic.Headers.CacheControl!.NoStore.Should().BeTrue();
+
         await db
-            .NativeSessions.Where(row => row.Id == id)
+            .NativeSessions.Where(row => row.Id == sessionId)
             .ExecuteUpdateAsync(update => update.SetProperty(row => row.RevokedAt, now));
 
-        using var revoked = await Get(path, native.Access);
-        revoked.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        revoked.Headers.WwwAuthenticate.Should().Contain(challenge => challenge.Scheme == "Bearer");
+        foreach (var path in new[] { search, library, publicPlaylist })
+        {
+            using var revoked = await Get(path, native.Access);
+            revoked.StatusCode.Should().Be(HttpStatusCode.Unauthorized, path);
+            revoked
+                .Headers.WwwAuthenticate.Should()
+                .Contain(challenge => challenge.Scheme == "Bearer");
+        }
+
+        using var anonymous = await Send(new(HttpMethod.Get, publicPlaylist));
+        anonymous.StatusCode.Should().Be(HttpStatusCode.OK);
+        anonymous.Headers.GetValues("CDN-Cache-Control").Should().Equal("max-age=60");
+    }
+
+    [Test]
+    public async Task AnUnavailableSessionStoreDoesNotTellTheAppToRefreshItsToken()
+    {
+        await StartApp();
+        var fields = AuthorizeFields(Native, NativeRedirect, ReadScopes);
+        var cookie = await SignIn(fields);
+        using var authorize = await Authorize(fields, cookie);
+        var native = await Exchange(Native, NativeRedirect, ReadCode(authorize));
+        var path = AccountsOrigin + "/v1/search?q=synthetic";
+
+        await using var db = database.CreateContext();
+        await using var transaction = await db.Database.BeginTransactionAsync();
+        await db.Database.ExecuteSqlRawAsync(
+            "LOCK TABLE identity.native_sessions IN ACCESS EXCLUSIVE MODE"
+        );
+
+        using var blocked = await Get(path, native.Access).WaitAsync(TimeSpan.FromSeconds(10));
+        blocked.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+        using var anonymous = await Send(new(HttpMethod.Get, path));
+        anonymous.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     private async Task AssertPublicPlaylistSearch(PlaylistSearchFixture fixture, ArtistId artist)

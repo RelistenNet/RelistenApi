@@ -88,6 +88,9 @@ WHERE playlist.id = live.id AND playlist.track_count <> live.track_count;
 The repair changes only the stored count. Library summaries already sent keep
 their old `track_count` until the playlist's next summary-writing change.
 
+Public playlist reads can omit credentials. A supplied invalid bearer token or
+revoked native session returns HTTP 401, including on public routes.
+
 Cloudflare needs a cache eligibility rule for the public snapshot GET route.
 Bypass requests carrying cookies or authorization and honor the origin's
 `CDN-Cache-Control: max-age=60`. The browser receives `Cache-Control: no-cache`.
@@ -108,9 +111,11 @@ retry can create a copy only if the restored source is public.
 request. Anonymous callers see public playlists. A native app caller with library access
 also sees their own playlists. The response uses `Cache-Control: private, no-store`.
 
-Requests with an invalid or expired bearer token receive HTTP 401. The User
-Service requires a search-only Typesense key in `Search__Typesense__SearchKey`
-outside Development. The worker uses its separate indexing credential.
+Requests with an invalid or expired bearer token receive HTTP 401. When
+a request carries a bearer token, the service verifies the native session
+before running either search backend. An unavailable session store returns
+HTTP 503. The User Service requires a search-only Typesense key in
+`Search__Typesense__SearchKey` outside Development. The worker uses its separate indexing credential.
 
 The default `scope=all` returns the ranked catalog response under `catalog`
 and an additional `playlists` section. Render the catalog's `top` before the

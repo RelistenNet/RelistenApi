@@ -19,7 +19,9 @@ internal sealed class MergedSearch(
         var catalogTask = request.WantsCatalog
             ? SearchCatalog(request, cancellationToken)
             : Task.FromResult(new CatalogResults("not_requested", null));
-        var playlistTask = SearchPlaylists(request, viewer, cancellationToken);
+        var playlistTask = request.WantsPlaylists
+            ? SearchPlaylists(request, viewer, cancellationToken)
+            : Task.FromResult(new PlaylistResults("not_requested", [], null));
 
         await Task.WhenAll(catalogTask, playlistTask);
         var index = await catalogTask;
@@ -72,13 +74,7 @@ internal sealed class MergedSearch(
         deadline.CancelAfter(TimeSpan.FromSeconds(3));
         try
         {
-            // Validate a supplied session even when the selected scope skips playlists.
             var owner = viewer is null ? null : await viewer(deadline.Token);
-            if (!request.WantsPlaylists)
-            {
-                return new("not_requested", [], null);
-            }
-
             var hits = await candidates.Find(request, owner, deadline.Token);
             var visible = await cards.Read(hits, owner, deadline.Token);
             return new(
@@ -97,7 +93,7 @@ internal sealed class MergedSearch(
         catch (Exception error) when (Unavailable(error, cancellationToken))
         {
             logger.LogWarning("Playlist search failed ({ErrorType})", error.GetType().Name);
-            return new(request.WantsPlaylists ? "unavailable" : "not_requested", [], null);
+            return new("unavailable", [], null);
         }
     }
 

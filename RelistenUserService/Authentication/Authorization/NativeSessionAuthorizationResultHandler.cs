@@ -23,11 +23,16 @@ public sealed class NativeSessionAuthorizationResultHandler : IAuthorizationMidd
             && !currentAccount.IsLoaded;
         if (authorizeResult.Forbidden && (nativeCredentialIsInvalid || reviewedCredentialIsInvalid))
         {
-            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-            context.Response.Headers.WWWAuthenticate = "Bearer";
+            RejectInvalidSession(context);
             return;
         }
 
         await _fallback.HandleAsync(next, context, policy, authorizeResult);
+    }
+
+    internal static void RejectInvalidSession(HttpContext context)
+    {
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        context.Response.Headers.WWWAuthenticate = "Bearer";
     }
 }
