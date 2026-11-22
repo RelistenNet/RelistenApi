@@ -56,9 +56,14 @@ Schedules use UTC and skip overlapping runs:
 | Archive artist discovery | 06:30 daily |
 | Full catalog refresh | 07:00 daily |
 | Recently active artists, or thin refresh | 00:00, 02:00, 04:00, 12:00, 14:00, 16:00, 18:00, 20:00, 22:00 |
+| Catalog search full build | 11:00 daily |
 
 Thin refresh selection uses `ArtistService.UuidsForImport` and provider-specific
 year rules. A small local seed does not limit a full artist import.
+
+`--register-schedules` creates `relisten-search-build` paused. Enable it after
+the production index and endpoint have been verified. Manual and scheduled
+builds use the same workflow ID, so they can't run at the same time.
 
 ## Run the worker
 
@@ -326,6 +331,14 @@ Kubernetes starts its usual readiness checks once the startup probe passes.
 Leave `/health/ready` on the database checks so browse can serve while search
 continues warming after the grace period.
 [Kubernetes startup probe documentation](https://kubernetes.io/docs/concepts/workloads/pods/probes/#startup-probe)
+
+Artist imports and scoped normalization refresh the artist's search documents
+after committing catalog data. A refresh failure is logged and leaves the import
+result intact. After publishing new aliases, the full build uses the catalog's
+update timestamps to refresh artists that changed while it ran. A deletion
+that leaves no newer timestamp can be missed by this catch-up and reconciled
+by the next daily build. Artist scope and review availability use the evidence
+snapshot refreshed at the alias swap.
 
 ### Recovery
 

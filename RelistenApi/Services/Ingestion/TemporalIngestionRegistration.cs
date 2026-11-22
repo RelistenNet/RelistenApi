@@ -76,6 +76,7 @@ public static class TemporalIngestionRegistration
             )
         );
         services.AddScoped<SearchIndexBuilder>();
+        services.AddScoped<ArtistSearchIndexer>();
         services
             .AddHostedTemporalWorker(IngestionQueues.Workflows)
             .AddWorkflow<ArtistRefreshWorkflow>()
@@ -93,6 +94,7 @@ public static class TemporalIngestionRegistration
             .AddWorkflow<RefreshBatchWorkflow>()
             .AddWorkflow<ArchiveArtistDiscoveryWorkflow>()
             .AddWorkflow<SearchBuildWorkflow>()
+            .AddWorkflow<ScheduledSearchBuildWorkflow>()
             .AddWorkflow<SearchRetireWorkflow>()
             .AddWorkflow<SearchCleanupWorkflow>()
             .AddNormalizationWorkflows();

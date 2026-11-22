@@ -144,22 +144,31 @@ public class VenueCatalogueWorkflow
             total = total with { LastMatch = await MatchAsync(request.Artists) };
         }
 
-        if (forget == null)
+        if (forget != null)
         {
-            return total;
+            total = total with
+            {
+                RowsForgotten = forget.Rows.Count,
+                VenuesRetired =
+                    forget.Venues.Count > 0
+                        ? await Workflow.ExecuteActivityAsync(
+                            (VenueActivities a) => a.Retire(forget.Venues),
+                            Step
+                        )
+                        : 0,
+            };
         }
 
-        return total with
+        // An unrestricted venue run leaves its full-catalog changes to the build.
+        if (artists != null && Workflow.Patched("search-after-venue-catalogue"))
         {
-            RowsForgotten = forget.Rows.Count,
-            VenuesRetired =
-                forget.Venues.Count > 0
-                    ? await Workflow.ExecuteActivityAsync(
-                        (VenueActivities a) => a.Retire(forget.Venues),
-                        Step
-                    )
-                    : 0,
-        };
+            foreach (var artist in artists.Distinct())
+            {
+                await SearchReindexStep.BestEffort(artist);
+            }
+        }
+
+        return total;
     }
 
     /// The run's artists: the request's (null: every artist), or the flagged ones.

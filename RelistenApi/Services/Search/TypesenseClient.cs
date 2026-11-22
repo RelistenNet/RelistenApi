@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -143,6 +144,50 @@ internal sealed class TypesenseClient(HttpClient http)
     public Task DeleteDocument(string collection, string id, CancellationToken cancellationToken) =>
         Delete($"collections/{collection}/documents/{Uri.EscapeDataString(id)}", cancellationToken);
 
+    public async IAsyncEnumerable<IndexedDocument> ExportDocuments(
+        string collection,
+        string filter,
+        [EnumeratorCancellation] CancellationToken cancellationToken
+    )
+    {
+        var path =
+            $"collections/{collection}/documents/export"
+            + $"?filter_by={Uri.EscapeDataString(filter)}&include_fields=id,venue_id,kind";
+        using var response = await http.GetAsync(
+            path,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken
+        );
+        await EnsureSuccess(response, cancellationToken);
+        using var reader = new StreamReader(
+            await response.Content.ReadAsStreamAsync(cancellationToken)
+        );
+        while (await reader.ReadLineAsync(cancellationToken) is { Length: > 0 } line)
+        {
+            yield return JsonSerializer.Deserialize<IndexedDocument>(line, Json)
+                ?? throw new InvalidDataException(
+                    "Typesense returned a null document in its export."
+                );
+        }
+    }
+
+    public async Task DeleteDocuments(
+        string collection,
+        IEnumerable<string> ids,
+        CancellationToken cancellationToken
+    )
+    {
+        // Keep the URL below normal request-line size limits.
+        foreach (var batch in ids.Chunk(100))
+        {
+            var filter = Uri.EscapeDataString($"id:=[{string.Join(',', batch)}]");
+            await Delete(
+                $"collections/{collection}/documents?filter_by={filter}",
+                cancellationToken
+            );
+        }
+    }
+
     public async Task<SearchDocument?> ReadDocument(
         string collection,
         string id,
@@ -204,4 +249,6 @@ internal sealed class TypesenseClient(HttpClient http)
     }
 
     internal sealed record ImportResult(int Accepted, int Rejected, string? FirstError);
+
+    internal sealed record IndexedDocument(string Id, string? VenueId, string? Kind);
 }

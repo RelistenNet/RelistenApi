@@ -5,6 +5,7 @@ using Relisten.Import;
 using Relisten.Ingestion;
 using Relisten.Ingestion.Providers.Jerry;
 using Relisten.Ingestion.Workflows;
+using Relisten.Normalization.Temporal;
 using Temporalio.Activities;
 using Temporalio.Client;
 using Temporalio.Exceptions;
@@ -290,5 +291,8 @@ public class TestJerryVenueRepairWorkflow
             Events.Enqueue("venues");
             return null;
         }
+
+        [Activity(SearchReindexStep.ActivityName)]
+        public void RefreshSearch(Guid artist) { }
     }
 }

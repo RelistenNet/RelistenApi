@@ -18,7 +18,8 @@ internal static class SearchPlayTotals
         NpgsqlTransaction transaction,
         DateOnly through,
         string? exportPath,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        Guid? artist = null
     )
     {
         if (exportPath == null)
@@ -27,7 +28,8 @@ internal static class SearchPlayTotals
                 connection,
                 transaction,
                 through,
-                cancellationToken
+                cancellationToken,
+                artist
             );
             return rows.ToDictionary(row => row.Id);
         }

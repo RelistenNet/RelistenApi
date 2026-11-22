@@ -62,8 +62,8 @@ public sealed class CatalogSearchCoordinator
         }
 
         if (
-            input.ArtistId != null && query.SelectedArtist == null
-            || input.Scope == SearchScope.Reviews && !reviewsAvailable
+            (input.ArtistId != null && query.SelectedArtist == null)
+            || (input.Scope == SearchScope.Reviews && !reviewsAvailable)
             || conflictingCountry
         )
         {
@@ -142,17 +142,17 @@ public sealed class CatalogSearchCoordinator
     )
     {
         var playback =
-            input.AddTracks && input.Scope is SearchScope.All or SearchScope.Shows
+            input.AddTracks && input.Scope is (SearchScope.All or SearchScope.Shows)
                 ? ReadPlaybackContext(query, evidence.Vocabulary, venues)
                 : default;
         var plan = Plan(input, query, venues, reviewsAvailable, playback);
         var replies = await Execute(plan, cancellationToken);
 
         var visible = PrimaryResults(input, query, evidence, plan, replies);
-        var extraSearches = ExtraSearchLimit;
+        var searchesLeft = ExtraSearchLimit;
         if (visible.Count == 0)
         {
-            (visible, extraSearches) = await RecoverEmptyResults(
+            (visible, searchesLeft) = await RecoverEmptyResults(
                 input,
                 query,
                 evidence,
@@ -170,7 +170,7 @@ public sealed class CatalogSearchCoordinator
                 playback,
                 venues,
                 visible,
-                extraSearches,
+                searchesLeft,
                 cancellationToken
             );
         }
@@ -199,37 +199,37 @@ public sealed class CatalogSearchCoordinator
     )
     {
         IReadOnlyList<SearchDocument> visible = [];
-        var extraSearches = ExtraSearchLimit;
+        var searchesLeft = ExtraSearchLimit;
         if (input.Page == 1 && SearchRequests.NamedRun(query, plan, venues) is { } run)
         {
             var fallback = await Execute([run.Request], cancellationToken);
             visible = SearchRanker.SuggestNamedRun(run, fallback[0].Documents);
-            extraSearches--;
+            searchesLeft--;
         }
 
         if (
             visible.Count == 0
-            && extraSearches > 0
+            && searchesLeft > 0
             && await RestoreEmptyPrefix(input, query, evidence, venues, plan, cancellationToken)
                 is { } restored
         )
         {
             visible = restored;
-            extraSearches--;
+            searchesLeft--;
         }
 
         if (
             visible.Count == 0
-            && extraSearches > 0
+            && searchesLeft > 0
             && SearchRequests.WidenEmptyPerformancePrefix(input, plan) is { } wider
         )
         {
             var replies = await Execute([wider], cancellationToken);
             visible = Primary(input, query, evidence, [wider], replies);
-            extraSearches--;
+            searchesLeft--;
         }
 
-        return (visible, extraSearches);
+        return (visible, searchesLeft);
     }
 
     private static SearchResponse DecorateResults(
@@ -254,7 +254,7 @@ public sealed class CatalogSearchCoordinator
             )
             .ToArray();
 
-        var passages = input.Scope is SearchScope.All or SearchScope.Shows
+        var passages = input.Scope is (SearchScope.All or SearchScope.Shows)
             ? evidence.Passages.Find(query)
             : [];
         return Response(
@@ -308,7 +308,7 @@ public sealed class CatalogSearchCoordinator
     )
     {
         var visible = Primary(input, query, evidence, plan, replies);
-        return input.Page == 1 && input.Scope is SearchScope.All or SearchScope.Shows
+        return input.Page == 1 && input.Scope is (SearchScope.All or SearchScope.Shows)
             ? SearchRanker.AddTourRoute(query, evidence.Vocabulary, visible)
             : visible;
     }
@@ -420,12 +420,12 @@ public sealed class CatalogSearchCoordinator
         PlaybackContext playback,
         IReadOnlySet<string> venues,
         IReadOnlyList<SearchDocument> visible,
-        int extraSearches,
+        int searchesLeft,
         CancellationToken cancellationToken
     )
     {
         var candidates = visible;
-        if (input.Scope == SearchScope.All && extraSearches > 0 && playback.Browse)
+        if (input.Scope == SearchScope.All && searchesLeft > 0 && playback.Browse)
         {
             var browse = SearchRequests.ScopedTracks(query, playback.Artist, venues);
             var replies = await Execute([browse], cancellationToken);

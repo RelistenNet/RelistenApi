@@ -149,7 +149,8 @@ internal sealed class SearchIndexBuilder(
     private async Task<long> ImportCollection(
         string collection,
         IAsyncEnumerable<Document> documents,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        bool upsert = false
     )
     {
         var batch = new StringBuilder();
@@ -163,7 +164,7 @@ internal sealed class SearchIndexBuilder(
 
             if (size >= BatchSize || batch.Length >= BatchCharacters)
             {
-                imported += await ImportBatch(collection, batch, size, cancellationToken);
+                imported += await ImportBatch(collection, batch, size, upsert, cancellationToken);
                 LogImportProgress(collection, imported, size);
                 batch.Clear();
                 size = 0;
@@ -172,7 +173,7 @@ internal sealed class SearchIndexBuilder(
 
         if (size > 0)
         {
-            imported += await ImportBatch(collection, batch, size, cancellationToken);
+            imported += await ImportBatch(collection, batch, size, upsert, cancellationToken);
         }
 
         logger.LogInformation(
@@ -182,6 +183,12 @@ internal sealed class SearchIndexBuilder(
         );
         return imported;
     }
+
+    public Task<long> Upsert(
+        string collection,
+        IAsyncEnumerable<Document> documents,
+        CancellationToken cancellationToken
+    ) => ImportCollection(collection, documents, cancellationToken, upsert: true);
 
     private void LogImportProgress(string collection, long imported, int batchSize)
     {
@@ -200,13 +207,14 @@ internal sealed class SearchIndexBuilder(
         string collection,
         StringBuilder batch,
         int expected,
+        bool upsert,
         CancellationToken cancellationToken
     )
     {
         var result = await typesense.Import(
             collection,
             batch.ToString(),
-            upsert: false,
+            upsert,
             cancellationToken
         );
         if (result.Rejected != 0 || result.Accepted != expected)

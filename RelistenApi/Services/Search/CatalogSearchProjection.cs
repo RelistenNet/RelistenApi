@@ -244,15 +244,66 @@ internal sealed partial class CatalogSearchProjection
         }
     }
 
-    private IEnumerable<Document> VenueDocuments() =>
-        _venues
-            .Values.Where(venue => string.IsNullOrEmpty(venue.MergedInto))
-            .Select(VenueDocument)
-            .Concat(
-                _importedVenues
-                    .Values.Where(venue => !string.IsNullOrEmpty(venue.Name))
-                    .Select(ImportedVenueDocument)
-            );
+    private IEnumerable<Document> VenueDocuments()
+    {
+        if (_rows.ArtistId is null)
+        {
+            foreach (
+                var venue in _venues.Values.Where(venue => string.IsNullOrEmpty(venue.MergedInto))
+            )
+            {
+                var artists = _venueArtists.GetValueOrDefault(venue.Id) ?? [];
+                yield return VenueDocument(venue, artists, artists.Count);
+            }
+        }
+
+        foreach (var venue in _importedVenues.Values)
+        {
+            if (
+                !string.IsNullOrEmpty(venue.Name)
+                && (_rows.ArtistId is null || venue.ArtistId == _rows.ArtistId)
+            )
+            {
+                yield return ImportedVenueDocument(venue);
+            }
+        }
+    }
+
+    public IEnumerable<string> SharedVenues => _venueArtists.Keys.Where(_venues.ContainsKey);
+
+    public async Task<IReadOnlyList<Document>> SharedVenueDocuments(
+        IReadOnlySet<string> affectedIds,
+        CancellationToken cancellationToken
+    )
+    {
+        if (affectedIds.Count == 0)
+        {
+            return [];
+        }
+
+        // A show can still point at a retired venue ID. Include its membership
+        // under the same surviving venue as the show projection.
+        var affectedSurvivors = affectedIds
+            .Select(id => CurrentVenue(id)?.Id)
+            .OfType<string>()
+            .ToHashSet();
+        var survivors = _venues
+            .Keys.Select(id => (Id: id, Current: CurrentVenue(id)?.Id))
+            .Where(venue => venue.Current != null && affectedSurvivors.Contains(venue.Current))
+            .ToDictionary(venue => venue.Id, venue => venue.Current!);
+        var memberships = await _rows.VenueMemberships(survivors.Keys.ToArray(), cancellationToken);
+        var bySurvivor = memberships.ToLookup(row => survivors[row.VenueId]);
+        return survivors
+            .Values.Distinct()
+            .Select(id =>
+                VenueDocument(
+                    _venues[id],
+                    bySurvivor[id].Select(row => row.ArtistSlug),
+                    bySurvivor[id].Sum(row => row.Shows)
+                )
+            )
+            .ToArray();
+    }
 
     private IEnumerable<Document> TourDocuments()
     {
@@ -452,9 +503,12 @@ internal sealed partial class CatalogSearchProjection
             ["popularity"] = 0,
         };
 
-    private Document VenueDocument(SearchProjectionRows.Venue venue)
+    private static Document VenueDocument(
+        SearchProjectionRows.Venue venue,
+        IEnumerable<string> artists,
+        int showCount
+    )
     {
-        var artists = _venueArtists.GetValueOrDefault(venue.Id) ?? [];
         var country = venue.Country ?? "";
         return new Document
         {
@@ -476,7 +530,7 @@ internal sealed partial class CatalogSearchProjection
                 .Distinct(StringComparer.Ordinal)
                 .Order(StringComparer.Ordinal)
                 .ToArray(),
-            ["popularity"] = Math.Log(1d + artists.Count),
+            ["popularity"] = Math.Log(1d + showCount),
         };
     }
 

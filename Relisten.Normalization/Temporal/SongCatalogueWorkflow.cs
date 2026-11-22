@@ -102,6 +102,11 @@ public class SongCatalogueWorkflow
             (SongActivities a) => a.MatchTracks(artist),
             Step
         );
+        if (Workflow.Patched("search-after-song-catalogue"))
+        {
+            await SearchReindexStep.BestEffort(artist);
+        }
+
         return total with
         {
             TracksWritten = total.TracksWritten + matched.TracksWritten,

@@ -61,6 +61,11 @@ internal static class CatalogSteps
                 );
             }
         }
+
+        if (Workflow.Patched("search-after-artist-rebuild"))
+        {
+            await SearchReindexStep.BestEffort(artist.Value);
+        }
     }
 
     private static readonly ActivityOptions VenueMatchStep = new()

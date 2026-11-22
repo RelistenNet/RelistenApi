@@ -110,16 +110,20 @@ public static class PlayRollupReader
         IDbConnection connection,
         IDbTransaction transaction,
         DateOnly through,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        Guid? artist = null
     ) =>
         connection.QueryAsync<TrackStartTotal>(
             new CommandDefinition(
                 $"""
                 SELECT source_track_uuid AS id, sum(plays)::bigint AS plays
-                FROM ({YearlyTrackRows("true", "source_track_uuid")}) AS track_rollups
+                FROM ({YearlyTrackRows(
+                    artist is null ? "true" : "artist_uuid = @artist",
+                    "source_track_uuid"
+                )}) AS track_rollups
                 GROUP BY source_track_uuid
                 """,
-                Window(through),
+                Window(through, artist),
                 transaction,
                 commandTimeout: 600,
                 cancellationToken: cancellationToken

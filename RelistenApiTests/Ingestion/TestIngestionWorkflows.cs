@@ -5,6 +5,7 @@ using Relisten.Ingestion.Providers.Archive;
 using Relisten.Ingestion.Providers.PhantasyTour;
 using Relisten.Ingestion.Providers.PhishIn;
 using Relisten.Ingestion.Workflows;
+using Relisten.Normalization.Temporal;
 using Relisten.Vendor.ArchiveOrg;
 using Temporalio.Activities;
 using Temporalio.Client;
@@ -37,7 +38,19 @@ public class TestIngestionWorkflows
         result.Status.Should().Be(ImportStatus.Partial);
         activities.Applied.Should().BeEquivalentTo([0, 3]);
         activities.Rebuilds.Should().Equal("shows", "years", "cache", "venues");
+        activities.SearchRefreshes.Should().Equal(result.Artist.Value);
         activities.DeletionApplications.Should().Be(1);
+    }
+
+    [Test]
+    public async Task SearchFailureDoesNotFailTheImportedArtist()
+    {
+        var activities = new RecordingActivities(1) { FailSearchRefresh = true };
+
+        var result = await Run(activities);
+
+        result.CompletedItems.Should().Be(1);
+        activities.SearchRefreshes.Should().Equal(result.Artist.Value);
     }
 
     [Test]
@@ -601,6 +614,22 @@ public class TestIngestionWorkflows
         public List<int> Attempts { get; } = [];
         public List<int> Applied { get; } = [];
         public List<string> Rebuilds { get; } = [];
+        public List<Guid> SearchRefreshes { get; } = [];
+        public bool FailSearchRefresh { get; init; }
+
+        [Activity(SearchReindexStep.ActivityName)]
+        public void SearchRefresh(Guid artist)
+        {
+            lock (sync)
+            {
+                SearchRefreshes.Add(artist);
+            }
+            if (FailSearchRefresh)
+            {
+                throw new ApplicationFailureException("Search service unavailable");
+            }
+        }
+
         public string? FailRebuildStep { get; init; }
         public ArtistId[] Artists { get; } =
             Enumerable.Range(0, 23).Select(_ => new ArtistId(Guid.NewGuid())).ToArray();
