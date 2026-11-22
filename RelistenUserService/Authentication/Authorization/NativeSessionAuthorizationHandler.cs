@@ -18,12 +18,15 @@ public sealed class NativeSessionAuthenticator(
     TimeProvider timeProvider
 )
 {
-    public async Task<AuthenticatedNativeSession?> AuthenticateAsync(ClaimsPrincipal principal)
+    public async Task<AuthenticatedNativeSession?> AuthenticateAsync(
+        ClaimsPrincipal principal,
+        CancellationToken cancellationToken = default
+    )
     {
         var session = await ReadActiveSessionAsync(
             principal,
             runtime.Options.Audience,
-            CancellationToken.None
+            cancellationToken
         );
         return session is null ? null : new AuthenticatedNativeSession(session.User, session.Id);
     }

@@ -66,6 +66,7 @@ public static class AccountsApplication
         var (temporalAddress, temporalNamespace) = ReadTemporalSettings(builder);
         builder.Services.AddTemporalClient(temporalAddress, temporalNamespace);
         builder.Services.AddSingleton<PlaylistSearchNotifier>();
+        builder.Services.AddMergedSearch(runtime, builder.Configuration);
         builder.Services.AddScoped<AccountDeletionJobs>();
         builder.Services.AddSingleton<AccountDeletionStarter>();
         builder

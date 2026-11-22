@@ -8,11 +8,18 @@ namespace RelistenUserService.Playlists;
 internal static class PlaylistVisibility
 {
     internal static IQueryable<Playlist> Public(this IQueryable<Playlist> playlists) =>
+        playlists.VisibleTo(null);
+
+    internal static IQueryable<Playlist> VisibleTo(
+        this IQueryable<Playlist> playlists,
+        UserId? viewer
+    ) =>
         playlists.Where(row =>
-            row.Published
-            && !row.Archived
-            && !row.TakenDown
-            && row.Owner.Status == UserStatuses.Active
+            row.Owner.Status == UserStatuses.Active
+            && (
+                (viewer != null && row.OwnerId == viewer)
+                || (row.Published && !row.Archived && !row.TakenDown)
+            )
         );
 
     internal static bool IsCode(string code) =>

@@ -33,7 +33,9 @@ the cached response expires.
 ## Moderation
 
 Run these commands with the User Service image and its accounts migration
-connection pointed at the writer. They exit without starting the HTTP service.
+connection pointed at the writer. Set `Temporal__Address` and
+`Temporal__Namespace` for takedowns and lifts to wake playlist indexing.
+The commands exit without starting the HTTP service.
 
 ```sh
 dotnet RelistenUserService.dll playlist-moderation list-reports
@@ -99,3 +101,25 @@ expire before reopening it. Rotate the history generation using the existing
 [restore procedure](private-playlists.md#after-restoring-the-user-service-database). A copied playlist
 and its receipt are restored together. If an older backup predates both, a
 retry can create a copy only if the restored source is public.
+
+## Search
+
+`GET /v1/search` on the accounts host searches the catalog and playlists in one
+request. Anonymous callers see public playlists. A native app caller with library access
+also sees their own playlists. The response uses `Cache-Control: private, no-store`.
+
+The default `scope=all` returns the ranked catalog response under `catalog`
+and an additional `playlists` section. Render the catalog's `top` before the
+playlist section. Use `scope=playlists&page=1` for a playlist-only page. The
+response includes `playlist_next_page` when the page is full or the service finds
+more visible matches after a short page. An edit or visibility change can
+shorten a page until the index catches up.
+
+`catalog_availability` and `playlist_availability` are independent. A value of
+`unavailable` calls for an unavailable state even when the other half returned
+results. A scope that omits one half sets its availability to `not_requested`.
+The request accepts the catalog search parameters, including `typing` and
+`request_id`. `artist_id` also scopes playlists by the artists of their tracks.
+
+MCP `find` uses the same search. A valid `library.read` grant adds the listener's
+own playlists to its results.

@@ -21,6 +21,7 @@ using RelistenIngestionWorker.AccountDeletion;
 using RelistenUserService;
 using RelistenUserService.Authentication;
 using RelistenUserService.Mcp;
+using RelistenUserService.Search;
 
 namespace RelistenUserServiceTests;
 
@@ -298,7 +299,7 @@ public sealed partial class TestMcpHttp
     [Test]
     public async Task FindProjectsShowsFromPerformancesAndKeepsToursSeparate()
     {
-        const string artistId = "artist_example";
+        var artistId = new Relisten.Identifiers.ArtistId(Guid.NewGuid()).ToString();
         const string venueId = "imported_venue_harbor";
         const string showId = "show_harbor_1998";
         const string tourId = "tour_autumn_1998";
@@ -829,7 +830,9 @@ public sealed partial class TestMcpHttp
     private async Task StartApp(
         bool mountCatalog = true,
         Func<Uri, object?>? catalogResponse = null,
-        HttpMessageHandler? sonos = null
+        HttpMessageHandler? sonos = null,
+        string? playlistAlias = null,
+        HttpMessageHandler? playlistSearch = null
     )
     {
         catalog = new(catalogResponse);
@@ -868,6 +871,8 @@ public sealed partial class TestMcpHttp
                 ["Accounts:EnableDevelopmentPersonas"] = "true",
                 ["Accounts:McpHost"] = mountCatalog ? new Uri(McpOrigin).Authority : null,
                 ["Accounts:McpCatalogBaseUrl"] = "https://catalog.example.test",
+                ["Accounts:CatalogBaseUrl"] = "https://catalog.example.test",
+                ["Search:PlaylistAlias"] = playlistAlias,
                 ["MCP_REVIEW_SEARCH_KEY"] = ReviewServiceKey,
                 ["MCP_WRITE_ID_KEY"] = WriteIdKey,
                 ["Sonos:PublicBaseUrl"] = sonos is null ? null : "https://sonos.example.test/",
@@ -909,6 +914,25 @@ public sealed partial class TestMcpHttp
                     handler.PrimaryHandler = catalog
                 )
         );
+        builder.Services.PostConfigure<Microsoft.Extensions.Http.HttpClientFactoryOptions>(
+            nameof(CatalogSearchClient),
+            options =>
+                options.HttpMessageHandlerBuilderActions.Add(handler =>
+                    handler.PrimaryHandler = catalog
+                )
+        );
+        if (playlistAlias is null)
+        {
+            builder.Services.PostConfigure<Microsoft.Extensions.Http.HttpClientFactoryOptions>(
+                nameof(PlaylistSearchCandidates),
+                options =>
+                    options.HttpMessageHandlerBuilderActions.Add(handler =>
+                        handler.PrimaryHandler =
+                            playlistSearch
+                            ?? new PlaylistSearchStub(HttpStatusCode.ServiceUnavailable)
+                    )
+            );
+        }
         app = AccountsApplication.Build(builder);
         await AccountsApplication.InitializeAsync(app, CancellationToken.None);
         await app.StartAsync();

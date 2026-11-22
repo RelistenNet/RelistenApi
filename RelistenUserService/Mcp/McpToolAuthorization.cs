@@ -16,6 +16,19 @@ internal sealed class McpToolAuthorization(
     public Task<NativeSession?> AuthenticateAsync(CancellationToken cancellationToken) =>
         accounts.AuthenticateAsync(http.HttpContext!.User, cancellationToken);
 
+    public async Task<UserId?> OptionalViewerAsync(
+        string scope,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!http.HttpContext!.User.HasScope(scope))
+        {
+            return null;
+        }
+
+        return (await AuthenticateAsync(cancellationToken))?.UserId;
+    }
+
     public async Task<(NativeSession? Session, CallToolResult? Error)> AuthorizeAsync(
         string scope,
         CancellationToken cancellationToken

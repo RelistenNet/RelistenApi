@@ -4,18 +4,24 @@ using System.Text.Json;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 using Relisten.Identifiers;
+using RelistenUserService.Authentication;
+using RelistenUserService.Search;
 using static RelistenUserService.Mcp.CatalogToolResponse;
 using static RelistenUserService.Mcp.McpCatalogClient;
 
 namespace RelistenUserService.Mcp;
 
 // The SDK uses method parameter names as wire names. Keep public tool arguments in snake_case.
-internal sealed class CatalogBrowseTools(McpCatalogClient catalog)
+internal sealed class CatalogBrowseTools(
+    McpCatalogClient catalog,
+    MergedSearch search,
+    McpToolAuthorization authorization
+)
 {
     [McpServerTool(Name = "find", ReadOnly = true, OpenWorld = false)]
-    [McpMeta("securitySchemes", JsonValue = McpSecuritySchemes.NoAuth)]
+    [McpMeta("securitySchemes", JsonValue = McpSecuritySchemes.NoAuthOrLibraryRead)]
     [Description(
-        "Find artists, shows, songs, venues or tours by text. Provide an artist ID to narrow a search."
+        "Find artists, shows, songs, venues, tours or playlists by text. Connect with library.read to include your private playlists."
     )]
     public Task<CallToolResult> Find(
         string text,
@@ -29,26 +35,50 @@ internal sealed class CatalogBrowseTools(McpCatalogClient catalog)
                 throw new McpCatalogException("Use a search term between 3 and 200 characters.");
             }
 
-            var results = await catalog.Get(
-                "search",
-                cancellationToken,
-                ("q", text),
-                ("artist_id", artist)
+            var request = new MergedSearchRequest { Q = text, ArtistId = artist };
+            if (!request.IsValid())
+            {
+                throw new McpCatalogException("Use a valid artist ID to narrow the search.");
+            }
+
+            var result = await search.Run(
+                request,
+                token => authorization.OptionalViewerAsync(RelistenScopes.LibraryRead, token),
+                cancellationToken
             );
             if (
-                String(results, "availability") != "full"
-                || Object(results, "sections") is not { } sections
+                result.CatalogAvailability == "unavailable"
+                && result.PlaylistAvailability == "unavailable"
             )
             {
                 throw new McpCatalogException(
-                    "Relisten's catalog search is temporarily unavailable."
+                    "Relisten's catalog search is temporarily unavailable. Playlist search is also unavailable."
                 );
             }
 
-            var showsAndTours = Rows(sections, "shows");
+            var sections = result.Catalog is { } body ? Object(body, "sections") : null;
+            IEnumerable<JsonElement> SearchRows(string kind) =>
+                sections is { } group ? Rows(group, kind) : [];
+            var showsAndTours = SearchRows("shows");
             return new
             {
-                artists = Rows(sections, "artists")
+                catalog_availability = result.CatalogAvailability,
+                playlist_availability = result.PlaylistAvailability,
+                playlists = result.Playlists.Select(item => new
+                {
+                    id = item.Id,
+                    untrusted_listener_text = new
+                    {
+                        name = item.Label,
+                        item.Description,
+                        item.Curator,
+                    },
+                    notice = McpResults.UntrustedTextNotice,
+                    track_count = item.TrackCount,
+                    owned = item.Owned,
+                    public_code = item.PublicCode,
+                }),
+                artists = SearchRows("artists")
                     .Take(8)
                     .Select(item => new
                     {
@@ -59,7 +89,7 @@ internal sealed class CatalogBrowseTools(McpCatalogClient catalog)
                 // All search can lead a show with one of its performances.
                 shows = showsAndTours
                     .Where(item => String(item, "kind") == "show")
-                    .Concat(Rows(sections, "performances"))
+                    .Concat(SearchRows("performances"))
                     .Select(item =>
                     {
                         var date = SearchDate(item);
@@ -78,7 +108,7 @@ internal sealed class CatalogBrowseTools(McpCatalogClient catalog)
                     })
                     .DistinctBy(show => show.id)
                     .Take(8),
-                songs = Rows(sections, "songs")
+                songs = SearchRows("songs")
                     .Take(8)
                     .Select(item => new
                     {
@@ -87,7 +117,7 @@ internal sealed class CatalogBrowseTools(McpCatalogClient catalog)
                         artist_id = String(item, "artist_id"),
                         artist = String(item, "artist_label"),
                     }),
-                venues = Rows(sections, "venues")
+                venues = SearchRows("venues")
                     .Take(8)
                     .Select(item => new
                     {
