@@ -7,6 +7,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Hosting.Internal;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -17,6 +18,7 @@ using Relisten.Identifiers;
 using Relisten.Search;
 using RelistenIngestionWorker.PlaylistSearch;
 using RelistenUserService.Playlists.Entities;
+using RelistenUserService.Search;
 
 namespace RelistenUserServiceTests;
 
@@ -136,6 +138,124 @@ public sealed partial class TestMcpHttp
         response.GetProperty("request_id").GetString().Should().Be("roundtrip");
     }
 
+    [Test]
+    public async Task CancellingTheRequestInterruptsPlaylistLookahead()
+    {
+        using var handler = new BlockingPlaylistLookahead();
+        await StartApp(playlistSearch: handler);
+        await using var scope = app.Services.CreateAsyncScope();
+        var search = scope.ServiceProvider.GetRequiredService<MergedSearch>();
+        using var cancellation = new CancellationTokenSource();
+
+        var request = new MergedSearchRequest { Q = "a playlist", Scope = "playlists" };
+        var response = search.Run(request, viewer: null, cancellation.Token);
+        await handler.Lookahead.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        cancellation.Cancel();
+
+        Func<Task> finish = () => response.WaitAsync(TimeSpan.FromSeconds(5));
+        await finish.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    private sealed class BlockingPlaylistLookahead : HttpMessageHandler
+    {
+        public TaskCompletionSource Lookahead { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        )
+        {
+            if (QueryHelpers.ParseQuery(request.RequestUri!.Query)["page"] != "1")
+            {
+                Lookahead.TrySetResult();
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            }
+
+            // Fill the first Typesense page with IDs removed from the accounts database.
+            var hits = Enumerable
+                .Range(0, 20)
+                .Select(_ => new
+                {
+                    document = new
+                    {
+                        id = PlaylistId.New().Value,
+                        history_generation = "stale",
+                        revision = 1,
+                    },
+                });
+            return new(HttpStatusCode.OK) { Content = JsonContent.Create(new { hits }) };
+        }
+    }
+
+    [TestCase("all")]
+    [TestCase("artists")]
+    public async Task SearchRequiresRefreshForAnInvalidBearer(string scope)
+    {
+        await StartApp();
+        var path = AccountsOrigin + "/v1/search?q=synthetic&scope=" + scope;
+
+        using var invalid = await Get(path, "invalid-bearer");
+        invalid.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        invalid.Headers.WwwAuthenticate.Should().Contain(challenge => challenge.Scheme == "Bearer");
+
+        using var anonymous = await Send(new(HttpMethod.Get, path));
+        anonymous.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Test]
+    public async Task SearchRequiresRefreshWhenTheBearerExpires()
+    {
+        var clock = new SearchValidationClock();
+        await StartApp(validationClock: clock);
+        var fields = AuthorizeFields(Native, NativeRedirect, ReadScopes);
+        var cookie = await SignIn(fields);
+        using var authorize = await Authorize(fields, cookie);
+        var native = await Exchange(Native, NativeRedirect, ReadCode(authorize));
+        var path = AccountsOrigin + "/v1/search?q=synthetic";
+
+        using var valid = await Get(path, native.Access);
+        valid.StatusCode.Should().Be(HttpStatusCode.OK);
+        clock.Offset = TimeSpan.FromMinutes(20);
+
+        using var expired = await Get(path, native.Access);
+        expired.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    private sealed class SearchValidationClock : TimeProvider
+    {
+        public TimeSpan Offset { get; set; }
+
+        public override DateTimeOffset GetUtcNow() => DateTimeOffset.UtcNow + Offset;
+    }
+
+    [Test]
+    public async Task SearchRejectsARevokedNativeSession()
+    {
+        await StartApp();
+        var fields = AuthorizeFields(Native, NativeRedirect, "openid offline_access user.read");
+        var cookie = await SignIn(fields);
+        using var authorize = await Authorize(fields, cookie);
+        var native = await Exchange(Native, NativeRedirect, ReadCode(authorize));
+        var path = AccountsOrigin + "/v1/search?q=synthetic&scope=artists";
+        using var valid = await Get(path, native.Access);
+        valid.StatusCode.Should().Be(HttpStatusCode.OK);
+        using var profile = await Get(AccountsOrigin + "/v1/me", native.Access);
+        var id = SessionId.Parse(
+            (await Json(profile)).GetProperty("native_session_id").GetString()!
+        );
+
+        await using var db = database.CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        await db
+            .NativeSessions.Where(row => row.Id == id)
+            .ExecuteUpdateAsync(update => update.SetProperty(row => row.RevokedAt, now));
+
+        using var revoked = await Get(path, native.Access);
+        revoked.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        revoked.Headers.WwwAuthenticate.Should().Contain(challenge => challenge.Scheme == "Bearer");
+    }
+
     private async Task AssertPublicPlaylistSearch(PlaylistSearchFixture fixture, ArtistId artist)
     {
         var byName = await SearchHttp("Dead Mondays");
@@ -221,7 +341,16 @@ public sealed partial class TestMcpHttp
         curator.Username = "curatornewhandle";
         curator.UsernameVersion++;
         await db.SaveChangesAsync();
-        PlaylistIds(await SearchHttp("curatorbluejay")).Should().BeEmpty();
+        var oldHandle = await SearchHttp("curatorbluejay");
+        var card = oldHandle
+            .GetProperty("playlists")
+            .EnumerateArray()
+            .Should()
+            .ContainSingle()
+            .Subject;
+        card.GetProperty("id").GetString().Should().Be(fixture.RoadTrip.Value);
+        card.GetProperty("curator").GetString().Should().Be("curatornewhandle");
+        PlaylistIds(await SearchHttp("Road Trip Reels")).Should().Contain(fixture.RoadTrip.Value);
     }
 
     private async Task AssertPaginationSurvivesAStaleHit(PlaylistSearchIndex index, UserId owner)

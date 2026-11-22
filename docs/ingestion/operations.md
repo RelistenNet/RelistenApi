@@ -129,10 +129,12 @@ dotnet run --project RelistenIngestionWorker -- --playlist-search-build=true
 
 Playlist search writes use the `user-data` worker and both database connections.
 The User Service signals the playlist's workflow after saving changes. That
-workflow waits one minute after the playlist's latest signal. It reads the
-current playlist, updates its document or deletes it if gone, and exits.
-The nightly playlist build repairs missed
-signals and updates follow counts and catalog names. Schedule registration creates
+workflow waits one minute after the playlist's latest signal and caps the wait
+at five minutes after the first signal. Reindexing reads the current playlist,
+updates its document or deletes it if gone, and exits once it has handled its
+pending edits.
+The nightly playlist build repairs missed signals and updates follow counts
+and catalog names. Schedule registration creates
 `relisten-playlist-search-build` paused.
 
 Account-deletion activities retry Typesense cleanup after the database commit.

@@ -25,77 +25,67 @@ using Temporalio.Worker;
 
 namespace RelistenUserServiceTests;
 
-[TestFixture, NonParallelizable]
+[TestFixture, NonParallelizable, FixtureLifeCycle(LifeCycle.InstancePerTestCase)]
 public sealed class TestPlaylistSearchIndex
 {
-    [Test]
-    public async Task SignalsCoalesceByPlaylistAndPurgeRetriesAfterCommit()
+    private PostgresIntegrationDatabase database = null!;
+    private string primary = null!;
+    private string replica = null!;
+    private string alias = null!;
+    private BeforeImport beforeImport = null!;
+    private HttpClient http = null!;
+    private TypesenseClient typesense = null!;
+    private PlaylistSearchIndex index = null!;
+
+    [SetUp]
+    public async Task SetUp()
     {
+        primary = DbService.ConnStr;
+        replica = DbService.ReadOnlyConnStr;
         if (Environment.GetEnvironmentVariable("RELISTEN_LOCAL_INGESTION_TESTS") != "1")
         {
             Assert.Ignore("Requires local Typesense and PostgreSQL.");
         }
 
-        var database = new PostgresIntegrationDatabase();
+        database = new PostgresIntegrationDatabase();
         await database.StartAsync();
-        var primary = DbService.ConnStr;
-        var replica = DbService.ReadOnlyConnStr;
-        var alias = "test_playlists_" + Guid.NewGuid().ToString("N");
-        var beforeImport = new BeforeImport();
-        using var http = new HttpClient(beforeImport);
+        alias = "test_playlists_" + Guid.NewGuid().ToString("N");
+        beforeImport = new BeforeImport();
+        http = new HttpClient(beforeImport);
         TypesenseClient.Configure(http, "http://127.0.0.1:18108", "local_dev_typesense");
-        var typesense = new TypesenseClient(http);
+        typesense = new TypesenseClient(http);
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?> { ["Search:PlaylistAlias"] = alias }
+            )
+            .Build();
+        var catalog = new DbService(
+            "postgresql://relisten:local_dev_password@127.0.0.1:15432/relisten_db",
+            null,
+            null,
+            new HostingEnvironment { EnvironmentName = Environments.Production },
+            NullLogger<DbService>.Instance
+        );
+        index = new PlaylistSearchIndex(new(database.ConnectionString, catalog), typesense, config);
+    }
+
+    [TearDown]
+    public async Task TearDown()
+    {
+        DbService.ConnStr = primary;
+        DbService.ReadOnlyConnStr = replica;
+        if (database is null)
+        {
+            return;
+        }
+
         try
         {
-            var config = new ConfigurationBuilder()
-                .AddInMemoryCollection(
-                    new Dictionary<string, string?> { ["Search:PlaylistAlias"] = alias }
-                )
-                .Build();
-            var catalog = new DbService(
-                "postgresql://relisten:local_dev_password@127.0.0.1:15432/relisten_db",
-                null,
-                null,
-                new HostingEnvironment { EnvironmentName = Environments.Production },
-                NullLogger<DbService>.Instance
-            );
-            var index = new PlaylistSearchIndex(
-                new(database.ConnectionString, catalog),
-                typesense,
-                config
-            );
-            var owner = await database.CreateUserAsync("curator");
-            var first = await Seed(database, owner, "Before the edit");
-            var second = await Seed(database, owner, "Public playlist");
-            await index.Rebuild(CancellationToken.None);
-            var erasedOwner = await database.CreateUserAsync("erasedcurator");
-            var erased = await Seed(database, erasedOwner, "Purge during indexing");
-            beforeImport.OnImport = () =>
-                new AccountPurge(
-                    database.ConnectionString,
-                    (id, token) => PlaylistSearchIndex.Purge(typesense, alias, id, token)
-                ).RunForUserAsync(erasedOwner.Value, CancellationToken.None);
-            await index.Sync(erased.Value, CancellationToken.None);
-            (await Read(http, alias, erased)).Should().BeNull();
+            if (typesense is null)
+            {
+                return;
+            }
 
-            await RunEditBurst(database, index, first, second);
-            (await Read(http, alias, first))!
-                .Value.GetProperty("name")
-                .GetString()
-                .Should()
-                .Be("Final edit");
-            var moderated = (await Read(http, alias, second))!.Value;
-            moderated.GetProperty("taken_down").GetBoolean().Should().BeTrue();
-            moderated.GetProperty("curator").GetString().Should().BeEmpty();
-
-            await PurgeAfterFailedIndexCleanup(database, typesense, alias, owner);
-            (await Read(http, alias, first)).Should().BeNull();
-            (await Read(http, alias, second)).Should().BeNull();
-        }
-        finally
-        {
-            DbService.ConnStr = primary;
-            DbService.ReadOnlyConnStr = replica;
             await typesense.DeleteAlias(alias, CancellationToken.None);
             foreach (
                 var name in (await typesense.ReadCollectionNames(CancellationToken.None)).Where(
@@ -105,9 +95,87 @@ public sealed class TestPlaylistSearchIndex
             {
                 await typesense.DeleteCollection(name, CancellationToken.None);
             }
+        }
+        finally
+        {
+            http?.Dispose();
             await database.StopAsync();
         }
     }
+
+    [Test]
+    public async Task APlaylistUpsertCannotRestoreAPurgedAccount()
+    {
+        var owner = await database.CreateUserAsync("erasedcurator");
+        var playlist = await Seed(database, owner, "Purge during indexing");
+        await index.Rebuild(CancellationToken.None);
+        (await Read(http, alias, playlist)).Should().NotBeNull();
+
+        // The indexer has already read the document when purge commits.
+        beforeImport.OnImport = () => Purge().RunForUserAsync(owner.Value, CancellationToken.None);
+        await index.Sync(playlist.Value, CancellationToken.None);
+
+        (await Read(http, alias, playlist)).Should().BeNull();
+    }
+
+    [Test]
+    public async Task RetryingACommittedPurgeRemovesItsSearchDocument()
+    {
+        var owner = await database.CreateUserAsync("removedcurator");
+        var playlist = await Seed(database, owner, "Retry an index deletion");
+        await index.Rebuild(CancellationToken.None);
+
+        var job = new AccountDeletionInput(Guid.CreateVersion7(), owner.Value);
+        await using var db = database.CreateContext();
+        db.AccountDeletionJobs.Add(
+            new AccountDeletionJob
+            {
+                Id = job.JobId,
+                UserId = owner,
+                RequestedAt = DateTimeOffset.UtcNow,
+            }
+        );
+        await db.SaveChangesAsync();
+        var failedPurge = new AccountPurge(
+            database.ConnectionString,
+            (_, _) => throw new HttpRequestException()
+        );
+        Assert.ThrowsAsync<HttpRequestException>(() =>
+            failedPurge.RunJobAsync(job, CancellationToken.None)
+        );
+        (await db.Playlists.AnyAsync(row => row.OwnerId == owner)).Should().BeFalse();
+        (await Read(http, alias, playlist)).Should().NotBeNull();
+
+        await Purge().RunJobAsync(job, CancellationToken.None);
+
+        (await Read(http, alias, playlist)).Should().BeNull();
+    }
+
+    [Test]
+    public async Task EditsCoalesceSeparatelyForEachPlaylist()
+    {
+        var owner = await database.CreateUserAsync("curator");
+        var first = await Seed(database, owner, "Before the edit");
+        var second = await Seed(database, owner, "Public playlist");
+        await index.Rebuild(CancellationToken.None);
+
+        await RunEditBurst(database, index, first, second);
+
+        (await Read(http, alias, first))!
+            .Value.GetProperty("name")
+            .GetString()
+            .Should()
+            .Be("Final edit");
+        var moderated = (await Read(http, alias, second))!.Value;
+        moderated.GetProperty("taken_down").GetBoolean().Should().BeTrue();
+        moderated.GetProperty("curator").GetString().Should().BeEmpty();
+    }
+
+    private AccountPurge Purge() =>
+        new(
+            database.ConnectionString,
+            (id, token) => PlaylistSearchIndex.Purge(typesense, alias, id, token)
+        );
 
     private static async Task RunEditBurst(
         PostgresIntegrationDatabase database,
@@ -173,38 +241,6 @@ public sealed class TestPlaylistSearchIndex
                     .BeGreaterThan(TimeSpan.FromSeconds(59));
             }
         });
-    }
-
-    private static async Task PurgeAfterFailedIndexCleanup(
-        PostgresIntegrationDatabase database,
-        TypesenseClient typesense,
-        string alias,
-        UserId owner
-    )
-    {
-        var job = new AccountDeletionInput(Guid.CreateVersion7(), owner.Value);
-        await using var db = database.CreateContext();
-        db.AccountDeletionJobs.Add(
-            new AccountDeletionJob
-            {
-                Id = job.JobId,
-                UserId = owner,
-                RequestedAt = DateTimeOffset.UtcNow,
-            }
-        );
-        await db.SaveChangesAsync();
-        var failedPurge = new AccountPurge(
-            database.ConnectionString,
-            (_, _) => throw new HttpRequestException()
-        );
-        Assert.ThrowsAsync<HttpRequestException>(() =>
-            failedPurge.RunJobAsync(job, CancellationToken.None)
-        );
-        (await db.Playlists.AnyAsync(row => row.OwnerId == owner)).Should().BeFalse();
-        await new AccountPurge(
-            database.ConnectionString,
-            (id, token) => PlaylistSearchIndex.Purge(typesense, alias, id, token)
-        ).RunJobAsync(job, CancellationToken.None);
     }
 
     private static async Task<PlaylistId> Seed(

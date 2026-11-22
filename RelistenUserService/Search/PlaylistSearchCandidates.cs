@@ -41,8 +41,7 @@ internal sealed class PlaylistSearchCandidates(HttpClient client, IConfiguration
                 ["text_match_type"] = "max_weight",
                 ["drop_tokens_threshold"] = "0",
                 ["filter_by"] = filter,
-                ["include_fields"] =
-                    "id,history_generation,revision,curator_version,published,archived,taken_down",
+                ["include_fields"] = "id,history_generation,revision,published,archived,taken_down",
                 ["highlight_fields"] = "none",
                 ["sort_by"] = "_text_match:desc,follow_count:desc,updated_at:desc",
                 ["page"] = request.Page.ToString(System.Globalization.CultureInfo.InvariantCulture),
@@ -74,7 +73,6 @@ internal sealed record PlaylistCandidate(
     string Id,
     string HistoryGeneration,
     long Revision,
-    long CuratorVersion,
     bool Published,
     bool Archived,
     bool TakenDown

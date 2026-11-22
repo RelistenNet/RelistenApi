@@ -17,6 +17,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using NUnit.Framework;
 using OpenIddict.Abstractions;
+using OpenIddict.Validation;
 using RelistenIngestionWorker.AccountDeletion;
 using RelistenUserService;
 using RelistenUserService.Authentication;
@@ -832,7 +833,8 @@ public sealed partial class TestMcpHttp
         Func<Uri, object?>? catalogResponse = null,
         HttpMessageHandler? sonos = null,
         string? playlistAlias = null,
-        HttpMessageHandler? playlistSearch = null
+        HttpMessageHandler? playlistSearch = null,
+        TimeProvider? validationClock = null
     )
     {
         catalog = new(catalogResponse);
@@ -931,6 +933,12 @@ public sealed partial class TestMcpHttp
                             playlistSearch
                             ?? new PlaylistSearchStub(HttpStatusCode.ServiceUnavailable)
                     )
+            );
+        }
+        if (validationClock is not null)
+        {
+            builder.Services.PostConfigure<OpenIddictValidationOptions>(options =>
+                options.TimeProvider = validationClock
             );
         }
         app = AccountsApplication.Build(builder);

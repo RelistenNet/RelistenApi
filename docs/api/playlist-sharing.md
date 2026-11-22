@@ -108,12 +108,17 @@ retry can create a copy only if the restored source is public.
 request. Anonymous callers see public playlists. A native app caller with library access
 also sees their own playlists. The response uses `Cache-Control: private, no-store`.
 
+Requests with an invalid or expired bearer token receive HTTP 401. The User
+Service requires a search-only Typesense key in `Search__Typesense__SearchKey`
+outside Development. The worker uses its separate indexing credential.
+
 The default `scope=all` returns the ranked catalog response under `catalog`
 and an additional `playlists` section. Render the catalog's `top` before the
 playlist section. Use `scope=playlists&page=1` for a playlist-only page. The
 response includes `playlist_next_page` when the page is full or the service finds
 more visible matches after a short page. An edit or visibility change can
-shorten a page until the index catches up.
+shorten a page until the index catches up. Cards show the curator's current
+username. A previous username can still match until the playlist is reindexed.
 
 `catalog_availability` and `playlist_availability` are independent. A value of
 `unavailable` calls for an unavailable state even when the other half returned

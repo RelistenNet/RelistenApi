@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -21,6 +22,20 @@ public sealed class SearchController(NativeSessionAuthenticator sessions) : Cont
     )
     {
         Response.Headers.CacheControl = "private, no-store";
+        Func<CancellationToken, Task<UserId?>>? viewer = null;
+        if (!string.IsNullOrWhiteSpace(Request.Headers.Authorization))
+        {
+            var credential = await HttpContext
+                .AuthenticateAsync(AuthenticationConstants.AccountCredentialScheme)
+                .WaitAsync(cancellationToken);
+            if (!credential.Succeeded)
+            {
+                return Challenge();
+            }
+
+            viewer = token => Viewer(credential.Principal!, token);
+        }
+
         if (!request.IsValid())
         {
             return UnprocessableEntity(
@@ -33,19 +48,27 @@ public sealed class SearchController(NativeSessionAuthenticator sessions) : Cont
         }
 
         var search = services.GetRequiredService<MergedSearch>();
-        return Ok(await search.Run(request, Viewer, cancellationToken));
-    }
-
-    private async Task<UserId?> Viewer(CancellationToken cancellationToken)
-    {
-        var credential = await HttpContext
-            .AuthenticateAsync(AuthenticationConstants.AccountCredentialScheme)
-            .WaitAsync(cancellationToken);
-        if (!credential.Succeeded || !credential.Principal!.HasScope(RelistenScopes.LibraryRead))
+        try
         {
-            return null;
+            return Ok(await search.Run(request, viewer, cancellationToken));
         }
-
-        return (await sessions.AuthenticateAsync(credential.Principal, cancellationToken))?.User.Id;
+        catch (InvalidSearchSessionException)
+        {
+            Response.Headers.WWWAuthenticate = "Bearer";
+            return Unauthorized();
+        }
     }
+
+    private async Task<UserId?> Viewer(
+        ClaimsPrincipal principal,
+        CancellationToken cancellationToken
+    )
+    {
+        var session =
+            await sessions.AuthenticateAsync(principal, cancellationToken)
+            ?? throw new InvalidSearchSessionException();
+        return principal.HasScope(RelistenScopes.LibraryRead) ? session.User.Id : null;
+    }
+
+    private sealed class InvalidSearchSessionException : Exception;
 }

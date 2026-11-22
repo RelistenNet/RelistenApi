@@ -41,8 +41,7 @@ internal sealed class PlaylistSearchCards(AccountsDbContext db)
                 row.Revision,
                 row.PublicCode,
                 generation.Value,
-                row.Owner.Username,
-                row.Owner.UsernameVersion
+                row.Owner.Username
             )
         ).ToDictionaryAsync(row => row.Id.Value, cancellationToken);
 
@@ -66,8 +65,7 @@ internal sealed class PlaylistSearchCards(AccountsDbContext db)
         long Revision,
         string? PublicCode,
         string HistoryGeneration,
-        string Username,
-        long UsernameVersion
+        string Username
     )
     {
         private bool IsPublic => Published && !Archived && !TakenDown;
@@ -77,8 +75,7 @@ internal sealed class PlaylistSearchCards(AccountsDbContext db)
             && hit.Revision == Revision
             && hit.Published == Published
             && hit.Archived == Archived
-            && hit.TakenDown == TakenDown
-            && (!IsPublic || hit.CuratorVersion == UsernameVersion);
+            && hit.TakenDown == TakenDown;
 
         public PlaylistSearchCard Card(UserId? viewer) =>
             new(

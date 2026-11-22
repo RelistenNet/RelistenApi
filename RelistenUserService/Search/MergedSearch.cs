@@ -19,9 +19,7 @@ internal sealed class MergedSearch(
         var catalogTask = request.WantsCatalog
             ? SearchCatalog(request, cancellationToken)
             : Task.FromResult(new CatalogResults("not_requested", null));
-        var playlistTask = request.WantsPlaylists
-            ? SearchPlaylists(request, viewer, cancellationToken)
-            : Task.FromResult(new PlaylistResults("not_requested", [], null));
+        var playlistTask = SearchPlaylists(request, viewer, cancellationToken);
 
         await Task.WhenAll(catalogTask, playlistTask);
         var index = await catalogTask;
@@ -74,19 +72,32 @@ internal sealed class MergedSearch(
         deadline.CancelAfter(TimeSpan.FromSeconds(3));
         try
         {
+            // Validate a supplied session even when the selected scope skips playlists.
             var owner = viewer is null ? null : await viewer(deadline.Token);
+            if (!request.WantsPlaylists)
+            {
+                return new("not_requested", [], null);
+            }
+
             var hits = await candidates.Find(request, owner, deadline.Token);
             var visible = await cards.Read(hits, owner, deadline.Token);
             return new(
                 "full",
                 visible,
-                await NextPlaylistPage(request, owner, hits.Length, visible.Length, deadline.Token)
+                await NextPlaylistPage(
+                    request,
+                    owner,
+                    hits.Length,
+                    visible.Length,
+                    deadline.Token,
+                    cancellationToken
+                )
             );
         }
         catch (Exception error) when (Unavailable(error, cancellationToken))
         {
             logger.LogWarning("Playlist search failed ({ErrorType})", error.GetType().Name);
-            return new("unavailable", [], null);
+            return new(request.WantsPlaylists ? "unavailable" : "not_requested", [], null);
         }
     }
 
@@ -95,7 +106,8 @@ internal sealed class MergedSearch(
         UserId? viewer,
         int candidatesOnPage,
         int visibleOnPage,
-        CancellationToken cancellationToken
+        CancellationToken playlistCancellation,
+        CancellationToken requestCancellation
     )
     {
         if (candidatesOnPage < PlaylistSearchCandidates.PageSize || request.Page >= 100)
@@ -108,36 +120,44 @@ internal sealed class MergedSearch(
             return request.Page + 1;
         }
 
-        // A stale hit can shorten a page. Only an authorized hit can confirm
-        // continuation, since a raw index count could reveal a hidden match.
         try
         {
-            for (var page = request.Page + 1; page <= 100; page++)
-            {
-                var hits = await candidates.Find(
-                    request with
-                    {
-                        Page = page,
-                    },
-                    viewer,
-                    cancellationToken
-                );
-                if ((await cards.Read(hits, viewer, cancellationToken)).Length > 0)
-                {
-                    // Keep the next page number independent of skipped hidden matches.
-                    return request.Page + 1;
-                }
-                if (hits.Length < PlaylistSearchCandidates.PageSize)
-                {
-                    break;
-                }
-            }
+            return await FindVisibleContinuation(request, viewer, playlistCancellation);
         }
-        catch (Exception error)
-            when (Unavailable(error, cancellationToken) || error is OperationCanceledException)
+        catch (Exception error) when (Unavailable(error, requestCancellation))
         {
             // Keep the already authorized page when lookahead fails.
             logger.LogWarning("Playlist pagination failed ({ErrorType})", error.GetType().Name);
+            return null;
+        }
+    }
+
+    private async Task<int?> FindVisibleContinuation(
+        MergedSearchRequest request,
+        UserId? viewer,
+        CancellationToken cancellationToken
+    )
+    {
+        // Use only authorized hits to confirm continuation after a short page.
+        for (var page = request.Page + 1; page <= 100; page++)
+        {
+            var hits = await candidates.Find(
+                request with
+                {
+                    Page = page,
+                },
+                viewer,
+                cancellationToken
+            );
+            if ((await cards.Read(hits, viewer, cancellationToken)).Length > 0)
+            {
+                // Keep the next page number independent of skipped hidden matches.
+                return request.Page + 1;
+            }
+            if (hits.Length < PlaylistSearchCandidates.PageSize)
+            {
+                break;
+            }
         }
 
         return null;

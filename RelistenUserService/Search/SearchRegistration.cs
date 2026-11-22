@@ -7,9 +7,23 @@ internal static class SearchRegistration
     public static void AddMergedSearch(
         this IServiceCollection services,
         AccountsRuntimeConfiguration runtime,
-        IConfiguration configuration
+        IConfiguration configuration,
+        IHostEnvironment environment
     )
     {
+        var searchKey = configuration["Search:Typesense:SearchKey"];
+        if (string.IsNullOrWhiteSpace(searchKey))
+        {
+            if (!environment.IsDevelopment())
+            {
+                throw new InvalidOperationException(
+                    "Search:Typesense:SearchKey is required outside Development."
+                );
+            }
+
+            searchKey = "local_dev_typesense";
+        }
+
         services.AddScoped<MergedSearch>();
         services.AddScoped<PlaylistSearchCards>();
         services
@@ -26,12 +40,7 @@ internal static class SearchRegistration
             {
                 var url = configuration["Search:Typesense:Url"] ?? "http://127.0.0.1:18108";
                 client.BaseAddress = new Uri(url.TrimEnd('/') + "/");
-                client.DefaultRequestHeaders.Add(
-                    "X-TYPESENSE-API-KEY",
-                    configuration["Search:Typesense:SearchKey"]
-                        ?? configuration["Search:Typesense:ApiKey"]
-                        ?? "local_dev_typesense"
-                );
+                client.DefaultRequestHeaders.Add("X-TYPESENSE-API-KEY", searchKey);
             })
             .RemoveAllLoggers()
             .ConfigurePrimaryHttpMessageHandler(SearchHandler);

@@ -47,7 +47,6 @@ internal sealed class PlaylistSearchRows(string accountsConnectionString, DbServ
                     header.Published && !header.Archived && !header.TakenDown
                         ? header.Username
                         : "",
-                    header.UsernameVersion,
                     header.Published,
                     header.Archived,
                     header.TakenDown,
@@ -94,7 +93,7 @@ internal sealed class PlaylistSearchRows(string accountsConnectionString, DbServ
                     """
                     SELECT p.id, p.owner_id AS OwnerId, p.name, p.description, p.published, p.archived,
                            p.taken_down AS TakenDown, p.revision, (extract(epoch FROM p.updated_at) * 1000)::bigint AS UpdatedAt,
-                           u.username, u.username_version AS UsernameVersion,
+                           u.username,
                            g.value AS HistoryGeneration,
                            (SELECT count(*) FROM user_data.playlist_follows f WHERE f.playlist_id = p.id) AS FollowCount
                     FROM user_data.playlists p
@@ -188,7 +187,6 @@ internal sealed class PlaylistSearchRows(string accountsConnectionString, DbServ
         long Revision,
         long UpdatedAt,
         string Username,
-        long UsernameVersion,
         string HistoryGeneration,
         long FollowCount
     );
@@ -214,7 +212,6 @@ internal sealed record PlaylistSearchDocument(
     string[] ArtistIds,
     string[] Songs,
     string Curator,
-    long CuratorVersion,
     bool Published,
     bool Archived,
     bool TakenDown,

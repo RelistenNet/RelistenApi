@@ -10,34 +10,62 @@ namespace RelistenIngestionWorker.PlaylistSearch;
 [Workflow(PlaylistSearchJob.SyncWorkflow)]
 public sealed class PlaylistSearchSyncWorkflow
 {
-    private bool changed;
+    private static readonly TimeSpan QuietPeriod = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan MaximumWait = TimeSpan.FromMinutes(5);
+    private EditWindow? pending;
 
     [WorkflowSignal(PlaylistSearchJob.ChangedSignal)]
     public Task Changed()
     {
-        changed = true;
+        var now = Workflow.UtcNow;
+        pending = new(pending?.FirstEditAt ?? now, now);
         return Task.CompletedTask;
     }
 
     [WorkflowRun]
-    public async Task RunAsync(string playlistId)
+    public async Task RunAsync(string playlistId, EditWindow? previous = null)
     {
-        do
+        if (previous is not null)
         {
-            do
-            {
-                changed = false;
-                // Each edit starts a fresh quiet period for this playlist.
-                await Workflow.WaitConditionAsync(() => changed, TimeSpan.FromMinutes(1));
-            } while (changed);
+            pending = new(previous.FirstEditAt, pending?.LastEditAt ?? previous.LastEditAt);
+        }
+        await Workflow.WaitConditionAsync(() => pending is not null);
+        await WaitForBatch();
+        pending = null;
+        await Workflow.ExecuteActivityAsync(
+            (PlaylistSearchActivities activity) => activity.Sync(playlistId),
+            PlaylistSearchActivities.Options(TimeSpan.FromMinutes(5))
+        );
 
-            await Workflow.ExecuteActivityAsync(
-                (PlaylistSearchActivities activity) => activity.Sync(playlistId),
-                PlaylistSearchActivities.Options(TimeSpan.FromMinutes(5))
+        if (pending is { } next)
+        {
+            // Edits arriving during indexing need a later read. Carry only that
+            // batch into a new history under the same workflow ID.
+            throw Workflow.CreateContinueAsNewException(
+                (PlaylistSearchSyncWorkflow workflow) => workflow.RunAsync(playlistId, next)
             );
-            // A write may have arrived after the activity read the playlist.
-        } while (changed);
+        }
     }
+
+    private async Task WaitForBatch()
+    {
+        while (pending is { } batch)
+        {
+            var quietUntil = batch.LastEditAt + QuietPeriod;
+            var deadline = batch.FirstEditAt + MaximumWait;
+            var wakeAt = quietUntil < deadline ? quietUntil : deadline;
+            var delay = wakeAt - Workflow.UtcNow;
+            if (
+                delay <= TimeSpan.Zero
+                || !await Workflow.WaitConditionAsync(() => pending != batch, delay)
+            )
+            {
+                return;
+            }
+        }
+    }
+
+    public sealed record EditWindow(DateTime FirstEditAt, DateTime LastEditAt);
 }
 
 [Workflow]
