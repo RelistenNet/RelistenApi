@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using FluentAssertions;
 using NUnit.Framework;
 using Relisten.Accounts.Contracts.Identifiers;
@@ -35,10 +36,8 @@ public sealed class TestPlaylistSearchSyncWorkflow
                     await Task.Delay(TimeSpan.FromSeconds(1));
                 }
 
-                (await reindex.Indexed.Task.WaitAsync(TimeSpan.FromSeconds(10)))
-                    .Should()
-                    .Be(playlist);
                 await run.GetResultAsync().WaitAsync(TimeSpan.FromSeconds(10));
+                reindex.Completed.Should().ContainSingle(result => result.Playlist == playlist);
                 var scheduled = (await run.FetchHistoryAsync()).Events.Single(item =>
                     item.ActivityTaskScheduledEventAttributes is not null
                 );
@@ -55,16 +54,11 @@ public sealed class TestPlaylistSearchSyncWorkflow
             async (environment, reindex) =>
             {
                 var playlist = PlaylistId.New().Value;
-                var now = (await environment.GetCurrentTimeAsync()).ToUniversalTime();
-                var window = new PlaylistSearchSyncWorkflow.EditWindow(now.AddMinutes(-5), now);
-                var run = await environment.Client.StartWorkflowAsync(
-                    (PlaylistSearchSyncWorkflow workflow) => workflow.RunAsync(playlist, window),
-                    new WorkflowOptions(PlaylistSearchJob.SyncId(playlist), PlaylistSearchJob.Queue)
-                );
+                var run = await StartDueSync(environment, playlist);
 
                 try
                 {
-                    await reindex.Indexed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                    await reindex.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
                     await run.SignalAsync(workflow => workflow.Changed());
                 }
                 finally
@@ -72,18 +66,81 @@ public sealed class TestPlaylistSearchSyncWorkflow
                     reindex.Release.TrySetResult();
                 }
 
-                Func<Task> originalRun = () =>
-                    run.GetResultAsync(followRuns: false).WaitAsync(TimeSpan.FromSeconds(5));
-                await originalRun.Should().ThrowAsync<WorkflowContinuedAsNewException>();
+                var nextRun = await FollowContinuation(run);
+                reindex.Completed.Should().Equal((run.ResultRunId!, playlist), (nextRun, playlist));
             }
         );
+
+    [Test]
+    public Task ATransientFailureIsRetriedWithinTheSameRun() =>
+        WithWorker(
+            new ReindexProbe { Fail = (_, attempt) => attempt == 1 },
+            async (environment, reindex) =>
+            {
+                var playlist = PlaylistId.New().Value;
+                var run = await StartDueSync(environment, playlist);
+
+                await run.GetResultAsync(followRuns: false).WaitAsync(TimeSpan.FromSeconds(15));
+
+                reindex.Completed.Should().Equal((run.ResultRunId!, playlist));
+            }
+        );
+
+    [Test]
+    public Task FailedSyncCarriesTheEditIntoANewRunWithoutAnotherSignal()
+    {
+        string? firstRun = null;
+        return WithWorker(
+            new ReindexProbe
+            {
+                Fail = (runId, _) =>
+                {
+                    var recordedRun = Interlocked.CompareExchange(ref firstRun, runId, null);
+                    return recordedRun is null || recordedRun == runId;
+                },
+            },
+            async (environment, reindex) =>
+            {
+                var playlist = PlaylistId.New().Value;
+                var run = await StartDueSync(environment, playlist);
+
+                var nextRun = await FollowContinuation(run);
+
+                reindex.Completed.Should().Equal((nextRun, playlist));
+            }
+        );
+    }
+
+    private static async Task<WorkflowHandle<PlaylistSearchSyncWorkflow>> StartDueSync(
+        WorkflowEnvironment environment,
+        string playlist
+    )
+    {
+        var now = await environment.GetCurrentTimeAsync();
+        var window = new PlaylistSearchSyncWorkflow.EditWindow(now.AddMinutes(-5), now);
+        return await environment.Client.StartWorkflowAsync(
+            (PlaylistSearchSyncWorkflow workflow) => workflow.RunAsync(playlist, window),
+            new WorkflowOptions(PlaylistSearchJob.SyncId(playlist), PlaylistSearchJob.Queue)
+        );
+    }
+
+    private static async Task<string> FollowContinuation(
+        WorkflowHandle<PlaylistSearchSyncWorkflow> run
+    )
+    {
+        var continued = Assert.ThrowsAsync<WorkflowContinuedAsNewException>(() =>
+            run.GetResultAsync(followRuns: false).WaitAsync(TimeSpan.FromSeconds(15))
+        );
+        await run.GetResultAsync().WaitAsync(TimeSpan.FromSeconds(15));
+        return continued!.NewRunId;
+    }
 
     private static async Task WithWorker(
         ReindexProbe reindex,
         Func<WorkflowEnvironment, ReindexProbe, Task> test
     )
     {
-        await using var environment = await WorkflowEnvironment.StartLocalAsync();
+        await using var environment = await WorkflowEnvironment.StartTimeSkippingAsync();
         using var worker = new TemporalWorker(
             environment.Client,
             new TemporalWorkerOptions(PlaylistSearchJob.Queue)
@@ -95,18 +152,34 @@ public sealed class TestPlaylistSearchSyncWorkflow
 
     public sealed class ReindexProbe
     {
-        public TaskCompletionSource<string> Indexed { get; } =
+        public ConcurrentQueue<(string RunId, string Playlist)> Completed { get; } = new();
+        public TaskCompletionSource Started { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+        public Func<string, int, bool>? Fail { get; init; }
         public bool HoldIndex { get; init; }
         public TaskCompletionSource Release { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         [Activity("Sync")]
-        public Task Sync(string playlistId)
+        public async Task Sync(string playlistId)
         {
-            Indexed.TrySetResult(playlistId);
-            return HoldIndex ? Release.Task : Task.CompletedTask;
+            Started.TrySetResult();
+            if (HoldIndex)
+            {
+                await Release.Task;
+            }
+
+            var info = ActivityExecutionContext.Current.Info;
+            var runId =
+                info.WorkflowRunId
+                ?? throw new InvalidOperationException("Expected a workflow run ID.");
+            if (Fail?.Invoke(runId, info.Attempt) == true)
+            {
+                throw new ApplicationFailureException("Typesense temporarily unavailable");
+            }
+
+            Completed.Enqueue((runId, playlistId));
         }
     }
 }

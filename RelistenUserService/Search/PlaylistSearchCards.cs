@@ -77,6 +77,7 @@ internal sealed class PlaylistSearchCards(AccountsDbContext db)
             && hit.Archived == Archived
             && hit.TakenDown == TakenDown;
 
+        // The old handle can match until reindexing, while the card shows the current username.
         public PlaylistSearchCard Card(UserId? viewer) =>
             new(
                 Id,

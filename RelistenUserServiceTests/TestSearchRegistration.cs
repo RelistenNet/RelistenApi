@@ -15,21 +15,41 @@ public sealed class TestSearchRegistration
     [TestCase("Production")]
     public void SearchCannotStartWithOnlyTheWriterKey(string environmentName)
     {
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(
-                new Dictionary<string, string?> { ["Search:Typesense:ApiKey"] = "writer-key" }
-            )
-            .Build();
+        Action register = () => Register(environmentName, "ApiKey");
+
+        register.Should().Throw<InvalidOperationException>();
+    }
+
+    [Test]
+    public void DevelopmentCanStartWithoutAKey()
+    {
+        Action register = () => Register("Development");
+
+        register.Should().NotThrow();
+    }
+
+    [Test]
+    public void ProductionCanStartWithTheSearchKey()
+    {
+        Action register = () => Register("Production", "SearchKey");
+
+        register.Should().NotThrow();
+    }
+
+    private static void Register(string environmentName, string? keyName = null)
+    {
+        var configuration = new ConfigurationManager();
+        if (keyName is not null)
+        {
+            configuration[$"Search:Typesense:{keyName}"] = "test-key";
+        }
+
         var environment = new HostingEnvironment { EnvironmentName = environmentName };
         var runtime = new AccountsRuntimeConfiguration(
             new AccountsOptions(),
             new Uri("https://auth.example.test/"),
             []
         );
-        var services = new ServiceCollection();
-
-        Action register = () => services.AddMergedSearch(runtime, configuration, environment);
-
-        register.Should().Throw<InvalidOperationException>();
+        new ServiceCollection().AddMergedSearch(runtime, configuration, environment);
     }
 }

@@ -133,6 +133,8 @@ workflow waits one minute after the playlist's latest signal and caps the wait
 at five minutes after the first signal. Reindexing reads the current playlist,
 updates its document or deletes it if gone, and exits once it has handled its
 pending edits.
+If sync exhausts its activity retries, the workflow waits two minutes and carries
+its pending edits into a new run under the same workflow ID.
 The nightly playlist build repairs missed signals and updates follow counts
 and catalog names. Schedule registration creates
 `relisten-playlist-search-build` paused.
