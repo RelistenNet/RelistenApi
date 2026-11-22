@@ -62,10 +62,8 @@ public sealed record MergedSearchRequest
         query.Add(new("page", Page.ToString(System.Globalization.CultureInfo.InvariantCulture)));
         query.Add(new("request_id", RequestId));
         query.AddRange(
-            (BoostArtistIds ?? []).Select(value => new KeyValuePair<string, string?>(
-                "boost_artist_ids",
-                value
-            ))
+            Values(BoostArtistIds)
+                .Select(value => new KeyValuePair<string, string?>("boost_artist_ids", value))
         );
         query.AddRange(
             (Ignore ?? []).Select(value => new KeyValuePair<string, string?>("ignore", value))
@@ -74,7 +72,12 @@ public sealed record MergedSearchRequest
     }
 
     private static IEnumerable<string> Values(string[]? values) =>
-        (values ?? []).SelectMany(value =>
-            value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-        );
+        (values ?? [])
+            .OfType<string>()
+            .SelectMany(value =>
+                value.Split(
+                    ',',
+                    StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
+                )
+            );
 }

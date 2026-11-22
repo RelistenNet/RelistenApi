@@ -28,6 +28,7 @@ public sealed class TestCatalogSearchHttp
     private const string TypesenseKey = "local_dev_typesense";
     private const int PagingShowCount = 20;
     private const string JapanShowsQuery = "?q=Pagination%20Japan&scope=shows";
+    private const string ScarletSongsQuery = "?q=Scarlet%20Begonias&scope=songs&typing=true";
     private readonly string _prefix = "test_search_http_" + Guid.NewGuid().ToString("N");
     private readonly Guid _review = Guid.NewGuid();
     private string _previousPrimary = null!;
@@ -245,6 +246,30 @@ public sealed class TestCatalogSearchHttp
         scoped["page"]!.GetValue<int>().Should().Be(1);
         scoped["results"]!.AsArray().Should().OnlyContain(row => (string?)row!["kind"] == "venue");
         Ids(scoped["results"]!).Should().Contain(venue);
+    }
+
+    [Test]
+    public async Task SearchTreatsAnEmptyBoostAsNoBoost()
+    {
+        var control = await GetSearch(ScarletSongsQuery);
+
+        var result = await GetSearch(ScarletSongsQuery + "&boost_artist_ids=");
+
+        Ids(control["results"]!).Should().NotBeEmpty();
+        Ids(result["results"]!).Should().Equal(Ids(control["results"]!));
+    }
+
+    [TestCase(13, "song_00000002")]
+    [TestCase(14, "song_00000003")]
+    public async Task SearchAppliesValidBoostsInAMixedList(int artistSuffix, string song)
+    {
+        var artist = Id("artist", artistSuffix);
+
+        var result = await GetSearch(
+            ScarletSongsQuery + $"&boost_artist_ids=&boost_artist_ids=,%20,{artist},"
+        );
+
+        Ids(result["results"]!).First().Should().Be(song);
     }
 
     [TestCase("explore")]

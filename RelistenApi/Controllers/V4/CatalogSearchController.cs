@@ -127,7 +127,12 @@ public sealed class CatalogSearchController(
         && string.Equals(value.ToString(), scope, StringComparison.OrdinalIgnoreCase);
 
     private static IEnumerable<string> SplitValues(string[]? values) =>
-        (values ?? []).SelectMany(value =>
-            value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-        );
+        (values ?? [])
+            .OfType<string>()
+            .SelectMany(value =>
+                value.Split(
+                    ',',
+                    StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
+                )
+            );
 }
