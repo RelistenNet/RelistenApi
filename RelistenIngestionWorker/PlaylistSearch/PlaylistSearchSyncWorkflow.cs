@@ -14,6 +14,7 @@ public sealed class PlaylistSearchSyncWorkflow
     private static readonly TimeSpan QuietPeriod = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan MaximumWait = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan RecoveryDelay = TimeSpan.FromMinutes(2);
+    private static readonly TimeSpan ProlongedFailure = TimeSpan.FromMinutes(30);
     private EditWindow? pending;
 
     [WorkflowSignal(PlaylistSearchJob.ChangedSignal)]
@@ -70,9 +71,12 @@ public sealed class PlaylistSearchSyncWorkflow
             {
                 LastEditAt = pending?.LastEditAt ?? batch.LastEditAt,
             };
-            Workflow.Logger.LogWarning(
-                "Playlist search sync for {PlaylistId} failed and will retry in a new run",
-                playlistId
+            var editAge = Workflow.UtcNow - batch.FirstEditAt;
+            Workflow.Logger.Log(
+                editAge >= ProlongedFailure ? LogLevel.Error : LogLevel.Warning,
+                "Playlist search sync for {PlaylistId} still pending after {PendingMinutes:F1} minutes. Retrying in a new run.",
+                playlistId,
+                editAge.TotalMinutes
             );
             await Workflow.DelayAsync(RecoveryDelay);
         }
