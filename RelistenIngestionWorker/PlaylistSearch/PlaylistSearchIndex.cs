@@ -19,6 +19,20 @@ internal sealed class PlaylistSearchIndex(
 
     public async Task Sync(string playlistId, CancellationToken cancellationToken)
     {
+        // Record before resolving the alias so a sync to the old collection is replayed.
+        await rows.RecordSyncRequest(playlistId, cancellationToken);
+        await SyncCurrent(playlistId, cancellationToken);
+    }
+
+    private Task SyncCurrent(string playlistId, CancellationToken cancellationToken) =>
+        rows.WithPlaylistWriteLock(
+            playlistId,
+            () => WriteCurrentPlaylist(playlistId, cancellationToken),
+            cancellationToken
+        );
+
+    private async Task WriteCurrentPlaylist(string playlistId, CancellationToken cancellationToken)
+    {
         var target = await typesense.ReadAlias(Alias, cancellationToken);
         if (target is null)
         {
@@ -37,8 +51,9 @@ internal sealed class PlaylistSearchIndex(
         }
     }
 
-    public async Task Rebuild(CancellationToken cancellationToken)
+    public async Task<DateTime> Rebuild(CancellationToken cancellationToken)
     {
+        var startedAt = await rows.RebuildStartedAt(cancellationToken);
         await Sweep(cancellationToken);
         var collection = $"{Alias}_{Guid.NewGuid():N}";
         await typesense.CreateCollection(Schema(collection), cancellationToken);
@@ -56,6 +71,19 @@ internal sealed class PlaylistSearchIndex(
         }
 
         await typesense.SetAlias(Alias, collection, cancellationToken);
+        return startedAt;
+    }
+
+    public async Task CatchUp(DateTime startedAt, CancellationToken cancellationToken)
+    {
+        foreach (
+            var playlistId in await rows.PruneAndReadSyncRequests(startedAt, cancellationToken)
+        )
+        {
+            await SyncCurrent(playlistId, cancellationToken);
+        }
+
+        // Retire the old collection after the new alias has caught up.
         await Sweep(cancellationToken);
     }
 

@@ -107,11 +107,20 @@ public sealed class PlaylistSearchSyncWorkflow
 public sealed class PlaylistSearchRebuildWorkflow
 {
     [WorkflowRun]
-    public Task RunAsync() =>
-        Workflow.ExecuteActivityAsync(
+    public async Task RunAsync()
+    {
+        var startedAt = await Workflow.ExecuteActivityAsync(
             (PlaylistSearchActivities activity) => activity.Rebuild(),
             PlaylistSearchActivities.Options(TimeSpan.FromHours(1))
         );
+        await Workflow.ExecuteActivityAsync(
+            (PlaylistSearchActivities activity) => activity.CatchUp(startedAt),
+            PlaylistSearchActivities.Options(
+                TimeSpan.FromMinutes(15),
+                new RetryPolicy { MaximumAttempts = 3 }
+            )
+        );
+    }
 }
 
 [Workflow]
@@ -153,9 +162,16 @@ internal sealed class PlaylistSearchActivities(PlaylistSearchIndex index)
     }
 
     [Activity]
-    public async Task Rebuild()
+    public async Task<DateTime> Rebuild()
     {
         using var heartbeat = new ActivityHeartbeat();
-        await index.Rebuild(ActivityExecutionContext.Current.CancellationToken);
+        return await index.Rebuild(ActivityExecutionContext.Current.CancellationToken);
+    }
+
+    [Activity]
+    public async Task CatchUp(DateTime startedAt)
+    {
+        using var heartbeat = new ActivityHeartbeat();
+        await index.CatchUp(startedAt, ActivityExecutionContext.Current.CancellationToken);
     }
 }

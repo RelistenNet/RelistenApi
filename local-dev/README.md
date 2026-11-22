@@ -53,6 +53,10 @@ Temporal tests start temporary local servers through the .NET SDK. The first
 run may download the server binary. The tests stop those servers automatically;
 no separately managed Temporal server or persistence databases are needed.
 
+The opt-in User Service playlist search tests also use the local catalog. Apply
+its schema migrations with the worker's `--migrate` command before running those
+tests with `RELISTEN_LOCAL_INGESTION_TESTS=1`.
+
 Pass ordinary `dotnet test` options through the script, for example:
 
 ```sh

@@ -35,6 +35,7 @@ public sealed class TestPlaylistSearchIndex
     private BeforeImport beforeImport = null!;
     private HttpClient http = null!;
     private TypesenseClient typesense = null!;
+    private IConfiguration configuration = null!;
     private PlaylistSearchIndex index = null!;
 
     [SetUp]
@@ -54,7 +55,7 @@ public sealed class TestPlaylistSearchIndex
         http = new HttpClient(beforeImport);
         TypesenseClient.Configure(http, "http://127.0.0.1:18108", "local_dev_typesense");
         typesense = new TypesenseClient(http);
-        var config = new ConfigurationBuilder()
+        configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(
                 new Dictionary<string, string?> { ["Search:PlaylistAlias"] = alias }
             )
@@ -66,7 +67,59 @@ public sealed class TestPlaylistSearchIndex
             new HostingEnvironment { EnvironmentName = Environments.Production },
             NullLogger<DbService>.Instance
         );
-        index = new PlaylistSearchIndex(new(database.ConnectionString, catalog), typesense, config);
+        index = new PlaylistSearchIndex(
+            new(database.ConnectionString, catalog),
+            typesense,
+            configuration
+        );
+    }
+
+    [Test]
+    public async Task PlaylistEditedDuringRebuildRemainsSearchableAfterTheSwap()
+    {
+        var owner = await database.CreateUserAsync("curator");
+        var playlist = await Seed(database, owner, "Before the rebuild");
+        await index.Rebuild(CancellationToken.None);
+
+        // The new collection has read the old revision. Complete an incremental
+        // sync while the alias still points at the old collection.
+        const string title = "Moonlight Reels";
+        beforeImport.OnImport = async () =>
+        {
+            await using var db = database.CreateContext();
+            var edited = await db.Playlists.SingleAsync(row => row.Id == playlist);
+            edited.Name = title;
+            edited.Revision++;
+            await db.SaveChangesAsync();
+            await index.Sync(playlist.Value, CancellationToken.None);
+        };
+
+        await using var environment = await WorkflowEnvironment.StartLocalAsync();
+        using var worker = new TemporalWorker(
+            environment.Client,
+            new TemporalWorkerOptions(PlaylistSearchJob.Queue)
+                .AddWorkflow<PlaylistSearchRebuildWorkflow>()
+                .AddAllActivities(new PlaylistSearchActivities(index))
+        );
+        await worker.ExecuteAsync(() =>
+            environment.Client.ExecuteWorkflowAsync(
+                (PlaylistSearchRebuildWorkflow workflow) => workflow.RunAsync(),
+                new WorkflowOptions(PlaylistSearchJob.RebuildId, PlaylistSearchJob.Queue)
+            )
+        );
+
+        await using var searchDb = database.CreateContext();
+        var candidates = await new PlaylistSearchCandidates(http, configuration).Find(
+            new MergedSearchRequest { Q = title, Scope = "playlists" },
+            null,
+            CancellationToken.None
+        );
+        var cards = await new PlaylistSearchCards(searchDb).Read(
+            candidates,
+            null,
+            CancellationToken.None
+        );
+        cards.Should().ContainSingle(card => card.Id == playlist && card.Label == title);
     }
 
     [TearDown]

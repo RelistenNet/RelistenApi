@@ -9,6 +9,86 @@ namespace RelistenIngestionWorker.PlaylistSearch;
 internal sealed class PlaylistSearchRows(string accountsConnectionString, DbService catalog)
 {
     internal const int PageSize = 256;
+    private readonly string lockConnectionString = new NpgsqlConnectionStringBuilder(
+        accountsConnectionString
+    )
+    {
+        ApplicationName = "relisten-playlist-search-lock",
+        MinPoolSize = 0,
+        MaxPoolSize = 8,
+    }.ConnectionString;
+
+    public async Task<DateTime> RebuildStartedAt(CancellationToken cancellationToken)
+    {
+        await using var db = catalog.CreateConnection(longTimeout: false, readOnly: false);
+        return await db.QuerySingleAsync<DateTime>(
+            new CommandDefinition("SELECT clock_timestamp()", cancellationToken: cancellationToken)
+        );
+    }
+
+    public async Task RecordSyncRequest(string playlistId, CancellationToken cancellationToken)
+    {
+        await using var db = catalog.CreateConnection(longTimeout: false, readOnly: false);
+        await db.ExecuteAsync(
+            new CommandDefinition(
+                """
+                INSERT INTO search_playlist_reindexes (playlist_id, requested_at)
+                VALUES (@playlistId, clock_timestamp())
+                ON CONFLICT (playlist_id) DO UPDATE SET requested_at = clock_timestamp()
+                """,
+                new { playlistId },
+                cancellationToken: cancellationToken
+            )
+        );
+    }
+
+    public async Task<IEnumerable<string>> PruneAndReadSyncRequests(
+        DateTime startedAt,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var db = catalog.CreateConnection(longTimeout: false, readOnly: false);
+        // A successfully published full build already covers older requests.
+        return await db.QueryAsync<string>(
+            new CommandDefinition(
+                """
+                WITH expired AS (
+                    DELETE FROM search_playlist_reindexes WHERE requested_at < @startedAt
+                )
+                SELECT playlist_id FROM search_playlist_reindexes
+                WHERE requested_at >= @startedAt
+                ORDER BY playlist_id
+                """,
+                new { startedAt },
+                cancellationToken: cancellationToken
+            )
+        );
+    }
+
+    public async Task WithPlaylistWriteLock(
+        string playlistId,
+        Func<Task> write,
+        CancellationToken cancellationToken
+    )
+    {
+        // The writer also reads the accounts database. Bound its lock pool
+        // separately so lock holders cannot exhaust the pool used by those reads.
+        await using var db = new NpgsqlConnection(lockConnectionString);
+        await db.OpenAsync(cancellationToken);
+        await using var transaction = await db.BeginTransactionAsync(cancellationToken);
+        // Rebuild replay and the edit workflow both write this playlist. Take
+        // the lock before reading its revision so neither can publish an older read last.
+        await db.ExecuteAsync(
+            new CommandDefinition(
+                "SELECT pg_advisory_xact_lock(hashtextextended(@playlistId, 0))",
+                new { playlistId },
+                transaction,
+                cancellationToken: cancellationToken
+            )
+        );
+        await write();
+        await transaction.CommitAsync(cancellationToken);
+    }
 
     public async Task<PlaylistSearchDocument[]> Read(
         string? playlistId,

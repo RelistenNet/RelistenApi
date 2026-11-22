@@ -136,7 +136,10 @@ pending edits.
 If sync exhausts its activity retries, the workflow waits two minutes and carries
 its pending edits into a new run under the same workflow ID.
 The nightly playlist build repairs missed signals and updates follow counts
-and catalog names. Schedule registration creates
+and catalog names. Playlist syncs record requests in the catalog database
+before resolving the playlist alias. After publication, the build replays the
+requests made since it started and drops older requests. Catalog migration 23
+creates the request table. Schedule registration creates
 `relisten-playlist-search-build` paused.
 
 Account-deletion activities retry Typesense cleanup after the database commit.
