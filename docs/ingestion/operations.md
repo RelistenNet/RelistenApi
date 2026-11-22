@@ -303,6 +303,32 @@ and payload Redis. Infrastructure manifests and their runbook live in the
    provider. Observe queue delay, upstream failures, database load, and listener
    errors. Resume any paused schedules after these checks and inspect the next thin result.
 
+### Catalog search startup
+
+Bring up Typesense and publish the first catalog aliases before rolling out the
+search API. With the API image that serves `/health/search-startup`, configure
+the `relistenapi` container's startup probe in
+`clusters/relisten3-k3s/apps/relistenapi.yaml` in the infrastructure repository.
+
+```yaml
+startupProbe:
+  httpGet:
+    path: /health/search-startup
+    port: 3823
+  periodSeconds: 5
+  failureThreshold: 24
+```
+
+This gives the container about two minutes to start and pass the check.
+The API returns 503 while loading its first search evidence snapshot, and
+200 once it publishes the snapshot or 60 seconds after warmup starts.
+Kubernetes starts its usual readiness checks once the startup probe passes.
+Leave `/health/ready` on the database checks so browse can serve while search
+continues warming after the grace period.
+[Kubernetes startup probe documentation](https://kubernetes.io/docs/concepts/workloads/pods/probes/#startup-probe)
+
+### Recovery
+
 Replacing a worker with the same image should resume unfinished work. A restart
 may finish an in-flight activity gracefully; inspect history before claiming that
 it exercised an activity retry. Verify that a failed or canceled operation can

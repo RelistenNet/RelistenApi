@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using Relisten.Search;
 using Relisten.Services.Health;
 
 namespace Relisten.Controllers;
@@ -25,6 +26,16 @@ public sealed class HealthController : ControllerBase
     public IActionResult Live()
     {
         return Ok(new { status = "ok" });
+    }
+
+    /// <summary>Allows the pod to start after search warmup or its startup grace period.</summary>
+    [HttpGet("search-startup")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    public IActionResult SearchStartup([FromServices] CatalogQueryEvidenceStore evidence)
+    {
+        return evidence.SearchStartupComplete
+            ? Ok(new { status = "ok" })
+            : StatusCode(StatusCodes.Status503ServiceUnavailable, new { status = "warming_up" });
     }
 
     [HttpGet("ready")]

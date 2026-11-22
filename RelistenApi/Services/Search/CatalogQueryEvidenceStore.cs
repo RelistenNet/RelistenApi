@@ -8,13 +8,31 @@ using Microsoft.Extensions.Logging;
 
 namespace Relisten.Search;
 
-internal sealed class CatalogQueryEvidenceStore
+/// <summary>Holds the API's current search evidence and its startup grace period.</summary>
+public sealed class CatalogQueryEvidenceStore
 {
+    private static readonly TimeSpan StartupGracePeriod = TimeSpan.FromSeconds(60);
+    private readonly TimeProvider _clock;
+    private readonly long _startedAt;
     private CatalogQueryEvidence _current = CatalogQueryEvidence.Empty;
 
-    public CatalogQueryEvidence Current => Volatile.Read(ref _current);
+    public CatalogQueryEvidenceStore()
+        : this(TimeProvider.System) { }
 
-    public void Publish(CatalogQueryEvidence snapshot) => Volatile.Write(ref _current, snapshot);
+    internal CatalogQueryEvidenceStore(TimeProvider clock)
+    {
+        _clock = clock;
+        _startedAt = clock.GetTimestamp();
+    }
+
+    internal CatalogQueryEvidence Current => Volatile.Read(ref _current);
+
+    // Give search a head start on replacement pods while keeping browse
+    // available if loading evidence takes longer than the startup window.
+    internal bool SearchStartupComplete =>
+        Current.Collection != null || _clock.GetElapsedTime(_startedAt) >= StartupGracePeriod;
+
+    internal void Publish(CatalogQueryEvidence snapshot) => Volatile.Write(ref _current, snapshot);
 }
 
 internal sealed class CatalogQueryEvidenceRefreshService(
