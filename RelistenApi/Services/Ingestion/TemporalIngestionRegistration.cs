@@ -94,6 +94,7 @@ public static class TemporalIngestionRegistration
             .AddWorkflow<ArchiveArtistDiscoveryWorkflow>()
             .AddWorkflow<SearchBuildWorkflow>()
             .AddWorkflow<SearchRetireWorkflow>()
+            .AddWorkflow<SearchCleanupWorkflow>()
             .AddNormalizationWorkflows();
         services
             .AddHostedTemporalWorker(IngestionQueues.Database)

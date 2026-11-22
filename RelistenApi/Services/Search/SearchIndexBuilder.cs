@@ -19,13 +19,16 @@ internal sealed class SearchIndexBuilder(
     private const int BatchSize = 2_500;
     private const int BatchCharacters = 4_000_000;
 
-    public async Task<(Dictionary<string, long> Counts, string[] PreviousCollections)> Build(
+    public async Task<Dictionary<string, long>> Build(
         string aliasPrefix,
         string buildId,
         SearchBuildDocuments documents,
         CancellationToken cancellationToken
     )
     {
+        var aliases = await typesense.ReadAliases(cancellationToken);
+        await RemoveUnaliased(aliasPrefix, aliases, cancellationToken);
+
         var counts = new Dictionary<string, long>();
         var created = new List<string>();
 
@@ -46,8 +49,8 @@ internal sealed class SearchIndexBuilder(
         }
         catch
         {
-            // These names are private until the alias phase. A failed import
-            // should neither disturb current search nor leave a partial index.
+            // These names are private until publication. The operator can rerun
+            // a failed import now, or the next daily build will sweep any leftovers.
             foreach (var name in created)
             {
                 try
@@ -67,32 +70,63 @@ internal sealed class SearchIndexBuilder(
             throw;
         }
 
-        var previous = await Publish(aliasPrefix, buildId, cancellationToken);
-        return (counts, previous);
+        // A failed publication may have moved some aliases. Keep all its
+        // collections so the next sweep can preserve every current target.
+        await Publish(aliasPrefix, buildId, cancellationToken);
+        return counts;
     }
 
     public async Task RemoveRetired(
         string aliasPrefix,
-        string[] collections,
+        string publishedBuildId,
         CancellationToken cancellationToken
     )
     {
-        foreach (var kind in SearchIndexSchema.Collections)
-        {
-            var alias = AliasName(aliasPrefix, kind);
-            var current = await typesense.ReadAlias(alias, cancellationToken);
-            foreach (
-                var name in collections.Where(name =>
-                    name.StartsWith(alias + "_", StringComparison.Ordinal)
-                )
+        var aliases = await typesense.ReadAliases(cancellationToken);
+        if (
+            SearchIndexSchema.Collections.Any(kind =>
+                aliases.GetValueOrDefault(AliasName(aliasPrefix, kind))
+                != CollectionName(aliasPrefix, kind, publishedBuildId)
             )
+        )
+        {
+            // A newer publication has its own grace period.
+            return;
+        }
+
+        await RemoveUnaliased(aliasPrefix, aliases, cancellationToken);
+        await typesense.Compact(cancellationToken);
+    }
+
+    private async Task RemoveUnaliased(
+        string aliasPrefix,
+        Dictionary<string, string> aliases,
+        CancellationToken cancellationToken
+    )
+    {
+        var collections = await typesense.ReadCollectionNames(cancellationToken);
+        var targets = aliases.Values.ToHashSet(StringComparer.Ordinal);
+        foreach (var name in collections.Where(name => IsBuildCollection(aliasPrefix, name)))
+        {
+            if (!targets.Contains(name))
             {
-                if (current != name)
-                {
-                    await typesense.DeleteCollection(name, cancellationToken);
-                }
+                await typesense.DeleteCollection(name, cancellationToken);
             }
         }
+    }
+
+    private static bool IsBuildCollection(string aliasPrefix, string name)
+    {
+        foreach (var kind in SearchIndexSchema.Collections)
+        {
+            var prefix = AliasName(aliasPrefix, kind) + "_";
+            if (name.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                return Guid.TryParseExact(name.AsSpan(prefix.Length), "N", out _);
+            }
+        }
+
+        return false;
     }
 
     private async Task<long> ImportCollection(
@@ -113,14 +147,7 @@ internal sealed class SearchIndexBuilder(
             if (size >= BatchSize || batch.Length >= BatchCharacters)
             {
                 imported += await ImportBatch(collection, batch, size, cancellationToken);
-                if (imported / 250_000 != (imported - size) / 250_000)
-                {
-                    logger.LogInformation(
-                        "Imported {Count:N0} documents into {Collection}",
-                        imported,
-                        collection
-                    );
-                }
+                LogImportProgress(collection, imported, size);
                 batch.Clear();
                 size = 0;
             }
@@ -137,6 +164,19 @@ internal sealed class SearchIndexBuilder(
             collection
         );
         return imported;
+    }
+
+    private void LogImportProgress(string collection, long imported, int batchSize)
+    {
+        const int interval = 250_000;
+        if (imported / interval != (imported - batchSize) / interval)
+        {
+            logger.LogInformation(
+                "Imported {Count:N0} documents into {Collection}",
+                imported,
+                collection
+            );
+        }
     }
 
     private async Task<int> ImportBatch(
@@ -163,27 +203,18 @@ internal sealed class SearchIndexBuilder(
         return result.Accepted;
     }
 
-    private async Task<string[]> Publish(
+    private async Task Publish(
         string aliasPrefix,
         string buildId,
         CancellationToken cancellationToken
     )
     {
-        var previous = new List<string>();
         foreach (var kind in SearchIndexSchema.Collections)
         {
             var alias = AliasName(aliasPrefix, kind);
             var name = CollectionName(aliasPrefix, kind, buildId);
-            var old = await typesense.ReadAlias(alias, cancellationToken);
             await typesense.SetAlias(alias, name, cancellationToken);
-
-            if (old != null && old != name)
-            {
-                previous.Add(old);
-            }
         }
-
-        return previous.ToArray();
     }
 
     internal static string AliasName(string prefix, string kind) => $"{prefix}_{kind}";

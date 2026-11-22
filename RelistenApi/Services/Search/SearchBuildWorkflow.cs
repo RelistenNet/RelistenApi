@@ -2,11 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Diagnostics;
+using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
+using Npgsql;
 using Relisten.Ingestion;
 using Temporalio.Activities;
 using Temporalio.Common;
+using Temporalio.Exceptions;
 using Temporalio.Workflows;
 
 namespace Relisten.Search;
@@ -14,9 +17,7 @@ namespace Relisten.Search;
 public sealed record SearchBuildResult(
     string BuildId,
     Dictionary<string, long> Counts,
-    long Rejected,
     double BuildSeconds,
-    string[] PreviousCollections,
     long PlayedFiles
 );
 
@@ -28,32 +29,27 @@ public sealed class SearchBuildWorkflow
     [WorkflowRun]
     public async Task<SearchBuildResult> RunAsync(string? playExportPath)
     {
+        var buildId = Workflow.NewGuid().ToString("N");
         var result = await Workflow.ExecuteActivityAsync(
-            (SearchBuildActivities activities) =>
-                activities.Build(playExportPath, Workflow.NewGuid().ToString("N")),
+            (SearchBuildActivities activities) => activities.Build(playExportPath, buildId),
             new ActivityOptions
             {
                 TaskQueue = IngestionQueues.Database,
                 StartToCloseTimeout = TimeSpan.FromHours(2),
                 HeartbeatTimeout = TimeSpan.FromSeconds(30),
                 CancellationType = ActivityCancellationType.WaitCancellationCompleted,
-                // Rerun a failed build with a fresh collection name.
                 RetryPolicy = new RetryPolicy { MaximumAttempts = 1 },
             }
         );
 
-        if (result.PreviousCollections.Length > 0)
-        {
-            await Workflow.StartChildWorkflowAsync(
-                (SearchRetireWorkflow child) => child.RunAsync(result.PreviousCollections),
-                new ChildWorkflowOptions
-                {
-                    Id = $"catalog-search-retire-{result.BuildId}",
-                    ParentClosePolicy = ParentClosePolicy.Abandon,
-                }
-            );
-        }
-
+        await Workflow.StartChildWorkflowAsync(
+            (SearchRetireWorkflow child) => child.RunAsync(buildId),
+            new ChildWorkflowOptions
+            {
+                Id = $"catalog-search-retire-{buildId}",
+                ParentClosePolicy = ParentClosePolicy.Abandon,
+            }
+        );
         return result;
     }
 }
@@ -62,19 +58,43 @@ public sealed class SearchBuildWorkflow
 public sealed class SearchRetireWorkflow
 {
     [WorkflowRun]
-    public async Task RunAsync(string[] collections)
+    public async Task RunAsync(string publishedBuildId)
     {
+        // Give searches that resolved the previous aliases time to finish.
         await Workflow.DelayAsync(TimeSpan.FromHours(1));
-        await Workflow.ExecuteActivityAsync(
-            (SearchBuildActivities activities) => activities.RemoveRetired(collections),
+
+        try
+        {
+            // A build's collections are unaliased until publication. Reuse its
+            // workflow ID so the sweep cannot run during a newer build.
+            await Workflow.ExecuteChildWorkflowAsync(
+                (SearchCleanupWorkflow cleanup) => cleanup.RunAsync(publishedBuildId),
+                new ChildWorkflowOptions { Id = SearchBuildWorkflow.Id }
+            );
+        }
+        catch (WorkflowAlreadyStartedException)
+        {
+            // A build already owns the collections and handles cleanup.
+        }
+    }
+}
+
+[Workflow]
+public sealed class SearchCleanupWorkflow
+{
+    [WorkflowRun]
+    public Task RunAsync(string publishedBuildId) =>
+        Workflow.ExecuteActivityAsync(
+            (SearchBuildActivities activities) => activities.RemoveRetired(publishedBuildId),
             new ActivityOptions
             {
                 TaskQueue = IngestionQueues.Database,
-                StartToCloseTimeout = TimeSpan.FromMinutes(5),
-                RetryPolicy = new RetryPolicy { MaximumAttempts = 3 },
+                StartToCloseTimeout = TimeSpan.FromMinutes(10),
+                HeartbeatTimeout = TimeSpan.FromSeconds(30),
+                CancellationType = ActivityCancellationType.WaitCancellationCompleted,
+                RetryPolicy = new RetryPolicy { MaximumAttempts = 1 },
             }
         );
-    }
 }
 
 internal sealed class SearchBuildActivities(DbService db, SearchIndexBuilder builder)
@@ -88,22 +108,65 @@ internal sealed class SearchBuildActivities(DbService db, SearchIndexBuilder bui
         var token = ActivityExecutionContext.Current.CancellationToken;
         var timer = Stopwatch.StartNew();
 
-        // A build reads one consistent catalog without taking any write locks.
-        // Use the primary connection to avoid replica recovery canceling a long scan.
         await using var connection = db.CreateConnection(longTimeout: true, readOnly: false);
         await connection.OpenAsync(token);
-        await using var snapshot = await connection.BeginTransactionAsync(
-            IsolationLevel.RepeatableRead,
-            token
-        );
-        await connection.ExecuteAsync(
-            new CommandDefinition(
-                "SET TRANSACTION READ ONLY",
-                transaction: snapshot,
-                cancellationToken: token
-            )
-        );
+        await using var snapshot = await OpenCatalogSnapshot(connection, token);
 
+        var projection = await LoadProjection(connection, snapshot, playExportPath, token);
+        var counts = await builder.Build(AliasPrefix, buildId, projection.Documents(token), token);
+        return new SearchBuildResult(
+            buildId,
+            counts,
+            timer.Elapsed.TotalSeconds,
+            projection.PlayedFiles
+        );
+    }
+
+    [Activity]
+    public async Task RemoveRetired(string publishedBuildId)
+    {
+        // Keep the shared workflow ID until the activity observes cancellation.
+        using var heartbeat = new ActivityHeartbeat();
+        await builder.RemoveRetired(
+            AliasPrefix,
+            publishedBuildId,
+            ActivityExecutionContext.Current.CancellationToken
+        );
+    }
+
+    private static async Task<NpgsqlTransaction> OpenCatalogSnapshot(
+        NpgsqlConnection connection,
+        CancellationToken token
+    )
+    {
+        // Use the primary to avoid recovery canceling a long read on a replica.
+        // This snapshot holds back vacuum for the length of the build, acceptable once a day.
+        var snapshot = await connection.BeginTransactionAsync(IsolationLevel.RepeatableRead, token);
+        try
+        {
+            await connection.ExecuteAsync(
+                new CommandDefinition(
+                    "SET TRANSACTION READ ONLY",
+                    transaction: snapshot,
+                    cancellationToken: token
+                )
+            );
+            return snapshot;
+        }
+        catch
+        {
+            await snapshot.DisposeAsync();
+            throw;
+        }
+    }
+
+    private static async Task<CatalogSearchProjection> LoadProjection(
+        NpgsqlConnection connection,
+        NpgsqlTransaction snapshot,
+        string? playExportPath,
+        CancellationToken token
+    )
+    {
         var through = DateOnly.FromDateTime(DateTime.UtcNow);
         var plays = await SearchPlayTotals.Load(
             connection,
@@ -112,38 +175,10 @@ internal sealed class SearchBuildActivities(DbService db, SearchIndexBuilder bui
             playExportPath,
             token
         );
-        var projection = await CatalogSearchProjection.Open(
+        return await CatalogSearchProjection.Open(
             new SearchProjectionRows(connection, snapshot),
             plays,
             token
         );
-        var (counts, previousCollections) = await builder.Build(
-            AliasPrefix,
-            buildId,
-            new SearchBuildDocuments(
-                projection.Reviews(token),
-                projection.Performances(token),
-                projection.Recordings(token),
-                projection.Entities(token)
-            ),
-            token
-        );
-
-        return new SearchBuildResult(
-            buildId,
-            counts,
-            Rejected: 0,
-            timer.Elapsed.TotalSeconds,
-            previousCollections,
-            projection.PlayedFiles
-        );
     }
-
-    [Activity]
-    public Task RemoveRetired(string[] collections) =>
-        builder.RemoveRetired(
-            AliasPrefix,
-            collections,
-            ActivityExecutionContext.Current.CancellationToken
-        );
 }

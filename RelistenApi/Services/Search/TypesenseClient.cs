@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
@@ -22,7 +24,7 @@ internal sealed class TypesenseClient(HttpClient http)
     {
         http.BaseAddress = new Uri(url.TrimEnd('/') + "/");
         http.DefaultRequestHeaders.Add("X-TYPESENSE-API-KEY", apiKey);
-        http.Timeout = TimeSpan.FromSeconds(60);
+        http.Timeout = TimeSpan.FromMinutes(5);
     }
 
     public async Task CreateCollection(object schema, CancellationToken cancellationToken)
@@ -89,6 +91,37 @@ internal sealed class TypesenseClient(HttpClient http)
             cancellationToken: cancellationToken
         );
         return result!.RootElement.GetProperty("collection_name").GetString();
+    }
+
+    public async Task<string[]> ReadCollectionNames(CancellationToken cancellationToken)
+    {
+        using var result = await http.GetFromJsonAsync<JsonDocument>(
+            "collections",
+            cancellationToken
+        );
+        return result!
+            .RootElement.EnumerateArray()
+            .Select(collection => collection.GetProperty("name").GetString()!)
+            .ToArray();
+    }
+
+    public async Task<Dictionary<string, string>> ReadAliases(CancellationToken cancellationToken)
+    {
+        using var result = await http.GetFromJsonAsync<JsonDocument>("aliases", cancellationToken);
+        return result!
+            .RootElement.GetProperty("aliases")
+            .EnumerateArray()
+            .ToDictionary(
+                alias => alias.GetProperty("name").GetString()!,
+                alias => alias.GetProperty("collection_name").GetString()!,
+                StringComparer.Ordinal
+            );
+    }
+
+    public async Task Compact(CancellationToken cancellationToken)
+    {
+        using var response = await http.PostAsync("operations/db/compact", null, cancellationToken);
+        await EnsureSuccess(response, cancellationToken);
     }
 
     public async Task SetAlias(string alias, string collection, CancellationToken cancellationToken)

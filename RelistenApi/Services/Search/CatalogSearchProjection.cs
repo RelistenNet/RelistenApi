@@ -198,15 +198,37 @@ internal sealed partial class CatalogSearchProjection
         }
     }
 
+    public SearchBuildDocuments Documents(CancellationToken cancellationToken) =>
+        new(
+            Reviews(cancellationToken),
+            Performances(cancellationToken),
+            Recordings(cancellationToken),
+            Entities(cancellationToken)
+        );
+
     public async IAsyncEnumerable<Document> Entities(
         [EnumeratorCancellation] CancellationToken cancellationToken
     )
     {
-        foreach (var artist in _artists.Values)
+        var catalogEntities = _artists
+            .Values.Select(ArtistDocument)
+            .Concat(ShowDocuments())
+            .Concat(VenueDocuments())
+            .Concat(TourDocuments());
+
+        foreach (var document in catalogEntities)
         {
-            yield return ArtistDocument(artist);
+            yield return document;
         }
 
+        await foreach (var song in SongDocuments(cancellationToken))
+        {
+            yield return song;
+        }
+    }
+
+    private IEnumerable<Document> ShowDocuments()
+    {
         foreach (var show in _shows.Values)
         {
             var date = show.Row.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
@@ -220,19 +242,20 @@ internal sealed partial class CatalogSearchProjection
                 ["popularity"] = Math.Round(Math.Log(1d + show.Plays), 5),
             };
         }
+    }
 
-        foreach (var venue in _venues.Values.Where(venue => string.IsNullOrEmpty(venue.MergedInto)))
-        {
-            yield return VenueDocument(venue);
-        }
+    private IEnumerable<Document> VenueDocuments() =>
+        _venues
+            .Values.Where(venue => string.IsNullOrEmpty(venue.MergedInto))
+            .Select(VenueDocument)
+            .Concat(
+                _importedVenues
+                    .Values.Where(venue => !string.IsNullOrEmpty(venue.Name))
+                    .Select(ImportedVenueDocument)
+            );
 
-        foreach (
-            var venue in _importedVenues.Values.Where(venue => !string.IsNullOrEmpty(venue.Name))
-        )
-        {
-            yield return ImportedVenueDocument(venue);
-        }
-
+    private IEnumerable<Document> TourDocuments()
+    {
         foreach (var tour in _tours.Values)
         {
             var artist = _artists[tour.ArtistId];
@@ -247,7 +270,12 @@ internal sealed partial class CatalogSearchProjection
                 ["popularity"] = 0,
             };
         }
+    }
 
+    private async IAsyncEnumerable<Document> SongDocuments(
+        [EnumeratorCancellation] CancellationToken cancellationToken
+    )
+    {
         var approvedArtists = _artists
             .Values.Where(artist => artist.Row.Approved)
             .ToDictionary(artist => artist.Row.Uuid);
@@ -289,44 +317,10 @@ internal sealed partial class CatalogSearchProjection
     private ShowContext CreateShowContext(SearchProjectionRows.Show show)
     {
         var artist = _artists[show.ArtistId];
-        var raw = show.VenueId.HasValue
-            ? _importedVenues.GetValueOrDefault(show.VenueId.Value)
-            : null;
-        var venue = CurrentVenue(show.CanonicalVenueId);
-        var location = raw?.Location ?? "";
-        var venueLabel = venue?.Name ?? raw?.Name ?? "";
-        var venueId =
-            venue?.Id ?? (raw == null ? "" : UuidTypeId.Format("imported_venue", raw.Uuid));
-        var run = show.TourId.HasValue
-            ? _tours.GetValueOrDefault(show.TourId.Value)?.Name ?? ""
-            : "";
-        if (
-            artist.Row.Slug == "phish"
-            && show.Date >= new DateOnly(2017, 7, 21)
-            && show.Date <= new DateOnly(2017, 8, 6)
-            && Fold(venueLabel).Contains("madison square garden", StringComparison.Ordinal)
-        )
-        {
-            run = Join(run, "Baker’s Dozen");
-        }
+        var venue = ResolveShowVenue(show);
+        var tour = show.TourId is long tourId ? _tours.GetValueOrDefault(tourId)?.Name ?? "" : "";
+        var run = SearchableRun(show, artist.Row.Slug, venue.Label, tour);
 
-        var city = string.IsNullOrEmpty(venue?.City)
-            ? (location.Contains(',') ? FirstPlacePart(location) : "")
-            : venue.City;
-        var country = venue?.Country?.ToUpperInvariant() ?? "";
-        if (country.Length == 0 && location.Length > 0)
-        {
-            var foldedLocation = Fold(location);
-            country =
-                ImportedCountrySuffixes
-                    .FirstOrDefault(pair =>
-                        foldedLocation.EndsWith(pair.Suffix, StringComparison.Ordinal)
-                    )
-                    .Country
-                ?? "";
-        }
-
-        var aliases = venue?.Aliases.Take(8).ToArray() ?? [raw?.PastNames ?? ""];
         return new ShowContext(
             show,
             artist,
@@ -338,26 +332,87 @@ internal sealed partial class CatalogSearchProjection
                 ["artist_label"] = artist.Row.Name,
                 ["date"] = show.Date.Year * 10_000 + show.Date.Month * 100 + show.Date.Day,
                 ["day_key"] = show.Date.Month * 100 + show.Date.Day,
-                ["run"] = Fold(run),
-                ["tour_label"] = show.TourId.HasValue
-                    ? _tours.GetValueOrDefault(show.TourId.Value)?.Name ?? ""
-                    : "",
-                ["place"] = Join([
-                    venueLabel,
-                    raw?.Name ?? "",
-                    city,
-                    venue?.Region ?? "",
-                    location,
-                    CountryNames.GetValueOrDefault(country, ""),
-                    .. aliases,
-                ]),
-                ["country"] = country,
-                ["venue_label"] = venueLabel,
-                ["city_label"] = city,
-                ["venue_id"] = venueId,
+                ["run"] = run,
+                ["tour_label"] = tour,
+                ["place"] = venue.Place,
+                ["country"] = venue.Country,
+                ["venue_label"] = venue.Label,
+                ["city_label"] = venue.City,
+                ["venue_id"] = venue.Id,
             }
         );
     }
+
+    private ShowVenue ResolveShowVenue(SearchProjectionRows.Show show)
+    {
+        var imported = show.VenueId is long id ? _importedVenues.GetValueOrDefault(id) : null;
+        var canonical = CurrentVenue(show.CanonicalVenueId);
+        var location = imported?.Location ?? "";
+        var label = canonical?.Name ?? imported?.Name ?? "";
+        var venueId =
+            canonical?.Id
+            ?? (imported == null ? "" : UuidTypeId.Format("imported_venue", imported.Uuid));
+        var city = string.IsNullOrEmpty(canonical?.City)
+            ? (location.Contains(',') ? FirstPlacePart(location) : "")
+            : canonical.City;
+        var country = VenueCountry(canonical?.Country, location);
+        var aliases = canonical?.Aliases.Take(8).ToArray() ?? [imported?.PastNames ?? ""];
+        var place = Join([
+            label,
+            imported?.Name ?? "",
+            city,
+            canonical?.Region ?? "",
+            location,
+            CountryNames.GetValueOrDefault(country, ""),
+            .. aliases,
+        ]);
+
+        return new ShowVenue(venueId, label, city, country, place);
+    }
+
+    private static string VenueCountry(string? canonicalCountry, string importedLocation)
+    {
+        if (!string.IsNullOrEmpty(canonicalCountry))
+        {
+            return canonicalCountry.ToUpperInvariant();
+        }
+
+        var location = Fold(importedLocation);
+        return ImportedCountrySuffixes
+                .FirstOrDefault(pair => location.EndsWith(pair.Suffix, StringComparison.Ordinal))
+                .Country
+            ?? "";
+    }
+
+    private static string SearchableRun(
+        SearchProjectionRows.Show show,
+        string artistSlug,
+        string venue,
+        string tour
+    )
+    {
+        // Listeners know the Garden run as Baker's Dozen. The imported tour
+        // label does not reliably contain that name for each date in the run.
+        if (
+            artistSlug == "phish"
+            && show.Date >= new DateOnly(2017, 7, 21)
+            && show.Date <= new DateOnly(2017, 8, 6)
+            && Fold(venue).Contains("madison square garden", StringComparison.Ordinal)
+        )
+        {
+            return Join(tour, "Baker’s Dozen");
+        }
+
+        return Fold(tour);
+    }
+
+    private sealed record ShowVenue(
+        string Id,
+        string Label,
+        string City,
+        string Country,
+        string Place
+    );
 
     private SearchProjectionRows.Venue? CurrentVenue(string? id)
     {

@@ -204,16 +204,26 @@ catalog collections:
 dotnet run --project RelistenIngestionWorker -- --search-build=true
 ```
 
-The command waits for the build and prints the accepted counts, rejected count,
-and elapsed time. The worker reads Postgres and writes to Typesense. If the
-restore lacks play history, add `--search-plays-export=/absolute/path/to/plays.csv.gz`.
+The command waits for the build and prints the accepted counts and elapsed time.
+A rejected document fails the build before publication. The worker reads Postgres
+and writes to Typesense. If the restore lacks play history, add
+`--search-plays-export=/absolute/path/to/plays.csv.gz`.
 The worker must be able to read that path. The export supports plain or gzipped CSV
 with the header `source_track_uuid,plays,days_with_plays` or `uuid,plays,days_with_plays`.
 
 The worker defaults to the local Typesense endpoint above. Set
 `Search__Typesense__Url` and `Search__Typesense__ApiKey` on the worker to use a different instance.
-Set `RELISTEN_TYPESENSE_DATA_DIR` when creating the container to place its index
-outside the checkout. A new build keeps the previous collections for one hour.
+Compose stores the index on a named volume. In local testing on OrbStack, the
+Mac bind mount kept megabytes allocated for each tiny archived WAL file. Set
+`RELISTEN_TYPESENSE_DATA_DIR` to an absolute path if you need a bind mount.
+An hour after the latest publication, the worker removes
+unaliased catalog collections and compacts the database. Starting another build
+sweeps unaliased catalog collections before indexing.
+
+Typesense runs daily database compaction (`--db-compaction-interval=86400`) and
+takes Raft snapshots every five minutes (`--snapshot-interval-seconds=300`). Raft
+trims log segments as snapshots advance. Carry both settings into the single-node
+production manifest in Task 4.
 
 ## Working with a larger catalog
 
