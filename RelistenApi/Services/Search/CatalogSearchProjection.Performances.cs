@@ -141,8 +141,8 @@ internal sealed partial class CatalogSearchProjection
 
     private static SearchFile Preview(List<FileCandidate> candidates)
     {
-        // The prototype breaks otherwise equal play counts with the preview it
-        // chose before joining plays. Preserve that choice for a fresh build.
+        // When plays tie, keep the recording we would have picked without that
+        // signal if it is one of the tied candidates.
         var original = candidates
             .MaxBy(candidate =>
                 (

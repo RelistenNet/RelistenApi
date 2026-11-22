@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
@@ -68,6 +69,22 @@ internal sealed class CatalogQueryEvidenceRefreshService(
             return;
         }
 
+        if (store.Current.Collection != null)
+        {
+            // All pods see the same alias swap. Spread their full catalog reads
+            // over a minute while the current evidence remains usable.
+            await Task.Delay(
+                TimeSpan.FromMilliseconds(Random.Shared.Next(60_001)),
+                cancellationToken
+            );
+            collection = await typesense.ReadAlias(alias, cancellationToken);
+            if (collection is null || collection == store.Current.Collection)
+            {
+                return;
+            }
+        }
+
+        var loadTime = Stopwatch.StartNew();
         var snapshot = await CatalogQueryEvidenceLoader.Load(
             db,
             collection,
@@ -80,7 +97,11 @@ internal sealed class CatalogQueryEvidenceRefreshService(
         if (await typesense.ReadAlias(alias, cancellationToken) == collection)
         {
             store.Publish(snapshot);
-            logger.LogInformation("Loaded search query evidence for {Collection}", collection);
+            logger.LogInformation(
+                "Loaded search query evidence for {Collection} in {ElapsedMs} ms",
+                collection,
+                loadTime.ElapsedMilliseconds
+            );
         }
     }
 }

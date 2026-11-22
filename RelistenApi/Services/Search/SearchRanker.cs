@@ -7,6 +7,11 @@ namespace Relisten.Search;
 internal static class SearchRanker
 {
     public const int VisibleLimit = 15;
+    private const int KnownItemLimit = 6;
+    private const int ExactTitleQuality = 6;
+    private const int SameTitleCandidateLimit = 50;
+    private const double SongPlayWeight = 0.35;
+    private const double ListenerArtistBonus = 4;
 
     public static IReadOnlyList<SearchDocument> KnownItems(
         SearchQuery query,
@@ -38,6 +43,8 @@ internal static class SearchRanker
         }
 
         var vocabulary = evidence.Vocabulary;
+        // A selected artist makes two-character song prefixes specific enough
+        // to promote. Global promotion waits for a third character.
         var known = vocabulary.Lookup(
             query.Terms,
             query.Artist,
@@ -47,7 +54,7 @@ internal static class SearchRanker
             kind: kind
         );
         if (
-            known.FirstOrDefault() is not { Kind: "song", CatalogQuality: 6 } first
+            known.FirstOrDefault() is not { Kind: "song", CatalogQuality: ExactTitleQuality } first
             || input.Scope is not (SearchScope.All or SearchScope.Songs)
         )
         {
@@ -56,9 +63,11 @@ internal static class SearchRanker
 
         var boosts = BoostedArtists(query, input, vocabulary);
         var tied = vocabulary
-            .Lookup(query.Terms, query.Artist, curated: true, limit: 50)
+            .Lookup(query.Terms, query.Artist, curated: true, limit: SameTitleCandidateLimit)
             .Where(result =>
-                result.Kind == "song" && result.CatalogQuality == 6 && result.Name == first.Name
+                result.Kind == "song"
+                && result.CatalogQuality == ExactTitleQuality
+                && result.Name == first.Name
             )
             .ToArray();
         if (tied.Length < 2)
@@ -68,13 +77,18 @@ internal static class SearchRanker
 
         // Client affinity only reorders exact same-title candidates. It does not
         // supply an artist constraint or expand the candidate population.
+        // Show count gets more weight than recent plays. A fixed artist bonus
+        // lets listener affinity matter even when the two catalogs differ in size.
         var ranked = tied.OrderByDescending(result =>
             Math.Log(1d + result.Popularity)
-            + 0.35 * Math.Log(1d + evidence.SongPlays(result.Id))
-            + (boosts.Contains(result.ArtistSlug) ? 4d : 0d)
+            + SongPlayWeight * Math.Log(1d + evidence.SongPlays(result.Id))
+            + (boosts.Contains(result.ArtistSlug) ? ListenerArtistBonus : 0d)
         );
         var ids = tied.Select(result => result.Id).ToHashSet(StringComparer.Ordinal);
-        return ranked.Concat(known.Where(result => !ids.Contains(result.Id))).Take(6).ToArray();
+        return ranked
+            .Concat(known.Where(result => !ids.Contains(result.Id)))
+            .Take(KnownItemLimit)
+            .ToArray();
     }
 
     public static IReadOnlyList<SearchDocument> Primary(
@@ -105,7 +119,7 @@ internal static class SearchRanker
             .Take(scope == SearchScope.All ? VisibleLimit : int.MaxValue)
             .ToArray();
 
-        // The prototype sorts the already selected results for calendar intent.
+        // For calendar queries, show the most recent of the relevant matches first.
         var ordered = query.Chronological
             ? distinct.OrderByDescending(result => result.Date)
             : distinct.AsEnumerable();

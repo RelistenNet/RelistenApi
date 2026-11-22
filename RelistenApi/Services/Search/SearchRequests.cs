@@ -60,6 +60,35 @@ internal static class SearchRequests
         return requests;
     }
 
+    public static SearchRequest? WidenEmptyPerformancePrefix(
+        SearchInput input,
+        IReadOnlyList<SearchRequest> primary
+    )
+    {
+        if (!input.Typing || input.Scope != SearchScope.All || input.Page != 1)
+        {
+            return null;
+        }
+
+        // A short suffix has many possible completions across the catalog. When
+        // none joined the other words, try more completions with the same filters.
+        var performance = primary.FirstOrDefault(request =>
+            request.Collection == SearchIndexSchema.Performances
+        );
+        if (performance is not { Prefix: not false, Q: var text })
+        {
+            return null;
+        }
+
+        var space = text.LastIndexOf(' ');
+        return space >= 0 && text.Length - space - 1 is >= 2 and <= 4
+            ? performance with
+            {
+                MaxCandidates = 256,
+            }
+            : null;
+    }
+
     private static SearchRequest Performance(
         SearchQuery query,
         bool typing,
@@ -302,6 +331,9 @@ internal static class SearchRequests
         int page
     )
     {
+        // A title or alias identifies the item. Artist, venue and run add
+        // context. Credits identify recordings directly, while free text in
+        // notes and reviews is supporting evidence.
         var (fields, weights, highlights, size, group) = collection switch
         {
             SearchIndexSchema.Recordings => (

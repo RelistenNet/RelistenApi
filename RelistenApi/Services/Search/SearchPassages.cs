@@ -196,7 +196,7 @@ internal sealed class SearchPassages(ImmutableArray<SearchPassages.RuleMatches> 
         IGrouping<Guid, PartRow> take
     ) => (take.First().Playable, take.Count(row => row.SongId is not null), take.Key);
 
-    private static bool MatchesSongs(ReadOnlySpan<PartRow> path, ImmutableArray<string> songs)
+    internal static bool MatchesSongs(ReadOnlySpan<PartRow> path, ImmutableArray<string> songs)
     {
         for (var index = 0; index < path.Length; index++)
         {
@@ -330,7 +330,7 @@ internal sealed class SearchPassages(ImmutableArray<SearchPassages.RuleMatches> 
         ImmutableArray<string> SongIds
     );
 
-    private sealed record PartRow(
+    internal sealed record PartRow(
         string Artist,
         Guid ShowUuid,
         DateOnly Date,

@@ -15,7 +15,12 @@ namespace Relisten.Search;
 /// <summary>Coordinates one search request against the current catalog aliases.</summary>
 public sealed class CatalogSearchCoordinator
 {
+    // Leave room for a recovery request and playable browsing after the primary
+    // multi-search, while capping the serial work each keystroke can trigger.
     private const int ExtraSearchLimit = 2;
+
+    private readonly record struct PlaybackContext(string? Artist, bool Promote, bool Browse);
+
     private readonly TypesenseClient _typesense;
     private readonly CatalogQueryEvidenceStore _evidence;
     private readonly ILogger<CatalogSearchCoordinator> _logger;
@@ -66,6 +71,8 @@ public sealed class CatalogSearchCoordinator
         }
 
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        // A stalled engine should release typeahead requests quickly. A submit has
+        // more time to fetch the recording and review groups with the primary hits.
         deadline.CancelAfter(input.Typing ? TimeSpan.FromSeconds(3) : TimeSpan.FromSeconds(5));
         try
         {
@@ -136,23 +143,64 @@ public sealed class CatalogSearchCoordinator
     {
         var playback =
             input.AddTracks && input.Scope is SearchScope.All or SearchScope.Shows
-                ? PlayableContext(query, evidence.Vocabulary, venues)
+                ? ReadPlaybackContext(query, evidence.Vocabulary, venues)
                 : default;
         var plan = Plan(input, query, venues, reviewsAvailable, playback);
-
         var replies = await Execute(plan, cancellationToken);
-        var visible = Primary(input, query, evidence, plan, replies);
-        if (input.Page == 1 && input.Scope is SearchScope.All or SearchScope.Shows)
+
+        var visible = PrimaryResults(input, query, evidence, plan, replies);
+        var extraSearches = ExtraSearchLimit;
+        if (visible.Count == 0)
         {
-            visible = SearchRanker.AddTourRoute(query, evidence.Vocabulary, visible);
+            (visible, extraSearches) = await RecoverEmptyResults(
+                input,
+                query,
+                evidence,
+                venues,
+                plan,
+                cancellationToken
+            );
         }
 
+        if (playback.Promote)
+        {
+            visible = await PrioritizePlayable(
+                input,
+                query,
+                playback,
+                venues,
+                visible,
+                extraSearches,
+                cancellationToken
+            );
+        }
+
+        return DecorateResults(
+            input,
+            query,
+            evidence,
+            reviewsAvailable,
+            interpretation,
+            visible,
+            replies
+        );
+    }
+
+    private async Task<(
+        IReadOnlyList<SearchDocument> Results,
+        int SearchesLeft
+    )> RecoverEmptyResults(
+        SearchInput input,
+        SearchQuery query,
+        CatalogQueryEvidence evidence,
+        IReadOnlySet<string> venues,
+        IReadOnlyList<SearchRequest> plan,
+        CancellationToken cancellationToken
+    )
+    {
+        IReadOnlyList<SearchDocument> visible = [];
         var extraSearches = ExtraSearchLimit;
-        if (
-            visible.Count == 0
-            && input.Page == 1
-            && SearchRequests.NamedRun(query, plan, venues) is { } run
-        )
+        if (input.Page == 1 && SearchRequests.NamedRun(query, plan, venues) is { } run)
         {
             var fallback = await Execute([run.Request], cancellationToken);
             visible = SearchRanker.SuggestNamedRun(run, fallback[0].Documents);
@@ -170,21 +218,32 @@ public sealed class CatalogSearchCoordinator
             extraSearches--;
         }
 
-        if (playback.Promote)
+        if (
+            visible.Count == 0
+            && extraSearches > 0
+            && SearchRequests.WidenEmptyPerformancePrefix(input, plan) is { } wider
+        )
         {
-            visible = await PrioritizePlayable(
-                input,
-                query,
-                playback,
-                venues,
-                visible,
-                extraSearches,
-                cancellationToken
-            );
+            var replies = await Execute([wider], cancellationToken);
+            visible = Primary(input, query, evidence, [wider], replies);
+            extraSearches--;
         }
 
+        return (visible, extraSearches);
+    }
+
+    private static SearchResponse DecorateResults(
+        SearchInput input,
+        SearchQuery query,
+        CatalogQueryEvidence evidence,
+        bool reviewsAvailable,
+        SearchInterpretation interpretation,
+        IReadOnlyList<SearchDocument> visible,
+        IReadOnlyList<SearchReply> replies
+    )
+    {
         var artistIds = evidence.Vocabulary.ArtistDocuments;
-        visible = visible
+        var decorated = visible
             .Select(result =>
                 artistIds.TryGetValue(result.ArtistSlug, out var artist)
                     ? result with
@@ -203,7 +262,7 @@ public sealed class CatalogSearchCoordinator
             interpretation,
             reviewsAvailable,
             "full",
-            visible,
+            decorated,
             replies,
             passages
         );
@@ -214,7 +273,7 @@ public sealed class CatalogSearchCoordinator
         SearchQuery query,
         IReadOnlySet<string> venues,
         bool reviewsAvailable,
-        (string? Artist, bool Promote, bool Browse) playback
+        PlaybackContext playback
     )
     {
         var requests = string.IsNullOrWhiteSpace(input.Text)
@@ -238,6 +297,20 @@ public sealed class CatalogSearchCoordinator
         return reviewsAvailable
             ? requests
             : requests.Where(request => request.Collection != SearchIndexSchema.Reviews).ToArray();
+    }
+
+    private static IReadOnlyList<SearchDocument> PrimaryResults(
+        SearchInput input,
+        SearchQuery query,
+        CatalogQueryEvidence evidence,
+        IReadOnlyList<SearchRequest> plan,
+        IReadOnlyList<SearchReply> replies
+    )
+    {
+        var visible = Primary(input, query, evidence, plan, replies);
+        return input.Page == 1 && input.Scope is SearchScope.All or SearchScope.Shows
+            ? SearchRanker.AddTourRoute(query, evidence.Vocabulary, visible)
+            : visible;
     }
 
     private static IReadOnlyList<SearchDocument> Primary(
@@ -307,7 +380,7 @@ public sealed class CatalogSearchCoordinator
         return Primary(previousInput, previous, evidence, previousPlan, replies);
     }
 
-    private static (string? Artist, bool Promote, bool Browse) PlayableContext(
+    private static PlaybackContext ReadPlaybackContext(
         SearchQuery query,
         SearchVocabulary vocabulary,
         IReadOnlySet<string> venues
@@ -334,13 +407,17 @@ public sealed class CatalogSearchCoordinator
         }
 
         var barePlace = venues.Count > 0 && vocabulary.Places(query.Terms).Contains(query.Terms);
-        return (artist, true, query.Terms.Length == 0 || artistName || barePlace);
+        return new(
+            artist,
+            Promote: true,
+            Browse: query.Terms.Length == 0 || artistName || barePlace
+        );
     }
 
     private async Task<IReadOnlyList<SearchDocument>> PrioritizePlayable(
         SearchInput input,
         SearchQuery query,
-        (string? Artist, bool Promote, bool Browse) playback,
+        PlaybackContext playback,
         IReadOnlySet<string> venues,
         IReadOnlyList<SearchDocument> visible,
         int extraSearches,

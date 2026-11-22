@@ -29,14 +29,19 @@ internal static partial class SearchInterpretationReader
         ),
     ];
 
-    public static SearchQuery Read(SearchInput input, CatalogQueryEvidence evidence)
+    public static SearchQuery Read(
+        SearchInput input,
+        CatalogQueryEvidence evidence,
+        int? currentYear = null
+    )
     {
+        var yearLimit = currentYear ?? DateTime.UtcNow.Year;
         var vocabulary = evidence.Vocabulary;
         var selected = input.ArtistId is { } id
             ? vocabulary.ArtistSlugsById.GetValueOrDefault(id)
             : null;
-        var expanded = ExpandInteriorYear(input.Text, vocabulary);
-        var query = ReadDateIntent(expanded, selected, input.Country);
+        var expanded = ExpandInteriorYear(input.Text, vocabulary, yearLimit);
+        var query = ReadDateIntent(expanded, selected, input.Country, yearLimit);
 
         if (
             query.DayKey != null
@@ -48,7 +53,7 @@ internal static partial class SearchInterpretationReader
             query = query with { Terms = "", ImpliedArtist = dayArtist };
         }
 
-        query = ReadNamedTour(query, expanded, selected, input.Country, vocabulary);
+        query = ReadNamedTour(query, expanded, selected, input.Country, vocabulary, yearLimit);
         query = ReadCuratedRoute(query);
         query = query with { Chronological = WantsChronology(query, expanded, vocabulary) };
         query = ChooseReading(input.Text, query, evidence);
@@ -68,9 +73,14 @@ internal static partial class SearchInterpretationReader
         return IgnoreChips(query, input);
     }
 
-    private static SearchQuery ReadDateIntent(string text, string? selected, string? country)
+    private static SearchQuery ReadDateIntent(
+        string text,
+        string? selected,
+        string? country,
+        int currentYear
+    )
     {
-        var query = ReadSyntax(text, selected, country);
+        var query = ReadSyntax(text, selected, country, currentYear);
         if (query.Date != null)
         {
             return query;
@@ -86,7 +96,7 @@ internal static partial class SearchInterpretationReader
             && day <= DateTime.DaysInMonth(2000, month)
         )
         {
-            return ReadSyntax(Remove(text, monthDay), selected, country) with
+            return ReadSyntax(Remove(text, monthDay), selected, country, currentYear) with
             {
                 DayKey = 100 * month + day,
             };
@@ -95,14 +105,24 @@ internal static partial class SearchInterpretationReader
         return query;
     }
 
-    private static SearchQuery ReadSyntax(string text, string? selected, string? country)
+    private static SearchQuery ReadSyntax(
+        string text,
+        string? selected,
+        string? country,
+        int currentYear
+    )
     {
         var remaining = text.ToLowerInvariant();
         var (withoutDate, date) = ExtractDate(remaining);
         remaining = SearchText.Fold(withoutDate);
 
         var (withoutArtist, implied) = ExtractLeadingArtist(remaining);
-        var (withoutYear, year, month) = ExtractYear(withoutArtist, date, selected ?? implied);
+        var (withoutYear, year, month) = ExtractYear(
+            withoutArtist,
+            date,
+            selected ?? implied,
+            currentYear
+        );
         var (terms, dayKey, region) = ExtractCalendarAndCountry(withoutYear, country);
         var soundboard = Soundboard().IsMatch(terms);
         var matrix = HasPhrase(terms, "matrix");
@@ -170,7 +190,8 @@ internal static partial class SearchInterpretationReader
     private static (string Text, int? Year, int? Month) ExtractYear(
         string text,
         int? date,
-        string? artist
+        string? artist,
+        int currentYear
     )
     {
         if (date != null)
@@ -185,7 +206,7 @@ internal static partial class SearchInterpretationReader
             if (
                 !match.Success
                 || Number(match, "year") is not int shortYear
-                || !(shortYear >= 65 || shortYear <= 26 && artist != null)
+                || !(shortYear >= 65 || artist != null && FullYear(shortYear) <= currentYear)
             )
             {
                 return (text, null, null);
@@ -257,7 +278,8 @@ internal static partial class SearchInterpretationReader
         string text,
         string? selected,
         string? country,
-        SearchVocabulary vocabulary
+        SearchVocabulary vocabulary,
+        int currentYear
     )
     {
         var match = SeasonTour().Match(text);
@@ -276,7 +298,7 @@ internal static partial class SearchInterpretationReader
             return query;
         }
 
-        var remaining = ReadSyntax(Remove(text, match), selected, country);
+        var remaining = ReadSyntax(Remove(text, match), selected, country, currentYear);
         return remaining.Year is int other && other != year
             ? query
             : remaining with
@@ -405,7 +427,11 @@ internal static partial class SearchInterpretationReader
             : query;
     }
 
-    private static string ExpandInteriorYear(string text, SearchVocabulary vocabulary)
+    private static string ExpandInteriorYear(
+        string text,
+        SearchVocabulary vocabulary,
+        int currentYear
+    )
     {
         if (NumericDatePart().IsMatch(text) || FourDigitYear().IsMatch(text))
         {
@@ -414,6 +440,14 @@ internal static partial class SearchInterpretationReader
 
         foreach (Match match in InteriorYear().Matches(text))
         {
+            // A two-digit number in a title is only a year if the catalog could
+            // already contain that year and the surrounding words support a place.
+            var year = FullYear(Number(match, "year")!.Value);
+            if (year > currentYear)
+            {
+                continue;
+            }
+
             var left = SearchText.Fold(text[..match.Index]);
             var right = SearchText.Fold(text[(match.Index + match.Length)..]);
             if (left.Length == 0 || right.Length == 0 || !vocabulary.Places(left).Any())
@@ -431,7 +465,6 @@ internal static partial class SearchInterpretationReader
                 continue;
             }
 
-            var year = FullYear(Number(match, "year")!.Value);
             return text[..match.Index]
                 + year.ToString(CultureInfo.InvariantCulture)
                 + text[(match.Index + match.Length)..];
@@ -509,7 +542,7 @@ internal static partial class SearchInterpretationReader
     [GeneratedRegex(@"[/\d]\s*[-/]\s*\d")]
     private static partial Regex NumericDatePart();
 
-    [GeneratedRegex(@"(?<![\d/-])\b(?<year>6[5-9]|[789]\d|[01]\d|2[0-6])\b(?![\d/-])")]
+    [GeneratedRegex(@"(?<![\d/-])\b(?<year>[0-9]{2})\b(?![\d/-])")]
     private static partial Regex InteriorYear();
 
     [GeneratedRegex(

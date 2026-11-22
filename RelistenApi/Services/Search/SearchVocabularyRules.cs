@@ -5,7 +5,7 @@ using System.Linq;
 
 namespace Relisten.Search;
 
-// Listener shorthand from the frozen search evaluation. Catalog names and aliases come from Postgres.
+// Fan shorthand that supplements the names and aliases in the catalog.
 internal static class SearchVocabularyRules
 {
     public static readonly FrozenDictionary<string, string> LeadingArtistAliases = new Dictionary<
