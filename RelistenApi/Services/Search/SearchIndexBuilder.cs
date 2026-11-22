@@ -29,6 +29,21 @@ internal sealed class SearchIndexBuilder(
         var aliases = await typesense.ReadAliases(cancellationToken);
         await RemoveUnaliased(aliasPrefix, aliases, cancellationToken);
 
+        var counts = await ImportAll(aliasPrefix, buildId, documents, cancellationToken);
+
+        // A failed publication may have moved some aliases. Keep all its
+        // collections so the next sweep can preserve every current target.
+        await Publish(aliasPrefix, buildId, cancellationToken);
+        return counts;
+    }
+
+    private async Task<Dictionary<string, long>> ImportAll(
+        string aliasPrefix,
+        string buildId,
+        SearchBuildDocuments documents,
+        CancellationToken cancellationToken
+    )
+    {
         var counts = new Dictionary<string, long>();
         var created = new List<string>();
 
@@ -49,31 +64,32 @@ internal sealed class SearchIndexBuilder(
         }
         catch
         {
-            // These names are private until publication. The operator can rerun
-            // a failed import now, or the next daily build will sweep any leftovers.
-            foreach (var name in created)
-            {
-                try
-                {
-                    await typesense.DeleteCollection(name, CancellationToken.None);
-                }
-                catch (Exception error)
-                {
-                    logger.LogWarning(
-                        error,
-                        "Could not remove incomplete search collection {Collection}",
-                        name
-                    );
-                }
-            }
-
+            // An operator rerun or the next daily build sweeps any leftovers.
+            await RollBackImports(created);
             throw;
         }
 
-        // A failed publication may have moved some aliases. Keep all its
-        // collections so the next sweep can preserve every current target.
-        await Publish(aliasPrefix, buildId, cancellationToken);
         return counts;
+    }
+
+    private async Task RollBackImports(IEnumerable<string> created)
+    {
+        // These names are private until publication.
+        foreach (var name in created)
+        {
+            try
+            {
+                await typesense.DeleteCollection(name, CancellationToken.None);
+            }
+            catch (Exception error)
+            {
+                logger.LogWarning(
+                    error,
+                    "Could not remove incomplete search collection {Collection}",
+                    name
+                );
+            }
+        }
     }
 
     public async Task RemoveRetired(
@@ -95,6 +111,7 @@ internal sealed class SearchIndexBuilder(
         }
 
         await RemoveUnaliased(aliasPrefix, aliases, cancellationToken);
+        // Retirement is already complete if compaction times out. The server also compacts daily.
         await typesense.Compact(cancellationToken);
     }
 

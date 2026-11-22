@@ -24,6 +24,8 @@ public sealed record SearchBuildResult(
 [Workflow]
 public sealed class SearchBuildWorkflow
 {
+    // Temporal uniqueness on this ID is the sweep lock. Retirement cleanup reuses
+    // it, so every build must start with this ID to protect its unaliased collections.
     public const string Id = "catalog-search-build";
 
     [WorkflowRun]
@@ -47,6 +49,7 @@ public sealed class SearchBuildWorkflow
             new ChildWorkflowOptions
             {
                 Id = $"catalog-search-retire-{buildId}",
+                // The build returns at publication. The timer must survive until cleanup is due.
                 ParentClosePolicy = ParentClosePolicy.Abandon,
             }
         );

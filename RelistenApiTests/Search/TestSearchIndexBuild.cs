@@ -32,7 +32,7 @@ public sealed class TestSearchIndexBuild
         await using var index = new TestIndex();
         var first = await index.Build();
         var abandoned = Guid.NewGuid().ToString("N");
-        await index.CreateAbandonedCollection(abandoned);
+        await index.CreatePerformanceCollection(abandoned);
 
         var second = await index.Build();
 
@@ -53,6 +53,20 @@ public sealed class TestSearchIndexBuild
 
         Assert.That(await index.Collections(), Is.EquivalentTo(index.Names(second)));
         await index.AssertPublished(second);
+    }
+
+    [Test]
+    public async Task PrefixedCollectionOutsideBuildNamingSurvivesBothSweeps()
+    {
+        MigratedTestDatabase.RequireLocalDatabase();
+        await using var index = new TestIndex();
+        var preserved = await index.CreatePerformanceCollection("keep");
+
+        var build = await index.Build();
+        Assert.That(await index.Collections(), Does.Contain(preserved));
+
+        await index.Retire(build);
+        Assert.That(await index.Collections(), Does.Contain(preserved));
     }
 
     private sealed class TestIndex : IAsyncDisposable
@@ -89,13 +103,15 @@ public sealed class TestSearchIndexBuild
                 CancellationToken.None
             );
 
-        public Task CreateAbandonedCollection(string buildId)
+        public async Task<string> CreatePerformanceCollection(string suffix)
         {
             var kind = SearchIndexSchema.Performances;
-            return client.CreateCollection(
-                SearchIndexSchema.Create(kind, Alias(kind) + "_" + buildId),
+            var name = Alias(kind) + "_" + suffix;
+            await client.CreateCollection(
+                SearchIndexSchema.Create(kind, name),
                 CancellationToken.None
             );
+            return name;
         }
 
         public IEnumerable<string> Names(string buildId) =>

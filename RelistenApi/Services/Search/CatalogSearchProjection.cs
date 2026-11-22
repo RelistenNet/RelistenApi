@@ -127,6 +127,14 @@ internal sealed partial class CatalogSearchProjection
         return new CatalogSearchProjection(rows, metadata, plays);
     }
 
+    public SearchBuildDocuments Documents(CancellationToken cancellationToken) =>
+        new(
+            Reviews(cancellationToken),
+            Performances(cancellationToken),
+            Recordings(cancellationToken),
+            Entities(cancellationToken)
+        );
+
     public async IAsyncEnumerable<Document> Reviews(
         [EnumeratorCancellation] CancellationToken cancellationToken
     )
@@ -197,14 +205,6 @@ internal sealed partial class CatalogSearchProjection
             };
         }
     }
-
-    public SearchBuildDocuments Documents(CancellationToken cancellationToken) =>
-        new(
-            Reviews(cancellationToken),
-            Performances(cancellationToken),
-            Recordings(cancellationToken),
-            Entities(cancellationToken)
-        );
 
     public async IAsyncEnumerable<Document> Entities(
         [EnumeratorCancellation] CancellationToken cancellationToken
@@ -416,6 +416,7 @@ internal sealed partial class CatalogSearchProjection
 
     private SearchProjectionRows.Venue? CurrentVenue(string? id)
     {
+        // Bound traversal if malformed venue merges form a cycle.
         for (var depth = 0; depth < 32 && !string.IsNullOrEmpty(id); depth++)
         {
             var venue = _venues.GetValueOrDefault(id);
