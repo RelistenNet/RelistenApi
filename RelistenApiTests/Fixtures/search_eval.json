@@ -3648,6 +3648,182 @@
       "must_be_empty": true,
       "id": "R2H30",
       "eval_group": "round2_held_out"
+    },
+    {
+      "id": "FP01",
+      "query": "tahoe tweezer",
+      "surface": "catalog_api",
+      "cohort": "casual",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Recognize a performance from an unscoped query",
+      "expected": "Phish's July 31, 2013 performance leads the Holly Bowling cover.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "Tweezer",
+          "show_date": "2013-07-31"
+        }
+      ]
+    },
+    {
+      "id": "FP02",
+      "query": "cornell morning dew",
+      "surface": "catalog_api",
+      "cohort": "casual",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Recognize a performance from an unscoped query",
+      "expected": "The Grateful Dead's original Cornell performance leads other artists at Barton Hall.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "grateful-dead",
+          "name": "Morning Dew",
+          "show_date": "1977-05-08"
+        }
+      ]
+    },
+    {
+      "id": "FP03",
+      "query": "japan twist",
+      "surface": "catalog_api",
+      "cohort": "casual",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 2,
+      "intent": "Recognize a performance from an unscoped query",
+      "expected": "The two full Phish performances at Fukuoka and Tokyo occupy the first two results.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "Twist",
+          "show_date": "2000-06-14"
+        },
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "Twist",
+          "show_date": "2000-06-10"
+        }
+      ]
+    },
+    {
+      "id": "FP04",
+      "query": "japan ghost",
+      "surface": "catalog_api",
+      "cohort": "casual",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Recognize a performance from an unscoped query",
+      "expected": "Phish's June 15 Osaka Ghost leads Ghost-titled songs by other artists.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "Ghost",
+          "show_date": "2000-06-15"
+        }
+      ]
+    },
+    {
+      "id": "FP05",
+      "query": "ventura bowie",
+      "surface": "catalog_api",
+      "cohort": "casual",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Recognize a performance from an unscoped query",
+      "expected": "Phish's July 30, 1997 David Bowie leads the cover played in the same city.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "David Bowie",
+          "show_date": "1997-07-30"
+        }
+      ]
+    },
+    {
+      "id": "FP06",
+      "query": "veneta dark star",
+      "surface": "catalog_api",
+      "cohort": "casual",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Recognize a performance from an unscoped query",
+      "expected": "The Dead's 1972 Veneta performance leads later performances of Dark Star in the same town.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "grateful-dead",
+          "name": "Dark Star",
+          "show_date": "1972-08-27"
+        }
+      ]
+    },
+    {
+      "id": "FP07",
+      "query": "cornell scarlet begonias",
+      "surface": "catalog_api",
+      "cohort": "casual",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Recognize a performance from an unscoped query",
+      "expected": "The Grateful Dead's 1977 Scarlet leads Dead and Company's Cornell interpretation.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "grateful-dead",
+          "name": "Scarlet Begonias",
+          "show_date": "1977-05-08"
+        }
+      ]
+    },
+    {
+      "id": "FP08",
+      "query": "holly bowling tahoe tweezer",
+      "surface": "catalog_api",
+      "cohort": "casual",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Recognize a performance from an unscoped query",
+      "expected": "Naming Holly Bowling keeps her interpretation first.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "holly-bowling",
+          "name": "Tahoe Tweezer",
+          "show_date": "2015-08-18"
+        }
+      ]
     }
   ],
   "recordings": [

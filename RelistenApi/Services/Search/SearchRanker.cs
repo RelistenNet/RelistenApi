@@ -12,6 +12,7 @@ internal static class SearchRanker
     private const int SameTitleCandidateLimit = 50;
     private const double SongPlayWeight = 0.35;
     private const double ListenerArtistBonus = 4;
+    private const double ExactSongPlayAdvantage = 10;
 
     public static IReadOnlyList<SearchDocument> KnownItems(
         SearchQuery query,
@@ -144,6 +145,91 @@ internal static class SearchRanker
             SearchScope.Reviews => result.Kind == "review",
             _ => false,
         };
+
+    public static IReadOnlyList<SearchDocument> PreferPlayedVenueMatch(
+        SearchInput input,
+        SearchQuery query,
+        IReadOnlyList<SearchDocument> ranked,
+        CatalogQueryEvidence evidence
+    )
+    {
+        if (
+            input.Scope != SearchScope.All
+            || input.Page != 1
+            || input.AddTracks
+            || query
+                is not {
+                    Artist: null,
+                    ReadingArtist: null,
+                    Country: null,
+                    Tour: null,
+                    HasDate: false,
+                    Soundboard: false,
+                    Matrix: false,
+                    Order: "regular"
+                }
+            || input.Ignore?.Contains("venue") == true
+            || ranked.FirstOrDefault() is not { Kind: "song" } song
+            || song.Name != query.Terms
+            || !query.Terms.Contains(' ')
+        )
+        {
+            return ranked;
+        }
+
+        // An exact song title has a strong claim. A performance by another
+        // artist needs an exact venue-and-title reading and much stronger
+        // playback evidence. Imported songs lack song-wide play totals, so
+        // count their strongest visible performance as evidence too.
+        var exactPerformanceStarts = ranked
+            .Where(result =>
+                result.Kind == "performance"
+                && result.ArtistSlug == song.ArtistSlug
+                && result.Name == query.Terms
+            )
+            .Select(result => result.TrackPlays)
+            .DefaultIfEmpty()
+            .Max();
+        var exactStarts = Math.Max(evidence.SongPlays(song.Id), exactPerformanceStarts);
+        var requiredStarts = ExactSongPlayAdvantage * (1d + exactStarts);
+        var performance = ranked
+            .Where(result =>
+                result is { Kind: "performance", Preview: not null, Soundcheck: false }
+                && result.ArtistSlug != song.ArtistSlug
+                && 1d + result.TrackPlays >= requiredStarts
+                && NamesVenueAndSong(query.Terms, result)
+            )
+            .MaxBy(result => result.TrackPlays);
+
+        return performance == null
+            ? ranked
+            : [performance, .. ranked.Where(result => result.Id != performance.Id)];
+    }
+
+    private static bool NamesVenueAndSong(string terms, SearchDocument performance)
+    {
+        var title = performance.Name;
+        if (title.Length == 0)
+        {
+            return false;
+        }
+
+        string place;
+        if (terms.EndsWith(" " + title, StringComparison.Ordinal))
+        {
+            place = terms[..^(title.Length + 1)];
+        }
+        else if (terms.StartsWith(title + " ", StringComparison.Ordinal))
+        {
+            place = terms[(title.Length + 1)..];
+        }
+        else
+        {
+            return false;
+        }
+
+        return $" {performance.Place} ".Contains($" {place} ", StringComparison.Ordinal);
+    }
 
     public static IReadOnlyList<SearchDocument> AddTracksFirst(
         IReadOnlyList<SearchDocument> visible,

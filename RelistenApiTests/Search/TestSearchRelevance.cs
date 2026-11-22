@@ -90,6 +90,75 @@ public sealed class TestSearchRelevance
             .Equal(tokyo.Id, fukuoka.Id);
     }
 
+    [TestCase("lake tahoe outdoor arena", 402, 6, null, true)]
+    [TestCase("arena in another city", 4000, 6, null, false)]
+    [TestCase("lake tahoe outdoor arena", 402, 70, null, false)]
+    [TestCase("lake tahoe outdoor arena", 402, 6, "holly-bowling", false)]
+    [TestCase("lake tahoe outdoor arena", 402, 6, null, false, true)]
+    public void VenueAndPlaybackCanOutrankAnExactCoverTitle(
+        string place,
+        long trackPlays,
+        long exactPerformancePlays,
+        string? selectedArtist,
+        bool preferPerformance,
+        bool matrix = false
+    )
+    {
+        const string terms = "tahoe tweezer";
+        var song = Song("holly-bowling", terms).Document;
+        var performance = new SearchDocument
+        {
+            Id = "perf_tahoe",
+            Kind = "performance",
+            Name = "tweezer",
+            ArtistSlug = "phish",
+            Place = place,
+            TrackPlays = trackPlays,
+            Preview = new(
+                "track_tweezer",
+                "source_tahoe",
+                "Set 2",
+                1,
+                1,
+                2176,
+                trackPlays,
+                true,
+                false,
+                "Tweezer"
+            ),
+        };
+        var exactPerformance = performance with
+        {
+            Id = "perf_cutting_room",
+            ArtistSlug = song.ArtistSlug,
+            Name = terms,
+            Place = "the cutting room",
+            TrackPlays = exactPerformancePlays,
+            Preview = performance.Preview! with
+            {
+                TrackId = "track_cutting_room",
+                SourceId = "source_cutting_room",
+                Plays = exactPerformancePlays,
+                Label = "Tahoe Tweezer",
+            },
+        };
+
+        var ranked = SearchRanker.PreferPlayedVenueMatch(
+            new SearchInput(terms),
+            new SearchQuery(terms, SelectedArtist: selectedArtist, Matrix: matrix),
+            [song, exactPerformance, performance],
+            Evidence([])
+        );
+
+        ranked
+            .Should()
+            .Equal(
+                preferPerformance
+                    ? [performance, song, exactPerformance]
+                    : [song, exactPerformance, performance]
+            );
+    }
+
     [Test]
     public void ExplicitJradBeatsListenerAffinityForTheGratefulDead()
     {

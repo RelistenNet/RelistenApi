@@ -335,7 +335,7 @@ public sealed class CatalogSearchCoordinator
                 reply.Collection is SearchIndexSchema.Entities or SearchIndexSchema.Performances
             )
             .SelectMany(reply => reply.Documents);
-        return SearchRanker.Primary(
+        var ranked = SearchRanker.Primary(
             query,
             rankTerms,
             input.Scope,
@@ -344,6 +344,7 @@ public sealed class CatalogSearchCoordinator
             input.Page,
             browsePerformances: input.Scope == SearchScope.Shows && performanceTerms == "*"
         );
+        return SearchRanker.PreferPlayedVenueMatch(input, query, ranked, evidence);
     }
 
     private async Task<IReadOnlyList<SearchDocument>?> RestoreEmptyPrefix(
