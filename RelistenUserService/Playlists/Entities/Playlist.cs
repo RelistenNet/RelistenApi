@@ -18,6 +18,11 @@ public sealed class Playlist
 
     // Live entries with a track, maintained beside EntryCount so summaries need no entry scan.
     public int TrackCount { get; set; }
+
+    // Catalog facts derived from live track entries by PlaylistCatalogIndex, beside the
+    // playlist_artists rows. They are current when CatalogIndexedRevision equals Revision.
+    public int CatalogDurationSeconds { get; set; }
+    public long CatalogIndexedRevision { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }
@@ -40,6 +45,17 @@ public sealed class PlaylistEntry
     public string? Description { get; set; }
     public string? Rank { get; set; }
     public bool Deleted { get; set; }
+}
+
+/// <summary>
+/// One catalog artist with at least one live track in a playlist. Rebuilt with the
+/// playlist's other catalog facts; never edited directly.
+/// </summary>
+public sealed class PlaylistArtist
+{
+    public PlaylistId PlaylistId { get; set; }
+    public Guid ArtistUuid { get; set; }
+    public int TrackCount { get; set; }
 }
 
 public sealed class PlaylistRevisionRow

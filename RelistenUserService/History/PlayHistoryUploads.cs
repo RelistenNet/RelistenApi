@@ -53,8 +53,12 @@ public sealed class PlayHistoryUploads(AccountsDbContext database, TimeProvider 
             ON CONFLICT (user_id, qualified_at, play_id) DO NOTHING
             RETURNING play_id, received_at, app_type, origin
         ), recorded AS (
-            INSERT INTO public.source_track_plays (source_track_uuid, app_type, created_at, user_uuid)
-            SELECT submitted.track_uuid, added.app_type, added.received_at, NULL
+            -- playlist_id feeds the catalog's per-playlist play aggregate.
+            INSERT INTO public.source_track_plays (
+                source_track_uuid, app_type, created_at, user_uuid, playlist_id
+            )
+            SELECT submitted.track_uuid, added.app_type, added.received_at, NULL,
+                   submitted.playlist_id
             FROM added JOIN submitted USING (play_id)
             WHERE added.origin = 1
         )

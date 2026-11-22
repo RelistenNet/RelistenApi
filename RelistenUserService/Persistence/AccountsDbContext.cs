@@ -30,6 +30,7 @@ public sealed class AccountsDbContext(DbContextOptions<AccountsDbContext> option
     public DbSet<Playlist> Playlists => Set<Playlist>();
     public DbSet<PlaylistSegment> PlaylistSegments => Set<PlaylistSegment>();
     public DbSet<PlaylistEntry> PlaylistEntries => Set<PlaylistEntry>();
+    public DbSet<PlaylistArtist> PlaylistArtists => Set<PlaylistArtist>();
     public DbSet<PlaylistRevisionRow> PlaylistRevisions => Set<PlaylistRevisionRow>();
     public DbSet<PlaylistReceipt> PlaylistReceipts => Set<PlaylistReceipt>();
     public DbSet<HistoryGeneration> HistoryGenerations => Set<HistoryGeneration>();

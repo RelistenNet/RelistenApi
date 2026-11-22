@@ -60,6 +60,7 @@ public sealed partial class TestMcpHttp
     {
         database = new();
         await database.StartAsync();
+        await database.LoadCatalogSchemaAsync();
     }
 
     [OneTimeTearDown]

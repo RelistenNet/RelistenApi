@@ -30,6 +30,50 @@ matches the stored one. Apply it only when its generation matches the new
 library generation. If the edge still serves an old generation, retry after
 the cached response expires.
 
+## Listing public playlists
+
+`GET /v1/public-playlists` lists published playlists that are not archived or
+taken down and whose owner is active. It needs no credentials and is cached at
+the edge like the public snapshot.
+
+| Query | Meaning |
+| --- | --- |
+| `sort` | `recent` (default) orders by `updated_at`, which publication, unpublication and content edits move. `followers` orders by follower count. `plays` orders by plays started from the playlist on the last 30 UTC days, today included. Ties fall back to playlist ID, all descending. |
+| `artist` | An `artist_` ID or a bare catalog artist UUID. Keeps playlists with at least one live entry for one of that artist's tracks. |
+| `limit` | 1–50, default 25. |
+| `cursor` | The previous page's `next_cursor`. It is valid only with the `sort` that produced it. |
+
+Each item carries `playlist_id`, `public_code`, `name`, `owner` (`id`,
+`username`), `track_count`, `duration_seconds`, `updated_at`,
+`follower_count` and `recent_play_count`. A null `next_cursor` ends the
+listing. Counts can change between pages, so a playlist may move across the
+cursor and be skipped or repeated. An invalid query returns
+`422 invalid_query`.
+
+`duration_seconds` and the artist filter come from catalog facts the User
+Service rebuilds from `public.source_tracks` in the same transaction as every
+playlist revision. A track missing from the catalog counts in `track_count`
+but adds no duration or artist. A catalog change to a track's artist or
+duration reaches the playlist at its next revision.
+
+### Play attribution
+
+Plays started from a playlist record its `playlist_id` in
+`public.source_track_plays`. Signed-in plays get it from the cloud play
+history upload. Anonymous clients pass `playlist_id` to
+`POST /api/v4/live/play` (JSON) or `POST /api/v2/live/play` (query). The
+catalog checks only that the value is a canonical `playlist_` ID and never
+returns it. The `source_track_plays_playlist_daily` continuous aggregate
+totals plays per playlist and UTC day, and the `plays` sort reads it. Closed
+days are materialized hourly; real-time aggregation adds the current day from
+the raw plays, so a new play counts at once, apart from the 60-second edge
+cache.
+
+Anonymous attribution is unauthenticated, like the track play counts it sits
+beside. Nothing checks that the track is in the playlist or limits plays per
+playlist, so the `plays` ordering can be inflated. That is accepted for now;
+add per-client limits before using it for anything beyond browse ordering.
+
 ## Moderation
 
 Run these commands with the User Service image and its accounts migration
@@ -104,6 +148,35 @@ expire before reopening it. Rotate the history generation using the existing
 [restore procedure](private-playlists.md#after-restoring-the-user-service-database). A copied playlist
 and its receipt are restored together. If an older backup predates both, a
 retry can create a copy only if the restored source is public.
+
+### Public listing rollout
+
+Deploy the catalog API first. Its migration 24 adds
+`source_track_plays.playlist_id` with a five-second lock timeout and creates
+the daily playlist aggregate with no data. The User Service's play upload
+writes that column, so it fails until the migration has run.
+
+Until the aggregate has materialized a day with playlist plays, its
+real-time tail reads up to 30 days of raw plays on each uncached listing
+(about 2.2 million rows at November 2026 volume). That ends at the first
+hourly refresh after such a day closes, normally within a day of signed-in
+clients sending playlist plays.
+
+The User Service migration adds `playlist_artists` and the
+`catalog_duration_seconds` and `catalog_indexed_revision` playlist columns.
+Existing playlists start unindexed. After start, each User Service process
+rebuilds every playlist whose indexed revision differs from its revision.
+That covers the backfill and, from the last new pod to start, playlists the
+previous build edited during the rollout. If the query below finds rows
+afterwards, restart a pod to repair them.
+Check with:
+
+```sql
+SELECT count(*) FROM user_data.playlists WHERE catalog_indexed_revision <> revision;
+```
+
+Cloudflare's cache rule for public snapshots must also match the bare
+`/v1/public-playlists` path, with the query string in the cache key.
 
 ## Search
 

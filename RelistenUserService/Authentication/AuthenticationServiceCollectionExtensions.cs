@@ -240,7 +240,9 @@ public static class AuthenticationServiceCollectionExtensions
         services.AddScoped<RelistenUserService.Playlists.PlaylistWriteService>();
         services.AddScoped<RelistenUserService.Playlists.PlaylistSharingService>();
         services.AddScoped<RelistenUserService.Playlists.PlaylistReadService>();
+        services.AddScoped<RelistenUserService.Playlists.PublicPlaylistDirectory>();
         services.AddScoped<RelistenUserService.Playlists.PlaylistHttpFilter>();
+        services.AddHostedService<RelistenUserService.Playlists.PlaylistCatalogIndexSweep>();
         services.AddScoped<RelistenUserService.History.PlayHistoryUploads>();
         services.AddScoped<LibraryStateStore>();
         services.AddScoped<LibraryReadService>();

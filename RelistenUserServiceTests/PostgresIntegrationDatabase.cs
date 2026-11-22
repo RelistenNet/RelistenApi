@@ -51,6 +51,26 @@ public sealed class PostgresIntegrationDatabase
         await dbContext.GetService<IMigrator>().MigrateAsync(migration);
     }
 
+    /// <summary>
+    /// Adds the catalog's public schema, which production shares with the account schemas.
+    /// Playlist writes and play uploads read or write it inside account transactions.
+    /// </summary>
+    public async Task LoadCatalogSchemaAsync()
+    {
+        await using var connection = new NpgsqlConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            await File.ReadAllTextAsync(
+                Path.Combine(
+                    TestContext.CurrentContext.TestDirectory,
+                    "Fixtures/catalog-schema.sql"
+                )
+            ),
+            connection
+        );
+        await command.ExecuteNonQueryAsync();
+    }
+
     public async Task StopAsync()
     {
         if (!_databaseCreated)

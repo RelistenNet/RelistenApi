@@ -252,6 +252,8 @@ public sealed class TestAccountDeletionSchema
             VALUES (@SegmentId, @PlaylistId, 'a', false);
             INSERT INTO user_data.playlist_entries (id, playlist_id, segment_id, track_id, rank, deleted)
             VALUES (@EntryId, @PlaylistId, @SegmentId, @TrackId, 'a', false);
+            INSERT INTO user_data.playlist_artists (playlist_id, artist_uuid, track_count)
+            VALUES (@PlaylistId, gen_random_uuid(), 1);
             INSERT INTO user_data.playlist_revisions
                 (playlist_id, revision, kind, change_count, changes_json)
             VALUES (@PlaylistId, 2, 'content', 1, '[]'::jsonb);

@@ -46,7 +46,8 @@ namespace Relisten.Controllers
             [FromQuery] string app_type,
             [FromQuery] int? track_id = null,
             [FromQuery] string? track_uuid = null,
-            [FromQuery] string? user_uuid = null
+            [FromQuery] string? user_uuid = null,
+            [FromQuery] string? playlist_id = null
         )
         {
             if (
@@ -62,6 +63,11 @@ namespace Relisten.Controllers
             if (track_id == null && track_uuid == null)
             {
                 return BadRequest();
+            }
+
+            if (playlist_id != null && !SourceTrackPlaysService.IsPlaylistId(playlist_id))
+            {
+                return BadRequest("Invalid playlist_id format");
             }
 
             var track_guid = Guid.Empty;
@@ -93,7 +99,7 @@ namespace Relisten.Controllers
                 user_uuid = user_uuid != null ? Guid.Parse(user_uuid) : null,
             };
 
-            return JsonSuccess(await _sourceTrackPlaysService.RecordPlayedTrack(stp));
+            return JsonSuccess(await _sourceTrackPlaysService.RecordPlayedTrack(stp, playlist_id));
         }
 
         [HttpGet("live/history")]

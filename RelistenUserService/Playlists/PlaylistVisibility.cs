@@ -7,6 +7,7 @@ namespace RelistenUserService.Playlists;
 
 internal static class PlaylistVisibility
 {
+    // PublicPlaylistDirectory repeats this predicate in SQL; change both together.
     internal static IQueryable<Playlist> Public(this IQueryable<Playlist> playlists) =>
         playlists.VisibleTo(null);
 

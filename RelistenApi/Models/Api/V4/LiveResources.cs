@@ -21,6 +21,12 @@ public sealed class PlayRequest
 
     /// <summary>Optional caller UUID for telemetry; unrelated to authenticated user_ IDs.</summary>
     public Guid? ClientUuid { get; init; }
+
+    /// <summary>
+    /// Optional playlist_ ID of the public playlist this play came from. It counts toward
+    /// the playlist's play totals and is not returned by any catalog endpoint.
+    /// </summary>
+    public string? PlaylistId { get; init; }
 }
 
 // Keep legacy telemetry enum serialization unchanged. Values map to its stored

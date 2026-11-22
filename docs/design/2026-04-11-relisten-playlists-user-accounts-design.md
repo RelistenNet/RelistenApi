@@ -31,7 +31,7 @@ Relisten playlists differ from Spotify-style playlists because of live music and
 - Push notifications
 - Real-time collaborative editing via WebSocket (M1 deferred — collaborators sync on next fetch)
 - Social features / friends / activity feeds
-- Playlist discovery / search across all public playlists
+- Playlist search across all public playlists (browsing by recency, followers, plays and artist shipped in November 2026; see [playlist sharing](../api/playlist-sharing.md#listing-public-playlists))
 - User-submitted reviews
 - Full Realm → TanStack DB migration (separate spec)
 

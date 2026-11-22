@@ -6,6 +6,7 @@ using Dapper;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Relisten;
+using Relisten.Api.Models;
 using Relisten.Data;
 
 namespace RelistenApiTests.V4;
@@ -208,6 +209,9 @@ public sealed partial class TestV4CatalogHttp
         "{\"track_id\":\"track_0000000000000000000000001c\",\"app_type\":\"web\",\"client_uuid\":\"user_invalid\"}"
     )]
     [TestCase("{")]
+    [TestCase(
+        "{\"track_id\":\"track_0000000000000000000000001c\",\"app_type\":\"web\",\"playlist_id\":\"playlist_invalid\"}"
+    )]
     public async Task Invalid_reports_return_422_without_writing_telemetry(string body)
     {
         await using var connection = await MigratedTestDatabase.OpenAsync();
@@ -224,6 +228,76 @@ public sealed partial class TestV4CatalogHttp
         (await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM source_track_plays"))
             .Should()
             .Be(before);
+    }
+
+    [Test]
+    public async Task Playlist_plays_record_the_playlist_without_exposing_it()
+    {
+        var clientUuid = Guid.NewGuid();
+        var playlistId = Relisten.Identifiers.UuidTypeId.Format("playlist", Guid.CreateVersion7());
+        await using var connection = await MigratedTestDatabase.OpenAsync();
+        try
+        {
+            using var response = await http.PostAsJsonAsync(
+                "/api/v4/live/play",
+                new
+                {
+                    track_id = TrackId(1),
+                    app_type = "web",
+                    client_uuid = clientUuid,
+                    playlist_id = playlistId,
+                }
+            );
+            var text = await response.Content.ReadAsStringAsync();
+            response.StatusCode.Should().Be(HttpStatusCode.OK, text);
+            text.Should().NotContain("playlist");
+            var sequence = JsonNode.Parse(text)!["sequence"]!.GetValue<int>();
+
+            (
+                await connection.QuerySingleAsync<string?>(
+                    "SELECT playlist_id FROM source_track_plays WHERE id=@sequence",
+                    new { sequence }
+                )
+            )
+                .Should()
+                .Be(playlistId);
+            using var history = await http.GetAsync(
+                $"/api/v4/live/history?after_sequence={sequence - 1}"
+            );
+            (await history.Content.ReadAsStringAsync()).Should().NotContain("playlist");
+
+            // Mobile reports through the legacy v2 route, which this host does not serve.
+            // Its service call records the same ID and still returns no playlist field.
+            var legacy = await new SourceTrackPlaysService(
+                app.Services.GetRequiredService<DbService>()
+            ).RecordPlayedTrack(
+                new SourceTrackPlay
+                {
+                    source_track_uuid = Guid.Parse($"00000000-0000-0000-0000-{41:000000000000}"),
+                    user_uuid = clientUuid,
+                    app_type = SourceTrackPlayAppType.iOS,
+                },
+                playlistId
+            );
+            Newtonsoft.Json.JsonConvert.SerializeObject(legacy).Should().NotContain("playlist");
+            (
+                await connection.QuerySingleAsync<int>(
+                    "SELECT count(*) FROM source_track_plays WHERE user_uuid=@clientUuid AND playlist_id=@playlistId",
+                    new { clientUuid, playlistId }
+                )
+            )
+                .Should()
+                .Be(2);
+            SourceTrackPlaysService.IsPlaylistId("playlist_x").Should().BeFalse();
+            SourceTrackPlaysService.IsPlaylistId(playlistId).Should().BeTrue();
+        }
+        finally
+        {
+            await connection.ExecuteAsync(
+                "DELETE FROM source_track_plays WHERE user_uuid=@clientUuid",
+                new { clientUuid }
+            );
+        }
     }
 
     [Test]
