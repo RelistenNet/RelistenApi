@@ -93,6 +93,7 @@ public static class TemporalIngestionRegistration
             .AddWorkflow<LocalWorkflow>()
             .AddWorkflow<RefreshBatchWorkflow>()
             .AddWorkflow<ArchiveArtistDiscoveryWorkflow>()
+            .AddWorkflow<ArtistSearchReindexWorkflow>()
             .AddWorkflow<SearchBuildWorkflow>()
             .AddWorkflow<ScheduledSearchBuildWorkflow>()
             .AddWorkflow<SearchRetireWorkflow>()

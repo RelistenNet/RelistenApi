@@ -159,15 +159,6 @@ public class VenueCatalogueWorkflow
             };
         }
 
-        // An unrestricted venue run leaves its full-catalog changes to the build.
-        if (artists != null && Workflow.Patched("search-after-venue-catalogue"))
-        {
-            foreach (var artist in artists.Distinct())
-            {
-                await SearchReindexStep.BestEffort(artist);
-            }
-        }
-
         return total;
     }
 

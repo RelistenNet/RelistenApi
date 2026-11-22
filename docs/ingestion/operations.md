@@ -310,6 +310,7 @@ and payload Redis. Infrastructure manifests and their runbook live in the
 
 ### Catalog search startup
 
+Apply catalog migration 23 before rolling out the worker that refreshes search.
 Bring up Typesense and publish the first catalog aliases before rolling out the
 search API. With the API image that serves `/health/search-startup`, configure
 the `relistenapi` container's startup probe in
@@ -332,13 +333,14 @@ Leave `/health/ready` on the database checks so browse can serve while search
 continues warming after the grace period.
 [Kubernetes startup probe documentation](https://kubernetes.io/docs/concepts/workloads/pods/probes/#startup-probe)
 
-Artist imports and scoped normalization refresh the artist's search documents
-after committing catalog data. A refresh failure is logged and leaves the import
-result intact. After publishing new aliases, the full build uses the catalog's
-update timestamps to refresh artists that changed while it ran. A deletion
-that leaves no newer timestamp can be missed by this catch-up and reconciled
-by the next daily build. Artist scope and review availability use the evidence
-snapshot refreshed at the alias swap.
+After committing catalog data, artist imports start a background reindex and song
+normalization reindexes its artist. Venue normalization is picked up by the daily
+build. Import and song refresh requests record their start before resolving the
+aliases, using `search_artist_reindexes` from migration 23. Once the full build
+publishes new aliases and starts the retirement timer, it reindexes artists whose
+requests started since its database snapshot began. The next successful daily
+build repairs failed or missed refreshes. Artist scope and review availability
+use the evidence snapshot refreshed at the alias swap.
 
 Retirement drops the old collections. Typesense reclaims their disk space on
 its compaction interval (`--db-compaction-interval=86400`). Raft snapshots

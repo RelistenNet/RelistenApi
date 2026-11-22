@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Relisten.Ingestion;
 using Relisten.Normalization.Temporal;
@@ -33,7 +32,7 @@ public sealed class SearchBuildWorkflow
     public async Task<SearchBuildResult> RunAsync(string? playExportPath)
     {
         var buildId = Workflow.NewGuid().ToString("N");
-        var result = await Workflow.ExecuteActivityAsync(
+        var snapshot = await Workflow.ExecuteActivityAsync(
             (SearchBuildActivities activities) => activities.Build(playExportPath, buildId),
             new ActivityOptions
             {
@@ -50,11 +49,36 @@ public sealed class SearchBuildWorkflow
             new ChildWorkflowOptions
             {
                 Id = $"catalog-search-retire-{buildId}",
-                // The build returns at publication. The timer must survive until cleanup is due.
+                // The grace period can outlive this build.
                 ParentClosePolicy = ParentClosePolicy.Abandon,
             }
         );
-        return result;
+        await CatchUp(snapshot.StartedAt);
+        return snapshot.Result;
+    }
+
+    private static async Task CatchUp(DateTime startedAt)
+    {
+        try
+        {
+            await Workflow.ExecuteActivityAsync(
+                (SearchBuildActivities activities) => activities.CatchUp(startedAt),
+                new ActivityOptions
+                {
+                    TaskQueue = IngestionQueues.Database,
+                    // Release the build ID before the one-hour retirement timer fires,
+                    // even if catch-up sits in the activity queue or runs slowly.
+                    ScheduleToCloseTimeout = TimeSpan.FromMinutes(45),
+                    HeartbeatTimeout = TimeSpan.FromSeconds(30),
+                    CancellationType = ActivityCancellationType.WaitCancellationCompleted,
+                    RetryPolicy = new RetryPolicy { MaximumAttempts = 1 },
+                }
+            );
+        }
+        catch (ActivityFailureException error) when (!TemporalException.IsCanceledException(error))
+        {
+            Workflow.Logger.LogWarning(error, "Search catch-up failed after publishing the index");
+        }
     }
 }
 
@@ -101,52 +125,29 @@ public sealed class SearchCleanupWorkflow
         );
 }
 
+internal sealed record SearchBuildSnapshot(SearchBuildResult Result, DateTime StartedAt);
+
 internal sealed class SearchBuildActivities(
     DbService db,
     SearchIndexBuilder builder,
     ArtistSearchIndexer artists,
-    IConfiguration configuration,
     ILogger<SearchBuildActivities> logger
 )
 {
     [Activity]
-    public async Task<SearchBuildResult> Build(string? playExportPath, string buildId)
+    public async Task<SearchBuildSnapshot> Build(string? playExportPath, string buildId)
     {
         using var heartbeat = new ActivityHeartbeat();
         var token = ActivityExecutionContext.Current.CancellationToken;
-        var (result, since) = await BuildSnapshot(playExportPath, buildId, token);
-        await RefreshChanges(since, playExportPath, token);
-        return result;
-    }
-
-    [Activity(SearchReindexStep.ActivityName)]
-    public async Task ReindexArtist(Guid artist)
-    {
-        using var heartbeat = new ActivityHeartbeat();
-        await artists.Reindex(
-            artist,
-            configuration["Search:PlaysExport"],
-            ActivityExecutionContext.Current.CancellationToken
-        );
-    }
-
-    private async Task<(SearchBuildResult Result, DateTime Since)> BuildSnapshot(
-        string? playExportPath,
-        string buildId,
-        CancellationToken token
-    )
-    {
         var timer = Stopwatch.StartNew();
         // Use the primary to avoid recovery canceling a long read on a replica.
         // This snapshot holds back vacuum for the length of the build, acceptable once a day.
         await using var connection = db.CreateConnection(longTimeout: true, readOnly: false);
         await connection.OpenAsync(token);
         await using var snapshot = await SearchProjectionRows.BeginSnapshot(connection, token);
-        // Include short catalog transactions that began just before the snapshot
-        // but did not commit until after it was taken.
-        var since = await connection.ExecuteScalarAsync<DateTime>(
+        var startedAt = await connection.ExecuteScalarAsync<DateTime>(
             new CommandDefinition(
-                "SELECT transaction_timestamp() - interval '1 minute'",
+                "SELECT transaction_timestamp()",
                 transaction: snapshot,
                 cancellationToken: token
             )
@@ -169,14 +170,14 @@ internal sealed class SearchBuildActivities(
             projection.Documents(token),
             token
         );
-        return (
+        return new SearchBuildSnapshot(
             new SearchBuildResult(
                 buildId,
                 counts,
                 timer.Elapsed.TotalSeconds,
                 projection.PlayedFiles
             ),
-            since
+            startedAt
         );
     }
 
@@ -192,39 +193,61 @@ internal sealed class SearchBuildActivities(
         );
     }
 
-    private async Task RefreshChanges(
-        DateTime since,
-        string? playExportPath,
-        CancellationToken cancellationToken
-    )
+    [Activity(SearchReindexStep.ActivityName)]
+    public async Task ReindexArtist(Guid artist)
     {
-        IEnumerable<Guid> changed;
-        try
+        using var heartbeat = new ActivityHeartbeat();
+        var token = ActivityExecutionContext.Current.CancellationToken;
+
+        // Record the request before resolving aliases. If it writes to the old
+        // collections, a build that took its snapshot earlier will replay it.
+        await using (var connection = db.CreateConnection(longTimeout: false, readOnly: false))
         {
-            // Read after publication in a new transaction, so reindexing sees
-            // rows the completed build's snapshot could not see.
-            await using var connection = db.CreateConnection(longTimeout: true, readOnly: false);
-            changed = await connection.QueryAsync<Guid>(
+            await connection.ExecuteAsync(
                 new CommandDefinition(
-                    ChangedArtistsSql,
-                    new { since },
-                    cancellationToken: cancellationToken
+                    """
+                    INSERT INTO search_artist_reindexes (artist_id, requested_at)
+                    SELECT id, clock_timestamp() FROM artists WHERE uuid = @artist
+                    ON CONFLICT (artist_id) DO UPDATE SET requested_at = clock_timestamp()
+                    """,
+                    new { artist },
+                    cancellationToken: token
                 )
             );
         }
-        catch (Exception error) when (!cancellationToken.IsCancellationRequested)
+
+        await artists.Reindex(artist, token);
+    }
+
+    [Activity]
+    public async Task CatchUp(DateTime startedAt)
+    {
+        using var heartbeat = new ActivityHeartbeat();
+        var token = ActivityExecutionContext.Current.CancellationToken;
+        IEnumerable<Guid> requested;
+        await using (var connection = db.CreateConnection(longTimeout: false, readOnly: false))
         {
-            logger.LogWarning(error, "Could not read catalog changes after search publication");
-            return;
+            requested = await connection.QueryAsync<Guid>(
+                new CommandDefinition(
+                    """
+                    SELECT a.uuid
+                    FROM search_artist_reindexes r JOIN artists a ON a.id = r.artist_id
+                    WHERE r.requested_at >= @startedAt
+                    ORDER BY r.artist_id
+                    """,
+                    new { startedAt },
+                    cancellationToken: token
+                )
+            );
         }
 
-        foreach (var artist in changed)
+        foreach (var artist in requested)
         {
             try
             {
-                await artists.Reindex(artist, playExportPath, cancellationToken);
+                await artists.Reindex(artist, token);
             }
-            catch (Exception error) when (!cancellationToken.IsCancellationRequested)
+            catch (Exception error) when (!token.IsCancellationRequested)
             {
                 logger.LogWarning(
                     error,
@@ -234,29 +257,4 @@ internal sealed class SearchBuildActivities(
             }
         }
     }
-
-    private const string ChangedArtistsSql = """
-        WITH changed_venues AS (
-            SELECT id FROM norm.venues WHERE updated_at >= @since
-            UNION SELECT venue_id FROM norm.venue_names WHERE updated_at >= @since
-        ), changed_artist_ids AS (
-            SELECT id AS artist_id FROM artists WHERE updated_at >= @since
-            UNION SELECT artist_id FROM shows WHERE updated_at >= @since
-            UNION SELECT artist_id FROM sources WHERE updated_at >= @since OR created_at >= @since
-            UNION SELECT artist_id FROM venues WHERE updated_at >= @since
-            UNION
-            SELECT s.artist_id FROM source_reviews r JOIN sources s ON s.id = r.source_id
-            WHERE r.updated_at >= @since
-            UNION
-            SELECT s.artist_id FROM norm.show_venues v JOIN shows s ON s.uuid = v.show_uuid
-            WHERE v.updated_at >= @since OR v.venue_id IN (SELECT id FROM changed_venues)
-            UNION
-            SELECT t.artist_id FROM norm.track_songs m JOIN source_tracks t ON t.uuid = m.track_uuid
-            WHERE m.updated_at >= @since
-        )
-        SELECT a.uuid FROM changed_artist_ids c JOIN artists a ON a.id = c.artist_id
-        UNION SELECT artist_uuid FROM norm.songs WHERE updated_at >= @since
-        UNION SELECT artist_uuid FROM norm.song_aliases WHERE updated_at >= @since
-        ORDER BY 1
-        """;
 }

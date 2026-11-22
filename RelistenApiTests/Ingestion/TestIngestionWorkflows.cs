@@ -6,6 +6,7 @@ using Relisten.Ingestion.Providers.PhantasyTour;
 using Relisten.Ingestion.Providers.PhishIn;
 using Relisten.Ingestion.Workflows;
 using Relisten.Normalization.Temporal;
+using Relisten.Search;
 using Relisten.Vendor.ArchiveOrg;
 using Temporalio.Activities;
 using Temporalio.Client;
@@ -38,19 +39,64 @@ public class TestIngestionWorkflows
         result.Status.Should().Be(ImportStatus.Partial);
         activities.Applied.Should().BeEquivalentTo([0, 3]);
         activities.Rebuilds.Should().Equal("shows", "years", "cache", "venues");
-        activities.SearchRefreshes.Should().Equal(result.Artist.Value);
         activities.DeletionApplications.Should().Be(1);
     }
 
     [Test]
-    public async Task SearchFailureDoesNotFailTheImportedArtist()
+    public async Task TargetedImportCompletesWhileItsSearchReindexIsStillRunning()
     {
-        var activities = new RecordingActivities(1) { FailSearchRefresh = true };
+        var searchStarted = new TaskCompletionSource<Guid>(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        var releaseSearch = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        var activities = new RecordingActivities(1)
+        {
+            RefreshSearch = async artist =>
+            {
+                searchStarted.SetResult(artist);
+                await releaseSearch.Task;
+                throw new ApplicationFailureException("Search service unavailable");
+            },
+        };
 
-        var result = await Run(activities);
+        await WithWorkers(
+            activities,
+            async () =>
+            {
+                var artist = new ArtistId(Guid.NewGuid());
+                var import = await environment.Client.StartWorkflowAsync(
+                    (ArchiveItemImportWorkflow workflow) =>
+                        workflow.RunAsync(
+                            new ImportArchiveItem(artist, new ArchiveItemId("0")),
+                            null
+                        ),
+                    Options()
+                );
+                var timeout = TimeSpan.FromSeconds(20);
+                try
+                {
+                    (await searchStarted.Task.WaitAsync(timeout)).Should().Be(artist.Value);
+                    var result = await import.GetResultAsync().WaitAsync(timeout);
+                    result.Status.Should().Be(ImportStatus.Completed);
+                    result.CompletedItems.Should().Be(1);
+                }
+                finally
+                {
+                    releaseSearch.TrySetResult();
+                }
 
-        result.CompletedItems.Should().Be(1);
-        activities.SearchRefreshes.Should().Equal(result.Artist.Value);
+                var child = (await import.FetchHistoryAsync())
+                    .Events.Select(e => e.ChildWorkflowExecutionStartedEventAttributes)
+                    .Single(e => e?.WorkflowType.Name == nameof(ArtistSearchReindexWorkflow));
+                await environment
+                    .Client.GetWorkflowHandle(child.WorkflowExecution.WorkflowId)
+                    .GetResultAsync()
+                    .WaitAsync(timeout);
+                return true;
+            }
+        );
     }
 
     [Test]
@@ -578,6 +624,7 @@ public class TestIngestionWorkflows
                 .AddWorkflow<PhishInWorkflow>()
                 .AddWorkflow<PhantasyTourWorkflow>()
                 .AddWorkflow<RefreshBatchWorkflow>()
+                .AddWorkflow<ArtistSearchReindexWorkflow>()
         );
 
     private async Task<T> WithWorkers<T>(RecordingActivities activities, Func<Task<T>> run)
@@ -614,21 +661,11 @@ public class TestIngestionWorkflows
         public List<int> Attempts { get; } = [];
         public List<int> Applied { get; } = [];
         public List<string> Rebuilds { get; } = [];
-        public List<Guid> SearchRefreshes { get; } = [];
-        public bool FailSearchRefresh { get; init; }
+        public Func<Guid, Task>? RefreshSearch { get; init; }
 
         [Activity(SearchReindexStep.ActivityName)]
-        public void SearchRefresh(Guid artist)
-        {
-            lock (sync)
-            {
-                SearchRefreshes.Add(artist);
-            }
-            if (FailSearchRefresh)
-            {
-                throw new ApplicationFailureException("Search service unavailable");
-            }
-        }
+        public Task SearchRefresh(Guid artist) =>
+            RefreshSearch?.Invoke(artist) ?? Task.CompletedTask;
 
         public string? FailRebuildStep { get; init; }
         public ArtistId[] Artists { get; } =

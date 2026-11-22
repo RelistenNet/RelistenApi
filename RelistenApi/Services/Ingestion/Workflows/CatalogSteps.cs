@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Relisten.Normalization.Temporal;
+using Relisten.Search;
 using Temporalio.Common;
 using Temporalio.Exceptions;
 using Temporalio.Workflows;
@@ -64,7 +65,7 @@ internal static class CatalogSteps
 
         if (Workflow.Patched("search-after-artist-rebuild"))
         {
-            await SearchReindexStep.BestEffort(artist.Value);
+            await ArtistSearchReindexWorkflow.Start(artist.Value);
         }
     }
 

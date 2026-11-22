@@ -22,11 +22,7 @@ internal sealed class ArtistSearchIndexer(
 {
     internal string AliasPrefix { get; } = configuration["Search:AliasPrefix"] ?? "catalog";
 
-    public async Task Reindex(
-        Guid artistUuid,
-        string? playExportPath,
-        CancellationToken cancellationToken
-    )
+    public async Task Reindex(Guid artistUuid, CancellationToken cancellationToken)
     {
         // Diff and write the same concrete collections throughout a reindex.
         // The full build catches up after it moves the aliases.
@@ -71,7 +67,7 @@ internal sealed class ArtistSearchIndexer(
             connection,
             snapshot,
             DateOnly.FromDateTime(DateTime.UtcNow),
-            playExportPath,
+            exportPath: null,
             cancellationToken,
             artistUuid
         );

@@ -1,7 +1,5 @@
 using FluentAssertions;
 using Relisten.Normalization.Temporal;
-using Relisten.Normalization.Venues;
-using Temporalio.Activities;
 using Temporalio.Client;
 using Temporalio.Testing;
 using Temporalio.Worker;
@@ -67,56 +65,5 @@ public class TestNightlyVenueRun
             nightly.Should().StartWith("skipped");
             await manual.SignalAsync(run => run.FinishAsync());
         });
-    }
-
-    [TestCase(true)]
-    [TestCase(false)]
-    public async Task VenueRunRefreshesSearchOnlyWhenArtistsAreKnown(bool flaggedOnly)
-    {
-        var artists = new[] { Guid.NewGuid(), Guid.NewGuid() };
-        var activities = new VenueSearchActivities(artists);
-        using var workflows = new TemporalWorker(
-            environment.Client,
-            new TemporalWorkerOptions(
-                NormalizationQueues.Workflows
-            ).AddWorkflow<VenueCatalogueWorkflow>()
-        );
-        using var database = new TemporalWorker(
-            environment.Client,
-            new TemporalWorkerOptions(NormalizationQueues.Database).AddAllActivities(activities)
-        );
-        var request = new BuildVenueCatalogue(
-            MaxChunks: 0,
-            FlaggedOnly: flaggedOnly,
-            HistoryMinShows: 0
-        );
-
-        await workflows.ExecuteAsync(() =>
-            database.ExecuteAsync(() =>
-                environment.Client.ExecuteWorkflowAsync(
-                    (VenueCatalogueWorkflow workflow) => workflow.RunAsync(request),
-                    new WorkflowOptions(
-                        "test/venue-search/" + Guid.NewGuid(),
-                        NormalizationQueues.Workflows
-                    )
-                )
-            )
-        );
-
-        activities.SearchRefreshes.Should().Equal(flaggedOnly ? artists : []);
-    }
-
-    public sealed class VenueSearchActivities(Guid[] artists)
-    {
-        public List<Guid> SearchRefreshes { get; } = [];
-
-        [Activity("Venues.FlaggedArtists")]
-        public Guid[] FlaggedArtists() => artists;
-
-        [Activity("Venues.Match")]
-        public VenueMatchResult Match(IReadOnlyList<Guid>? selected) => new(0, 0, 0, 0);
-
-        [Activity(SearchReindexStep.ActivityName)]
-        public void RefreshSearch(Guid artist) => SearchRefreshes.Add(artist);
     }
 }

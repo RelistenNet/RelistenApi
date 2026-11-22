@@ -7,8 +7,11 @@ using Microsoft.Extensions.Hosting.Internal;
 using Microsoft.Extensions.Logging.Abstractions;
 using Relisten;
 using Relisten.Identifiers;
+using Relisten.Ingestion;
 using Relisten.Search;
+using Temporalio.Client;
 using Temporalio.Testing;
+using Temporalio.Worker;
 
 namespace RelistenApiTests.Search;
 
@@ -70,29 +73,54 @@ public sealed class TestArtistSearchReindex
     }
 
     [Test]
-    public async Task BuildCatchesUpAShowCommittedAfterItsSnapshotBeforeTheAliasSwap()
+    public async Task BuildCatchesUpATrackChangedDuringTheBuildWithAnOldProviderTimestamp()
     {
         MigratedTestDatabase.RequireLocalDatabase();
         await using var connection = await MigratedTestDatabase.OpenAsync();
         var artist = await SeedArtist(connection);
-        await SeedShow(connection, artist);
+        var show = await SeedShow(connection, artist);
 
         await using var index = new TestIndex();
         await index.Build();
-        var added = (Show: Guid.Empty, Track: Guid.Empty);
-        await index.Build(async () =>
+        const string title = "Updated provider track";
+        await index.BuildDuringImport(async () =>
         {
-            // The old aliases still serve the current artist while the fresh
-            // collections contain the earlier database snapshot.
-            added = await SeedShow(connection, artist, day: 2);
+            // This provider changes the file title without changing the source
+            // or advancing the track's old provider timestamp.
+            await connection.ExecuteAsync(
+                "UPDATE source_tracks SET title = @title WHERE uuid = @Track",
+                new { title, show.Track }
+            );
             await index.Reindex(artist.Uuid);
-            (await index.Performances(added.Show)).Should().ContainSingle();
+            (await index.PerformanceLabel(show.Show)).Should().Be(title);
         });
 
-        (await index.Document("entities", UuidTypeId.Format("show", added.Show)))
-            .Should()
-            .NotBeNull();
-        (await index.Performances(added.Show)).Should().ContainSingle();
+        (await index.PerformanceLabel(show.Show)).Should().Be(title);
+    }
+
+    [Test]
+    public async Task ArtistWithNoPlayableTracksLosesItsPerformancesInReindexAndFullBuild()
+    {
+        MigratedTestDatabase.RequireLocalDatabase();
+        await using var connection = await MigratedTestDatabase.OpenAsync();
+        var artist = await SeedArtist(connection);
+        var show = await SeedShow(connection, artist);
+
+        await using var index = new TestIndex();
+        await index.Build();
+        var old = (await index.Performances(show.Show)).Should().ContainSingle().Subject;
+
+        await connection.ExecuteAsync(
+            "UPDATE source_tracks SET mp3_url = '', flac_url = NULL WHERE uuid = @Track",
+            new { show.Track }
+        );
+        await index.Reindex(artist.Uuid);
+
+        (await index.Document("performances", old.Id)).Should().BeNull();
+        (await index.Performances(show.Show)).Should().BeEmpty();
+
+        await index.Build();
+        (await index.Performances(show.Show)).Should().BeEmpty();
     }
 
     private static Task SeedVenues(Npgsql.NpgsqlConnection connection) =>
@@ -163,7 +191,7 @@ public sealed class TestArtistSearchReindex
             INSERT INTO source_tracks(uuid, artist_id, source_id, source_set_id, track_position,
                                       title, slug, mp3_url, duration, is_orphaned, updated_at)
             SELECT @track, @artistId, source_id, id, 1, 'Search fixture track', 'fixture',
-                   'https://example.test/' || @track::text || '.mp3', 123, false, now()
+                   'https://example.test/' || @track::text || '.mp3', 123, false, @changed
             FROM track_set
             """,
             new
@@ -218,16 +246,36 @@ public sealed class TestArtistSearchReindex
                 db,
                 builder,
                 artists,
-                configuration,
                 NullLogger<SearchBuildActivities>.Instance
             );
         }
 
-        public Task<SearchBuildResult> Build(Func<Task>? beforePublish = null)
+        public Task Build() =>
+            new ActivityEnvironment().RunAsync(() =>
+                builds.Build(null, Guid.NewGuid().ToString("N"))
+            );
+
+        public async Task BuildDuringImport(Func<Task> beforePublish)
         {
             interceptor.BeforePublish = beforePublish;
-            return new ActivityEnvironment().RunAsync(() =>
-                builds.Build(null, Guid.NewGuid().ToString("N"))
+            await using var environment = await WorkflowEnvironment.StartLocalAsync();
+            using var workflows = new TemporalWorker(
+                environment.Client,
+                new TemporalWorkerOptions(IngestionQueues.Workflows)
+                    .AddWorkflow<SearchBuildWorkflow>()
+                    .AddWorkflow<SearchRetireWorkflow>()
+            );
+            using var database = new TemporalWorker(
+                environment.Client,
+                new TemporalWorkerOptions(IngestionQueues.Database).AddAllActivities(builds)
+            );
+            await workflows.ExecuteAsync(() =>
+                database.ExecuteAsync(() =>
+                    environment.Client.ExecuteWorkflowAsync(
+                        (SearchBuildWorkflow workflow) => workflow.RunAsync(null),
+                        new WorkflowOptions(SearchBuildWorkflow.Id, IngestionQueues.Workflows)
+                    )
+                )
             );
         }
 
@@ -236,6 +284,12 @@ public sealed class TestArtistSearchReindex
 
         public Task<SearchDocument?> Document(string kind, string id) =>
             client.ReadDocument(Alias(kind), id, CancellationToken.None);
+
+        public async Task<string> PerformanceLabel(Guid show)
+        {
+            var hit = (await Performances(show)).Should().ContainSingle().Subject;
+            return (await Document("performances", hit.Id))!.Label;
+        }
 
         public async Task<TypesenseClient.IndexedDocument[]> Performances(Guid show) =>
             await client
