@@ -13,6 +13,7 @@ using RelistenUserService.Identity.Deletion;
 using RelistenUserService.Mcp;
 using RelistenUserService.Persistence;
 using RelistenUserService.Playlists;
+using RelistenUserService.Search;
 using RelistenUserService.Sonos;
 using Temporalio.Extensions.Hosting;
 
@@ -64,6 +65,8 @@ public static class AccountsApplication
 
         var (temporalAddress, temporalNamespace) = ReadTemporalSettings(builder);
         builder.Services.AddTemporalClient(temporalAddress, temporalNamespace);
+        builder.Services.AddSingleton<PlaylistSearchNotifier>();
+        builder.Services.AddMergedSearch(runtime, builder.Configuration, builder.Environment);
         builder.Services.AddScoped<AccountDeletionJobs>();
         builder.Services.AddSingleton<AccountDeletionStarter>();
         builder
@@ -143,6 +146,7 @@ public static class AccountsApplication
         app.UseRouting();
         app.UseMiddleware<RefreshTokenReplayMiddleware>();
         app.UseAuthentication();
+        app.UseMiddleware<OptionalNativeBearerMiddleware>();
         app.UseAuthorization();
         app.UseMiddleware<BrowserMutationProtectionMiddleware>();
 

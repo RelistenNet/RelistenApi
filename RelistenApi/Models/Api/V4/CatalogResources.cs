@@ -108,6 +108,7 @@ public sealed class TrackResource
     public int? Duration { get; init; }
     public string Title { get; init; } = null!;
     public string Slug { get; init; } = null!;
+    public bool Playable { get; init; }
     public string? Mp3Url { get; init; }
     public string? Mp3Md5 { get; init; }
     public string? FlacUrl { get; init; }

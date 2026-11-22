@@ -1,0 +1,3847 @@
+{
+  "format_version": 1,
+  "locale": "en-US",
+  "cases": [
+    {
+      "id": "GD01",
+      "query": "grateful dead",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Grateful Dead artist.",
+      "targets": [
+        {
+          "kinds": [
+            "artist"
+          ],
+          "artist_slug": "grateful-dead"
+        }
+      ],
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "GD02",
+      "query": "barton hall",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "browse",
+      "max_rank": 1,
+      "expected": "Barton Hall, Ithaca, leads the results. The venue opens to the Dead's 1977-05-08, 1980-05-07, and 1981-05-16 shows.",
+      "targets": [
+        {
+          "kinds": [
+            "venue"
+          ],
+          "name": "Barton Hall",
+          "city": "Ithaca"
+        }
+      ],
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "GD03",
+      "query": "cornell 77",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Grateful Dead, Barton Hall, 1977-05-08.",
+      "targets": [
+        {
+          "kinds": [
+            "show"
+          ],
+          "artist_slug": "grateful-dead",
+          "show_date": "1977-05-08"
+        }
+      ],
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "GD04",
+      "query": "5/8/77",
+      "surface": "catalog_api",
+      "artist_filter": "grateful-dead",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Barton Hall, 1977-05-08.",
+      "also_covers": [
+        "PT15"
+      ],
+      "targets": [
+        {
+          "kinds": [
+            "show"
+          ],
+          "artist_slug": "grateful-dead",
+          "show_date": "1977-05-08"
+        }
+      ],
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "GD05",
+      "query": "barton hall 1980",
+      "surface": "catalog_api",
+      "artist_filter": "grateful-dead",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "1980-05-07. The famous 1977 show cannot satisfy this date.",
+      "targets": [
+        {
+          "kinds": [
+            "show"
+          ],
+          "artist_slug": "grateful-dead",
+          "show_date": "1980-05-07"
+        }
+      ],
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "GD06",
+      "query": "cornell scarlet 77",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "1977-05-08 with a selectable `Scarlet Begonias` file or a clearly labeled file containing it.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "grateful-dead",
+          "name": "Scarlet Begonias",
+          "show_date": "1977-05-08"
+        }
+      ],
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "GD07",
+      "query": "cornell morning dew",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 5,
+      "expected": "1977-05-08 with a `Morning Dew` preview.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "grateful-dead",
+          "name": "Morning Dew",
+          "show_date": "1977-05-08"
+        }
+      ],
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "GD08",
+      "query": "barton dancin 77",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "1977-05-08 with `Dancin’ in the Streets`, allowing title variants.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "grateful-dead",
+          "name": "Dancin’ in the Streets",
+          "show_date": "1977-05-08"
+        }
+      ],
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "GD09",
+      "query": "veneta darkstar",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 5,
+      "expected": "Grateful Dead, 1972-08-27, with `Dark Star`.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "grateful-dead",
+          "name": "Dark Star",
+          "show_date": "1972-08-27"
+        }
+      ],
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "GD10",
+      "query": "8/27/72 bird song",
+      "surface": "catalog_api",
+      "artist_filter": "grateful-dead",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "1972-08-27 with `Bird Song`.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "grateful-dead",
+          "name": "Bird Song",
+          "show_date": "1972-08-27"
+        }
+      ],
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "GD11",
+      "query": "englishtown peggy o",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 5,
+      "expected": "Raceway Park, 1977-09-03, with `Peggy-O`.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "grateful-dead",
+          "name": "Peggy-O",
+          "show_date": "1977-09-03"
+        }
+      ],
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "GD12",
+      "query": "lyceum morning dew 72",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 5,
+      "expected": "London, 1972-05-26, with `Morning Dew`.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "grateful-dead",
+          "name": "Morning Dew",
+          "show_date": "1972-05-26"
+        }
+      ],
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "GD13",
+      "query": "winterland dark star 11/11/73",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Winterland, 1973-11-11, with `Dark Star`.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "grateful-dead",
+          "name": "Dark Star",
+          "show_date": "1973-11-11"
+        }
+      ],
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "GD14",
+      "query": "other one",
+      "surface": "catalog_api",
+      "artist_filter": "grateful-dead",
+      "tier": "starter",
+      "check": "browse",
+      "max_rank": 5,
+      "expected": "the Dead's `The Other One` song and its performances.",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "grateful-dead",
+          "name": "The Other One"
+        }
+      ],
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "GD15",
+      "query": "scarlett begoinias",
+      "surface": "catalog_api",
+      "artist_filter": "grateful-dead",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "canonical `Scarlet Begonias` via the stored alias.",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "grateful-dead",
+          "name": "Scarlet Begonias"
+        }
+      ],
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "PH01",
+      "query": "phish",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Phish artist.",
+      "targets": [
+        {
+          "kinds": [
+            "artist"
+          ],
+          "artist_slug": "phish"
+        }
+      ],
+      "cohort": "phish"
+    },
+    {
+      "id": "PH02",
+      "query": "japan twist",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 5,
+      "expected": "2000-06-14 Fukuoka and 2000-06-10 Tokyo, each with a `Twist` preview. Both outrank the June 16 soundcheck if it appears.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "Twist",
+          "show_date": "2000-06-14"
+        },
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "Twist",
+          "show_date": "2000-06-10"
+        }
+      ],
+      "cohort": "phish",
+      "playback_replay": {
+        "window_end_utc": "2026-11-20",
+        "days": 365,
+        "track_starts": {
+          "fukuoka_twist": 741,
+          "tokyo_twist": 1
+        },
+        "ordered_matches": [
+          "fukuoka_twist",
+          "tokyo_twist"
+        ]
+      }
+    },
+    {
+      "id": "PH03",
+      "query": "ghost japan",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 5,
+      "expected": "Phish `Ghost` at 2000-06-15 Osaka and 1999-07-30 Naeba. Show each city's date with its track.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "Ghost",
+          "show_date": "2000-06-15"
+        },
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "Ghost",
+          "show_date": "1999-07-30"
+        }
+      ],
+      "cohort": "phish"
+    },
+    {
+      "id": "PH04",
+      "query": "fukuoka twi",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Drum Logos, 2000-06-14, with a playable `Twist`.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "Twist",
+          "show_date": "2000-06-14"
+        }
+      ],
+      "cohort": "phish"
+    },
+    {
+      "id": "PH05",
+      "query": "japan 2000 ghost",
+      "surface": "catalog_api",
+      "artist_filter": "phish",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 5,
+      "expected": "2000-06-15 Osaka with `Ghost`. The 1999 Naeba show fails the year constraint.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "Ghost",
+          "show_date": "2000-06-15"
+        }
+      ],
+      "cohort": "phish"
+    },
+    {
+      "id": "PH06",
+      "query": "hampton 97 halleys",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 5,
+      "expected": "Hampton Coliseum, 1997-11-22, with `Halley's Comet`.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "Halley's Comet",
+          "show_date": "1997-11-22"
+        }
+      ],
+      "cohort": "phish"
+    },
+    {
+      "id": "PH07",
+      "query": "tweezer auburn hills 97",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 5,
+      "expected": "The Palace, 1997-12-06, with `Tweezer`.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "Tweezer",
+          "show_date": "1997-12-06"
+        }
+      ],
+      "cohort": "phish"
+    },
+    {
+      "id": "PH08",
+      "query": "tweezer reprise auburn hills",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 5,
+      "expected": "1997-12-06 with `Tweezer Reprise`. The plain `Tweezer` from the same show cannot substitute.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "Tweezer Reprise",
+          "show_date": "1997-12-06"
+        }
+      ],
+      "cohort": "phish"
+    },
+    {
+      "id": "PH09",
+      "query": "phish 46 days",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "song `46 Days`. Treat `46` as part of the title.",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "phish",
+          "name": "46 Days"
+        }
+      ],
+      "cohort": "phish"
+    },
+    {
+      "id": "PH10",
+      "query": "yem msg 95",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 5,
+      "expected": "Madison Square Garden, 1995-12-31, with `You Enjoy Myself`. Use the stored song alias and a venue alias for `MSG`.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "You Enjoy Myself",
+          "show_date": "1995-12-31"
+        }
+      ],
+      "cohort": "phish"
+    },
+    {
+      "id": "PH11",
+      "query": "big cypress sand",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 5,
+      "expected": "1999-12-31 with `Sand`.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "Sand",
+          "show_date": "1999-12-31"
+        }
+      ],
+      "cohort": "phish"
+    },
+    {
+      "id": "PH12",
+      "query": "big cypress after midnight",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 5,
+      "expected": "1999-12-31 with `After Midnight`.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "After Midnight",
+          "show_date": "1999-12-31"
+        }
+      ],
+      "cohort": "phish"
+    },
+    {
+      "id": "PH13",
+      "query": "roses uniondale 4/3/98",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "1998-04-03 with `Roses Are Free`.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "Roses Are Free",
+          "show_date": "1998-04-03"
+        }
+      ],
+      "cohort": "phish"
+    },
+    {
+      "id": "PH14",
+      "query": "lawn boy baker's dozen",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Madison Square Garden, 2017-07-25. The show card opens to both Set 1 and encore choices with their durations. Use a scoped Baker’s Dozen run name.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "Lawn Boy",
+          "show_date": "2017-07-25"
+        }
+      ],
+      "cohort": "phish"
+    },
+    {
+      "id": "PH15",
+      "query": "scent of a mule limestone 8/17/97",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "1997-08-17. Expanding the match shows the two Set 3 files on either side of `Digital Delay Loop Jam`.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "Scent of a Mule",
+          "show_date": "1997-08-17"
+        }
+      ],
+      "cohort": "phish"
+    },
+    {
+      "id": "PH16",
+      "query": "tokyo 6/16/00 twist",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "2000-06-16 with the matching file explicitly labeled as soundcheck. Preserve that distinction when playing or adding.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "(Check) Twist Jam",
+          "show_date": "2000-06-16",
+          "soundcheck": true
+        }
+      ],
+      "cohort": "phish"
+    },
+    {
+      "id": "PH17",
+      "query": "phish japan 2000",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "browse",
+      "max_rank": 5,
+      "expected": "a route into Phish's 2000 Japan shows. The listener can reach Tokyo, Fukuoka, and Osaka without entering a track title.",
+      "targets": [
+        {
+          "kinds": [
+            "show"
+          ],
+          "artist_slug": "phish",
+          "year": 2000,
+          "country": "JP"
+        }
+      ],
+      "landing_targets": [
+        {
+          "kinds": [
+            "tour"
+          ],
+          "artist_slug": "phish"
+        }
+      ],
+      "cohort": "phish"
+    },
+    {
+      "id": "PH18",
+      "query": "lawn boy 2017",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 5,
+      "expected": "Madison Square Garden, 2017-07-25, and Northerly Island, 2017-07-16. Label their dates, places, and durations so either version is identifiable.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "Lawn Boy",
+          "show_date": "2017-07-25"
+        },
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "Lawn Boy",
+          "show_date": "2017-07-16"
+        }
+      ],
+      "cohort": "phish"
+    },
+    {
+      "id": "PH19",
+      "query": "tokyo twist",
+      "surface": "catalog_api",
+      "artist_filter": "phish",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "the 2000-06-10 Zepp performance with a playable `Twist`. The Fukuoka performance's higher play count cannot override the city, and the June 16 soundcheck ranks below the concert performance.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "Twist",
+          "show_date": "2000-06-10"
+        }
+      ],
+      "cohort": "phish"
+    },
+    {
+      "id": "BS01",
+      "query": "billy strings",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Billy Strings artist.",
+      "targets": [
+        {
+          "kinds": [
+            "artist"
+          ],
+          "artist_slug": "billy-strings"
+        }
+      ],
+      "cohort": "billy_strings"
+    },
+    {
+      "id": "BS02",
+      "query": "billy string",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Billy Strings via prefix or typo handling.",
+      "targets": [
+        {
+          "kinds": [
+            "artist"
+          ],
+          "artist_slug": "billy-strings"
+        }
+      ],
+      "cohort": "billy_strings"
+    },
+    {
+      "id": "BS03",
+      "query": "billy red rocks 2022",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 5,
+      "expected": "Billy Strings at Red Rocks on 2022-05-12 and 2022-05-13.",
+      "targets": [
+        {
+          "kinds": [
+            "show"
+          ],
+          "artist_slug": "billy-strings",
+          "show_date": "2022-05-12"
+        },
+        {
+          "kinds": [
+            "show"
+          ],
+          "artist_slug": "billy-strings",
+          "show_date": "2022-05-13"
+        }
+      ],
+      "cohort": "billy_strings"
+    },
+    {
+      "id": "BS04",
+      "query": "billy red rocks creek",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 5,
+      "expected": "2022-05-13 and 2023-05-12, each with `Meet Me at the Creek`.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "billy-strings",
+          "name": "Meet Me at the Creek",
+          "show_date": "2022-05-13"
+        },
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "billy-strings",
+          "name": "Meet Me at the Creek",
+          "show_date": "2023-05-12"
+        }
+      ],
+      "cohort": "billy_strings"
+    },
+    {
+      "id": "BS05",
+      "query": "red rocks creek 2022",
+      "surface": "catalog_api",
+      "artist_filter": "billy-strings",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "2022-05-13 with `Meet Me at the Creek`.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "billy-strings",
+          "name": "Meet Me at the Creek",
+          "show_date": "2022-05-13"
+        }
+      ],
+      "cohort": "billy_strings"
+    },
+    {
+      "id": "BS06",
+      "query": "meet me by the creek",
+      "surface": "catalog_api",
+      "artist_filter": "billy-strings",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "`Meet Me at the Creek` via the stored alias.",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "billy-strings",
+          "name": "Meet Me at the Creek"
+        }
+      ],
+      "cohort": "billy_strings"
+    },
+    {
+      "id": "BS07",
+      "query": "billy turmoil and tin foil",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "`Turmoil & Tinfoil` via the stored alias.",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "billy-strings",
+          "name": "Turmoil & Tinfoil"
+        }
+      ],
+      "cohort": "billy_strings"
+    },
+    {
+      "id": "BS08",
+      "query": "termoil and tinfoil red rocks 5/12/22",
+      "surface": "catalog_api",
+      "artist_filter": "billy-strings",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "2022-05-12 with a playable `Turmoil & Tinfoil` file, including an eligible numbered uploader title.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "billy-strings",
+          "name": "Turmoil & Tinfoil",
+          "show_date": "2022-05-12"
+        }
+      ],
+      "cohort": "billy_strings"
+    },
+    {
+      "id": "BS09",
+      "query": "away from the mire morrison 5/12/22",
+      "surface": "catalog_api",
+      "artist_filter": "billy-strings",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "the 2022-05-12 Red Rocks show and matching file. The city suffices.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "billy-strings",
+          "name": "Away From The Mire",
+          "show_date": "2022-05-12"
+        }
+      ],
+      "cohort": "billy_strings"
+    },
+    {
+      "id": "BS10",
+      "query": "billy dust in a baggy red rocks 22",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 5,
+      "expected": "2022-05-13 with `Dust in a Baggie`.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "billy-strings",
+          "name": "Dust In A Baggie",
+          "show_date": "2022-05-13"
+        }
+      ],
+      "cohort": "billy_strings"
+    },
+    {
+      "id": "BS11",
+      "query": "highway hipnosis asheville 2/16/24",
+      "surface": "catalog_api",
+      "artist_filter": "billy-strings",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "2024-02-16 with `Highway Hypnosis` via the stored alias.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "billy-strings",
+          "name": "Highway Hypnosis",
+          "show_date": "2024-02-16"
+        }
+      ],
+      "cohort": "billy_strings"
+    },
+    {
+      "id": "BS12",
+      "query": "billy little maggie asheville 2/18/24",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "2024-02-18 with `Little Maggie`.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "billy-strings",
+          "name": "Little Maggie",
+          "show_date": "2024-02-18"
+        }
+      ],
+      "cohort": "billy_strings"
+    },
+    {
+      "id": "BS13",
+      "query": "exploreasheville arena billy 2/18/24",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "2024-02-18 via the venue's alias, even if the displayed name is Harrah's Cherokee Center Asheville.",
+      "targets": [
+        {
+          "kinds": [
+            "show"
+          ],
+          "artist_slug": "billy-strings",
+          "show_date": "2024-02-18"
+        }
+      ],
+      "cohort": "billy_strings"
+    },
+    {
+      "id": "BS14",
+      "query": "billy train train",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "song `Train, Train`. A repeated query word can belong to an exact title.",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "billy-strings",
+          "name": "Train, Train"
+        }
+      ],
+      "cohort": "billy_strings"
+    },
+    {
+      "id": "BS15",
+      "query": "billy help on the way",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "browse",
+      "max_rank": 5,
+      "expected": "Billy Strings' song and playable matches under his name. A Dead result cannot stand in for it.",
+      "targets": [
+        {
+          "kinds": [
+            "song",
+            "performance"
+          ],
+          "artist_slug": "billy-strings",
+          "name": "Help On The Way"
+        }
+      ],
+      "cohort": "billy_strings"
+    },
+    {
+      "id": "BS16",
+      "query": "billy asheville feb 2024",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "browse",
+      "max_rank": 5,
+      "expected": "the Asheville shows on February 16–18. Let the listener choose by date and open the setlist.",
+      "targets": [
+        {
+          "kinds": [
+            "show"
+          ],
+          "artist_slug": "billy-strings",
+          "city": "Asheville",
+          "year": 2024,
+          "month": 2
+        }
+      ],
+      "landing_targets": [
+        {
+          "kinds": [
+            "venue"
+          ],
+          "city": "Asheville"
+        }
+      ],
+      "cohort": "billy_strings"
+    },
+    {
+      "id": "X01",
+      "query": "fire on the mountain",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 5,
+      "expected": "individually labeled Grateful Dead and Billy Strings songs or performance matches. Each opens versions by that artist.",
+      "targets": [
+        {
+          "kinds": [
+            "song",
+            "performance"
+          ],
+          "artist_slug": "grateful-dead",
+          "name": "Fire On The Mountain"
+        },
+        {
+          "kinds": [
+            "song",
+            "performance"
+          ],
+          "artist_slug": "billy-strings",
+          "name": "Fire On The Mountain"
+        }
+      ],
+      "cohort": "cross_catalog"
+    },
+    {
+      "id": "X02",
+      "query": "fire on the mountain",
+      "surface": "catalog_api",
+      "artist_filter": "billy-strings",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Billy Strings' song.",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "billy-strings",
+          "name": "Fire On The Mountain"
+        }
+      ],
+      "cohort": "cross_catalog"
+    },
+    {
+      "id": "X03",
+      "query": "ghost",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 5,
+      "expected": "at least one clearly labeled artist-name match, such as Ghost Light, and the clearly labeled Phish `Ghost` song.",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "phish",
+          "name": "Ghost"
+        },
+        {
+          "kinds": [
+            "artist"
+          ],
+          "name_contains": "Ghost"
+        }
+      ],
+      "cohort": "cross_catalog"
+    },
+    {
+      "id": "X04",
+      "query": "ghost",
+      "surface": "catalog_api",
+      "artist_filter": "phish",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Phish's song.",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "phish",
+          "name": "Ghost"
+        }
+      ],
+      "cohort": "cross_catalog"
+    },
+    {
+      "id": "X05",
+      "query": "barton hall 2023",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 5,
+      "expected": "Dead and Company, 2023-05-08. Preserve the artist and date.",
+      "targets": [
+        {
+          "kinds": [
+            "show"
+          ],
+          "artist_slug": "dead-and-co",
+          "show_date": "2023-05-08"
+        }
+      ],
+      "cohort": "cross_catalog"
+    },
+    {
+      "id": "X06",
+      "query": "string cheese restless wind",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "browse",
+      "max_rank": 5,
+      "expected": "playable String Cheese Incident performances based on raw titles. Group title variants and label the artist.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "sci",
+          "name": "Restless Wind"
+        }
+      ],
+      "cohort": "cross_catalog"
+    },
+    {
+      "id": "X07",
+      "query": "ween buckingham green",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "browse",
+      "max_rank": 5,
+      "expected": "Ween's song and access to playable files. Some catalog evidence is imported and playable files still exist.",
+      "targets": [
+        {
+          "kinds": [
+            "song",
+            "performance"
+          ],
+          "artist_slug": "ween",
+          "name": "Buckingham Green"
+        }
+      ],
+      "cohort": "cross_catalog"
+    },
+    {
+      "id": "X08",
+      "query": "grateful dead scarlet japan 5/8/77",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "guardrail",
+      "expected": "no file with the Cornell show presented as a Japan match. Offer an explicit way to drop a constraint.",
+      "cohort": "cross_catalog"
+    },
+    {
+      "id": "X09",
+      "query": "phish fukuoka twist 1900",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "guardrail",
+      "expected": "show no exact match. The correct 2000 show can appear only as a clearly marked suggestion behind a date correction.",
+      "cohort": "cross_catalog"
+    },
+    {
+      "id": "X10",
+      "query": "billy little maggie",
+      "surface": "phone",
+      "next_query": "japan twist",
+      "complete_newer_response_first": true,
+      "tier": "starter",
+      "check": "guardrail",
+      "expected": "If the Billy response arrives after the Japan response, keep only the current query’s results and add targets.",
+      "cohort": "cross_catalog"
+    },
+    {
+      "id": "X11",
+      "query": "1997-12-06",
+      "surface": "catalog_api",
+      "artist_filter": "phish",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "The Palace of Auburn Hills show.",
+      "targets": [
+        {
+          "kinds": [
+            "show"
+          ],
+          "artist_slug": "phish",
+          "show_date": "1997-12-06"
+        }
+      ],
+      "cohort": "cross_catalog"
+    },
+    {
+      "id": "X12",
+      "query": "japan twist",
+      "surface": "catalog_api",
+      "artist_filter": "phish",
+      "country_filter": "JP",
+      "tier": "starter",
+      "check": "guardrail",
+      "expected": "Every matching performance is Phish in Japan. Keep both clauses mandatory throughout retrieval and ranking.",
+      "cohort": "cross_catalog"
+    },
+    {
+      "id": "R01",
+      "query": "scarlet > fire cornell 77",
+      "surface": "catalog_api",
+      "tier": "extended",
+      "check": "behavior",
+      "expected": "Show the two adjacent files or an actual combined file from a single source on 1977-05-08. Let the user add the passage in order. Seeing both titles somewhere on the show is weaker evidence.",
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "R02",
+      "query": "help slip frank winterland 6/9/77",
+      "surface": "catalog_api",
+      "tier": "extended",
+      "check": "behavior",
+      "expected": "Find the verified three-song sequence. A source with a combined Help/Slip file offers that file once. The query needs shorthand and source-order handling.",
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "R03",
+      "query": "fukuoka twist jam",
+      "surface": "catalog_api",
+      "tier": "extended",
+      "check": "behavior",
+      "expected": "Find the 2000-06-14 Set 2 pair based on adjacency in that recording. Let the listener keep the two files together.",
+      "cohort": "phish"
+    },
+    {
+      "id": "R04",
+      "query": "charlie miller cornell",
+      "surface": "catalog_api",
+      "tier": "extended",
+      "check": "behavior",
+      "expected": "Show the relevant Cornell recordings with their transfer credits. Adding later must use a file on the chosen transfer.",
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "R05",
+      "query": "117026",
+      "surface": "catalog_api",
+      "tier": "extended",
+      "check": "behavior",
+      "expected": "An exact etree ID opens or identifies the Moore/Berger/Miller Cornell source. The number is a source identifier.",
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "R06",
+      "query": "cornell 77 sbd dew",
+      "surface": "catalog_api",
+      "tier": "extended",
+      "check": "behavior",
+      "expected": "A file labeled `Morning Dew` on an eligible soundboard. A soundboard elsewhere on the same show cannot justify an audience file wearing that label.",
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "R07",
+      "query": "sunshine daydream dark star",
+      "surface": "catalog_api",
+      "tier": "extended",
+      "check": "behavior",
+      "expected": "Surface the 1972-08-27 Veneta show and `Dark Star` via a scoped show or release alias. The alias can coexist with other uses of the phrase.",
+      "sources": [
+        {
+          "label": "Dead.net on Veneta and “Dark Star”",
+          "url": "https://www.dead.net/sunshine-daydream-veneta-82772-part-2"
+        }
+      ],
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "R08",
+      "query": "tweezabella",
+      "surface": "catalog_api",
+      "tier": "extended",
+      "check": "behavior",
+      "expected": "Show 1997-12-06 with `Tweezer → Izabella`. Add an evidence-backed alias for this performance or sequence.",
+      "sources": [
+        {
+          "label": "Phish’s Auburn Hills show notes",
+          "url": "https://phish.com/tours/dates/sat-1997-12-06-the-palace-of-auburn-hills/"
+        }
+      ],
+      "cohort": "phish"
+    },
+    {
+      "id": "R09",
+      "query": "went gin",
+      "surface": "catalog_api",
+      "tier": "extended",
+      "check": "behavior",
+      "expected": "Find `Bathtub Gin` on 1997-08-17. The nickname belongs to this performance.",
+      "sources": [
+        {
+          "label": "Phish’s Great Went show notes",
+          "url": "https://phish.com/tours/dates/sun-1997-08-17-the-great-went-loring-air-force-base/"
+        }
+      ],
+      "cohort": "phish"
+    },
+    {
+      "id": "R10",
+      "query": "quan boy baker's dozen",
+      "surface": "catalog_api",
+      "tier": "extended",
+      "check": "behavior",
+      "expected": "Reach the same `Lawn Boy` result as PH14 directly or through one visible correction. Keep the named run as a constraint.",
+      "cohort": "phish"
+    },
+    {
+      "id": "R11",
+      "query": "longest billy creek red rocks",
+      "surface": "catalog_api",
+      "tier": "extended",
+      "check": "behavior",
+      "expected": "Let the user compare versions with dates and durations. Call a value a track duration where it includes neighboring music or tape effects. A claim about musical runtime needs stronger evidence.",
+      "cohort": "billy_strings"
+    },
+    {
+      "id": "R12",
+      "query": "best dark star",
+      "surface": "catalog_api",
+      "tier": "extended",
+      "check": "behavior",
+      "expected": "Offer a clearly labeled comparison such as `Popular performances`, ranked by starts of eligible files containing the song over the stated time window.",
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "R13",
+      "query": "beautiful jam charlie miller",
+      "surface": "catalog_api",
+      "artist_filter": "grateful-dead",
+      "tier": "extended",
+      "check": "behavior",
+      "expected": "The February 18, 1971 Miller source `111793` opens with a relevant review excerpt. The April 28 descriptive phrase cannot establish the named passage. The Miller review cannot supply a direct add for a file on the Cantor source. Keep the named file from the other February 18 recording identifiable by source.",
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "R14",
+      "query": "jerry moore cornell dolby b",
+      "surface": "catalog_api",
+      "tier": "extended",
+      "check": "behavior",
+      "expected": "Find the May 8, 1977 source with upstream ID containing `117026` using the taper credit and source notes. Show the relevant line and open the exact recording.",
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "PT01",
+      "query": "scarlet",
+      "surface": "catalog_api",
+      "artist_filter": "grateful-dead",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Song name",
+      "expected": "Song: Scarlet Begonias",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "grateful-dead",
+          "name": "Scarlet Begonias"
+        }
+      ],
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "PT02",
+      "query": "morning dew",
+      "surface": "catalog_api",
+      "artist_filter": "grateful-dead",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Song name",
+      "expected": "Song: Morning Dew",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "grateful-dead",
+          "name": "Morning Dew"
+        }
+      ],
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "PT03",
+      "query": "PITB",
+      "surface": "catalog_api",
+      "artist_filter": "grateful-dead",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Abbreviation",
+      "expected": "Song: Playing In The Band",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "grateful-dead",
+          "name": "Playing In The Band"
+        }
+      ],
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "PT04",
+      "query": "GDTRFB",
+      "surface": "catalog_api",
+      "artist_filter": "grateful-dead",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Abbreviation",
+      "expected": "Song: Goin' Down The Road Feeling Bad",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "grateful-dead",
+          "name": "Goin' Down The Road Feeling Bad"
+        }
+      ],
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "PT05",
+      "query": "nfa",
+      "surface": "catalog_api",
+      "artist_filter": "grateful-dead",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Abbreviation",
+      "expected": "Song: Not Fade Away",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "grateful-dead",
+          "name": "Not Fade Away"
+        }
+      ],
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "PT06",
+      "query": "YEM",
+      "surface": "catalog_api",
+      "artist_filter": "phish",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Abbreviation",
+      "expected": "Song: You Enjoy Myself",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "phish",
+          "name": "You Enjoy Myself"
+        }
+      ],
+      "cohort": "phish"
+    },
+    {
+      "id": "PT07",
+      "query": "mikes",
+      "surface": "catalog_api",
+      "artist_filter": "phish",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Punctuation",
+      "expected": "Song: Mike's Song",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "phish",
+          "name": "Mike's Song"
+        }
+      ],
+      "cohort": "phish"
+    },
+    {
+      "id": "PT08",
+      "query": "dust in a baggy",
+      "surface": "catalog_api",
+      "artist_filter": "billy-strings",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Misspelling",
+      "expected": "Song: Dust In A Baggie",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "billy-strings",
+          "name": "Dust In A Baggie"
+        }
+      ],
+      "cohort": "billy_strings"
+    },
+    {
+      "id": "PT09",
+      "query": "dust in a bagy",
+      "surface": "catalog_api",
+      "artist_filter": "billy-strings",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Typo",
+      "expected": "Song: Dust In A Baggie",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "billy-strings",
+          "name": "Dust In A Baggie"
+        }
+      ],
+      "cohort": "billy_strings"
+    },
+    {
+      "id": "PT10",
+      "query": "meet me",
+      "surface": "catalog_api",
+      "artist_filter": "billy-strings",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Prefix",
+      "expected": "Song: Meet Me At The Creek",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "billy-strings",
+          "name": "Meet Me at the Creek"
+        }
+      ],
+      "cohort": "billy_strings"
+    },
+    {
+      "id": "PT11",
+      "query": "friend of the devil",
+      "surface": "catalog_api",
+      "artist_filter": "grateful-dead",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Song name",
+      "expected": "Song: Friend Of The Devil",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "grateful-dead",
+          "name": "Friend Of The Devil"
+        }
+      ],
+      "cohort": "casual"
+    },
+    {
+      "id": "PT12",
+      "query": "begonais",
+      "surface": "catalog_api",
+      "artist_filter": "grateful-dead",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Typo",
+      "expected": "Song: Scarlet Begonias",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "grateful-dead",
+          "name": "Scarlet Begonias"
+        }
+      ],
+      "cohort": "casual"
+    },
+    {
+      "id": "PT13",
+      "query": "tw",
+      "surface": "catalog_api",
+      "artist_filter": "phish",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 3,
+      "intent": "Typeahead, 2 characters",
+      "expected": "Song: Tweezer in the top 3",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "phish",
+          "name": "Tweezer"
+        }
+      ],
+      "context_note": "Explicit Phish scope permits a two-character prefix probe.",
+      "cohort": "phish"
+    },
+    {
+      "id": "PT14",
+      "query": "tweez",
+      "surface": "catalog_api",
+      "artist_filter": "phish",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Prefix",
+      "expected": "Song: Tweezer ranks above Tweezer Reprise for this prefix.",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "phish",
+          "name": "Tweezer"
+        }
+      ],
+      "cohort": "phish"
+    },
+    {
+      "id": "PT16",
+      "query": "1977-05-08",
+      "surface": "catalog_api",
+      "artist_filter": "grateful-dead",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Date, ISO",
+      "expected": "Show: 1977-05-08 Barton Hall",
+      "targets": [
+        {
+          "kinds": [
+            "show"
+          ],
+          "artist_slug": "grateful-dead",
+          "show_date": "1977-05-08"
+        }
+      ],
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "PT17",
+      "query": "12/31/95",
+      "surface": "catalog_api",
+      "artist_filter": "phish",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Date, US short",
+      "expected": "Show: 1995-12-31 Madison Square Garden",
+      "targets": [
+        {
+          "kinds": [
+            "show"
+          ],
+          "artist_slug": "phish",
+          "show_date": "1995-12-31"
+        }
+      ],
+      "cohort": "phish"
+    },
+    {
+      "id": "PT18",
+      "query": "may 8 1977",
+      "surface": "catalog_api",
+      "artist_filter": "grateful-dead",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Date, words",
+      "expected": "Show: 1977-05-08",
+      "targets": [
+        {
+          "kinds": [
+            "show"
+          ],
+          "artist_slug": "grateful-dead",
+          "show_date": "1977-05-08"
+        }
+      ],
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "PT19",
+      "query": "big cypress",
+      "surface": "catalog_api",
+      "artist_filter": "phish",
+      "tier": "starter",
+      "check": "browse",
+      "max_rank": 5,
+      "intent": "Venue",
+      "expected": "Show: 1999-12-31 Big Cypress. A venue result can satisfy the browse check if the named show can be reached from it.",
+      "targets": [
+        {
+          "kinds": [
+            "show"
+          ],
+          "artist_slug": "phish",
+          "show_date": "1999-12-31"
+        }
+      ],
+      "landing_targets": [
+        {
+          "kinds": [
+            "venue"
+          ],
+          "name": "Big Cypress Seminole Indian Reservation"
+        }
+      ],
+      "cohort": "phish"
+    },
+    {
+      "id": "PT20",
+      "query": "77",
+      "surface": "catalog_api",
+      "artist_filter": "grateful-dead",
+      "tier": "starter",
+      "check": "browse",
+      "max_rank": 5,
+      "intent": "Year",
+      "expected": "1977 shows, most popular first",
+      "targets": [
+        {
+          "kinds": [
+            "show"
+          ],
+          "artist_slug": "grateful-dead",
+          "year": 1977
+        }
+      ],
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "PT21",
+      "query": "8/27/72",
+      "surface": "catalog_api",
+      "artist_filter": "grateful-dead",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Date",
+      "expected": "Show: 1972-08-27 Old Renaissance Faire Grounds",
+      "targets": [
+        {
+          "kinds": [
+            "show"
+          ],
+          "artist_slug": "grateful-dead",
+          "show_date": "1972-08-27"
+        }
+      ],
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "PT22",
+      "query": "veneta",
+      "surface": "catalog_api",
+      "artist_filter": "grateful-dead",
+      "tier": "starter",
+      "check": "browse",
+      "max_rank": 5,
+      "intent": "Venue city",
+      "expected": "Show: 1972-08-27. A venue result can satisfy the browse check if the named show can be reached from it.",
+      "targets": [
+        {
+          "kinds": [
+            "show"
+          ],
+          "artist_slug": "grateful-dead",
+          "show_date": "1972-08-27"
+        }
+      ],
+      "landing_targets": [
+        {
+          "kinds": [
+            "venue"
+          ],
+          "name": "Old Renaissance Faire Grounds"
+        }
+      ],
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "PT23",
+      "query": "cornell",
+      "surface": "catalog_api",
+      "artist_filter": "grateful-dead",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Venue nickname",
+      "expected": "Show: 1977-05-08 Barton Hall",
+      "targets": [
+        {
+          "kinds": [
+            "show"
+          ],
+          "artist_slug": "grateful-dead",
+          "show_date": "1977-05-08"
+        }
+      ],
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "PT24",
+      "query": "msg",
+      "surface": "catalog_api",
+      "artist_filter": "phish",
+      "tier": "starter",
+      "check": "browse",
+      "max_rank": 5,
+      "intent": "Venue abbreviation",
+      "expected": "Venue: Madison Square Garden, then its top shows",
+      "targets": [
+        {
+          "kinds": [
+            "venue",
+            "show"
+          ],
+          "artist_slug": "phish",
+          "venue": "Madison Square Garden"
+        }
+      ],
+      "cohort": "phish"
+    },
+    {
+      "id": "PT25",
+      "query": "the gorge",
+      "surface": "catalog_api",
+      "artist_filter": "phish",
+      "tier": "starter",
+      "check": "browse",
+      "max_rank": 5,
+      "intent": "Venue nickname",
+      "expected": "Venue: Gorge Amphitheatre",
+      "targets": [
+        {
+          "kinds": [
+            "venue",
+            "show"
+          ],
+          "artist_slug": "phish",
+          "venue": "Gorge Amphitheatre"
+        }
+      ],
+      "cohort": "phish"
+    },
+    {
+      "id": "PT26",
+      "query": "st augustine",
+      "surface": "catalog_api",
+      "artist_filter": "billy-strings",
+      "tier": "starter",
+      "check": "browse",
+      "max_rank": 5,
+      "intent": "Venue",
+      "expected": "Billy's St. Augustine Amphitheatre shows",
+      "targets": [
+        {
+          "kinds": [
+            "venue",
+            "show"
+          ],
+          "artist_slug": "billy-strings",
+          "venue": "St. Augustine Amphitheatre"
+        }
+      ],
+      "cohort": "billy_strings"
+    },
+    {
+      "id": "PT27",
+      "query": "dicks",
+      "surface": "catalog_api",
+      "artist_filter": "phish",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Venue nickname",
+      "expected": "Venue: Dick's Sporting Goods Park",
+      "targets": [
+        {
+          "kinds": [
+            "venue"
+          ],
+          "artist_slug": "phish",
+          "venue": "Dick's Sporting Goods Park"
+        }
+      ],
+      "cohort": "phish"
+    },
+    {
+      "id": "PT28",
+      "query": "winterland",
+      "surface": "catalog_api",
+      "artist_filter": "grateful-dead",
+      "tier": "starter",
+      "check": "browse",
+      "max_rank": 5,
+      "intent": "Venue",
+      "expected": "Winterland Arena, then its top shows",
+      "targets": [
+        {
+          "kinds": [
+            "venue",
+            "show"
+          ],
+          "artist_slug": "grateful-dead",
+          "venue": "Winterland Ballroom"
+        }
+      ],
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "PT29",
+      "query": "cornell 77",
+      "surface": "catalog_api",
+      "artist_filter": "grateful-dead",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Venue + year",
+      "expected": "Show: 1977-05-08",
+      "targets": [
+        {
+          "kinds": [
+            "show"
+          ],
+          "artist_slug": "grateful-dead",
+          "show_date": "1977-05-08"
+        }
+      ],
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "PT30",
+      "query": "cornell morning dew",
+      "surface": "catalog_api",
+      "artist_filter": "grateful-dead",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Venue + song",
+      "expected": "Track: Morning Dew, 1977-05-08",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "grateful-dead",
+          "name": "Morning Dew",
+          "show_date": "1977-05-08"
+        }
+      ],
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "PT31",
+      "query": "tahoe tweezer",
+      "surface": "catalog_api",
+      "artist_filter": "phish",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Place + song",
+      "expected": "Tweezer at the July 31, 2013 Tahoe show ranks first. The playable preview is the 36:16 Set 2 file. The 3:05 Set 1 file is Lawn Boy and must not appear as an addable Tweezer.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "Tweezer",
+          "show_date": "2013-07-31"
+        }
+      ],
+      "required_recordings": [
+        "tahoe_tweezer"
+      ],
+      "excluded_recordings": [
+        "tahoe_lawn_boy"
+      ],
+      "sources": [
+        {
+          "label": "LivePhish setlist for July 31, 2013",
+          "url": "https://www.livephish.com/LP-765.html"
+        }
+      ],
+      "also_covers": [
+        "PT53"
+      ],
+      "reviewed_alias_replay": "With the reviewed Tahoe Tweezer alias enabled, keep the same exact file ranked first. Another show mentioning the nickname in a review cannot substitute.",
+      "cohort": "phish"
+    },
+    {
+      "id": "PT32",
+      "query": "msg nye",
+      "surface": "catalog_api",
+      "artist_filter": "phish",
+      "tier": "starter",
+      "check": "browse",
+      "max_rank": 5,
+      "intent": "Venue + holiday",
+      "expected": "Phish 12/31 shows at MSG, newest first",
+      "targets": [
+        {
+          "kinds": [
+            "show"
+          ],
+          "artist_slug": "phish",
+          "venue": "Madison Square Garden",
+          "month": 12,
+          "day": 31
+        }
+      ],
+      "cohort": "phish"
+    },
+    {
+      "id": "PT33",
+      "query": "billy st augustine",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "browse",
+      "max_rank": 5,
+      "intent": "Artist + venue",
+      "expected": "Billy's St. Augustine shows",
+      "targets": [
+        {
+          "kinds": [
+            "venue",
+            "show"
+          ],
+          "artist_slug": "billy-strings",
+          "venue": "St. Augustine Amphitheatre"
+        }
+      ],
+      "cohort": "billy_strings"
+    },
+    {
+      "id": "PT34",
+      "query": "dead scarlet",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Artist + song",
+      "expected": "Song: Scarlet Begonias (Grateful Dead)",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "grateful-dead",
+          "name": "Scarlet Begonias"
+        }
+      ],
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "PT35",
+      "query": "fall 97 ghost",
+      "surface": "catalog_api",
+      "artist_filter": "phish",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Tour + song",
+      "expected": "Ghost versions from fall 1997",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "Ghost",
+          "tour": "Fall Tour 1997"
+        }
+      ],
+      "cohort": "phish"
+    },
+    {
+      "id": "PT36",
+      "query": "europe 72",
+      "surface": "catalog_api",
+      "artist_filter": "grateful-dead",
+      "tier": "starter",
+      "check": "browse",
+      "max_rank": 5,
+      "intent": "Tour",
+      "expected": "Spring 1972 European tour shows",
+      "targets": [
+        {
+          "kinds": [
+            "tour",
+            "show"
+          ],
+          "artist_slug": "grateful-dead",
+          "tour": "Europe 1972"
+        }
+      ],
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "PT37",
+      "query": "scarlet fire",
+      "surface": "catalog_api",
+      "artist_filter": "grateful-dead",
+      "tier": "extended",
+      "check": "behavior",
+      "intent": "Song pairing",
+      "expected": "Pair: Scarlet Begonias > Fire On The Mountain. Verify the sequence from track or song-part order within one playable source. A combined file is added only once.",
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "PT38",
+      "query": "help slip frank",
+      "surface": "catalog_api",
+      "artist_filter": "grateful-dead",
+      "tier": "extended",
+      "check": "behavior",
+      "intent": "Suite",
+      "expected": "Help On The Way > Slipknot! > Franklin's Tower. Verify the sequence from track or song-part order within one playable source. A combined file is added only once.",
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "PT39",
+      "query": "mikes groove",
+      "surface": "catalog_api",
+      "artist_filter": "phish",
+      "tier": "extended",
+      "check": "behavior",
+      "intent": "Suite",
+      "expected": "Mike's Song > I Am Hydrogen > Weekapaug Groove. Verify the sequence from track or song-part order within one playable source. A combined file is added only once.",
+      "cohort": "phish"
+    },
+    {
+      "id": "PT40",
+      "query": "china rider",
+      "surface": "catalog_api",
+      "artist_filter": "grateful-dead",
+      "tier": "extended",
+      "check": "behavior",
+      "intent": "Song pairing",
+      "expected": "China Cat Sunflower > I Know You Rider. Verify the sequence from track or song-part order within one playable source. A combined file is added only once.",
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "PT41",
+      "query": "longest dark star",
+      "surface": "catalog_api",
+      "artist_filter": "grateful-dead",
+      "tier": "extended",
+      "check": "behavior",
+      "intent": "Version qualifier",
+      "expected": "Dark Star tracks sorted by duration",
+      "cohort": "curator"
+    },
+    {
+      "id": "PT42",
+      "query": "dew sbd 77",
+      "surface": "catalog_api",
+      "artist_filter": "grateful-dead",
+      "tier": "extended",
+      "check": "behavior",
+      "intent": "Song + source + year",
+      "expected": "Soundboard Morning Dews from 1977",
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "PT43",
+      "query": "yem 1995",
+      "surface": "catalog_api",
+      "artist_filter": "phish",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Song + year",
+      "expected": "YEM versions from 1995, most popular first",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "You Enjoy Myself",
+          "year": 1995
+        }
+      ],
+      "cohort": "phish"
+    },
+    {
+      "id": "PT44",
+      "query": "dust in a baggie 2024",
+      "surface": "catalog_api",
+      "artist_filter": "billy-strings",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Song + year",
+      "expected": "2024 versions, newest first",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "billy-strings",
+          "name": "Dust In A Baggie",
+          "year": 2024
+        }
+      ],
+      "cohort": "billy_strings"
+    },
+    {
+      "id": "PT45",
+      "query": "last dark star",
+      "surface": "catalog_api",
+      "artist_filter": "grateful-dead",
+      "tier": "extended",
+      "check": "behavior",
+      "intent": "Debut or last time",
+      "expected": "Return the latest eligible Grateful Dead Dark Star performance by show date in the pinned catalog.",
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "PT46",
+      "query": "tweezer reprise",
+      "surface": "catalog_api",
+      "artist_filter": "phish",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Song name",
+      "expected": "Song: Tweezer Reprise",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "phish",
+          "name": "Tweezer Reprise"
+        }
+      ],
+      "cohort": "phish"
+    },
+    {
+      "id": "PT47",
+      "query": "",
+      "surface": "phone",
+      "tier": "starter",
+      "check": "behavior",
+      "intent": "Recently played",
+      "expected": "With the Add Tracks sheet open and the query empty, show recently played eligible recordings grouped by show. Downloaded files can be added offline.",
+      "cohort": "any"
+    },
+    {
+      "id": "PT48",
+      "query": "fire",
+      "surface": "catalog_api",
+      "artist_filter": "billy-strings",
+      "tier": "starter",
+      "check": "browse",
+      "max_rank": 5,
+      "intent": "Short, ambiguous",
+      "expected": "Billy's Fire Line, Fire On My Tongue and Fire On The Mountain; not the Dead's",
+      "targets": [
+        {
+          "kinds": [
+            "song",
+            "performance"
+          ],
+          "artist_slug": "billy-strings",
+          "name": "Fire Line"
+        },
+        {
+          "kinds": [
+            "song",
+            "performance"
+          ],
+          "artist_slug": "billy-strings",
+          "name": "Fire On My Tongue"
+        },
+        {
+          "kinds": [
+            "song",
+            "performance"
+          ],
+          "artist_slug": "billy-strings",
+          "name": "Fire On The Mountain"
+        }
+      ],
+      "cohort": "billy_strings"
+    },
+    {
+      "id": "PT49",
+      "query": "charlie miller cornell",
+      "surface": "catalog_api",
+      "artist_filter": "grateful-dead",
+      "tier": "extended",
+      "check": "rank",
+      "intent": "Notes and reviews",
+      "expected": "Rank a 1977-05-08 recording crediting Charlie Miller first. Keep the selected source’s playable IDs.",
+      "cohort": "grateful_dead",
+      "max_rank": 1,
+      "targets": [
+        {
+          "kinds": [
+            "recording"
+          ],
+          "artist_slug": "grateful-dead",
+          "show_date": "1977-05-08",
+          "transferrer_contains": "Charlie Miller"
+        }
+      ]
+    },
+    {
+      "id": "PT50",
+      "query": "with branford",
+      "surface": "catalog_api",
+      "artist_filter": "grateful-dead",
+      "tier": "extended",
+      "check": "rank",
+      "intent": "Notes and reviews",
+      "expected": "A notes or review result identifies 1990-03-29 Nassau Coliseum in the first three evidence results. Show the evidence and require an independent match for a direct file action.",
+      "cohort": "grateful_dead",
+      "max_rank": 3,
+      "result_group": "notes_and_reviews",
+      "targets": [
+        {
+          "kinds": [
+            "note",
+            "review"
+          ],
+          "artist_slug": "grateful-dead",
+          "show_date": "1990-03-29"
+        }
+      ]
+    },
+    {
+      "id": "PT51",
+      "query": "matrix 77",
+      "surface": "catalog_api",
+      "artist_filter": "grateful-dead",
+      "tier": "extended",
+      "check": "behavior",
+      "intent": "Notes and reviews",
+      "expected": "1977 matrix recordings",
+      "cohort": "grateful_dead"
+    },
+    {
+      "id": "PT52",
+      "query": "rain show",
+      "surface": "catalog_api",
+      "artist_filter": "grateful-dead",
+      "tier": "extended",
+      "check": "behavior",
+      "intent": "Notes and reviews",
+      "expected": "Show a bounded Notes & Reviews group for descriptive mentions. Keep those mentions below direct catalog results and attach each to its owning source.",
+      "cohort": "casual"
+    },
+    {
+      "query": "greatful dead",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Open the Grateful Dead artist after a common misspelling.",
+      "targets": [
+        {
+          "kinds": [
+            "artist"
+          ],
+          "artist_slug": "grateful-dead"
+        }
+      ],
+      "id": "HC01",
+      "eval_group": "tuning"
+    },
+    {
+      "query": "dead and co",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Open Dead and Company using the shortened band name.",
+      "targets": [
+        {
+          "kinds": [
+            "artist"
+          ],
+          "artist_slug": "dead-and-co"
+        }
+      ],
+      "id": "HC02",
+      "eval_group": "tuning"
+    },
+    {
+      "query": "dead & company",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Open Dead and Company with the familiar ampersand spelling.",
+      "targets": [
+        {
+          "kinds": [
+            "artist"
+          ],
+          "artist_slug": "dead-and-co"
+        }
+      ],
+      "id": "HC03",
+      "eval_group": "held_out"
+    },
+    {
+      "query": "phish 12/31",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Browse Phish New Year’s Eve shows newest first, without supplying a year.",
+      "targets": [
+        {
+          "kinds": [
+            "show"
+          ],
+          "artist_slug": "phish",
+          "show_date": "2025-12-31"
+        }
+      ],
+      "ordering": "newest_first",
+      "id": "HC04",
+      "eval_group": "tuning"
+    },
+    {
+      "query": "halloween phish",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Browse Phish Halloween shows newest first, without supplying a year.",
+      "targets": [
+        {
+          "kinds": [
+            "show"
+          ],
+          "artist_slug": "phish",
+          "show_date": "2021-10-31"
+        }
+      ],
+      "ordering": "newest_first",
+      "id": "HC05",
+      "eval_group": "tuning"
+    },
+    {
+      "query": "red rocks",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Open Red Rocks Amphitheatre first and browse the venue across artists.",
+      "targets": [
+        {
+          "kinds": [
+            "venue"
+          ],
+          "name": "Red Rocks Amphitheatre"
+        }
+      ],
+      "id": "HC06",
+      "eval_group": "tuning"
+    },
+    {
+      "query": "billy strings red rocks",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 3,
+      "expected": "Find Billy Strings shows at Red Rocks; show the artist and venue on the result.",
+      "targets": [
+        {
+          "kinds": [
+            "show"
+          ],
+          "artist_slug": "billy-strings",
+          "venue": "Red Rocks Amphitheatre"
+        }
+      ],
+      "id": "HC07",
+      "eval_group": "tuning"
+    },
+    {
+      "query": "red rocks billy strings",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 3,
+      "expected": "Find Billy Strings shows at Red Rocks with the venue typed first.",
+      "targets": [
+        {
+          "kinds": [
+            "show"
+          ],
+          "artist_slug": "billy-strings",
+          "venue": "Red Rocks Amphitheatre"
+        }
+      ],
+      "id": "HC08",
+      "eval_group": "tuning"
+    },
+    {
+      "query": "dark star 2/13/70",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 3,
+      "expected": "Find a playable Grateful Dead Dark Star from February 13, 1970.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "grateful-dead",
+          "name": "Dark Star",
+          "show_date": "1970-02-13"
+        }
+      ],
+      "id": "HC09",
+      "eval_group": "tuning"
+    },
+    {
+      "query": "morning dew 5/8",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 3,
+      "expected": "Find the Cornell Morning Dew with only the month and day.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "grateful-dead",
+          "name": "Morning Dew",
+          "show_date": "1977-05-08"
+        }
+      ],
+      "artist_filter": "grateful-dead",
+      "id": "HC10",
+      "eval_group": "held_out"
+    },
+    {
+      "query": "scarlet begonias",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Open the grateful-dead song Scarlet Begonias to browse versions.",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "grateful-dead",
+          "name": "Scarlet Begonias"
+        }
+      ],
+      "id": "HC11",
+      "eval_group": "held_out"
+    },
+    {
+      "query": "sugar mag",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Open the grateful-dead song Sugar Magnolia to browse versions.",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "grateful-dead",
+          "name": "Sugar Magnolia"
+        }
+      ],
+      "id": "HC12",
+      "eval_group": "held_out"
+    },
+    {
+      "query": "wolfmans",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Open the phish song Wolfman's Brother to browse versions.",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "phish",
+          "name": "Wolfman's Brother"
+        }
+      ],
+      "artist_filter": "phish",
+      "id": "HC13",
+      "eval_group": "tuning"
+    },
+    {
+      "query": "wolfman's brother",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Open the phish song Wolfman's Brother to browse versions.",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "phish",
+          "name": "Wolfman's Brother"
+        }
+      ],
+      "id": "HC14",
+      "eval_group": "tuning"
+    },
+    {
+      "query": "you enjoy myself",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Open the phish song You Enjoy Myself to browse versions.",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "phish",
+          "name": "You Enjoy Myself"
+        }
+      ],
+      "id": "HC15",
+      "eval_group": "tuning"
+    },
+    {
+      "query": "bertha",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Open the grateful-dead song Bertha to browse versions.",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "grateful-dead",
+          "name": "Bertha"
+        }
+      ],
+      "id": "HC16",
+      "eval_group": "tuning"
+    },
+    {
+      "query": "ripple",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Open the grateful-dead song Ripple to browse versions.",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "grateful-dead",
+          "name": "Ripple"
+        }
+      ],
+      "id": "HC17",
+      "eval_group": "tuning"
+    },
+    {
+      "query": "scar",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "behavior",
+      "max_rank": 1,
+      "expected": "Typing s → sc → sca → scar keeps a Scarlet Begonias song result available in the top five from sc forward, with no rank reversal. The completed prefix puts it first.",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "grateful-dead",
+          "name": "Scarlet Begonias"
+        }
+      ],
+      "artist_filter": "grateful-dead",
+      "prefix_queries": [
+        "s",
+        "sc",
+        "sca"
+      ],
+      "id": "HC18",
+      "eval_group": "held_out"
+    },
+    {
+      "query": "phish 1977",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "guardrail",
+      "expected": "Show an empty result for the explicit Phish and 1977 constraints.",
+      "targets": [],
+      "must_be_empty": true,
+      "id": "HC19",
+      "eval_group": "tuning"
+    },
+    {
+      "query": "cornell 1978",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "guardrail",
+      "expected": "While browsing the Dead, show no match for Cornell in 1978.",
+      "targets": [],
+      "must_be_empty": true,
+      "artist_filter": "grateful-dead",
+      "id": "HC20",
+      "eval_group": "tuning"
+    },
+    {
+      "query": "sugaree 5/28/77",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 3,
+      "expected": "Get a playable Sugaree from the May 28, 1977 Hartford show.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "grateful-dead",
+          "name": "Sugaree",
+          "show_date": "1977-05-28"
+        }
+      ],
+      "id": "HC21",
+      "eval_group": "tuning"
+    },
+    {
+      "query": "turmoil tinfoil",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Open the billy-strings song Turmoil & Tinfoil to browse versions.",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "billy-strings",
+          "name": "Turmoil & Tinfoil"
+        }
+      ],
+      "artist_filter": "billy-strings",
+      "id": "HC22",
+      "eval_group": "tuning"
+    },
+    {
+      "query": "winterland 12/31/78",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Open the Dead’s closing night at Winterland.",
+      "targets": [
+        {
+          "kinds": [
+            "show"
+          ],
+          "artist_slug": "grateful-dead",
+          "venue": "Winterland Ballroom",
+          "show_date": "1978-12-31"
+        }
+      ],
+      "id": "HC23",
+      "eval_group": "held_out"
+    },
+    {
+      "query": "phish hydrogen",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Open the phish song I Am Hydrogen to browse versions.",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "phish",
+          "name": "I Am Hydrogen"
+        }
+      ],
+      "id": "HC24",
+      "eval_group": "held_out"
+    },
+    {
+      "query": "ghost light",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Open the Ghost Light artist and find their shows.",
+      "targets": [
+        {
+          "kinds": [
+            "artist"
+          ],
+          "artist_slug": "ghost-light"
+        }
+      ],
+      "id": "HC25",
+      "eval_group": "held_out"
+    },
+    {
+      "query": "ripple",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Open the Grateful Dead Ripple song with the Grateful Dead boosted.",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "grateful-dead",
+          "name": "Ripple"
+        }
+      ],
+      "id": "R2B01",
+      "eval_group": "round2_tuning",
+      "boost_artist_ids": [
+        "artist_3qmp7zjbg1rpebhtyfy43096vj"
+      ]
+    },
+    {
+      "query": "fire",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Surface Billy Strings’ song Fire when Billy Strings is boosted.",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "billy-strings",
+          "name": "Fire"
+        }
+      ],
+      "id": "R2B02",
+      "eval_group": "round2_tuning",
+      "boost_artist_ids": [
+        "artist_2j6a67avy742qfafsr2zzk646n"
+      ]
+    },
+    {
+      "query": "scarlet begonias",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Open the Dead and Company Scarlet Begonias song with that artist boosted.",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "dead-and-co",
+          "name": "Scarlet Begonias"
+        }
+      ],
+      "id": "R2B03",
+      "eval_group": "round2_tuning",
+      "boost_artist_ids": [
+        "artist_3nyvb7dx143cnr0nd3pvf45pr4"
+      ]
+    },
+    {
+      "query": "jrad help on the way",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Use the explicit JRAD scope even when the Grateful Dead is boosted.",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "jrad",
+          "name": "Help On The Way"
+        }
+      ],
+      "id": "R2B04",
+      "eval_group": "round2_tuning",
+      "boost_artist_ids": [
+        "artist_3qmp7zjbg1rpebhtyfy43096vj"
+      ]
+    },
+    {
+      "query": "cornell morning dew 5/8/77",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Keep the Cornell date and Grateful Dead file over the boosted artist.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "grateful-dead",
+          "name": "Morning Dew",
+          "show_date": "1977-05-08"
+        }
+      ],
+      "id": "R2B05",
+      "eval_group": "round2_tuning",
+      "boost_artist_ids": [
+        "artist_3nyvb7dx143cnr0nd3pvf45pr4"
+      ]
+    },
+    {
+      "query": "red rocks",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Keep Red Rocks as the venue even with Phish boosted.",
+      "targets": [
+        {
+          "kinds": [
+            "venue"
+          ],
+          "name": "Red Rocks Amphitheatre"
+        }
+      ],
+      "id": "R2B06",
+      "eval_group": "round2_tuning",
+      "boost_artist_ids": [
+        "artist_6aaf982021nrst0m68ew1djerc"
+      ]
+    },
+    {
+      "query": "ripple",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Open JRAD’s Ripple when JRAD is boosted.",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "jrad",
+          "name": "Ripple"
+        }
+      ],
+      "id": "R2B07",
+      "eval_group": "round2_tuning",
+      "boost_artist_ids": [
+        "artist_7mdg13db3h45swdc5fmkhbnpzf"
+      ]
+    },
+    {
+      "query": "goose",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Keep the exact Goose artist match despite the Widespread Panic boost.",
+      "targets": [
+        {
+          "kinds": [
+            "artist"
+          ],
+          "artist_slug": "goose"
+        }
+      ],
+      "id": "R2B08",
+      "eval_group": "round2_tuning",
+      "boost_artist_ids": [
+        "artist_6e3qb6jfsv063appf860795pvz"
+      ]
+    },
+    {
+      "query": "widespread panic",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Open Widespread Panic’s artist page.",
+      "targets": [
+        {
+          "kinds": [
+            "artist"
+          ],
+          "artist_slug": "wsp"
+        }
+      ],
+      "id": "R2H01",
+      "eval_group": "round2_held_out"
+    },
+    {
+      "query": "panic chilly water",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 3,
+      "expected": "Get Chilly Water under Widespread Panic.",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "wsp",
+          "name": "Chilly Water"
+        }
+      ],
+      "id": "R2H02",
+      "eval_group": "round2_held_out"
+    },
+    {
+      "query": "panic athens 4/18/98",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 3,
+      "expected": "Find the April 18, 1998 Washington Street show in Athens.",
+      "targets": [
+        {
+          "kinds": [
+            "show"
+          ],
+          "artist_slug": "wsp",
+          "show_date": "1998-04-18"
+        }
+      ],
+      "id": "R2H03",
+      "eval_group": "round2_held_out"
+    },
+    {
+      "query": "moe.",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Find moe. the band from the spelling with a period.",
+      "targets": [
+        {
+          "kinds": [
+            "artist"
+          ],
+          "artist_slug": "moe"
+        }
+      ],
+      "id": "R2H04",
+      "eval_group": "round2_held_out"
+    },
+    {
+      "query": "rebubula",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 3,
+      "expected": "Find the moe. song and browse its versions.",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "moe",
+          "name": "Rebubula"
+        }
+      ],
+      "id": "R2H05",
+      "eval_group": "round2_held_out"
+    },
+    {
+      "query": "moe 12/31",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Browse moe. New Year’s Eve shows, newest first.",
+      "targets": [
+        {
+          "kinds": [
+            "show"
+          ],
+          "artist_slug": "moe",
+          "show_date": "2023-12-31"
+        }
+      ],
+      "ordering": "newest_first",
+      "id": "R2H06",
+      "eval_group": "round2_held_out"
+    },
+    {
+      "query": "umphrey's mcgee",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Open Umphrey’s McGee from the full name.",
+      "targets": [
+        {
+          "kinds": [
+            "artist"
+          ],
+          "artist_slug": "umphreys"
+        }
+      ],
+      "id": "R2H07",
+      "eval_group": "round2_held_out"
+    },
+    {
+      "query": "the triple w",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 3,
+      "expected": "Complete The Triple Wide inside the Umphrey’s catalog.",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "umphreys",
+          "name": "The Triple Wide"
+        }
+      ],
+      "artist_filter": "umphreys",
+      "id": "R2H08",
+      "eval_group": "round2_held_out"
+    },
+    {
+      "query": "umphreys red rocks 6/17/22",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 3,
+      "expected": "Open the June 17, 2022 Red Rocks show.",
+      "targets": [
+        {
+          "kinds": [
+            "show"
+          ],
+          "artist_slug": "umphreys",
+          "show_date": "2022-06-17"
+        }
+      ],
+      "id": "R2H09",
+      "eval_group": "round2_held_out"
+    },
+    {
+      "query": "goose",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Find Goose the band.",
+      "targets": [
+        {
+          "kinds": [
+            "artist"
+          ],
+          "artist_slug": "goose"
+        }
+      ],
+      "id": "R2H10",
+      "eval_group": "round2_held_out"
+    },
+    {
+      "query": "hot tea",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Browse Goose’s Hot Tea in the already selected artist.",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "goose",
+          "name": "Hot Tea"
+        }
+      ],
+      "artist_filter": "goose",
+      "id": "R2H11",
+      "eval_group": "round2_held_out"
+    },
+    {
+      "query": "goose radio city 6/25/22",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 3,
+      "expected": "Open the June 25 Radio City show.",
+      "targets": [
+        {
+          "kinds": [
+            "show"
+          ],
+          "artist_slug": "goose",
+          "show_date": "2022-06-25"
+        }
+      ],
+      "id": "R2H12",
+      "eval_group": "round2_held_out"
+    },
+    {
+      "query": "jrad",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Open Joe Russo’s Almost Dead via the initials.",
+      "targets": [
+        {
+          "kinds": [
+            "artist"
+          ],
+          "artist_slug": "jrad"
+        }
+      ],
+      "id": "R2H13",
+      "eval_group": "round2_held_out"
+    },
+    {
+      "query": "jrad shakedown",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 3,
+      "expected": "Find JRAD’s Shakedown Street and its versions.",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "jrad",
+          "name": "Shakedown Street"
+        }
+      ],
+      "id": "R2H14",
+      "eval_group": "round2_held_out"
+    },
+    {
+      "query": "jrad brooklyn bowl 1/26/13",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 3,
+      "expected": "Get the January 26, 2013 Brooklyn Bowl show.",
+      "targets": [
+        {
+          "kinds": [
+            "show"
+          ],
+          "artist_slug": "jrad",
+          "show_date": "2013-01-26"
+        }
+      ],
+      "id": "R2H15",
+      "eval_group": "round2_held_out"
+    },
+    {
+      "query": "king gizzard",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 3,
+      "expected": "Open King Gizzard & the Lizard Wizard from the usual shortened name.",
+      "targets": [
+        {
+          "kinds": [
+            "artist"
+          ],
+          "artist_slug": "kgatlw"
+        }
+      ],
+      "id": "R2H16",
+      "eval_group": "round2_held_out"
+    },
+    {
+      "query": "kglw rattlesnake",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 3,
+      "expected": "Find Rattlesnake by King Gizzard.",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "kgatlw",
+          "name": "Rattlesnake"
+        }
+      ],
+      "id": "R2H17",
+      "eval_group": "round2_held_out"
+    },
+    {
+      "query": "king gizzard red rocks 10/10/22",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 3,
+      "expected": "Find the first October 2022 Red Rocks night.",
+      "targets": [
+        {
+          "kinds": [
+            "show"
+          ],
+          "artist_slug": "kgatlw",
+          "show_date": "2022-10-10"
+        }
+      ],
+      "id": "R2H18",
+      "eval_group": "round2_held_out"
+    },
+    {
+      "query": "disco biscuits",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Open the Disco Biscuits artist page.",
+      "targets": [
+        {
+          "kinds": [
+            "artist"
+          ],
+          "artist_slug": "disco-biscuits"
+        }
+      ],
+      "id": "R2H19",
+      "eval_group": "round2_held_out"
+    },
+    {
+      "query": "bisco helicopters",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 3,
+      "expected": "Find the Disco Biscuits song Helicopters from the fan shorthand.",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "disco-biscuits",
+          "name": "Helicopters"
+        }
+      ],
+      "id": "R2H20",
+      "eval_group": "round2_held_out"
+    },
+    {
+      "query": "disco biscuits 12/31",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Get Disco Biscuits NYE shows newest first.",
+      "targets": [
+        {
+          "kinds": [
+            "show"
+          ],
+          "artist_slug": "disco-biscuits",
+          "show_date": "2025-12-31"
+        }
+      ],
+      "ordering": "newest_first",
+      "id": "R2H21",
+      "eval_group": "round2_held_out"
+    },
+    {
+      "query": "lotus",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Open Lotus the band.",
+      "targets": [
+        {
+          "kinds": [
+            "artist"
+          ],
+          "artist_slug": "lotus"
+        }
+      ],
+      "id": "R2H22",
+      "eval_group": "round2_held_out"
+    },
+    {
+      "query": "lotus flower sermon",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 3,
+      "expected": "Find Flower Sermon and browse versions.",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "lotus",
+          "name": "Flower Sermon"
+        }
+      ],
+      "id": "R2H23",
+      "eval_group": "round2_held_out"
+    },
+    {
+      "query": "intro to a cell",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Find Lotus’s song from inside the artist.",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "lotus",
+          "name": "Intro to a Cell"
+        }
+      ],
+      "artist_filter": "lotus",
+      "id": "R2H24",
+      "eval_group": "round2_held_out"
+    },
+    {
+      "query": "dead & co",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Open Dead and Company from the compact name.",
+      "targets": [
+        {
+          "kinds": [
+            "artist"
+          ],
+          "artist_slug": "dead-and-co"
+        }
+      ],
+      "id": "R2H25",
+      "eval_group": "round2_held_out"
+    },
+    {
+      "query": "dead and company brown eyed",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 3,
+      "expected": "Browse Dead and Company versions of Brown Eyed Women.",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "dead-and-co",
+          "name": "Brown Eyed Women"
+        }
+      ],
+      "id": "R2H26",
+      "eval_group": "round2_held_out"
+    },
+    {
+      "query": "dead & company sphere 5/16/24",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 3,
+      "expected": "Find the first Sphere show on May 16.",
+      "targets": [
+        {
+          "kinds": [
+            "show"
+          ],
+          "artist_slug": "dead-and-co",
+          "show_date": "2024-05-16"
+        }
+      ],
+      "id": "R2H27",
+      "eval_group": "round2_held_out"
+    },
+    {
+      "query": "king gizzard 1977",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "guardrail",
+      "max_rank": 1,
+      "expected": "There is no 1977 King Gizzard show. Keep the date constraint.",
+      "targets": [],
+      "artist_filter": "kgatlw",
+      "must_be_empty": true,
+      "id": "R2H28",
+      "eval_group": "round2_held_out"
+    },
+    {
+      "query": "goose radio city 1997",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "guardrail",
+      "max_rank": 1,
+      "expected": "There is no 1997 Goose Radio City show. Keep both constraints.",
+      "targets": [],
+      "artist_filter": "goose",
+      "must_be_empty": true,
+      "id": "R2H29",
+      "eval_group": "round2_held_out"
+    },
+    {
+      "query": "lotus 12/31/1900",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "guardrail",
+      "max_rank": 1,
+      "expected": "There is no 1900-12-31 Lotus show. Keep the requested date.",
+      "targets": [],
+      "artist_filter": "lotus",
+      "must_be_empty": true,
+      "id": "R2H30",
+      "eval_group": "round2_held_out"
+    }
+  ],
+  "recordings": [
+    {
+      "id": "tokyo_twist",
+      "artist_slug": "phish",
+      "show_date": "2000-06-10",
+      "source_upstream_id": "1049",
+      "set": "Set 2",
+      "track_position": 12,
+      "track_uuid": "22071a82-327d-5b3a-7a33-d751fe9937f0",
+      "equivalent_restore_track_uuid": "c705ec29-d62f-0657-fd19-c52a7c12c48a"
+    },
+    {
+      "id": "fukuoka_twist",
+      "artist_slug": "phish",
+      "show_date": "2000-06-14",
+      "source_upstream_id": "1052",
+      "set": "Set 2",
+      "track_position": 10,
+      "track_uuid": "b07a5a37-99a2-deb1-1baf-701fe866e6c5"
+    },
+    {
+      "id": "fukuoka_jam",
+      "artist_slug": "phish",
+      "show_date": "2000-06-14",
+      "source_upstream_id": "1052",
+      "set": "Set 2",
+      "track_position": 11,
+      "track_uuid": "8dd61eb7-4a89-023e-6640-c4a8e11378ce"
+    },
+    {
+      "id": "garden_lawn_boy_set",
+      "artist_slug": "phish",
+      "show_date": "2017-07-25",
+      "source_upstream_id": "1914",
+      "set": "Set 1",
+      "track_position": 2,
+      "track_uuid": "1fd1144c-cc4f-e95a-942f-1b6aa34f5c01"
+    },
+    {
+      "id": "garden_lawn_boy_encore",
+      "artist_slug": "phish",
+      "show_date": "2017-07-25",
+      "source_upstream_id": "1914",
+      "set": "Encore",
+      "track_position": 14,
+      "track_uuid": "01cfe32a-e354-fc20-8168-624cd9146b6b"
+    },
+    {
+      "id": "cornell_scarlet_moore",
+      "artist_slug": "grateful-dead",
+      "show_date": "1977-05-08",
+      "source_upstream_id": "gd1977-05-08.ecm33p.moore.berger.miller.117026.flac16",
+      "set": "Set",
+      "track_position": 14,
+      "track_uuid": "4dae346a-e132-70c7-b10f-f4623d1ac271"
+    },
+    {
+      "id": "red_rocks_creek",
+      "artist_slug": "billy-strings",
+      "show_date": "2022-05-13",
+      "source_upstream_id": "billystrings2022-05-13.ck63",
+      "set": "Set",
+      "track_position": 23,
+      "track_uuid": "60aadf97-3fe8-329e-1472-3ea2e4734196"
+    },
+    {
+      "id": "tahoe_tweezer",
+      "artist_slug": "phish",
+      "show_date": "2013-07-31",
+      "source_upstream_id": "1694",
+      "set": "Set 2",
+      "track_position": 14,
+      "track_uuid": "abed5c25-ec79-b083-eb6b-8f2ece3f6912",
+      "title": "Tweezer"
+    },
+    {
+      "id": "tahoe_lawn_boy",
+      "artist_slug": "phish",
+      "show_date": "2013-07-31",
+      "source_upstream_id": "1694",
+      "set": "Set 1",
+      "track_position": 11,
+      "track_uuid": "c822e137-b362-6cf5-6894-f2e22718908a",
+      "title": "Lawn Boy"
+    }
+  ],
+  "phone_journeys": [
+    {
+      "id": "PHONE01",
+      "entry_point": "search",
+      "query_cases": [
+        "PH02"
+      ],
+      "recording_fixtures": [
+        "fukuoka_twist",
+        "fukuoka_jam"
+      ],
+      "expected": "Open the Fukuoka show. Twist is adjacent to Jam in Set 2. Back restores query and result position."
+    },
+    {
+      "id": "PHONE02",
+      "entry_point": "add_tracks",
+      "query_cases": [
+        "PH02"
+      ],
+      "recording_fixtures": [
+        "tokyo_twist",
+        "fukuoka_jam"
+      ],
+      "expected": "Add Tokyo Twist, open the Fukuoka setlist and add Jam. The exact IDs in that order reach the original playlist."
+    },
+    {
+      "id": "PHONE03",
+      "entry_point": "add_tracks",
+      "query_cases": [
+        "PH14"
+      ],
+      "recording_fixtures": [
+        "garden_lawn_boy_encore",
+        "garden_lawn_boy_set"
+      ],
+      "expected": "Open the Garden show. Add the encore then Set 1. Verify ordered exact IDs; adding the identical file again uses the duplicate prompt."
+    },
+    {
+      "id": "PHONE04",
+      "entry_point": "add_tracks",
+      "query_cases": [
+        "GD06"
+      ],
+      "recording_fixtures": [
+        "cornell_scarlet_moore"
+      ],
+      "expected": "Pick the Moore/Berger/Miller Cornell transfer in Other recordings. The exact Scarlet file on that transfer is saved."
+    },
+    {
+      "id": "PHONE05",
+      "entry_point": "search",
+      "query_cases": [
+        "GD02"
+      ],
+      "recording_fixtures": [],
+      "expected": "Open Barton Hall and play a file from the 1980-05-07 Grateful Dead show. Verify the selected file belongs to that show."
+    },
+    {
+      "id": "PHONE06",
+      "entry_point": "add_tracks",
+      "query_cases": [
+        "BS04"
+      ],
+      "recording_fixtures": [
+        "red_rocks_creek"
+      ],
+      "expected": "Start with a playlist containing only Phish and no explicit artist filter. Red Rocks leads to an openable venue and the May 13, 2022 Billy Strings show. Go back and type red rocks creek. A Billy Strings match must already be visible before adding the artist name. Refine to billy red rocks creek and add the exact 2022 Creek file. Back preserves the query and original destination.",
+      "typed_queries": [
+        "red rocks",
+        "red rocks creek",
+        "billy red rocks creek"
+      ]
+    },
+    {
+      "id": "PHONE07",
+      "entry_point": "add_tracks",
+      "query_cases": [
+        "BS04"
+      ],
+      "recording_fixtures": [
+        "red_rocks_creek"
+      ],
+      "expected": "With Creek downloaded, find and add it offline. Remote availability is explicit. Reconnection restores catalog results and keeps the destination."
+    },
+    {
+      "id": "PHONE08",
+      "entry_point": "add_tracks",
+      "query_cases": [
+        "PH02"
+      ],
+      "recording_fixtures": [
+        "tokyo_twist"
+      ],
+      "expected": "Withdraw Tokyo Twist in a disposable catalog after search. Tapping Add explains the unavailability, leaves results visible and makes no playlist change."
+    },
+    {
+      "id": "PHONE09",
+      "entry_point": "add_tracks",
+      "query_cases": [
+        "PT47"
+      ],
+      "recording_fixtures": [
+        "fukuoka_twist",
+        "fukuoka_jam"
+      ],
+      "expected": "Seed Fukuoka as the most recent locally playable show and start with the query empty. Open it and add Twist then Jam without closing the sheet. Verify both exact IDs in order. Undo the Jam edit and confirm Twist remains as the only addition."
+    }
+  ]
+}

@@ -36,17 +36,28 @@ internal sealed class PlaylistEditor(
         );
     }
 
-    public PlaylistOperationResult Apply(PlaylistOperation operation)
+    public async Task<PlaylistOperationResult> ApplyAsync(
+        PlaylistOperation operation,
+        Func<IReadOnlyList<PlaylistEntryInput>, Task<bool>> entriesArePlayable
+    )
     {
         var changes = new List<PlaylistChange>();
         var status = operation.Payload switch
         {
             UpdatePlaylistMetadata metadata => UpdateMetadata(metadata, changes),
-            InsertPlaylistSegment insert => InsertSegment(insert, changes),
+            InsertPlaylistSegment insert => await InsertSegmentAsync(
+                insert,
+                entriesArePlayable,
+                changes
+            ),
             UpdatePlaylistSegment update => UpdateSegment(update, changes),
             MovePlaylistSegment move => MoveSegment(move, changes),
             DeletePlaylistSegment delete => DeleteSegment(delete, changes),
-            InsertPlaylistEntries insert => InsertEntries(insert, changes),
+            InsertPlaylistEntries insert => await InsertEntriesAsync(
+                insert,
+                entriesArePlayable,
+                changes
+            ),
             UpdatePlaylistEntry update => UpdateEntry(update, changes),
             MovePlaylistEntry move => MoveEntry(move, changes),
             DeletePlaylistEntry delete => DeleteEntry(delete, changes),
@@ -77,7 +88,11 @@ internal sealed class PlaylistEditor(
         return "applied";
     }
 
-    private string InsertSegment(InsertPlaylistSegment insert, List<PlaylistChange> changes)
+    private async Task<string> InsertSegmentAsync(
+        InsertPlaylistSegment insert,
+        Func<IReadOnlyList<PlaylistEntryInput>, Task<bool>> entriesArePlayable,
+        List<PlaylistChange> changes
+    )
     {
         if (
             Conflicts([
@@ -88,6 +103,11 @@ internal sealed class PlaylistEditor(
         {
             return "id_conflict";
         }
+        if (!await entriesArePlayable(insert.Entries))
+        {
+            return "track_unavailable";
+        }
+
         var siblings = LiveSegments();
         var index = Position(
             siblings.Select(row => row.Id).ToList(),
@@ -203,7 +223,11 @@ internal sealed class PlaylistEditor(
         return "applied";
     }
 
-    private string InsertEntries(InsertPlaylistEntries insert, List<PlaylistChange> changes)
+    private async Task<string> InsertEntriesAsync(
+        InsertPlaylistEntries insert,
+        Func<IReadOnlyList<PlaylistEntryInput>, Task<bool>> entriesArePlayable,
+        List<PlaylistChange> changes
+    )
     {
         if (SegmentStatus(insert.SegmentId) is not null)
         {
@@ -213,6 +237,11 @@ internal sealed class PlaylistEditor(
         {
             return "id_conflict";
         }
+        if (!await entriesArePlayable(insert.Entries))
+        {
+            return "track_unavailable";
+        }
+
         var siblings = LiveEntries(insert.SegmentId);
         var index = Position(
             siblings.Select(row => row.Id).ToList(),

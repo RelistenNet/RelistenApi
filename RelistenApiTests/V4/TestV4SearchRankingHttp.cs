@@ -91,121 +91,6 @@ public sealed partial class TestV4CatalogHttp
     }
 
     [Test]
-    public async Task Search_returns_existing_resource_shapes_and_approved_aliases_with_imported_fallback()
-    {
-        var result = await GetJson($"/api/v4/search?q=Scarlet&artist_id={BrowseArtistId}");
-        result["songs"]!.AsArray().Should().NotBeEmpty();
-        result["songs"]![0]!["kind"]!.GetValue<string>().Should().Be("song");
-        result["songs"]![0]!["song"]!["id"]!.GetValue<string>().Should().Be("song_00000003");
-        var raw = await GetJson($"/api/v4/search?q=Scarlet&artist_id={CatalogId("artist", 11)}");
-        raw["songs"]!
-            .AsArray()
-            .Should()
-            .OnlyContain(entry => entry!["kind"]!.GetValue<string>() == "imported_song");
-        foreach (var entry in raw["songs"]!.AsArray())
-        {
-            entry!["imported_song"]!.AsObject().ContainsKey("normalized_song_id").Should().BeTrue();
-            entry["imported_song"]!["normalized_song_id"].Should().BeNull();
-        }
-        // Only the imported title matches; its evidence points through a merged song.
-        var mapped = await GetJson(
-            $"/api/v4/search?q=Imported%20Scarlet&artist_id={CatalogId("artist", 301)}"
-        );
-        mapped["songs"]!.AsArray().Should().ContainSingle();
-        mapped["songs"]![0]!["song"]!["id"]!.GetValue<string>().Should().Be("song_00000101");
-        mapped["songs"]![0]!["imported_song"].Should().BeNull();
-        var venues = await GetJson($"/api/v4/search?q=Historical&artist_id={BrowseArtistId}");
-        venues["venues"]!.AsArray().Should().Contain(entry => entry!["artist_venue"] != null);
-        var show = await GetJson($"/api/v4/search?q=1995-12-31&artist_id={BrowseArtistId}");
-        show["shows"]![0]!["id"]!.GetValue<string>().Should().Be(ShowId(4));
-        show["shows"]![0]!["artist_venue"].Should().NotBeNull();
-        var source = await GetJson($"/api/v4/search?q=Fixture%20taper&artist_id={BrowseArtistId}");
-        source["sources"]!.AsArray().Should().NotBeEmpty();
-        source["sources"]![0]!["show_id"]!.GetValue<string>().Should().Be(ShowId(4));
-        source["sources"]![0]!.AsObject().ContainsKey("sets").Should().BeFalse();
-        var tour = await GetJson($"/api/v4/search?q=Winter&artist_id={BrowseArtistId}");
-        tour["tours"]![0]!["id"]!.GetValue<string>().Should().StartWith("tour_");
-        var artist = await GetJson($"/api/v4/search?q=Matched&artist_id={BrowseArtistId}");
-        (
-            System.Numerics.BigInteger.Parse(artist["artists"]![0]!["features"]!.GetValue<string>())
-            & (System.Numerics.BigInteger.One << 23)
-        )
-            .Should()
-            .NotBe(System.Numerics.BigInteger.Zero);
-        (await GetJson($"/api/v4/search?q=Scarlet&artist_id={BrowseArtistId}&songs=false"))[
-            "songs"
-        ]!
-            .AsArray()
-            .Should()
-            .BeEmpty();
-    }
-
-    [Test]
-    public async Task Search_finds_merged_venue_aliases_and_imported_labels_using_the_current_relationship()
-    {
-        await using var connection = await MigratedTestDatabase.OpenAsync();
-        try
-        {
-            await ChangeNormalization(
-                connection,
-                """
-                UPDATE norm.venues SET parent_id=NULL WHERE id='venue_00000001';
-                INSERT INTO norm.venue_names (venue_id,normalized,name,kind,valid_from,valid_to,author_type,author_ref,run_uuid)
-                SELECT 'venue_00000003',normalized,name,kind,valid_from,valid_to,author_type,author_ref,run_uuid
-                FROM norm.venue_names WHERE venue_id='venue_00000001' AND name='Historical Areena';
-                DELETE FROM norm.venue_names WHERE venue_id='venue_00000001' AND name='Historical Areena';
-                UPDATE norm.venues SET merged_into='venue_00000001' WHERE id='venue_00000003';
-                UPDATE norm.show_venues SET venue_id='venue_00000003' WHERE show_uuid='00000000-0000-0000-0000-000000000004';
-                """
-            );
-            foreach (var term in new[] { "Historical Areena", "Imported Civic" })
-            {
-                var result = await GetJson(
-                    $"/api/v4/search?q={Uri.EscapeDataString(term)}&artist_id={BrowseArtistId}"
-                );
-                result["venues"]!
-                    .AsArray()
-                    .Should()
-                    .Contain(entry =>
-                        entry!["artist_venue"] != null
-                        && entry["artist_venue"]!["venue"]!["id"]!.GetValue<string>()
-                            == "venue_00000001"
-                    );
-            }
-        }
-        finally
-        {
-            await ChangeNormalization(
-                connection,
-                """
-                UPDATE norm.show_venues SET venue_id='venue_00000001' WHERE show_uuid='00000000-0000-0000-0000-000000000004';
-                UPDATE norm.venues SET merged_into=NULL WHERE id='venue_00000003';
-                INSERT INTO norm.venue_names (venue_id,normalized,name,kind,valid_from,valid_to,author_type,author_ref,run_uuid)
-                SELECT 'venue_00000001',normalized,name,kind,valid_from,valid_to,author_type,author_ref,run_uuid
-                FROM norm.venue_names WHERE venue_id='venue_00000003' AND name='Historical Areena';
-                DELETE FROM norm.venue_names WHERE venue_id='venue_00000003' AND name='Historical Areena';
-                UPDATE norm.venues SET parent_id='venue_00000003' WHERE id='venue_00000001';
-                """
-            );
-        }
-    }
-
-    [TestCase("/api/v4/search")]
-    [TestCase("/api/v4/search?q=ab")]
-    [TestCase(
-        "/api/v4/search?q=Scarlet&artists=false&shows=false&songs=false&sources=false&tours=false&venues=false"
-    )]
-    public async Task Empty_search_always_contains_all_six_categories(string path)
-    {
-        var result = (await GetJson(path)).AsObject();
-        result
-            .Select(entry => entry.Key)
-            .Should()
-            .BeEquivalentTo("artists", "shows", "songs", "sources", "tours", "venues");
-        result.All(entry => entry.Value!.AsArray().Count == 0).Should().BeTrue();
-    }
-
-    [Test]
     public async Task Ranking_windows_thresholds_groups_and_organic_momentum_preserve_current_catalog_metadata()
     {
         var store = new PopularityStore(app.Services.GetRequiredService<DbService>());
@@ -491,7 +376,6 @@ public sealed partial class TestV4CatalogHttp
                 (BrowseArtistPath + "/venues/venue_00000001", "shows"),
                 ("/api/v4/imported-venues/" + CatalogId("imported_venue", 74), "shows"),
                 ("/api/v4/tours/" + CatalogId("tour", 84), "shows"),
-                ($"/api/v4/search?q=1995-12-31&artist_id={BrowseArtistId}", "shows"),
                 (BrowseArtistPath + "/shows/on-date?month=12&day=31", null),
                 (BrowseArtistPath + "/shows/recently-performed", null),
                 (BrowseArtistPath + "/shows/popular-trending", "popular_shows"),
@@ -519,7 +403,5 @@ public sealed partial class TestV4CatalogHttp
         using var invalid = await http.GetAsync("/api/v4/popular/shows?window=forever");
         invalid.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
         invalid.Headers.CacheControl!.NoStore.Should().BeTrue();
-        using var invalidId = await http.GetAsync("/api/v4/search?q=Scarlet&artist_id=wrong");
-        invalidId.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
     }
 }

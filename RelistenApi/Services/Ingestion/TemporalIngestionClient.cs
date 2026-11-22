@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using Relisten.Api.Models;
 using Relisten.Ingestion.Workflows;
+using Relisten.Search;
 using Temporalio.Api.Enums.V1;
 using Temporalio.Client;
 using Temporalio.Client.Schedules;
@@ -236,6 +237,8 @@ public sealed class TemporalIngestionClient
                 // Operators own existing schedules, including their paused state.
             }
         }
+
+        await SearchBuildSchedule.RegisterAsync(client);
     }
 
     private static ScheduleActionStartWorkflow ScheduledAction(string name)

@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Relisten.Api.Models;
 using Relisten.Ingestion;
 using Relisten.Ingestion.Workflows;
+using Relisten.Search;
 using Temporalio.Activities;
 using Temporalio.Client.Schedules;
 using Temporalio.Testing;
@@ -149,6 +150,7 @@ public class TestImportAdmission
             "relisten-ingest-discover",
             "relisten-ingest-full",
             "relisten-ingest-thin",
+            SearchBuildSchedule.Id,
         };
 
         await client.RegisterSchedulesAsync();
@@ -160,6 +162,10 @@ public class TestImportAdmission
                 var schedule = environment.Client.GetScheduleHandle(id);
                 var description = await schedule.DescribeAsync();
                 description.Schedule.Action.Should().BeOfType<ScheduleActionStartWorkflow>();
+                if (id == SearchBuildSchedule.Id)
+                {
+                    description.Schedule.State.Paused.Should().BeTrue();
+                }
 
                 // Keep the test independent of the wall-clock cron boundary.
                 await schedule.PauseAsync("Test operator pause");

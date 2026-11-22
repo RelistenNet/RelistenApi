@@ -139,6 +139,9 @@ public static partial class V4CatalogProjection
             Duration = value.duration,
             Title = value.title,
             Slug = value.slug,
+            Playable =
+                !value.is_orphaned
+                && (!string.IsNullOrEmpty(value.mp3_url) || !string.IsNullOrEmpty(value.flac_url)),
             Mp3Url = value.mp3_url,
             Mp3Md5 = value.mp3_md5,
             FlacUrl = value.flac_url,

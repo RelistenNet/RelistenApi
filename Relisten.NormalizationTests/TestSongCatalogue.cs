@@ -160,6 +160,7 @@ public class TestSongCatalogueWorkflow
         public List<int?> OnlySizes { get; } = [];
         public int Matches { get; private set; }
         public int Attempts { get; private set; }
+        public List<Guid> SearchRefreshes { get; } = [];
 
         /// The first chunk fails after (say) its model call.
         public bool FailFirst { get; init; }
@@ -204,12 +205,16 @@ public class TestSongCatalogueWorkflow
             Matches++;
             return new CatalogueMatchResult(7, 0);
         }
+
+        [Activity(SearchReindexStep.ActivityName)]
+        public void RefreshSearch(Guid artist) => SearchRefreshes.Add(artist);
     }
 
     [Test]
     public async Task LoopsUntilDoneThenMatches()
     {
         var steps = new Steps();
+        var artist = Guid.NewGuid();
         using var workflows = new TemporalWorker(
             environment.Client,
             new TemporalWorkerOptions(
@@ -224,7 +229,7 @@ public class TestSongCatalogueWorkflow
         var result = await workflows.ExecuteAsync(() =>
             database.ExecuteAsync(() =>
                 environment.Client.ExecuteWorkflowAsync(
-                    (SongCatalogueWorkflow w) => w.RunAsync(new BuildSongCatalogue(Guid.NewGuid())),
+                    (SongCatalogueWorkflow w) => w.RunAsync(new BuildSongCatalogue(artist)),
                     new WorkflowOptions("test/" + Guid.NewGuid(), NormalizationQueues.Workflows)
                 )
             )
@@ -233,6 +238,7 @@ public class TestSongCatalogueWorkflow
         // First pass: two chunks, then done; review pass: done at once, with a fresh skip list.
         steps.SkipSizes.Should().Equal(0, 2, 4, 0);
         steps.Matches.Should().Be(1);
+        steps.SearchRefreshes.Should().Equal(artist);
         result
             .Should()
             .BeEquivalentTo(

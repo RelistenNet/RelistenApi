@@ -73,6 +73,8 @@ public sealed partial class TestPlaylistApi
                 ["AllowedHosts"] = "auth.relisten.net;accounts.relisten.net;relisten.net",
                 ["Accounts:Issuer"] = "https://auth.relisten.net/",
                 ["Accounts:WebClientSecret"] = "disposable-proof-secret",
+                // Successful playlist writes must survive an unavailable search wake-up.
+                ["Temporal:Address"] = "127.0.0.1:1",
             }
         );
         builder.Logging.ClearProviders();
@@ -84,6 +86,9 @@ public sealed partial class TestPlaylistApi
             AuthenticationConstants.AccountCredentialScheme,
             options => options.ForwardDefaultSelector = _ => "proof"
         );
+        builder
+            .Services.AddHttpClient(nameof(PlaylistTrackResolver))
+            .ConfigurePrimaryHttpMessageHandler(() => _catalog);
         var app = AccountsApplication.Build(builder);
         await AccountsApplication.InitializeAsync(app, CancellationToken.None);
         await app.StartAsync();
@@ -100,8 +105,11 @@ public sealed partial class TestPlaylistApi
     }
 
     [SetUp]
-    public async Task CreateUser() =>
+    public async Task CreateUser()
+    {
+        _catalog.Reset();
         _user = await _database.CreateUserAsync($"p_{Guid.NewGuid():N}"[..30]);
+    }
 
     [OneTimeTearDown]
     public async Task Stop()
@@ -1049,7 +1057,13 @@ public sealed partial class TestPlaylistApi
             .AddInterceptors(new RejectSave())
             .Options;
         await using var db = new AccountsDbContext(options);
-        var service = new PlaylistWriteService(db, new(db), new(db), TimeProvider.System);
+        var service = new PlaylistWriteService(
+            db,
+            new(db),
+            new(db),
+            TimeProvider.System,
+            _app.Services.GetRequiredService<PlaylistTrackResolver>()
+        );
         var edit = Op(
             "move_entry",
             new MovePlaylistEntry(

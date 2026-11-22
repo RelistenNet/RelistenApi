@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using RelistenUserService.Library;
 using RelistenUserService.Persistence;
+using RelistenUserService.Search;
 
 namespace RelistenUserService.Playlists;
 
@@ -8,7 +9,8 @@ namespace RelistenUserService.Playlists;
 internal sealed class PlaylistModerationService(
     AccountsDbContext database,
     LibraryStateStore stateStore,
-    TimeProvider clock
+    TimeProvider clock,
+    PlaylistSearchNotifier? search = null
 )
 {
     internal async Task<bool> SetTakedownAsync(
@@ -62,6 +64,10 @@ internal sealed class PlaylistModerationService(
         stateStore.Append(state, PlaylistWriteService.SummaryChange(playlist, now));
         await database.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+        if (search is not null)
+        {
+            await search.Changed(id);
+        }
         return true;
     }
 }

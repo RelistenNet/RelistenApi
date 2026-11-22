@@ -27,6 +27,7 @@ Local services are ready:
     database: relisten_db
   PgBouncer:  127.0.0.1:16432
   Redis:      127.0.0.1:16379
+  Typesense:  127.0.0.1:18108 (local_dev_typesense)
   Adminer:    http://localhost:18080
 
 An empty catalog receives the checked-in development seed. Existing data is

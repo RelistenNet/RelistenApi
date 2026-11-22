@@ -106,19 +106,46 @@ public static class PlayRollupReader
         );
     }
 
+    internal static Task<IEnumerable<TrackStartTotal>> ReadTrackStarts(
+        IDbConnection connection,
+        IDbTransaction transaction,
+        DateOnly through,
+        CancellationToken cancellationToken,
+        Guid? artist = null
+    ) =>
+        connection.QueryAsync<TrackStartTotal>(
+            new CommandDefinition(
+                $"""
+                SELECT source_track_uuid AS id, sum(plays)::bigint AS plays
+                FROM ({YearlyTrackRows(
+                    artist is null ? "true" : "artist_uuid = @artist",
+                    "source_track_uuid"
+                )}) AS track_rollups
+                GROUP BY source_track_uuid
+                """,
+                Window(through, artist),
+                transaction,
+                commandTimeout: 600,
+                cancellationToken: cancellationToken
+            )
+        );
+
     // The three half-open ranges partition 365 UTC play days. Passing timestamp
     // bounds lets each branch exclude irrelevant Timescale chunks and use its indexes.
-    private static string YearlyTrackRows(string filter) =>
+    private static string YearlyTrackRows(
+        string filter,
+        string columns = "artist_uuid, show_uuid, total_track_seconds"
+    ) =>
         $"""
-            SELECT artist_uuid, show_uuid, plays, total_track_seconds
+            SELECT {columns}, plays
             FROM source_track_plays_monthly
             WHERE play_month >= @firstWholeMonth AND play_month < @endOfWholeMonths AND {filter}
             UNION ALL
-            SELECT artist_uuid, show_uuid, plays, total_track_seconds
+            SELECT {columns}, plays
             FROM source_track_plays_daily
             WHERE play_day >= @startDay AND play_day < @firstWholeMonth AND {filter}
             UNION ALL
-            SELECT artist_uuid, show_uuid, plays, total_track_seconds
+            SELECT {columns}, plays
             FROM source_track_plays_daily
             WHERE play_day >= @endOfWholeMonths AND play_day < @endDay AND {filter}
             """;
@@ -147,6 +174,8 @@ public static class PlayRollupReader
 }
 
 internal sealed record YearlyPopularityTotal(Guid Id, long Plays, long Seconds);
+
+internal readonly record struct TrackStartTotal(Guid Id, long Plays);
 
 internal sealed record PerformancePlaysRequest(Guid[] Tracks, Guid Source);
 

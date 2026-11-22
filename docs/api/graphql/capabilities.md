@@ -15,7 +15,7 @@ no normalization matching SQL or alternate public field calculations.
 
 `CatalogEntityReader` supplies shallow entity and complete source batches to
 GraphQL and REST reference hydration. `CatalogCollectionReader` selects pages
-before hydration, including a separate lateral limit per parent. REST search,
+before hydration, including a separate lateral limit per parent. GraphQL search,
 canonical/imported song and venue browsing, and show discovery compose this same
 selector with complete or existing bounded collection policies. Ordinary REST
 show/source reads retain `CatalogRecordingReader`; its complete recording batches
@@ -27,13 +27,10 @@ approval-gated overlays, imported facts, and ordinary popularity in both paths.
 uses `V4CatalogProjection`, `CatalogBrowseProjection`, and `V4SongProjection`
 for public representations; it does not call controllers or issue loopback HTTP.
 
-For a concrete call path, REST `CatalogSearchReader` asks `CatalogCollectionReader`
-for 20 members, then `CatalogEntityReader` hydrates them. GraphQL
-`CatalogGraphOperation.ReadPageGroup` calls those same two readers with the
-requested cursor and per-parent limit. Both then use the public projections.
-The collection reader's keyset and per-parent lateral SQL is new: the old readers
-returned complete lists or fixed top-N results. Some older REST list selection
-queries remain separate, while sharing metadata hydration and mappings.
+GraphQL `CatalogGraphOperation.ReadPageGroup` selects catalog members using the
+requested cursor and per-parent limit, then hydrates them with
+`CatalogEntityReader` and the public projections. The standalone
+`GET /api/v4/search` endpoint uses Typesense.
 
 ## Read capability mapping
 
@@ -65,9 +62,9 @@ queries remain separate, while sharing metadata hydration and mappings.
   `recentlyPerformedShows`, `recentlyUpdatedShows`, `recentlyAddedShows`,
   `topShows`, `showByDate`, and `randomShow`. Artist scope is a typed filter or
   required lookup argument. Connections page beyond REST's bounded discovery view.
-- **CatalogSearchController:** `search` has independently selected artist, show,
-  song, source, tour, and venue connections. Literal substring matching,
-  canonical/imported fallback, and result tie-breaks share REST's selector.
+- **GraphQL search:** `search` has independently selected artist, show, song,
+  source, tour, and venue connections. It uses literal substring matching and
+  returns imported entries when canonical entries are unavailable.
 - **CatalogRankingController:** `popularArtists`, `trendingArtists`, `popularYears`,
   `trendingYears`, `popularShows`, `trendingShows`, `artistRankings`, and
   `momentumShows`. These are bounded top-N views. Rank `metrics` retains contextual

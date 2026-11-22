@@ -9,8 +9,23 @@ namespace RelistenIngestionWorker.AccountDeletion;
 /// Only identity rows are deleted here; library, playlist and history rows go with the
 /// user through ON DELETE CASCADE foreign keys, so a new user-owned table needs one.
 /// </summary>
-public sealed class AccountPurge(string connectionString)
+public sealed class AccountPurge
 {
+    private readonly string connectionString;
+    private readonly Func<string, CancellationToken, Task>? removeSearchDocuments;
+
+    public AccountPurge(string connectionString)
+        : this(connectionString, null) { }
+
+    internal AccountPurge(
+        string connectionString,
+        Func<string, CancellationToken, Task>? removeSearchDocuments
+    )
+    {
+        this.connectionString = connectionString;
+        this.removeSearchDocuments = removeSearchDocuments;
+    }
+
     public Task RunJobAsync(AccountDeletionInput input, CancellationToken cancellationToken) =>
         PurgeAsync(input.UserId, input.JobId, cancellationToken);
 
@@ -18,6 +33,21 @@ public sealed class AccountPurge(string connectionString)
         PurgeAsync(userId, null, cancellationToken);
 
     private async Task PurgeAsync(string userId, Guid? jobId, CancellationToken cancellationToken)
+    {
+        await DeleteAccountAsync(userId, jobId, cancellationToken);
+        if (removeSearchDocuments != null)
+        {
+            // Once the database commit makes the data private, retries can finish index cleanup
+            // even if the job's SQL work is already marked complete.
+            await removeSearchDocuments(userId, cancellationToken);
+        }
+    }
+
+    private async Task DeleteAccountAsync(
+        string userId,
+        Guid? jobId,
+        CancellationToken cancellationToken
+    )
     {
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken);

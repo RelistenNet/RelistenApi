@@ -4,9 +4,11 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using Microsoft.OpenApi;
 using Relisten.Catalog;
 using Relisten.Identifiers;
+using Relisten.Search;
 using Relisten.Services.Popularity;
 using Swashbuckle.AspNetCore.SwaggerGen;
 
@@ -84,7 +86,25 @@ public static class V4CatalogRegistration
         services.AddTransient<CatalogSongMatchReader>();
         services.AddTransient<CatalogSongReader>();
         services.AddTransient<CatalogBrowseReader>();
-        services.AddTransient<CatalogSearchReader>();
+        services.AddHttpClient<TypesenseClient>(
+            (provider, http) =>
+            {
+                var configuration = provider.GetRequiredService<IConfiguration>();
+                TypesenseClient.Configure(
+                    http,
+                    configuration["Search:Typesense:Url"] ?? "http://127.0.0.1:18108",
+                    configuration["Search:Typesense:ApiKey"] ?? "local_dev_typesense"
+                );
+            }
+        );
+        services.AddSingleton<CatalogQueryEvidenceStore>();
+        services.AddHostedService<CatalogQueryEvidenceRefreshService>();
+        services.AddTransient(provider => new CatalogSearchCoordinator(
+            provider.GetRequiredService<TypesenseClient>(),
+            provider.GetRequiredService<CatalogQueryEvidenceStore>(),
+            provider.GetRequiredService<ILogger<CatalogSearchCoordinator>>(),
+            provider.GetRequiredService<IConfiguration>()["Search:AliasPrefix"] ?? "catalog"
+        ));
         services.AddTransient<CatalogRankingReader>();
         services.AddTransient<CatalogShowDiscoveryReader>();
         services.AddTransient<CatalogImportedVenueMetadataReader>();

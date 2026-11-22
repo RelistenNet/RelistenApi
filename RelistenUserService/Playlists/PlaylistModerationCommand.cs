@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using RelistenUserService.Library;
 using RelistenUserService.Persistence;
+using RelistenUserService.Search;
 
 namespace RelistenUserService.Playlists;
 
@@ -13,7 +14,8 @@ internal static class PlaylistModerationCommand
         Func<AccountsDbContext> openDatabase,
         TextWriter output,
         TextWriter error,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        PlaylistSearchNotifier? search = null
     )
     {
         if (args is ["list-reports"])
@@ -58,7 +60,8 @@ internal static class PlaylistModerationCommand
             var moderation = new PlaylistModerationService(
                 database,
                 new LibraryStateStore(database),
-                TimeProvider.System
+                TimeProvider.System,
+                search
             );
             try
             {

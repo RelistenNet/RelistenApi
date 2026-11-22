@@ -56,9 +56,14 @@ Schedules use UTC and skip overlapping runs:
 | Archive artist discovery | 06:30 daily |
 | Full catalog refresh | 07:00 daily |
 | Recently active artists, or thin refresh | 00:00, 02:00, 04:00, 12:00, 14:00, 16:00, 18:00, 20:00, 22:00 |
+| Catalog search full build | 11:00 daily |
 
 Thin refresh selection uses `ArtistService.UuidsForImport` and provider-specific
 year rules. A small local seed does not limit a full artist import.
+
+`--register-schedules` creates `relisten-search-build` paused. Enable it after
+the production index and endpoint have been verified. Manual and scheduled
+builds use the same workflow ID, so they can't run at the same time.
 
 ## Run the worker
 
@@ -117,7 +122,30 @@ dotnet run --project RelistenIngestionWorker -- --cancel=ingest/artist/ARTIST_UU
 # After a backup restore, purge an account deleted after the backup was taken.
 # Runs the account-deletion SQL by user ID without a job row. Needs ACCOUNTS_DATABASE_URL.
 dotnet run --project RelistenIngestionWorker -- purge-account --user user_XXXXXXXX
+
+# Build playlist search from the accounts and catalog databases, then publish its alias.
+dotnet run --project RelistenIngestionWorker -- --playlist-search-build=true
 ```
+
+Playlist search writes use the `user-data` worker and both database connections.
+The User Service signals the playlist's workflow after saving changes. That
+workflow waits one minute after the playlist's latest signal and caps the wait
+at five minutes after the first signal. Reindexing reads the current playlist,
+updates its document or deletes it if gone, and exits once it has handled its
+pending edits.
+If sync exhausts its activity retries, the workflow waits two minutes and carries
+its pending edits into a new run under the same workflow ID.
+The nightly playlist build repairs missed signals and updates follow counts
+and catalog names. Playlist syncs record requests in the catalog database
+before resolving the playlist alias. After publication, the build replays the
+requests made since it started and drops older requests. Catalog migration 23
+creates the request table. Schedule registration creates
+`relisten-playlist-search-build` paused.
+
+Account-deletion activities retry Typesense cleanup after the database commit.
+The restore replay command can run with the accounts database alone. Set
+`Search__Typesense__Url` and the writer key when the command should also remove
+documents from a live playlist index.
 
 `--item` implies Archive. Combining it with another provider or with `--year` is
 invalid. With an explicit provider, year applies only to Archive, Phish.in, or
@@ -302,6 +330,49 @@ and payload Redis. Infrastructure manifests and their runbook live in the
 6. For shared importer changes, test an appropriate artist for each affected
    provider. Observe queue delay, upstream failures, database load, and listener
    errors. Resume any paused schedules after these checks and inspect the next thin result.
+
+### Catalog search startup
+
+Apply catalog migration 23 before rolling out the worker that refreshes search.
+Bring up Typesense and publish the first catalog aliases before rolling out the
+search API. With the API image that serves `/health/search-startup`, configure
+the `relistenapi` container's startup probe in
+`clusters/relisten3-k3s/apps/relistenapi.yaml` in the infrastructure repository.
+
+```yaml
+startupProbe:
+  httpGet:
+    path: /health/search-startup
+    port: 3823
+  periodSeconds: 5
+  failureThreshold: 24
+```
+
+This gives the container about two minutes to start and pass the check.
+The API returns 503 while loading its first search evidence snapshot, and
+200 once it publishes the snapshot or 60 seconds after warmup starts.
+Kubernetes starts its usual readiness checks once the startup probe passes.
+Leave `/health/ready` on the database checks so browse can serve while search
+continues warming after the grace period.
+[Kubernetes startup probe documentation](https://kubernetes.io/docs/concepts/workloads/pods/probes/#startup-probe)
+
+After committing catalog data, artist imports start a background reindex and song
+normalization reindexes its artist. Venue normalization is picked up by the daily
+build. Import and song refresh requests record their start before resolving the
+aliases, using `search_artist_reindexes` from migration 23. Once the full build
+publishes new aliases and starts the retirement timer, it reindexes artists whose
+requests started since its database snapshot began. The next successful daily
+build repairs failed or missed refreshes. Artist scope and review availability
+use the evidence snapshot refreshed at the alias swap.
+
+Retirement drops the old collections. Typesense reclaims their disk space on
+its compaction interval (`--db-compaction-interval=86400`). Raft snapshots
+bound the import log on a separate interval (`--snapshot-interval-seconds=300`).
+Allow disk headroom for the retiring generation until compaction and a subsequent
+snapshot complete. Run any manual full compaction during low traffic because it
+can slow live searches.
+
+### Recovery
 
 Replacing a worker with the same image should resume unfinished work. A restart
 may finish an in-flight activity gracefully; inspect history before claiming that

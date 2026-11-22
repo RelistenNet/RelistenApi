@@ -45,6 +45,10 @@ public sealed partial class PlaylistWriteService
         }
 
         await transaction.CommitAsync(cancellationToken);
+        if (search is not null && changed)
+        {
+            await search.Changed(id);
+        }
         return new(
             1,
             generation,
@@ -121,9 +125,14 @@ public sealed partial class PlaylistWriteService
             cancellationToken
         );
         var copy = PlaylistCopy.CreateRequest(request, source, structure);
-        var created = await AddPlaylistAsync(actor, state, copy, "copy", hash, cancellationToken);
+        var count = await CheckNewPlaylistQuotaAsync(actor, copy, cancellationToken);
+        var created = AddPlaylist(actor, state, copy, "copy", hash, count);
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+        if (search is not null)
+        {
+            await search.Changed(created.Id);
+        }
         return (new(1, generation, created.Id, created.Revision), false);
     }
 }

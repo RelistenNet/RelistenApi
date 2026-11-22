@@ -494,6 +494,22 @@ public sealed class TestPopularityStore
                 .Should()
                 .Be(new YearlyPopularityTotal(showId, 4, 540));
 
+            await using (var transaction = await connection.BeginTransactionAsync())
+            {
+                var starts = await PlayRollupReader.ReadTrackStarts(
+                    connection,
+                    transaction,
+                    throughLeapDay,
+                    CancellationToken.None
+                );
+                starts
+                    .Where(start => start.Id == firstTrack || start.Id == secondTrack)
+                    .Should()
+                    .BeEquivalentTo(
+                        new TrackStartTotal[] { new(firstTrack, 4), new(secondTrack, 1) }
+                    );
+            }
+
             // Both files played on 2023-03-02: the performance and its source each
             // count that day once.
             (

@@ -7,7 +7,7 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 # Reuse running containers even when this command comes from another worktree.
 # Recreating them could switch the developer's bind-mounted database directory.
 docker compose -f "$script_dir/local-dev/docker-compose.yml" \
-  up -d --wait --no-recreate relisten-db relisten-redis
+  up -d --wait --no-recreate relisten-db relisten-redis relisten-typesense
 
 # Tests use disposable databases on the shared local server and SDK-managed
 # Temporal servers. Every project runs even when an earlier one fails, so one
