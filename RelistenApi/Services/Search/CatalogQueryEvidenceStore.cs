@@ -47,6 +47,12 @@ internal sealed class CatalogQueryEvidenceRefreshService(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // The dedicated Hangfire process shares the API image but serves no search traffic.
+        if (!configuration.GetValue("Search:RefreshQueryEvidence", true))
+        {
+            return;
+        }
+
         var alias = SearchIndexBuilder.AliasName(
             configuration["Search:AliasPrefix"] ?? "catalog",
             SearchIndexSchema.Entities
