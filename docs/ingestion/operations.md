@@ -340,6 +340,13 @@ that leaves no newer timestamp can be missed by this catch-up and reconciled
 by the next daily build. Artist scope and review availability use the evidence
 snapshot refreshed at the alias swap.
 
+Retirement drops the old collections. Typesense reclaims their disk space on
+its compaction interval (`--db-compaction-interval=86400`). Raft snapshots
+bound the import log on a separate interval (`--snapshot-interval-seconds=300`).
+Allow disk headroom for the retiring generation until compaction and a subsequent
+snapshot complete. Run any manual full compaction during low traffic because it
+can slow live searches.
+
 ### Recovery
 
 Replacing a worker with the same image should resume unfinished work. A restart

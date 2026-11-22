@@ -216,9 +216,8 @@ The worker defaults to the local Typesense endpoint above. Set
 Compose stores the index on a named volume. In local testing on OrbStack, the
 Mac bind mount kept megabytes allocated for each tiny archived WAL file. Set
 `RELISTEN_TYPESENSE_DATA_DIR` to an absolute path if you need a bind mount.
-An hour after the latest publication, the worker removes
-unaliased catalog collections and compacts the database. Starting another build
-sweeps unaliased catalog collections before indexing.
+An hour after the latest publication, the worker removes unaliased catalog
+collections. Starting another build sweeps them before indexing.
 
 Typesense runs daily database compaction (`--db-compaction-interval=86400`) and
 takes Raft snapshots every five minutes (`--snapshot-interval-seconds=300`). Raft

@@ -119,12 +119,6 @@ internal sealed class TypesenseClient(HttpClient http)
             );
     }
 
-    public async Task Compact(CancellationToken cancellationToken)
-    {
-        using var response = await http.PostAsync("operations/db/compact", null, cancellationToken);
-        await EnsureSuccess(response, cancellationToken);
-    }
-
     public async Task SetAlias(string alias, string collection, CancellationToken cancellationToken)
     {
         using var response = await http.PutAsJsonAsync(

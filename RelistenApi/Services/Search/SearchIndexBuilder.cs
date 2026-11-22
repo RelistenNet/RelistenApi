@@ -110,9 +110,9 @@ internal sealed class SearchIndexBuilder(
             return;
         }
 
+        // Let Typesense reclaim the retired data on its compaction interval.
+        // Forcing compaction here competes with live queries.
         await RemoveUnaliased(aliasPrefix, aliases, cancellationToken);
-        // Retirement is already complete if compaction times out. The server also compacts daily.
-        await typesense.Compact(cancellationToken);
     }
 
     private async Task RemoveUnaliased(
