@@ -92,12 +92,19 @@ public sealed class CatalogLiveController(
             return Failure(
                 422,
                 "invalid_request",
-                "Provide a track_id, supported app_type, and optional client_uuid as JSON."
+                "Provide a track_id, supported app_type, and optional client_uuid and playlist_id as JSON."
             );
         }
         if (!TrackId.TryParse(request.TrackId, out var trackId))
         {
             return InvalidId(TrackId.Prefix);
+        }
+        if (
+            request.PlaylistId is not null
+            && !SourceTrackPlaysService.IsPlaylistId(request.PlaylistId)
+        )
+        {
+            return InvalidId("playlist");
         }
 
         try
@@ -109,6 +116,7 @@ public sealed class CatalogLiveController(
                     app_type = (SourceTrackPlayAppType)request.AppType!.Value,
                     user_uuid = request.ClientUuid,
                 },
+                request.PlaylistId,
                 cancellationToken
             );
             if (play is null)

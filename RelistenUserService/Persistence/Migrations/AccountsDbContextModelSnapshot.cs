@@ -972,6 +972,18 @@ namespace RelistenUserService.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("archived");
 
+                    b.Property<int>("CatalogDurationSeconds")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("catalog_duration_seconds");
+
+                    b.Property<long>("CatalogIndexedRevision")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("catalog_indexed_revision");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -1032,6 +1044,30 @@ namespace RelistenUserService.Persistence.Migrations
                             t.HasCheckConstraint("ck_playlists_publication", "(NOT published OR public_code IS NOT NULL) AND (public_code IS NULL OR public_code ~ '^[0-9a-f]{32}$')");
 
                             t.HasCheckConstraint("ck_playlists_state", "revision >= 1 AND entry_count >= 0 AND char_length(name) BETWEEN 1 AND 100 AND (description IS NULL OR char_length(description) <= 1000)");
+                        });
+                });
+
+            modelBuilder.Entity("RelistenUserService.Playlists.Entities.PlaylistArtist", b =>
+                {
+                    b.Property<string>("PlaylistId")
+                        .HasColumnType("text")
+                        .HasColumnName("playlist_id");
+
+                    b.Property<Guid>("ArtistUuid")
+                        .HasColumnType("uuid")
+                        .HasColumnName("artist_uuid");
+
+                    b.Property<int>("TrackCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("track_count");
+
+                    b.HasKey("PlaylistId", "ArtistUuid");
+
+                    b.HasIndex("ArtistUuid", "PlaylistId");
+
+                    b.ToTable("playlist_artists", "user_data", t =>
+                        {
+                            t.HasCheckConstraint("ck_playlist_artists_track_count", "track_count > 0");
                         });
                 });
 
@@ -1632,6 +1668,15 @@ namespace RelistenUserService.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Owner");
+                });
+
+            modelBuilder.Entity("RelistenUserService.Playlists.Entities.PlaylistArtist", b =>
+                {
+                    b.HasOne("RelistenUserService.Playlists.Entities.Playlist", null)
+                        .WithMany()
+                        .HasForeignKey("PlaylistId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("RelistenUserService.Playlists.Entities.PlaylistEntry", b =>

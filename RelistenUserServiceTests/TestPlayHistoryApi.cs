@@ -50,15 +50,7 @@ public sealed class TestPlayHistoryApi
     public async Task Start()
     {
         await _database.StartAsync();
-        await using var connection = NewConnection();
-        await connection.ExecuteAsync(
-            await File.ReadAllTextAsync(
-                Path.Combine(
-                    TestContext.CurrentContext.TestDirectory,
-                    "Fixtures/catalog-schema.sql"
-                )
-            )
-        );
+        await _database.LoadCatalogSchemaAsync();
 
         _directory = Directory.CreateTempSubdirectory("relisten-cloud-play-history-");
         _app = await StartAppAsync();
@@ -159,7 +151,7 @@ public sealed class TestPlayHistoryApi
             .Should()
             .ContainSingle()
             .Which.Should()
-            .Be(new AnonymousPlay(stored.ReceivedAt, null, live.AppType));
+            .Be(new AnonymousPlay(stored.ReceivedAt, null, live.AppType, stored.PlaylistId));
         (await AnonymousPlaysAsync(connection, imported)).Should().BeEmpty();
     }
 
@@ -455,7 +447,8 @@ public sealed class TestPlayHistoryApi
     ) =>
         connection.QueryAsync<AnonymousPlay>(
             """
-            SELECT created_at "CreatedAt", user_uuid "UserUuid", app_type "AppType"
+            SELECT created_at "CreatedAt", user_uuid "UserUuid", app_type "AppType",
+                   playlist_id "PlaylistId"
             FROM public.source_track_plays WHERE source_track_uuid = @track
             """,
             new { track = TrackId.Parse(play.TrackId).Value }
@@ -500,7 +493,12 @@ public sealed class TestPlayHistoryApi
         bool Offline
     );
 
-    private sealed record AnonymousPlay(DateTime CreatedAt, Guid? UserUuid, short AppType);
+    private sealed record AnonymousPlay(
+        DateTime CreatedAt,
+        Guid? UserUuid,
+        short AppType,
+        string? PlaylistId
+    );
 
     private sealed class ProofAuthentication(
         IOptionsMonitor<AuthenticationSchemeOptions> options,

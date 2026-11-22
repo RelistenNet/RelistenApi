@@ -128,6 +128,7 @@ public sealed partial class PlaylistWriteService
         var count = await CheckNewPlaylistQuotaAsync(actor, copy, cancellationToken);
         var created = AddPlaylist(actor, state, copy, "copy", hash, count);
         await dbContext.SaveChangesAsync(cancellationToken);
+        await PlaylistCatalogIndex.RefreshAsync(dbContext, created.Id, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         if (search is not null)
         {

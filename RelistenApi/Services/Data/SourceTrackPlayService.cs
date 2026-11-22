@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
 using Relisten.Api.Models;
+using Relisten.Identifiers;
 using Relisten.Services.Live;
 
 namespace Relisten.Data
@@ -15,9 +16,11 @@ namespace Relisten.Data
         public SourceTrackPlaysService(DbService db)
             : base(db) { }
 
+        // playlist_id stays out of SourceTrackPlay, so RETURNING * and every activity
+        // endpoint that maps rows to it never expose which playlist a listener used.
         private const string InsertPlay = """
-            INSERT INTO source_track_plays (source_track_uuid,user_uuid,app_type)
-            SELECT @source_track_uuid,@user_uuid,@app_type
+            INSERT INTO source_track_plays (source_track_uuid,user_uuid,app_type,playlist_id)
+            SELECT @source_track_uuid,@user_uuid,@app_type,@playlist_id
             """;
 
         private const string PlayableTracks = """
@@ -28,20 +31,44 @@ namespace Relisten.Data
             WHERE NOT t.is_orphaned
             """;
 
-        public async Task<SourceTrackPlay> RecordPlayedTrack(SourceTrackPlay track)
+        /// <summary>
+        /// The User Service owns playlist IDs. The catalog checks only their canonical
+        /// shape, a UUIDv7 playlist_ typed ID, never whether the playlist exists or is public.
+        /// </summary>
+        public static bool IsPlaylistId(string value) =>
+            UuidTypeId.TryParse(value, "playlist", out var uuid) && uuid.Version == 7;
+
+        public async Task<SourceTrackPlay> RecordPlayedTrack(
+            SourceTrackPlay track,
+            string? playlistId = null
+        )
         {
             return await db.WithWriteConnection(con =>
-                con.QuerySingleAsync<SourceTrackPlay>(InsertPlay + " RETURNING *", track)
+                con.QuerySingleAsync<SourceTrackPlay>(
+                    InsertPlay + " RETURNING *",
+                    InsertParameters(track, playlistId)
+                )
             );
         }
+
+        private static object InsertParameters(SourceTrackPlay track, string? playlistId) =>
+            new
+            {
+                track.source_track_uuid,
+                track.user_uuid,
+                track.app_type,
+                playlist_id = playlistId,
+            };
 
         /// <summary>
         /// Records v4 telemetry only for a playable catalog track. Validation and
         /// insertion share one statement; a missing/orphaned track writes nothing.
         /// The client UUID is anonymous telemetry, never an account identity.
+        /// The playlist ID, when present, is the caller's already-validated playlist_ ID.
         /// </summary>
         public async Task<SourceTrackPlay?> RecordPlayableTrack(
             SourceTrackPlay track,
+            string? playlistId,
             CancellationToken cancellationToken
         )
         {
@@ -55,7 +82,7 @@ namespace Relisten.Data
                         + " WHERE EXISTS ("
                         + PlayableTracks
                         + " AND t.uuid=@source_track_uuid) RETURNING *",
-                    track,
+                    InsertParameters(track, playlistId),
                     commandTimeout: 30,
                     cancellationToken: cancellationToken
                 )

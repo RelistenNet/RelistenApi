@@ -9,6 +9,7 @@ public sealed class PlaylistConfiguration
     : IEntityTypeConfiguration<Playlist>,
         IEntityTypeConfiguration<PlaylistSegment>,
         IEntityTypeConfiguration<PlaylistEntry>,
+        IEntityTypeConfiguration<PlaylistArtist>,
         IEntityTypeConfiguration<PlaylistRevisionRow>,
         IEntityTypeConfiguration<PlaylistReceipt>,
         IEntityTypeConfiguration<HistoryGeneration>
@@ -39,6 +40,8 @@ public sealed class PlaylistConfiguration
             row.UpdatedAt,
         });
         builder.HasIndex(row => row.PublicCode).IsUnique();
+        builder.Property(row => row.CatalogDurationSeconds).HasDefaultValue(0);
+        builder.Property(row => row.CatalogIndexedRevision).HasDefaultValue(0L);
         builder
             .HasOne(row => row.Owner)
             .WithMany()
@@ -111,6 +114,23 @@ public sealed class PlaylistConfiguration
             .IsUnique()
             .HasFilter("NOT deleted");
         builder.HasIndex(row => new { row.PlaylistId, row.Deleted });
+    }
+
+    public void Configure(EntityTypeBuilder<PlaylistArtist> builder)
+    {
+        builder.ToTable(
+            "playlist_artists",
+            "user_data",
+            table => table.HasCheckConstraint("ck_playlist_artists_track_count", "track_count > 0")
+        );
+        builder.HasKey(row => new { row.PlaylistId, row.ArtistUuid });
+        // Artist pages look up playlists by artist.
+        builder.HasIndex(row => new { row.ArtistUuid, row.PlaylistId });
+        builder
+            .HasOne<Playlist>()
+            .WithMany()
+            .HasForeignKey(row => row.PlaylistId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 
     public void Configure(EntityTypeBuilder<PlaylistRevisionRow> builder)

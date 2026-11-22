@@ -87,6 +87,7 @@ public sealed partial class PlaylistWriteService(
 
         var created = AddPlaylist(actor, state, request, "create", hash, count);
         await dbContext.SaveChangesAsync(cancellationToken);
+        await PlaylistCatalogIndex.RefreshAsync(dbContext, created.Id, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         if (search is not null)
         {
@@ -216,6 +217,7 @@ public sealed partial class PlaylistWriteService(
             );
         }
 
+        var previousRevision = playlist.Revision;
         var newOperations = request
             .Operations.Where(operation => !receipts.ContainsKey(operation.OperationId.Value))
             .ToArray();
@@ -259,6 +261,20 @@ public sealed partial class PlaylistWriteService(
 
         await ReleaseChangedRanksAsync(cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
+        if (editor.Revisions.Count > 0 && editsOnlyName)
+        {
+            // A rename keeps the facts; it skips the entry scan and catalog join.
+            await PlaylistCatalogIndex.AdvanceAfterNameEditAsync(
+                dbContext,
+                playlist.Id,
+                previousRevision,
+                cancellationToken
+            );
+        }
+        else if (editor.Revisions.Count > 0)
+        {
+            await PlaylistCatalogIndex.RefreshAsync(dbContext, playlist.Id, cancellationToken);
+        }
         await transaction.CommitAsync(cancellationToken);
         if (search is not null && editor.Revisions.Count > 0)
         {

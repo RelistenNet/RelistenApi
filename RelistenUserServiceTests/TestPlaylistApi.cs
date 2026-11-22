@@ -45,6 +45,7 @@ public sealed partial class TestPlaylistApi
     public async Task Start()
     {
         await _database.StartAsync();
+        await _database.LoadCatalogSchemaAsync();
         _directory = Path.Combine(
             Path.GetTempPath(),
             $"relisten-playlist-proof-{Guid.NewGuid():N}"
