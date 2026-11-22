@@ -110,8 +110,9 @@ public sealed partial class TestPlaylistApi
         followed.Playlists.Single().PlaylistId.Should().Be(ids[0]);
         followed.Playlists.Single().FollowerCount.Should().Be(1);
 
-        await RecordPlaylistPlaysAsync(artist.Tracks[0], ids[1], plays: 3);
-        await RecordPlaylistPlaysAsync(artist.Tracks[0], ids[2], plays: 1);
+        // Materialized days and today's real-time tail both count.
+        await RecordPlaylistPlaysAsync(artist.Tracks[0], ids[1], plays: 3, daysAgo: 2);
+        await RecordPlaylistPlaysAsync(artist.Tracks[0], ids[2], plays: 1, daysAgo: 0);
         var played = await ListArtist(artist.Uuid, sort: "plays");
         played.Playlists.Select(item => item.PlaylistId).Should().Equal(ids[1], ids[2], ids[0]);
         played.Playlists.Select(item => item.RecentPlayCount).Should().Equal(3, 1, 0);
@@ -235,10 +236,19 @@ public sealed partial class TestPlaylistApi
         return (artist, tracks.Select(track => new TrackId(track).ToString()).ToArray());
     }
 
-    /// <summary>Records plays from a playlist in a closed hour and materializes them.</summary>
-    private async Task RecordPlaylistPlaysAsync(string track, PlaylistId playlist, int plays)
+    /// <summary>
+    /// Records plays from a playlist at noon UTC, <paramref name="daysAgo"/> days back.
+    /// A closed day is materialized; today's plays stay in the real-time tail.
+    /// </summary>
+    private async Task RecordPlaylistPlaysAsync(
+        string track,
+        PlaylistId playlist,
+        int plays,
+        int daysAgo
+    )
     {
-        var playedAt = DateTime.UtcNow.AddHours(-3);
+        var day = DateTime.UtcNow.Date.AddDays(-daysAgo);
+        var playedAt = daysAgo == 0 ? DateTime.UtcNow.AddMinutes(-1) : day.AddHours(12);
         await using var connection = new NpgsqlConnection(_database.ConnectionString);
         await connection.ExecuteAsync(
             """
@@ -253,9 +263,12 @@ public sealed partial class TestPlaylistApi
                 plays,
             }
         );
-        await connection.ExecuteAsync(
-            "CALL refresh_continuous_aggregate('public.source_track_plays_playlist_hourly', @start, @end)",
-            new { start = playedAt.AddHours(-1), end = playedAt.AddHours(1) }
-        );
+        if (daysAgo > 0)
+        {
+            await connection.ExecuteAsync(
+                "CALL refresh_continuous_aggregate('public.source_track_plays_playlist_daily', @start, @end)",
+                new { start = day, end = day.AddDays(1) }
+            );
+        }
     }
 }

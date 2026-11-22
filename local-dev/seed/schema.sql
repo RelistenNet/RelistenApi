@@ -1563,9 +1563,9 @@ GROUP BY 1, 2, 3, 4, 5
 WITH NO DATA;
 
 -- Mirrors catalog migration 24, which an already-seeded database applies itself.
-CREATE MATERIALIZED VIEW source_track_plays_playlist_hourly
-WITH (timescaledb.continuous, timescaledb.materialized_only = true) AS
-SELECT time_bucket('1 hour', p.created_at) AS play_hour,
+CREATE MATERIALIZED VIEW source_track_plays_playlist_daily
+WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
+SELECT time_bucket('1 day', p.created_at) AS play_day,
        p.playlist_id, count(*) AS plays, sum(coalesce(t.duration, 0)) AS total_track_seconds
 FROM source_track_plays p
 JOIN source_tracks t ON t.uuid = p.source_track_uuid
@@ -1583,5 +1583,5 @@ SELECT add_continuous_aggregate_policy('source_track_plays_hourly',
     start_offset => interval '6 hours', end_offset => interval '1 hour', schedule_interval => interval '1 hour');
 SELECT add_continuous_aggregate_policy('source_track_plays_daily',
     start_offset => interval '3 days', end_offset => interval '1 day', schedule_interval => interval '1 day');
-SELECT add_continuous_aggregate_policy('source_track_plays_playlist_hourly',
-    start_offset => interval '1 day', end_offset => interval '1 hour', schedule_interval => interval '30 minutes');
+SELECT add_continuous_aggregate_policy('source_track_plays_playlist_daily',
+    start_offset => interval '3 days', end_offset => interval '1 hour', schedule_interval => interval '1 hour');

@@ -38,7 +38,7 @@ the edge like the public snapshot.
 
 | Query | Meaning |
 | --- | --- |
-| `sort` | `recent` (default) orders by `updated_at`, which publication, unpublication and content edits move. `followers` orders by follower count. `plays` orders by plays started from the playlist in the last 30 days. Ties fall back to playlist ID, all descending. |
+| `sort` | `recent` (default) orders by `updated_at`, which publication, unpublication and content edits move. `followers` orders by follower count. `plays` orders by plays started from the playlist on the last 30 UTC days, today included. Ties fall back to playlist ID, all descending. |
 | `artist` | An `artist_` ID or a bare catalog artist UUID. Keeps playlists with at least one live entry for one of that artist's tracks. |
 | `limit` | 1–50, default 25. |
 | `cursor` | The previous page's `next_cursor`. It is valid only with the `sort` that produced it. |
@@ -63,10 +63,11 @@ Plays started from a playlist record its `playlist_id` in
 history upload. Anonymous clients pass `playlist_id` to
 `POST /api/v4/live/play` (JSON) or `POST /api/v2/live/play` (query). The
 catalog checks only that the value is a canonical `playlist_` ID and never
-returns it. The `source_track_plays_playlist_hourly` continuous aggregate
-totals plays per playlist and hour, and the `plays` sort reads it. Its
-half-hourly policy materializes an hour once it has been over for an hour, so
-new plays count within about two and a half hours.
+returns it. The `source_track_plays_playlist_daily` continuous aggregate
+totals plays per playlist and UTC day, and the `plays` sort reads it. Closed
+days are materialized hourly; real-time aggregation adds the current day from
+the raw plays, so a new play counts at once, apart from the 60-second edge
+cache.
 
 Anonymous attribution is unauthenticated, like the track play counts it sits
 beside. Nothing checks that the track is in the playlist or limits plays per
@@ -152,8 +153,14 @@ retry can create a copy only if the restored source is public.
 
 Deploy the catalog API first. Its migration 24 adds
 `source_track_plays.playlist_id` with a five-second lock timeout and creates
-the hourly playlist aggregate with no data. The User Service's play upload
+the daily playlist aggregate with no data. The User Service's play upload
 writes that column, so it fails until the migration has run.
+
+Until the aggregate has materialized a day with playlist plays, its
+real-time tail reads up to 30 days of raw plays on each uncached listing
+(about 2.2 million rows at November 2026 volume). That ends at the first
+hourly refresh after such a day closes, normally within a day of signed-in
+clients sending playlist plays.
 
 The User Service migration adds `playlist_artists` and the
 `catalog_duration_seconds` and `catalog_indexed_revision` playlist columns.

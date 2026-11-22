@@ -56,8 +56,8 @@ public sealed record FollowedPlaylistHead(PlaylistId PlaylistId, bool Available)
 
 /// <summary>
 /// One public playlist in a listing. <c>DurationSeconds</c> totals the catalog durations
-/// of its tracks. <c>RecentPlayCount</c> counts plays started from it in the last 30 days,
-/// from signed-in and anonymous listeners, and lags by up to about two and a half hours.
+/// of its tracks. <c>RecentPlayCount</c> counts plays started from it on the last 30 UTC
+/// days, today included, from signed-in and anonymous listeners.
 /// </summary>
 public sealed record PublicPlaylistListing(
     PlaylistId PlaylistId,

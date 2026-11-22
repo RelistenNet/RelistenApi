@@ -26,7 +26,7 @@ public sealed class PublicPlaylistDirectory(AccountsDbContext database, TimeProv
 {
     internal const int DefaultLimit = 25;
     internal const int MaximumLimit = 50;
-    private static readonly TimeSpan PlayWindow = TimeSpan.FromDays(30);
+    private const int PlayWindowDays = 30;
 
     // Integer keys for every sort, so one cursor shape and one keyset predicate serve all.
     private static readonly Dictionary<string, string> SortKeys = new(StringComparer.Ordinal)
@@ -125,8 +125,8 @@ public sealed class PublicPlaylistDirectory(AccountsDbContext database, TimeProv
                        ) AS follower_count,
                        (
                            SELECT coalesce(sum(bucket.plays), 0)::bigint
-                           FROM public.source_track_plays_playlist_hourly AS bucket
-                           WHERE bucket.playlist_id = playlist.id AND bucket.play_hour >= @plays_since
+                           FROM public.source_track_plays_playlist_daily AS bucket
+                           WHERE bucket.playlist_id = playlist.id AND bucket.play_day >= @plays_since
                        ) AS recent_play_count
                 FROM user_data.playlists AS playlist
                 JOIN identity.users AS owner ON owner.id = playlist.owner_id
@@ -152,7 +152,7 @@ public sealed class PublicPlaylistDirectory(AccountsDbContext database, TimeProv
     {
         var parameters = new List<NpgsqlParameter>
         {
-            new("plays_since", NpgsqlDbType.TimestampTz) { Value = clock.GetUtcNow() - PlayWindow },
+            new("plays_since", NpgsqlDbType.TimestampTz) { Value = PlayWindowStart() },
             new("active_status", NpgsqlDbType.Text) { Value = UserStatuses.Active },
             // One extra row tells whether another page follows.
             new("take", NpgsqlDbType.Integer) { Value = query.Limit + 1 },
@@ -167,6 +167,17 @@ public sealed class PublicPlaylistDirectory(AccountsDbContext database, TimeProv
             parameters.Add(new("after_id", NpgsqlDbType.Text) { Value = after.Id });
         }
         return parameters.ToArray<object>();
+    }
+
+    /// <summary>
+    /// The first UTC day of the play window, today included. It must reach the query as a
+    /// parameter: the aggregate's real-time tail excludes older raw chunks only for a
+    /// constant bound (see catalog migration 24).
+    /// </summary>
+    private DateTimeOffset PlayWindowStart()
+    {
+        var today = clock.GetUtcNow().UtcDateTime.Date;
+        return new DateTimeOffset(today.AddDays(1 - PlayWindowDays), TimeSpan.Zero);
     }
 
     private static PublicPlaylistListing ToListing(ListingRow row) =>

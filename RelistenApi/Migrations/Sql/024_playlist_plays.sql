@@ -10,17 +10,21 @@ SET LOCAL lock_timeout = '5s';
 
 ALTER TABLE source_track_plays ADD COLUMN IF NOT EXISTS playlist_id text;
 
--- Hourly totals per playlist, the source of the User Service's "most played"
+-- Daily totals per playlist, the source of the User Service's "most played"
 -- ordering. Earlier plays have no playlist, so there is no history to backfill
--- and the aggregate starts empty. It reads materialized buckets only: without a
--- watermark, a real-time tail would scan the whole hypertable. Timescale's
--- default group index covers (playlist_id, play_hour DESC). A play becomes
--- visible within about two and a half hours: its hour must end, then the
--- one-hour end offset pass, then the next half-hourly policy run.
-CREATE MATERIALIZED VIEW IF NOT EXISTS source_track_plays_playlist_hourly
-WITH (timescaledb.continuous, timescaledb.materialized_only = true)
+-- and the aggregate starts empty. Real-time aggregation adds plays after the
+-- last materialized day straight from the hypertable, so today's plays count
+-- immediately. Timescale's default group index covers (playlist_id, play_day).
+--
+-- Until a day with playlist plays has been materialized, the watermark stays at
+-- the start of time (a refresh over empty data does not move it), and each
+-- read scans raw plays back to its own play_day bound. Readers must therefore
+-- pass that bound as a parameter: a constant lets Timescale exclude older chunks
+-- at startup, while an expression such as now() - interval does not.
+CREATE MATERIALIZED VIEW IF NOT EXISTS source_track_plays_playlist_daily
+WITH (timescaledb.continuous, timescaledb.materialized_only = false)
 AS
-SELECT time_bucket(INTERVAL '1 hour', p.created_at) AS play_hour,
+SELECT time_bucket(INTERVAL '1 day', p.created_at) AS play_day,
        p.playlist_id,
        count(*) AS plays,
        sum(coalesce(t.duration, 0)) AS total_track_seconds
@@ -30,10 +34,12 @@ WHERE p.playlist_id IS NOT NULL
 GROUP BY 1, 2
 WITH NO DATA;
 
+-- Materialize each closed day an hour after it ends, and re-close the previous
+-- three days to pick up late uploads (offline plays and history imports).
 SELECT add_continuous_aggregate_policy(
-    'source_track_plays_playlist_hourly',
-    start_offset => INTERVAL '1 day',
+    'source_track_plays_playlist_daily',
+    start_offset => INTERVAL '3 days',
     end_offset => INTERVAL '1 hour',
-    schedule_interval => INTERVAL '30 minutes',
+    schedule_interval => INTERVAL '1 hour',
     if_not_exists => true
 );
