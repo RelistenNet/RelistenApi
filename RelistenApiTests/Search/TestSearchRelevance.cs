@@ -90,73 +90,143 @@ public sealed class TestSearchRelevance
             .Equal(tokyo.Id, fukuoka.Id);
     }
 
-    [TestCase("lake tahoe outdoor arena", 402, 6, null, true)]
-    [TestCase("arena in another city", 4000, 6, null, false)]
-    [TestCase("lake tahoe outdoor arena", 402, 70, null, false)]
-    [TestCase("lake tahoe outdoor arena", 402, 6, "holly-bowling", false)]
-    [TestCase("lake tahoe outdoor arena", 402, 6, null, false, true)]
+    [TestCase("lake tahoe outdoor arena", 6, null, false, true)]
+    [TestCase("arena in another city", 6, null, false, false)]
+    [TestCase("lake tahoe outdoor arena", 70, null, false, false)]
+    [TestCase("lake tahoe outdoor arena", 6, "holly-bowling", false, false)]
+    [TestCase("lake tahoe outdoor arena", 6, null, true, false)]
     public void VenueAndPlaybackCanOutrankAnExactCoverTitle(
         string place,
-        long trackPlays,
         long exactPerformancePlays,
         string? selectedArtist,
-        bool preferPerformance,
-        bool matrix = false
+        bool matrix,
+        bool preferPerformance
     )
     {
-        const string terms = "tahoe tweezer";
-        var song = Song("holly-bowling", terms).Document;
-        var performance = new SearchDocument
-        {
-            Id = "perf_tahoe",
-            Kind = "performance",
-            Name = "tweezer",
-            ArtistSlug = "phish",
-            Place = place,
-            TrackPlays = trackPlays,
-            Preview = new(
-                "track_tweezer",
-                "source_tahoe",
-                "Set 2",
-                1,
-                1,
-                2176,
-                trackPlays,
-                true,
-                false,
-                "Tweezer"
-            ),
-        };
-        var exactPerformance = performance with
-        {
-            Id = "perf_cutting_room",
-            ArtistSlug = song.ArtistSlug,
-            Name = terms,
-            Place = "the cutting room",
-            TrackPlays = exactPerformancePlays,
-            Preview = performance.Preview! with
-            {
-                TrackId = "track_cutting_room",
-                SourceId = "source_cutting_room",
-                Plays = exactPerformancePlays,
-                Label = "Tahoe Tweezer",
-            },
-        };
+        var (song, cover, original) = TahoeResults(exactPerformancePlays);
+        original = original with { Place = place };
+        var input = new SearchInput(song.Name);
+        var query = new SearchQuery(song.Name, SelectedArtist: selectedArtist, Matrix: matrix);
 
         var ranked = SearchRanker.PreferPlayedVenueMatch(
-            new SearchInput(terms),
-            new SearchQuery(terms, SelectedArtist: selectedArtist, Matrix: matrix),
-            [song, exactPerformance, performance],
-            Evidence([])
+            input,
+            query,
+            [song, cover, original],
+            Evidence([TahoeVenue()])
         );
 
         ranked
             .Should()
-            .Equal(
-                preferPerformance
-                    ? [performance, song, exactPerformance]
-                    : [song, exactPerformance, performance]
-            );
+            .Equal(preferPerformance ? [original, song, cover] : [song, cover, original]);
+    }
+
+    [TestCase("holly-bowling", false)]
+    [TestCase("phish", true)]
+    public void VenueMatchPreservesAnExactSongFromABoostedArtist(
+        string boostedArtist,
+        bool preferPerformance
+    )
+    {
+        var (song, cover, original) = TahoeResults();
+        var artist = Artist(boostedArtist, boostedArtist.Replace('-', ' '));
+        var input = new SearchInput(song.Name, BoostArtistIds: [artist.Document.Id]);
+
+        var ranked = SearchRanker.PreferPlayedVenueMatch(
+            input,
+            new SearchQuery(song.Name),
+            [song, cover, original],
+            Evidence([TahoeVenue(), artist])
+        );
+
+        ranked
+            .Should()
+            .Equal(preferPerformance ? [original, song, cover] : [song, cover, original]);
+    }
+
+    [TestCase("the")]
+    [TestCase("the dallas")]
+    public void VenueMatchRequiresTheWholePlacePhraseToBeRecognized(string place)
+    {
+        var (song, _, original) = TahoeResults();
+        song = song with { Name = place + " tweezer" };
+        original = original with { Place = "the dallas amphitheater" };
+        var venue = Venue("amphitheater", "the dallas amphitheater", "dallas");
+
+        var ranked = SearchRanker.PreferPlayedVenueMatch(
+            new SearchInput(song.Name),
+            new SearchQuery(song.Name),
+            [song, original],
+            Evidence([venue])
+        );
+
+        ranked.Should().Equal(song, original);
+    }
+
+    [Test]
+    public void TahoeShorthandResolvesToHarveys()
+    {
+        var venue = TahoeVenue();
+
+        Evidence([venue])
+            .Vocabulary.RecognizeVenues("tahoe tweezer")
+            .Should()
+            .Equal(venue.Document.Id);
+    }
+
+    [Test]
+    public void VenueMatchCountsSongWidePlaysEvenWhenTheVisibleCoverHasFew()
+    {
+        var (song, cover, original) = TahoeResults();
+        var evidence = Evidence(
+            [TahoeVenue()],
+            songPlays: new Dictionary<string, long> { [song.Id] = 70 }.ToFrozenDictionary()
+        );
+
+        var ranked = SearchRanker.PreferPlayedVenueMatch(
+            new SearchInput(song.Name),
+            new SearchQuery(song.Name),
+            [song, cover, original],
+            evidence
+        );
+
+        ranked.Should().Equal(song, cover, original);
+    }
+
+    [TestCase(true)]
+    [TestCase(false)]
+    public void VenueMatchSkipsSoundchecksAndPerformancesWithoutPreviews(bool soundcheck)
+    {
+        var (song, cover, original) = TahoeResults();
+        original = original with
+        {
+            Soundcheck = soundcheck,
+            Preview = soundcheck ? original.Preview! with { Soundcheck = true } : null,
+        };
+
+        var ranked = SearchRanker.PreferPlayedVenueMatch(
+            new SearchInput(song.Name),
+            new SearchQuery(song.Name),
+            [song, cover, original],
+            Evidence([TahoeVenue()])
+        );
+
+        ranked.Should().Equal(song, cover, original);
+    }
+
+    [Test]
+    public void VenueMatchSkipsAPerformanceFromTheExactSongsOwnArtist()
+    {
+        var (song, cover, original) = TahoeResults();
+        original = original with { ArtistSlug = song.ArtistSlug };
+
+        var ranked = SearchRanker.PreferPlayedVenueMatch(
+            new SearchInput(song.Name),
+            new SearchQuery(song.Name),
+            [song, cover, original],
+            Evidence([TahoeVenue()])
+        );
+
+        ranked.Should().Equal(song, cover, original);
     }
 
     [Test]
@@ -270,15 +340,69 @@ public sealed class TestSearchRelevance
             .Build(query, input.Scope, input.Typing)
             .Single(request => request.Collection == SearchIndexSchema.Performances);
 
+    private static (
+        SearchDocument Song,
+        SearchDocument Cover,
+        SearchDocument Original
+    ) TahoeResults(long coverPlays = 6)
+    {
+        var song = Song("holly-bowling", "tahoe tweezer").Document;
+        var original = new SearchDocument
+        {
+            Id = "perf_tahoe",
+            Kind = "performance",
+            Name = "tweezer",
+            ArtistSlug = "phish",
+            Place = "lake tahoe outdoor arena at harveys",
+            TrackPlays = 402,
+            Preview = new(
+                "track_tweezer",
+                "source_tahoe",
+                "Set 2",
+                1,
+                1,
+                2176,
+                402,
+                true,
+                false,
+                "Tweezer"
+            ),
+        };
+        var cover = original with
+        {
+            Id = "perf_cutting_room",
+            ArtistSlug = song.ArtistSlug,
+            Name = song.Name,
+            Place = "the cutting room",
+            TrackPlays = coverPlays,
+            Preview = original.Preview! with
+            {
+                TrackId = "track_cutting_room",
+                SourceId = "source_cutting_room",
+                Plays = coverPlays,
+                Label = "Tahoe Tweezer",
+            },
+        };
+
+        return (song, cover, original);
+    }
+
+    private static (SearchDocument Document, string[] Aliases) TahoeVenue()
+    {
+        var (venue, aliases) = Venue("harveys", "lake tahoe outdoor arena at harveys");
+        return (venue with { ArtistSlugs = ["phish"] }, aliases);
+    }
+
     private static CatalogQueryEvidence Evidence(
         (SearchDocument, string[])[] documents,
-        SearchPassages? passages = null
+        SearchPassages? passages = null,
+        FrozenDictionary<string, long>? songPlays = null
     ) =>
         new(
             "entities_fixture",
             new SearchVocabulary(documents, []),
             passages ?? SearchPassages.Empty,
-            FrozenDictionary<string, long>.Empty,
+            songPlays ?? FrozenDictionary<string, long>.Empty,
             FrozenSet<string>.Empty
         );
 

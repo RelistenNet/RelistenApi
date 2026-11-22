@@ -12,6 +12,9 @@ internal static class SearchRanker
     private const int SameTitleCandidateLimit = 50;
     private const double SongPlayWeight = 0.35;
     private const double ListenerArtistBonus = 4;
+
+    // Require an order-of-magnitude lead before plays outweigh an exact title.
+    // The Tahoe replay had 402 starts for Phish and 6 for the visible cover.
     private const double ExactSongPlayAdvantage = 10;
 
     public static IReadOnlyList<SearchDocument> KnownItems(
@@ -153,25 +156,13 @@ internal static class SearchRanker
         CatalogQueryEvidence evidence
     )
     {
+        var vocabulary = evidence.Vocabulary;
         if (
-            input.Scope != SearchScope.All
-            || input.Page != 1
-            || input.AddTracks
-            || query
-                is not {
-                    Artist: null,
-                    ReadingArtist: null,
-                    Country: null,
-                    Tour: null,
-                    HasDate: false,
-                    Soundboard: false,
-                    Matrix: false,
-                    Order: "regular"
-                }
-            || input.Ignore?.Contains("venue") == true
-            || ranked.FirstOrDefault() is not { Kind: "song" } song
-            || song.Name != query.Terms
-            || !query.Terms.Contains(' ')
+            ranked.FirstOrDefault() is not { Kind: "song" } song
+            || !IsUnscopedExactSongLead(input, query, song)
+            || input.BoostArtistIds?.Any(id =>
+                vocabulary.ArtistSlugsById.GetValueOrDefault(id) == song.ArtistSlug
+            ) == true
         )
         {
             return ranked;
@@ -197,7 +188,7 @@ internal static class SearchRanker
                 result is { Kind: "performance", Preview: not null, Soundcheck: false }
                 && result.ArtistSlug != song.ArtistSlug
                 && 1d + result.TrackPlays >= requiredStarts
-                && NamesVenueAndSong(query.Terms, result)
+                && NamesVenueAndSong(query.Terms, result, vocabulary)
             )
             .MaxBy(result => result.TrackPlays);
 
@@ -206,7 +197,32 @@ internal static class SearchRanker
             : [performance, .. ranked.Where(result => result.Id != performance.Id)];
     }
 
-    private static bool NamesVenueAndSong(string terms, SearchDocument performance)
+    private static bool IsUnscopedExactSongLead(
+        SearchInput input,
+        SearchQuery query,
+        SearchDocument song
+    ) =>
+        input is { Scope: SearchScope.All, Page: 1, AddTracks: false }
+        && query
+            is {
+                Artist: null,
+                ReadingArtist: null,
+                Country: null,
+                Tour: null,
+                HasDate: false,
+                Soundboard: false,
+                Matrix: false,
+                Order: "regular"
+            }
+        && input.Ignore?.Contains("venue") != true
+        && song.Name == query.Terms
+        && query.Terms.Contains(' ');
+
+    private static bool NamesVenueAndSong(
+        string terms,
+        SearchDocument performance,
+        SearchVocabulary vocabulary
+    )
     {
         var title = performance.Name;
         if (title.Length == 0)
@@ -228,7 +244,8 @@ internal static class SearchRanker
             return false;
         }
 
-        return $" {performance.Place} ".Contains($" {place} ", StringComparison.Ordinal);
+        return vocabulary.Places(place).Contains(place)
+            && $" {performance.Place} ".Contains($" {place} ", StringComparison.Ordinal);
     }
 
     public static IReadOnlyList<SearchDocument> AddTracksFirst(

@@ -49,7 +49,11 @@ internal static class SearchVocabularyRules
         string Artist,
         string Place,
         string Alias
-    )> PlaceAliases = [("grateful-dead", "barton hall", "cornell")];
+    )> PlaceAliases =
+    [
+        ("grateful-dead", "barton hall", "cornell"),
+        ("phish", "lake tahoe outdoor arena at harveys", "tahoe"),
+    ];
 
     public static readonly ImmutableArray<(
         string Artist,
