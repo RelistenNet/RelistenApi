@@ -57,6 +57,7 @@ var operations = new[]
     "norm-songs",
     "norm-venues",
     "repair-jerry-venues",
+    "search-build",
 }
     .Where(key => builder.Configuration[key] != null)
     .ToArray();
@@ -185,7 +186,7 @@ static bool ValidateOperationSelection(
     if (operationCount > 1)
     {
         Console.Error.WriteLine(
-            "Choose one import, batch, cancel, rebuild, repair, migration, or schedule operation."
+            "Choose one import, batch, cancel, rebuild, repair, search build, migration, or schedule operation."
         );
         return false;
     }
@@ -196,6 +197,12 @@ static bool ValidateOperationSelection(
     )
     {
         Console.Error.WriteLine("Provider, item, and year options require --import.");
+        return false;
+    }
+
+    if (configuration["search-build"] == null && configuration["search-plays-export"] != null)
+    {
+        Console.Error.WriteLine("--search-plays-export requires --search-build.");
         return false;
     }
 

@@ -13,6 +13,7 @@ using Relisten.Ingestion.Providers.SetlistFm;
 using Relisten.Ingestion.Transport;
 using Relisten.Ingestion.Workflows;
 using Relisten.Normalization;
+using Relisten.Search;
 using Temporalio.Converters;
 using Temporalio.Extensions.Hosting;
 
@@ -67,6 +68,14 @@ public static class TemporalIngestionRegistration
         services.AddSingleton<IngestionHttpClientFactory>();
         // IngestionHttpHandler logs paths without query parameters that may contain credentials.
         services.AddHttpClient(nameof(IngestionHttpClientFactory)).RemoveAllLoggers();
+        services.AddHttpClient<TypesenseClient>(http =>
+            TypesenseClient.Configure(
+                http,
+                configuration["Search:Typesense:Url"] ?? "http://127.0.0.1:18108",
+                configuration["Search:Typesense:ApiKey"] ?? "local_dev_typesense"
+            )
+        );
+        services.AddScoped<SearchIndexBuilder>();
         services
             .AddHostedTemporalWorker(IngestionQueues.Workflows)
             .AddWorkflow<ArtistRefreshWorkflow>()
@@ -83,12 +92,15 @@ public static class TemporalIngestionRegistration
             .AddWorkflow<LocalWorkflow>()
             .AddWorkflow<RefreshBatchWorkflow>()
             .AddWorkflow<ArchiveArtistDiscoveryWorkflow>()
+            .AddWorkflow<SearchBuildWorkflow>()
+            .AddWorkflow<SearchRetireWorkflow>()
             .AddNormalizationWorkflows();
         services
             .AddHostedTemporalWorker(IngestionQueues.Database)
             .AddScopedActivities<CatalogActivities>()
             .AddNormalizationActivities()
             .AddScopedActivities<IngestionBatchActivities>()
+            .AddScopedActivities<SearchBuildActivities>()
             .ConfigureOptions(o =>
             {
                 o.MaxConcurrentActivities = 10;

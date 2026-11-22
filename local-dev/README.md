@@ -13,7 +13,7 @@ From the repository root:
 ./start-local-databases.sh
 ```
 
-The command starts PostgreSQL, PgBouncer, Redis, and Adminer. It loads the seed
+The command starts PostgreSQL, PgBouncer, Redis, Typesense, and Adminer. It loads the seed
 only when `relisten_db` is empty. Existing catalog data and any other logical
 databases are preserved. It does not start an importer or register schedules.
 Running containers are reused across worktrees. To apply an intentional Compose
@@ -31,6 +31,7 @@ Stop the containers without deleting their data:
 | PostgreSQL | `127.0.0.1:15432` | `relisten` / `local_dev_password` |
 | PgBouncer | `127.0.0.1:16432` | `relisten` / `local_dev_password` |
 | Redis | `127.0.0.1:16379` | none |
+| Typesense | `127.0.0.1:18108` | `local_dev_typesense` |
 | Adminer | <http://localhost:18080> | PostgreSQL credentials above |
 
 The application database is `relisten_db`. Tests create a separate database on
@@ -42,7 +43,7 @@ this PostgreSQL server and remove it when the test process finishes.
 ./test-local.sh
 ```
 
-This starts or reuses PostgreSQL and Redis, builds the test project, and includes
+This starts or reuses PostgreSQL, Redis, and Typesense, builds the test project, and includes
 the opt-in integration tests. It preserves running containers even when launched
 from another worktree. Each test process gets a unique empty database, initialized
 from the same schema as the development seed. Tests supply their own synthetic
@@ -193,6 +194,26 @@ See [ingestion operations](../docs/ingestion/operations.md) for operator command
 Redis stores oversized Temporal payloads as well as API caches. Keep Redis while
 manual workflow histories matter; clearing its data can make those histories
 unreadable. The temporary test servers have no history to retain after teardown.
+
+### Build the catalog search index
+
+With the local services and a Temporal worker running, build and publish the four
+catalog collections:
+
+```sh
+dotnet run --project RelistenIngestionWorker -- --search-build=true
+```
+
+The command waits for the build and prints the accepted counts, rejected count,
+and elapsed time. The worker reads Postgres and writes to Typesense. If the
+restore lacks play history, add `--search-plays-export=/absolute/path/to/plays.csv.gz`.
+The worker must be able to read that path. The export supports plain or gzipped CSV
+with the header `source_track_uuid,plays,days_with_plays` or `uuid,plays,days_with_plays`.
+
+The worker defaults to the local Typesense endpoint above. Set
+`Search__Typesense__Url` and `Search__Typesense__ApiKey` on the worker to use a different instance.
+Set `RELISTEN_TYPESENSE_DATA_DIR` when creating the container to place its index
+outside the checkout. A new build keeps the previous collections for one hour.
 
 ## Working with a larger catalog
 

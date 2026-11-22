@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Relisten.Api.Models;
@@ -6,6 +7,7 @@ using Relisten.Ingestion;
 using Relisten.Ingestion.Workflows;
 using Relisten.Normalization;
 using Relisten.Normalization.Temporal;
+using Relisten.Search;
 using Temporalio.Client;
 
 namespace RelistenIngestionWorker;
@@ -22,6 +24,17 @@ internal sealed class IngestionOperatorCommands(
 {
     public async Task<string> RunAsync(string operation)
     {
+        if (operation == "search-build")
+        {
+            var path = configuration["search-plays-export"];
+            var export = path == null ? null : Path.GetFullPath(path);
+            var run = await temporal.StartWorkflowAsync(
+                (SearchBuildWorkflow workflow) => workflow.RunAsync(export),
+                new WorkflowOptions(SearchBuildWorkflow.Id, IngestionQueues.Workflows)
+            );
+            return JsonSerializer.Serialize(await run.GetResultAsync());
+        }
+
         if (operation == "cancel")
         {
             return await CancelAsync(configuration[operation]!);
