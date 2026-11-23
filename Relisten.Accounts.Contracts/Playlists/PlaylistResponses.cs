@@ -14,6 +14,9 @@ public sealed record PlaylistSummary(
 {
     // Library changes stored before guide content have only track entries.
     public int TrackCount { get; init; } = EntryCount;
+
+    /// <summary>The author's Markdown, or null when there is none.</summary>
+    public string? Description { get; init; }
     public string? PublicCode { get; init; }
     public bool Published { get; init; }
     public bool TakenDown { get; init; }

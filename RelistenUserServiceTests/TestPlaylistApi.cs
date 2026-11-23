@@ -392,7 +392,11 @@ public sealed partial class TestPlaylistApi
         var intro = new PlaylistSegmentInput(PlaylistSegmentId.New(), [movedTrack], "Introduction");
         var outro = new PlaylistSegmentInput(PlaylistSegmentId.New(), [deletedTrack], "Afterword");
         var target = new PlaylistSegmentInput(PlaylistSegmentId.New(), [targetTrack]);
-        var create = NewPlaylist() with { Segments = [intro, outro, target] };
+        var create = NewPlaylist() with
+        {
+            Metadata = new("Guide", "A *guided* tour."),
+            Segments = [intro, outro, target],
+        };
         var id = create.PlaylistId;
         var libraryBefore = await ReadResponse<FavoriteLibrarySnapshot>(
             HttpMethod.Get,
@@ -520,6 +524,7 @@ public sealed partial class TestPlaylistApi
         var summary = library.Playlists.Single();
         summary.EntryCount.Should().Be(3);
         summary.TrackCount.Should().Be(2);
+        summary.Description.Should().Be("A *guided* tour.");
         var list = await ReadResponse<PlaylistList>(HttpMethod.Get, "/v1/playlists");
         list.Playlists.Single().Should().BeEquivalentTo(summary);
         var feed = await ReadResponse<FavoriteLibraryChanges>(

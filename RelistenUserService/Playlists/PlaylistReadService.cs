@@ -49,6 +49,7 @@ public sealed class PlaylistReadService(AccountsDbContext dbContext)
         )
         {
             TrackCount = row.TrackCount,
+            Description = row.Description,
             PublicCode = row.PublicCode,
             Published = row.Published,
             TakenDown = row.TakenDown,
