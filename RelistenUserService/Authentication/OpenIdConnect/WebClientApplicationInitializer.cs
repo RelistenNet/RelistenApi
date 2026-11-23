@@ -1,4 +1,6 @@
 using OpenIddict.Abstractions;
+using OpenIddict.Core;
+using OpenIddict.EntityFrameworkCore.Models;
 using RelistenUserService.Configuration;
 using static OpenIddict.Abstractions.OpenIddictConstants;
 
@@ -58,10 +60,17 @@ public sealed class WebClientApplicationInitializer(
         return required;
     }
 
-    public async Task InitializeAsync(CancellationToken cancellationToken)
+    public Task InitializeAsync(CancellationToken cancellationToken) =>
+        InitializeAsync(beforeFirstWrite: null, cancellationToken);
+
+    /// <param name="beforeFirstWrite">
+    /// Tests only: runs between the first read and write, to stage a conflicting update.
+    /// </param>
+    internal async Task InitializeAsync(
+        Func<Task>? beforeFirstWrite,
+        CancellationToken cancellationToken
+    )
     {
-        await using var scope = serviceProvider.CreateAsyncScope();
-        var manager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
         // Startup runs before the preview reload service, but serialize with it anyway:
         // both rewrite this client's redirect URIs.
         await runtime.BrowserOrigins.SessionCreationAndReload.WaitAsync(cancellationToken);
@@ -69,6 +78,12 @@ public sealed class WebClientApplicationInitializer(
         {
             for (var attempt = 1; ; attempt++)
             {
+                // A fresh scope per attempt. A failed update leaves its changes on the
+                // tracked entity, and the EF store hands that entity back on the next
+                // lookup, so reusing the context would re-read our own unsaved write.
+                await using var scope = serviceProvider.CreateAsyncScope();
+                var manager =
+                    scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
                 var existing = await manager.FindByClientIdAsync(
                     AuthenticationConstants.WebClientId,
                     cancellationToken
@@ -77,6 +92,11 @@ public sealed class WebClientApplicationInitializer(
                 {
                     await manager.CreateAsync(Descriptor(), cancellationToken);
                     return;
+                }
+
+                if (attempt == 1 && beforeFirstWrite is not null)
+                {
+                    await beforeFirstWrite();
                 }
 
                 try
@@ -92,24 +112,45 @@ public sealed class WebClientApplicationInitializer(
                 // Another replica updated the client between our read and write. Re-read
                 // and re-check rather than overwrite its change.
                 catch (OpenIddictExceptions.ConcurrencyException)
-                    when (attempt < MaximumUpgradeAttempts) { }
+                {
+                    // The cache may hold the entity with our failed change applied.
+                    await EvictAsync(scope, existing);
+                    if (attempt >= MaximumUpgradeAttempts)
+                    {
+                        throw;
+                    }
+                }
             }
 
+            await using var verify = serviceProvider.CreateAsyncScope();
+            var verifier =
+                verify.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
             var current =
-                await manager.FindByClientIdAsync(
+                await verifier.FindByClientIdAsync(
                     AuthenticationConstants.WebClientId,
                     cancellationToken
                 )
                 ?? throw new InvalidOperationException(
                     "The relisten-web client disappeared during startup."
                 );
-            await ValidateAsync(manager, current, runtime, cancellationToken);
+            await ValidateAsync(verifier, current, runtime, cancellationToken);
         }
         finally
         {
             runtime.BrowserOrigins.SessionCreationAndReload.Release();
         }
     }
+
+    private static Task EvictAsync(AsyncServiceScope scope, object application) =>
+        scope
+            .ServiceProvider.GetRequiredService<
+                IOpenIddictApplicationCache<OpenIddictEntityFrameworkCoreApplication<Guid>>
+            >()
+            .RemoveAsync(
+                (OpenIddictEntityFrameworkCoreApplication<Guid>)application,
+                CancellationToken.None
+            )
+            .AsTask();
 
     /// <summary>
     /// Adds a newly configured fixed callback (such as staging) to a client persisted

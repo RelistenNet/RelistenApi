@@ -476,6 +476,65 @@ public sealed class TestPreviewOriginReload
     }
 
     [Test]
+    public async Task Startup_retries_on_a_fresh_read_when_another_replica_updates_the_client()
+    {
+        await _app.DisposeAsync();
+        await StartApplicationAsync(
+            Path.Combine(_directory, "ca.pem"),
+            webOrigins:
+            [
+                AuthenticationConstants.CanonicalWebOrigin,
+                AuthenticationConstants.LocalWebOrigin,
+                AuthenticationConstants.StagingWebOrigin,
+            ]
+        );
+        // Back to a client persisted before staging existed.
+        await UpdateWebClientAsync(uris =>
+            uris.Remove(new Uri(AuthenticationConstants.StagingWebCallback))
+        );
+
+        var initializer = _app.Services.GetRequiredService<WebClientApplicationInitializer>();
+        await initializer.InitializeAsync(
+            // Another replica's preview reload commits between our read and write.
+            beforeFirstWrite: () =>
+                UpdateWebClientAsync(uris =>
+                    uris.Add(new Uri(PreviewA + "/auth/session/callback"))
+                ),
+            CancellationToken.None
+        );
+
+        // The row itself, not a cached or tracked entity.
+        await using var scope = _app.Services.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<AccountsDbContext>();
+        var persisted = await database
+            .Set<OpenIddict.EntityFrameworkCore.Models.OpenIddictEntityFrameworkCoreApplication<Guid>>()
+            .AsNoTracking()
+            .SingleAsync(application =>
+                application.ClientId == AuthenticationConstants.WebClientId
+            );
+        JsonSerializer
+            .Deserialize<string[]>(persisted.RedirectUris!)
+            .Should()
+            .BeEquivalentTo([
+                AuthenticationConstants.CanonicalWebCallback,
+                AuthenticationConstants.LocalWebCallback,
+                AuthenticationConstants.StagingWebCallback,
+                PreviewA + "/auth/session/callback",
+            ]);
+    }
+
+    private async Task UpdateWebClientAsync(Action<HashSet<Uri>> change)
+    {
+        await using var scope = _app.Services.CreateAsyncScope();
+        var manager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
+        var application = (await manager.FindByClientIdAsync(AuthenticationConstants.WebClientId))!;
+        var descriptor = new OpenIddictApplicationDescriptor();
+        await manager.PopulateAsync(descriptor, application);
+        change(descriptor.RedirectUris);
+        await manager.UpdateAsync(application, descriptor);
+    }
+
+    [Test]
     public async Task Startup_still_rejects_a_client_with_an_unknown_callback()
     {
         await using (var scope = _app.Services.CreateAsyncScope())
