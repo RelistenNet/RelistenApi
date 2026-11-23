@@ -47,11 +47,11 @@ public sealed class TestCatalogSearchProjection
         document["review_mentions"].Should().Be(1);
 
         var cuts = (CatalogSearchProjection.SearchFile[])document["files"];
-        cuts.Select(cut => (cut.TrackId, cut.Set, cut.Position, cut.Duration))
+        cuts.Select(cut => (cut.TrackId, cut.Slug, cut.Set, cut.Position, cut.Duration))
             .Should()
             .Equal(
-                (UuidTypeId.Format("track", files[0]), "Set 1", 2, 1798),
-                (UuidTypeId.Format("track", files[1]), "Encore", 14, 88)
+                (UuidTypeId.Format("track", files[0]), "1", "Set 1", 2, 1798),
+                (UuidTypeId.Format("track", files[1]), "2", "Encore", 14, 88)
             );
         var preview = (CatalogSearchProjection.SearchFile)document["preview"];
         preview.TrackId.Should().Be(UuidTypeId.Format("track", files[1]));

@@ -84,7 +84,8 @@ internal sealed partial class CatalogSearchProjection
             plays.Plays,
             recording.Row.Soundboard,
             Soundcheck().IsMatch(track.Title),
-            track.Title
+            track.Title,
+            track.Slug
         );
 
         var raw = RawTitle(track.Title);
@@ -260,6 +261,9 @@ internal sealed partial class CatalogSearchProjection
         long Plays,
         bool Soundboard,
         bool Soundcheck,
-        string Label
+        string Label,
+        // The track's URL slug within its recording. Documents indexed before
+        // this field existed deserialize it as null until the next rebuild.
+        string? Slug
     );
 }

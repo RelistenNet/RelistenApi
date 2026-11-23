@@ -156,7 +156,8 @@ public sealed class TestSearchPlayTieBreak
                 starts,
                 false,
                 false,
-                Title
+                Title,
+                "title"
             ),
         };
 }

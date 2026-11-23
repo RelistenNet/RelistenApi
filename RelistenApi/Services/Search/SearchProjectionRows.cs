@@ -161,7 +161,7 @@ internal sealed class SearchProjectionRows(
     public IAsyncEnumerable<Track> Tracks() =>
         Stream<Track>(
             """
-            SELECT s.show_id AS ShowId, s.id AS SourceId, t.uuid, coalesce(t.title, '') AS title,
+            SELECT s.show_id AS ShowId, s.id AS SourceId, t.uuid, t.slug, coalesce(t.title, '') AS title,
                    coalesce(t.duration, 0) AS duration, coalesce(t.track_position, 0) AS position,
                    coalesce(ss.index, 0) AS SetIndex, coalesce(ss.name, '') AS SetName
             FROM sources s JOIN shows h ON h.id = s.show_id AND h.artist_id = s.artist_id
@@ -306,6 +306,7 @@ internal sealed class SearchProjectionRows(
         long ShowId,
         long SourceId,
         Guid Uuid,
+        string Slug,
         string Title,
         int Duration,
         int Position,
