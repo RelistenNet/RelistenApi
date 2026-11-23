@@ -367,6 +367,15 @@ public static class AuthenticationServiceCollectionExtensions
                 new Uri(AuthenticationConstants.LocalWebCallback)
             )
         );
+        // Like the local client, always registered: RegistrationId only resolves it
+        // while Accounts:WebOrigins includes the staging origin.
+        options.AddRegistration(
+            WebClientRegistration(
+                runtime,
+                AuthenticationConstants.StagingWebRegistration,
+                new Uri(AuthenticationConstants.StagingWebCallback)
+            )
+        );
 
         options.UseAspNetCore().EnableRedirectionEndpointPassthrough();
         var systemNetHttp = options.UseSystemNetHttp();

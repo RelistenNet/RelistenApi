@@ -1,4 +1,5 @@
 using System.Net;
+using RelistenUserService.Authentication;
 
 namespace RelistenUserService.Configuration;
 
@@ -14,7 +15,11 @@ public sealed record AccountsRuntimeConfiguration(
     private static readonly Uri LocalGoogleIssuer = new("https://localhost:5443");
 
     private static readonly HashSet<string> SupportedWebOrigins = new(
-        ["https://relisten.net", "https://web.relisten.localhost:5173"],
+        [
+            AuthenticationConstants.CanonicalWebOrigin,
+            AuthenticationConstants.LocalWebOrigin,
+            AuthenticationConstants.StagingWebOrigin,
+        ],
         StringComparer.Ordinal
     );
 

@@ -46,6 +46,8 @@ public sealed partial class WebOriginRegistry
             AuthenticationConstants.CanonicalWebOrigin =>
                 AuthenticationConstants.CanonicalWebRegistration,
             AuthenticationConstants.LocalWebOrigin => AuthenticationConstants.LocalWebRegistration,
+            AuthenticationConstants.StagingWebOrigin =>
+                AuthenticationConstants.StagingWebRegistration,
             _ => active
                 .Snapshot.Previews.FirstOrDefault(value => value.Origin == origin)
                 ?.RegistrationId,
