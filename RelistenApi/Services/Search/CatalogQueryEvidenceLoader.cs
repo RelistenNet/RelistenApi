@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using Dapper;
 using Npgsql;
 using Relisten.Identifiers;
+using Relisten.Services.Popularity;
 
 namespace Relisten.Search;
 
@@ -49,10 +50,23 @@ internal static class CatalogQueryEvidenceLoader
             vocabulary,
             cancellationToken
         );
-        var songPlays = await LoadSongPlays(connection, transaction, exportPath, cancellationToken);
+        var (songPlays, titlePlays, soundcheckOnlyPlays) = await LoadPlayback(
+            connection,
+            transaction,
+            exportPath,
+            cancellationToken
+        );
         var reviewArtists = await LoadReviewArtists(connection, transaction, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return new CatalogQueryEvidence(collection, vocabulary, passages, songPlays, reviewArtists);
+        return new CatalogQueryEvidence(
+            collection,
+            vocabulary,
+            passages,
+            songPlays,
+            reviewArtists,
+            titlePlays,
+            soundcheckOnlyPlays
+        );
     }
 
     private static async Task<SearchVocabulary> LoadVocabulary(
@@ -192,7 +206,11 @@ internal static class CatalogQueryEvidenceLoader
         );
     }
 
-    private static async Task<FrozenDictionary<string, long>> LoadSongPlays(
+    private static async Task<(
+        FrozenDictionary<string, long> Songs,
+        FrozenDictionary<(string Artist, string Title), long> Titles,
+        FrozenDictionary<string, long> Soundchecks
+    )> LoadPlayback(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
         string? exportPath,
@@ -209,15 +227,48 @@ internal static class CatalogQueryEvidenceLoader
         );
         if (starts.Count == 0)
         {
-            return FrozenDictionary<string, long>.Empty;
+            return (
+                FrozenDictionary<string, long>.Empty,
+                FrozenDictionary<(string, string), long>.Empty,
+                FrozenDictionary<string, long>.Empty
+            );
         }
 
-        var totals = new Dictionary<string, long>();
+        var titles = new Dictionary<(string Artist, string Title), long>();
+        var (songs, soundchecks) = await ReadMappedSongStarts(
+            connection,
+            transaction,
+            starts,
+            cancellationToken
+        );
+        await AddUnmappedTitleStarts(connection, transaction, starts, titles, cancellationToken);
+        return (
+            songs.ToFrozenDictionary(),
+            titles.ToFrozenDictionary(),
+            soundchecks.ToFrozenDictionary()
+        );
+    }
+
+    private static async Task<(
+        Dictionary<string, long> Songs,
+        Dictionary<string, long> Soundchecks
+    )> ReadMappedSongStarts(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Dictionary<Guid, TrackStartTotal> starts,
+        CancellationToken cancellationToken
+    )
+    {
+        var songs = new Dictionary<string, long>();
+        var mapped = new HashSet<Guid>();
+        var concertPerformances = new HashSet<(string Song, Guid Show)>();
+        var soundchecks = new Dictionary<(string Song, Guid Show), long>();
         // The catalog matcher returns one edge per canonical song and file,
         // so a reprise within the same file counts its starts once for that song.
-        var matches = connection.QueryUnbufferedAsync<SearchProjectionRows.SongMapping>(
+        var matches = connection.QueryUnbufferedAsync<MappedSongTrack>(
             """
-            SELECT match.track_uuid AS TrackUuid, match.song_id AS SongId
+            SELECT match.track_uuid AS TrackUuid, match.song_id AS SongId,
+                   match.show_uuid AS ShowUuid, track.title AS Title
             FROM artists artist JOIN features feature ON feature.artist_id = artist.id AND feature.norm_catalogue
             CROSS JOIN LATERAL norm.song_recording_matches(artist.uuid, NULL::text[]) match
             JOIN source_tracks track ON track.uuid = match.track_uuid
@@ -228,14 +279,87 @@ internal static class CatalogQueryEvidenceLoader
         );
         await foreach (var match in matches.WithCancellation(cancellationToken))
         {
-            if (starts.TryGetValue(match.TrackUuid, out var total))
+            var performance = (match.SongId, match.ShowUuid);
+            var soundcheck = Soundcheck().IsMatch(match.Title ?? "");
+            if (!soundcheck)
             {
-                totals[match.SongId] = totals.GetValueOrDefault(match.SongId) + total.Plays;
+                concertPerformances.Add(performance);
+            }
+
+            if (!starts.TryGetValue(match.TrackUuid, out var total) || total.Plays <= 0)
+            {
+                continue;
+            }
+
+            songs[match.SongId] = songs.GetValueOrDefault(match.SongId) + total.Plays;
+            mapped.Add(match.TrackUuid);
+            if (soundcheck)
+            {
+                soundchecks[performance] = soundchecks.GetValueOrDefault(performance) + total.Plays;
             }
         }
 
-        return totals.ToFrozenDictionary();
+        // Mapped files have already contributed to their canonical title.
+        foreach (var id in mapped)
+        {
+            starts.Remove(id);
+        }
+
+        // A performance is marked soundcheck only when every file is a soundcheck.
+        // The venue rule keeps its existing all-files song totals.
+        var soundcheckOnlyPlays = soundchecks
+            .Where(pair => !concertPerformances.Contains(pair.Key))
+            .GroupBy(pair => pair.Key.Song)
+            .ToDictionary(group => group.Key, group => group.Sum(pair => pair.Value));
+        return (songs, soundcheckOnlyPlays);
     }
+
+    private static async Task AddUnmappedTitleStarts(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        IReadOnlyDictionary<Guid, TrackStartTotal> starts,
+        Dictionary<(string Artist, string Title), long> titles,
+        CancellationToken cancellationToken
+    )
+    {
+        // Imported song documents have no canonical song ID. Use the same
+        // folded title as the playable raw-track projection for their totals.
+        var tracks = connection.QueryUnbufferedAsync<RawTitleTrack>(
+            """
+            SELECT track.uuid AS TrackUuid, artist.slug AS Artist, track.title AS Title
+            FROM source_tracks track
+            JOIN artists artist ON artist.id = track.artist_id
+            JOIN sources source ON source.id = track.source_id AND source.artist_id = artist.id
+            JOIN shows show ON show.id = source.show_id AND show.artist_id = artist.id
+            JOIN source_sets set ON set.id = track.source_set_id AND set.source_id = source.id
+            WHERE track.uuid = ANY(@TrackIds)
+              AND NOT track.is_orphaned AND nullif(track.title, '') IS NOT NULL
+              AND (nullif(track.mp3_url, '') IS NOT NULL OR nullif(track.flac_url, '') IS NOT NULL)
+            """,
+            new { TrackIds = starts.Keys.ToArray() },
+            transaction: transaction,
+            commandTimeout: 600
+        );
+        await foreach (var track in tracks.WithCancellation(cancellationToken))
+        {
+            if (Soundcheck().IsMatch(track.Title))
+            {
+                continue;
+            }
+
+            var key = (track.Artist, Fold(RawTitle(track.Title)));
+            titles[key] = titles.GetValueOrDefault(key) + starts[track.TrackUuid].Plays;
+        }
+    }
+
+    private sealed record RawTitleTrack(Guid TrackUuid, string Artist, string Title);
+
+    private sealed record MappedSongTrack(
+        Guid TrackUuid,
+        string SongId,
+        Guid ShowUuid,
+        string? Title
+    );
 
     private static async Task<FrozenSet<string>> LoadReviewArtists(
         NpgsqlConnection connection,

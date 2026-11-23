@@ -1072,23 +1072,14 @@
       "surface": "catalog_api",
       "tier": "starter",
       "check": "rank",
-      "max_rank": 5,
-      "expected": "individually labeled Grateful Dead and Billy Strings songs or performance matches. Each opens versions by that artist.",
+      "max_rank": 1,
+      "expected": "Grateful Dead's song opens versions by the Grateful Dead.",
       "targets": [
         {
           "kinds": [
-            "song",
-            "performance"
+            "song"
           ],
           "artist_slug": "grateful-dead",
-          "name": "Fire On The Mountain"
-        },
-        {
-          "kinds": [
-            "song",
-            "performance"
-          ],
-          "artist_slug": "billy-strings",
           "name": "Fire On The Mountain"
         }
       ],

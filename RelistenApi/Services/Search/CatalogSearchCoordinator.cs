@@ -175,6 +175,7 @@ public sealed class CatalogSearchCoordinator
             );
         }
 
+        visible = SearchPlayTieBreak.Rank(input, query, visible, evidence);
         return DecorateResults(
             input,
             query,
