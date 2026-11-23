@@ -137,7 +137,8 @@ public sealed class TestCatalogSearchHttp
             0,
             false,
             false,
-            "Pagination"
+            "Pagination",
+            $"pagination-{cut}"
         );
         return document;
     }

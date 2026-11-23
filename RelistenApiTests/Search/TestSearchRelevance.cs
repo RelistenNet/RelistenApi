@@ -365,7 +365,8 @@ public sealed class TestSearchRelevance
                 402,
                 true,
                 false,
-                "Tweezer"
+                "Tweezer",
+                "tweezer"
             ),
         };
         var cover = original with
