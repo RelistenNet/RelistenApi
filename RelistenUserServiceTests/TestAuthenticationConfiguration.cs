@@ -68,7 +68,7 @@ public sealed class TestAuthenticationConfiguration
             .OrderBy(registration => registration.RegistrationId)
             .ToArray();
 
-        registrations.Should().HaveCount(2);
+        registrations.Should().HaveCount(3);
         registrations
             .Select(registration => new
             {
@@ -86,6 +86,11 @@ public sealed class TestAuthenticationConfiguration
                 {
                     RegistrationId = AuthenticationConstants.LocalWebRegistration,
                     RedirectUri = AuthenticationConstants.LocalWebCallback,
+                },
+                new
+                {
+                    RegistrationId = AuthenticationConstants.StagingWebRegistration,
+                    RedirectUri = AuthenticationConstants.StagingWebCallback,
                 },
             ]);
         registrations.Should().OnlyContain(registration => HasExactWebProtocolShape(registration));

@@ -14,11 +14,15 @@ public static class AuthenticationConstants
     public const string WebClientId = "relisten-web";
     public const string CanonicalWebOrigin = "https://relisten.net";
     public const string LocalWebOrigin = "https://web.relisten.localhost:5173";
+    public const string StagingWebOrigin = "https://soundcheck.relisten.net";
     public const string CanonicalWebCallback = "https://relisten.net/auth/session/callback";
     public const string LocalWebCallback =
         "https://web.relisten.localhost:5173/auth/session/callback";
+    public const string StagingWebCallback =
+        "https://soundcheck.relisten.net/auth/session/callback";
     public const string CanonicalWebRegistration = "relisten-web-canonical";
     public const string LocalWebRegistration = "relisten-web-local";
+    public const string StagingWebRegistration = "relisten-web-staging";
     public const string GoogleProvider = "google";
     public const string AppleProvider = "apple";
     public const string GoogleIssuer = "https://accounts.google.com";

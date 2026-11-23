@@ -64,7 +64,11 @@ public sealed class TestPreviewOriginReload
         await StartApplicationAsync(caPath);
     }
 
-    private async Task StartApplicationAsync(string caPath, string? previewFile = null)
+    private async Task StartApplicationAsync(
+        string caPath,
+        string? previewFile = null,
+        string[]? webOrigins = null
+    )
     {
         var builder = WebApplication.CreateBuilder(
             new WebApplicationOptions
@@ -83,7 +87,7 @@ public sealed class TestPreviewOriginReload
                 ["ACCOUNTS_DATABASE_URL"] = _database.ConnectionString,
                 ["ACCOUNTS_LOCK_DATABASE_URL"] = _database.ConnectionString,
                 ["AllowedHosts"] =
-                    "auth.relisten.localhost;accounts.relisten.localhost;relisten.net",
+                    "auth.relisten.localhost;accounts.relisten.localhost;relisten.net;soundcheck.relisten.net",
                 ["Accounts:Issuer"] = ProofBrowser.Issuer,
                 ["Accounts:PreviewOriginsFile"] = previewFile,
                 ["Accounts:AuthHost"] = "auth.relisten.localhost:5443",
@@ -93,6 +97,16 @@ public sealed class TestPreviewOriginReload
                 ["Accounts:DevelopmentCertificateAuthorityPath"] = caPath,
             }
         );
+        if (webOrigins is not null)
+        {
+            builder.Configuration.AddInMemoryCollection(
+                webOrigins.Select(
+                    (origin, index) =>
+                        new KeyValuePair<string, string?>($"Accounts:WebOrigins:{index}", origin)
+                )
+            );
+        }
+
         _clock = new ProofClock();
         builder.Services.AddSingleton<TimeProvider>(_clock);
         builder.Services.PostConfigure<OpenIddictClientOptions>(_ =>
@@ -402,6 +416,162 @@ public sealed class TestPreviewOriginReload
         await _reload.ApplyAsync(2, [PreviewA, PreviewB]);
         using var second = Browser();
         await second.LoginAsync(PreviewB);
+    }
+
+    [Test]
+    public async Task Startup_adds_the_staging_callback_once_its_origin_is_configured()
+    {
+        await _reload.ApplyAsync(1, [PreviewA]);
+        (await WebClientRedirectUrisAsync())
+            .Should()
+            .NotContain(AuthenticationConstants.StagingWebCallback);
+
+        await _app.DisposeAsync();
+        await StartApplicationAsync(
+            Path.Combine(_directory, "ca.pem"),
+            webOrigins:
+            [
+                AuthenticationConstants.CanonicalWebOrigin,
+                AuthenticationConstants.LocalWebOrigin,
+                AuthenticationConstants.StagingWebOrigin,
+            ]
+        );
+
+        (await WebClientRedirectUrisAsync())
+            .Should()
+            .BeEquivalentTo([
+                AuthenticationConstants.CanonicalWebCallback,
+                AuthenticationConstants.LocalWebCallback,
+                AuthenticationConstants.StagingWebCallback,
+                PreviewA + "/auth/session/callback",
+            ]);
+        await using (var scope = _app.Services.CreateAsyncScope())
+        {
+            var manager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
+            var application = (
+                await manager.FindByClientIdAsync(AuthenticationConstants.WebClientId)
+            )!;
+            (await manager.ValidateClientSecretAsync(application, "disposable-proof-secret"))
+                .Should()
+                .BeTrue();
+        }
+
+        _app.Services.GetRequiredService<AccountsRuntimeConfiguration>()
+            .BrowserOrigins.RegistrationId(AuthenticationConstants.StagingWebOrigin)
+            .Should()
+            .Be(AuthenticationConstants.StagingWebRegistration);
+        using var browser = Browser();
+        await browser.LoginAsync(AuthenticationConstants.StagingWebOrigin);
+        (await browser.SendAsync(AuthenticationConstants.StagingWebOrigin + "/v1/me"))
+            .StatusCode.Should()
+            .Be(HttpStatusCode.OK);
+
+        // Dropping the origin again leaves the persisted callback allowed but unused.
+        await _app.DisposeAsync();
+        await StartApplicationAsync(Path.Combine(_directory, "ca.pem"));
+        _app.Services.GetRequiredService<AccountsRuntimeConfiguration>()
+            .BrowserOrigins.RegistrationId(AuthenticationConstants.StagingWebOrigin)
+            .Should()
+            .BeNull();
+    }
+
+    [Test]
+    public async Task Startup_retries_on_a_fresh_read_when_another_replica_updates_the_client()
+    {
+        await _app.DisposeAsync();
+        await StartApplicationAsync(
+            Path.Combine(_directory, "ca.pem"),
+            webOrigins:
+            [
+                AuthenticationConstants.CanonicalWebOrigin,
+                AuthenticationConstants.LocalWebOrigin,
+                AuthenticationConstants.StagingWebOrigin,
+            ]
+        );
+        // Back to a client persisted before staging existed.
+        await UpdateWebClientAsync(uris =>
+            uris.Remove(new Uri(AuthenticationConstants.StagingWebCallback))
+        );
+
+        var initializer = _app.Services.GetRequiredService<WebClientApplicationInitializer>();
+        await initializer.InitializeAsync(
+            // Another replica's preview reload commits between our read and write.
+            beforeFirstWrite: () =>
+                UpdateWebClientAsync(uris =>
+                    uris.Add(new Uri(PreviewA + "/auth/session/callback"))
+                ),
+            CancellationToken.None
+        );
+
+        // The row itself, not a cached or tracked entity.
+        await using var scope = _app.Services.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<AccountsDbContext>();
+        var persisted = await database
+            .Set<OpenIddict.EntityFrameworkCore.Models.OpenIddictEntityFrameworkCoreApplication<Guid>>()
+            .AsNoTracking()
+            .SingleAsync(application =>
+                application.ClientId == AuthenticationConstants.WebClientId
+            );
+        JsonSerializer
+            .Deserialize<string[]>(persisted.RedirectUris!)
+            .Should()
+            .BeEquivalentTo([
+                AuthenticationConstants.CanonicalWebCallback,
+                AuthenticationConstants.LocalWebCallback,
+                AuthenticationConstants.StagingWebCallback,
+                PreviewA + "/auth/session/callback",
+            ]);
+    }
+
+    private async Task UpdateWebClientAsync(Action<HashSet<Uri>> change)
+    {
+        await using var scope = _app.Services.CreateAsyncScope();
+        var manager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
+        var application = (await manager.FindByClientIdAsync(AuthenticationConstants.WebClientId))!;
+        var descriptor = new OpenIddictApplicationDescriptor();
+        await manager.PopulateAsync(descriptor, application);
+        change(descriptor.RedirectUris);
+        await manager.UpdateAsync(application, descriptor);
+    }
+
+    [Test]
+    public async Task Startup_still_rejects_a_client_with_an_unknown_callback()
+    {
+        await using (var scope = _app.Services.CreateAsyncScope())
+        {
+            var manager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
+            var application = (
+                await manager.FindByClientIdAsync(AuthenticationConstants.WebClientId)
+            )!;
+            var descriptor = new OpenIddictApplicationDescriptor();
+            await manager.PopulateAsync(descriptor, application);
+            descriptor.RedirectUris.Add(new Uri("https://evil.example/auth/session/callback"));
+            await manager.UpdateAsync(application, descriptor);
+        }
+
+        await _app.DisposeAsync();
+        var restart = () =>
+            StartApplicationAsync(
+                Path.Combine(_directory, "ca.pem"),
+                webOrigins:
+                [
+                    AuthenticationConstants.CanonicalWebOrigin,
+                    AuthenticationConstants.LocalWebOrigin,
+                    AuthenticationConstants.StagingWebOrigin,
+                ]
+            );
+        await restart
+            .Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*does not match the configured browser boundary*");
+    }
+
+    private async Task<string[]> WebClientRedirectUrisAsync()
+    {
+        await using var scope = _app.Services.CreateAsyncScope();
+        var manager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
+        var application = (await manager.FindByClientIdAsync(AuthenticationConstants.WebClientId))!;
+        return [.. await manager.GetRedirectUrisAsync(application)];
     }
 
     [Test]
