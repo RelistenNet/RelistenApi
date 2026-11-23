@@ -54,13 +54,23 @@ public sealed partial class TestPlaylistApi
         edited.DurationSeconds.Should().Be(500);
         edited.TrackCount.Should().Be(3);
 
-        // A rename advances the indexed revision without rebuilding, and keeps the facts.
+        // A metadata edit advances the indexed revision without rebuilding, and keeps the facts.
+        listing.Description.Should().BeNull();
         await Apply(
             request.PlaylistId,
-            new(1, [Op("update_metadata", new UpdatePlaylistMetadata(new(true, "Renamed")))])
+            new(
+                1,
+                [
+                    Op(
+                        "update_metadata",
+                        new UpdatePlaylistMetadata(new(true, "Renamed"), new(true, "Some *jams*."))
+                    ),
+                ]
+            )
         );
         var renamed = (await ListArtist(artist.Uuid)).Playlists.Single();
         renamed.Name.Should().Be("Renamed");
+        renamed.Description.Should().Be("Some *jams*.");
         renamed.DurationSeconds.Should().Be(500);
         await using (var connection = new NpgsqlConnection(_database.ConnectionString))
         {
