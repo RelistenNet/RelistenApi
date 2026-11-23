@@ -188,6 +188,32 @@ public sealed partial class TestMcpHttp
         }
     }
 
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task SearchIgnoresEmptyBoostArtistIds(bool includeBoost)
+    {
+        await StartApp();
+        var artist = UuidTypeId.Format("artist", Guid.NewGuid());
+        var path = AccountsOrigin + "/v1/search?q=synthetic&scope=artists&boost_artist_ids=";
+        if (includeBoost)
+        {
+            path += $"&boost_artist_ids=,%20,{artist},";
+        }
+
+        using var response = await Send(new(HttpMethod.Get, path));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await Json(response)).GetProperty("catalog_availability").GetString().Should().Be("full");
+        var forwarded = catalog.LastRequest!;
+        forwarded.AbsolutePath.Should().Be(CatalogSearchPath);
+        var query = QueryHelpers.ParseQuery(forwarded.Query);
+        query
+            .GetValueOrDefault("boost_artist_ids")
+            .ToArray()
+            .Should()
+            .Equal(includeBoost ? [artist] : []);
+    }
+
     [TestCase("all")]
     [TestCase("artists")]
     public async Task SearchRequiresRefreshForAnInvalidBearer(string scope)

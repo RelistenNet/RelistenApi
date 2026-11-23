@@ -13,6 +13,10 @@ internal static class SearchRanker
     private const double SongPlayWeight = 0.35;
     private const double ListenerArtistBonus = 4;
 
+    // Require an order-of-magnitude lead before plays outweigh an exact title.
+    // The Tahoe replay had 402 starts for Phish and 6 for the visible cover.
+    private const double ExactSongPlayAdvantage = 10;
+
     public static IReadOnlyList<SearchDocument> KnownItems(
         SearchQuery query,
         SearchInput input,
@@ -144,6 +148,105 @@ internal static class SearchRanker
             SearchScope.Reviews => result.Kind == "review",
             _ => false,
         };
+
+    public static IReadOnlyList<SearchDocument> PreferPlayedVenueMatch(
+        SearchInput input,
+        SearchQuery query,
+        IReadOnlyList<SearchDocument> ranked,
+        CatalogQueryEvidence evidence
+    )
+    {
+        var vocabulary = evidence.Vocabulary;
+        if (
+            ranked.FirstOrDefault() is not { Kind: "song" } song
+            || !IsUnscopedExactSongLead(input, query, song)
+            || input.BoostArtistIds?.Any(id =>
+                vocabulary.ArtistSlugsById.GetValueOrDefault(id) == song.ArtistSlug
+            ) == true
+        )
+        {
+            return ranked;
+        }
+
+        // An exact song title has a strong claim. A performance by another
+        // artist needs an exact venue-and-title reading and much stronger
+        // playback evidence. Imported songs lack song-wide play totals, so
+        // count their strongest visible performance as evidence too.
+        var exactPerformanceStarts = ranked
+            .Where(result =>
+                result.Kind == "performance"
+                && result.ArtistSlug == song.ArtistSlug
+                && result.Name == query.Terms
+            )
+            .Select(result => result.TrackPlays)
+            .DefaultIfEmpty()
+            .Max();
+        var exactStarts = Math.Max(evidence.SongPlays(song.Id), exactPerformanceStarts);
+        var requiredStarts = ExactSongPlayAdvantage * (1d + exactStarts);
+        var performance = ranked
+            .Where(result =>
+                result is { Kind: "performance", Preview: not null, Soundcheck: false }
+                && result.ArtistSlug != song.ArtistSlug
+                && 1d + result.TrackPlays >= requiredStarts
+                && NamesVenueAndSong(query.Terms, result, vocabulary)
+            )
+            .MaxBy(result => result.TrackPlays);
+
+        return performance == null
+            ? ranked
+            : [performance, .. ranked.Where(result => result.Id != performance.Id)];
+    }
+
+    private static bool IsUnscopedExactSongLead(
+        SearchInput input,
+        SearchQuery query,
+        SearchDocument song
+    ) =>
+        input is { Scope: SearchScope.All, Page: 1, AddTracks: false }
+        && query
+            is {
+                Artist: null,
+                ReadingArtist: null,
+                Country: null,
+                Tour: null,
+                HasDate: false,
+                Soundboard: false,
+                Matrix: false,
+                Order: "regular"
+            }
+        && input.Ignore?.Contains("venue") != true
+        && song.Name == query.Terms
+        && query.Terms.Contains(' ');
+
+    private static bool NamesVenueAndSong(
+        string terms,
+        SearchDocument performance,
+        SearchVocabulary vocabulary
+    )
+    {
+        var title = performance.Name;
+        if (title.Length == 0)
+        {
+            return false;
+        }
+
+        string place;
+        if (terms.EndsWith(" " + title, StringComparison.Ordinal))
+        {
+            place = terms[..^(title.Length + 1)];
+        }
+        else if (terms.StartsWith(title + " ", StringComparison.Ordinal))
+        {
+            place = terms[(title.Length + 1)..];
+        }
+        else
+        {
+            return false;
+        }
+
+        return vocabulary.Places(place).Contains(place)
+            && $" {performance.Place} ".Contains($" {place} ", StringComparison.Ordinal);
+    }
 
     public static IReadOnlyList<SearchDocument> AddTracksFirst(
         IReadOnlyList<SearchDocument> visible,

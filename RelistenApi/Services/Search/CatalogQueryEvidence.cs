@@ -9,7 +9,9 @@ internal sealed class CatalogQueryEvidence(
     SearchVocabulary vocabulary,
     SearchPassages passages,
     FrozenDictionary<string, long> songPlays,
-    FrozenSet<string> reviewArtists
+    FrozenSet<string> reviewArtists,
+    FrozenDictionary<(string Artist, string Title), long>? titlePlays = null,
+    FrozenDictionary<string, long>? soundcheckOnlyPlays = null
 )
 {
     public static readonly CatalogQueryEvidence Empty = new(
@@ -25,6 +27,16 @@ internal sealed class CatalogQueryEvidence(
     public SearchPassages Passages { get; } = passages;
 
     public long SongPlays(string songId) => songPlays.GetValueOrDefault(songId);
+
+    public long ConcertSongPlays(string songId) =>
+        SongPlays(songId) - (soundcheckOnlyPlays?.GetValueOrDefault(songId) ?? 0);
+
+    public long TitlePlays(string artistSlug, string title)
+    {
+        var raw = titlePlays?.GetValueOrDefault((artistSlug, title)) ?? 0;
+        var canonical = Vocabulary.FindSong(artistSlug, title);
+        return raw + (canonical == null ? 0 : ConcertSongPlays(canonical.Id));
+    }
 
     public bool HasReviews(string? artistSlug = null) =>
         artistSlug is null ? reviewArtists.Count > 0 : reviewArtists.Contains(artistSlug);
