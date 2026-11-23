@@ -138,7 +138,18 @@ public sealed class TestPlaylistContracts
             PlaylistJson.StoredOptions
         );
         using var summary = JsonDocument.Parse(summaryJson);
-        summary.RootElement.TryGetProperty("track_count", out _).Should().BeFalse();
+        summary
+            .RootElement.EnumerateObject()
+            .Select(property => property.Name)
+            .Should()
+            .BeEquivalentTo(
+                "playlist_id",
+                "name",
+                "entry_count",
+                "archived",
+                "revision",
+                "updated_at"
+            );
         var restored = JsonSerializer.Deserialize<PlaylistSummary>(
             summaryJson,
             PlaylistJson.Options

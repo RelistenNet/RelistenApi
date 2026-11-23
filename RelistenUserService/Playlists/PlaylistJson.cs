@@ -50,6 +50,10 @@ public static class PlaylistJson
                 _,
                 takenDown
             ) => takenDown is true;
+            type.Properties.Single(property => property.Name == "description").ShouldSerialize = (
+                _,
+                description
+            ) => description is not null;
         }
         else if (
             type.Type == typeof(PlaylistSegmentUpserted)

@@ -43,7 +43,8 @@ the edge like the public snapshot.
 | `limit` | 1–50, default 25. |
 | `cursor` | The previous page's `next_cursor`. It is valid only with the `sort` that produced it. |
 
-Each item carries `playlist_id`, `public_code`, `name`, `owner` (`id`,
+Each item carries `playlist_id`, `public_code`, `name`, `description` (the
+author's Markdown, or null), `owner` (`id`,
 `username`), `track_count`, `duration_seconds`, `updated_at`,
 `follower_count` and `recent_play_count`. A null `next_cursor` ends the
 listing. Counts can change between pages, so a playlist may move across the

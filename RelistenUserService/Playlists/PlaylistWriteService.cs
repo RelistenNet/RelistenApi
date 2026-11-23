@@ -702,6 +702,7 @@ public sealed partial class PlaylistWriteService(
                 )
                 {
                     TrackCount = playlist.TrackCount,
+                    Description = playlist.Description,
                     PublicCode = playlist.PublicCode,
                     Published = playlist.Published,
                     TakenDown = playlist.TakenDown,

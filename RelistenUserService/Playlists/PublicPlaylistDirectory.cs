@@ -116,7 +116,8 @@ public sealed class PublicPlaylistDirectory(AccountsDbContext database, TimeProv
 
         return $"""
             WITH listed AS (
-                SELECT playlist.id, playlist.public_code, playlist.name, playlist.owner_id,
+                SELECT playlist.id, playlist.public_code, playlist.name, playlist.description,
+                       playlist.owner_id,
                        owner.username, playlist.track_count, playlist.catalog_duration_seconds,
                        playlist.updated_at,
                        (
@@ -137,6 +138,7 @@ public sealed class PublicPlaylistDirectory(AccountsDbContext database, TimeProv
                 SELECT *, {SortKeys[query.Sort]} AS sort_key FROM listed
             )
             SELECT id AS "Id", public_code AS "PublicCode", name AS "Name",
+                   description AS "Description",
                    owner_id AS "OwnerId", username AS "Username", track_count AS "TrackCount",
                    catalog_duration_seconds AS "DurationSeconds", updated_at AS "UpdatedAt",
                    follower_count AS "FollowerCount", recent_play_count AS "RecentPlayCount",
@@ -185,6 +187,7 @@ public sealed class PublicPlaylistDirectory(AccountsDbContext database, TimeProv
             PlaylistId.Parse(row.Id),
             row.PublicCode,
             row.Name,
+            row.Description,
             new(UserId.Parse(row.OwnerId), row.Username),
             row.TrackCount,
             row.DurationSeconds,
@@ -236,6 +239,7 @@ public sealed class PublicPlaylistDirectory(AccountsDbContext database, TimeProv
         public string Id { get; init; } = "";
         public string PublicCode { get; init; } = "";
         public string Name { get; init; } = "";
+        public string? Description { get; init; }
         public string OwnerId { get; init; } = "";
         public string Username { get; init; } = "";
         public int TrackCount { get; init; }

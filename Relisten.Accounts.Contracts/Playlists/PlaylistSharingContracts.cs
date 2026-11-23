@@ -57,12 +57,14 @@ public sealed record FollowedPlaylistHead(PlaylistId PlaylistId, bool Available)
 /// <summary>
 /// One public playlist in a listing. <c>DurationSeconds</c> totals the catalog durations
 /// of its tracks. <c>RecentPlayCount</c> counts plays started from it on the last 30 UTC
-/// days, today included, from signed-in and anonymous listeners.
+/// days, today included, from signed-in and anonymous listeners. <c>Description</c> is the
+/// author's Markdown, or null when there is none.
 /// </summary>
 public sealed record PublicPlaylistListing(
     PlaylistId PlaylistId,
     string PublicCode,
     string Name,
+    string? Description,
     PublicPlaylistOwner Owner,
     int TrackCount,
     int DurationSeconds,
