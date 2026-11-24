@@ -38,7 +38,7 @@ the edge like the public snapshot.
 
 | Query | Meaning |
 | --- | --- |
-| `sort` | `recent` (default) orders by `updated_at`, which publication, unpublication and content edits move. `followers` orders by follower count. `plays` orders by plays started from the playlist on the last 30 UTC days, today included. Ties fall back to playlist ID, all descending. |
+| `sort` | `recent` (default) orders by `updated_at`, which publication, unpublication and content edits move. `followers` orders by follower count. `plays` orders by plays started from the playlist on the last 30 UTC days, counting each day once it is materialized (see Play attribution). Ties fall back to playlist ID, all descending. |
 | `artist` | An `artist_` ID or a bare catalog artist UUID. Keeps playlists with at least one live entry for one of that artist's tracks. |
 | `limit` | 1–50, default 25. |
 | `cursor` | The previous page's `next_cursor`. It is valid only with the `sort` that produced it. |
@@ -67,10 +67,10 @@ history upload. Anonymous clients pass `playlist_id` to
 `POST /api/v4/live/play` (JSON) or `POST /api/v2/live/play` (query). The
 catalog checks only that the value is a canonical `playlist_` ID and never
 returns it. The `source_track_plays_playlist_daily` continuous aggregate
-totals plays per playlist and UTC day, and the `plays` sort reads it. Closed
-days are materialized hourly; real-time aggregation adds the current day from
-the raw plays, so a new play counts at once, apart from the 60-second edge
-cache.
+totals plays per playlist and UTC day, and the `plays` sort reads only its
+materialized days. A day is materialized an hour after it closes (and re-closed
+for three days to pick up late uploads), so a play counts one to 25 hours after
+it starts.
 
 Anonymous attribution is unauthenticated, like the track play counts it sits
 beside. Nothing checks that the track is in the playlist or limits plays per

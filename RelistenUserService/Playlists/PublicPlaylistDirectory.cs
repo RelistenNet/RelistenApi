@@ -178,9 +178,9 @@ public sealed class PublicPlaylistDirectory(AccountsDbContext database, TimeProv
     }
 
     /// <summary>
-    /// The first UTC day of the play window, today included. It must reach the query as a
-    /// parameter: the aggregate's real-time tail excludes older raw chunks only for a
-    /// constant bound (see catalog migration 24).
+    /// The first UTC day of the play window, today included. The aggregate holds only
+    /// materialized days (catalog migration 25), so today's plays, and yesterday's until
+    /// its refresh an hour after midnight UTC, are not counted yet.
     /// </summary>
     private DateTimeOffset PlayWindowStart()
     {

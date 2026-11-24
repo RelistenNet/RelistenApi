@@ -1564,7 +1564,7 @@ WITH NO DATA;
 
 -- Mirrors catalog migration 24, which an already-seeded database applies itself.
 CREATE MATERIALIZED VIEW source_track_plays_playlist_daily
-WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only = true) AS
 SELECT time_bucket('1 day', p.created_at) AS play_day,
        p.playlist_id, count(*) AS plays, sum(coalesce(t.duration, 0)) AS total_track_seconds
 FROM source_track_plays p

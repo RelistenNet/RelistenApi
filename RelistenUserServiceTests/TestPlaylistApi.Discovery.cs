@@ -125,9 +125,10 @@ public sealed partial class TestPlaylistApi
         followed.Playlists.Single().PlaylistId.Should().Be(ids[0]);
         followed.Playlists.Single().FollowerCount.Should().Be(1);
 
-        // Materialized days and today's real-time tail both count.
+        // Materialized days count; today's plays wait for the day to be materialized.
         await RecordPlaylistPlaysAsync(artist.Tracks[0], ids[1], plays: 3, daysAgo: 2);
-        await RecordPlaylistPlaysAsync(artist.Tracks[0], ids[2], plays: 1, daysAgo: 0);
+        await RecordPlaylistPlaysAsync(artist.Tracks[0], ids[2], plays: 1, daysAgo: 1);
+        await RecordPlaylistPlaysAsync(artist.Tracks[0], ids[0], plays: 5, daysAgo: 0);
         var played = await ListArtist(artist.Uuid, sort: "plays");
         played.Playlists.Select(item => item.PlaylistId).Should().Equal(ids[1], ids[2], ids[0]);
         played.Playlists.Select(item => item.RecentPlayCount).Should().Equal(3, 1, 0);
