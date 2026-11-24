@@ -19,9 +19,16 @@ public partial class PopularityService
     )
     {
         var generatedAt = DateTime.UtcNow;
-        var (tracks, recordings) = await ReadDetailRollups(generatedAt, artist, cancellationToken);
-        await using var connection = db.CreateConnection(longTimeout: true, readOnly: true);
+        // Nightly detail reads are bounded to one artist. Use the primary so
+        // standby recovery cannot cancel either the rollups or the catalog joins.
+        await using var connection = db.CreateConnection(longTimeout: true, readOnly: false);
         await connection.OpenAsync(cancellationToken);
+        var (tracks, recordings) = await ReadDetailRollups(
+            connection,
+            generatedAt,
+            artist,
+            cancellationToken
+        );
         var (performances, songs) = await CalculatePerformances(
             connection,
             artist,
@@ -40,15 +47,16 @@ public partial class PopularityService
         return (performances.Length, sources.Length, songs.Length);
     }
 
-    private async Task<(
+    private static async Task<(
         Dictionary<Guid, PlayPopularity> Tracks,
         Dictionary<Guid, PlayPopularity> Recordings
-    )> ReadDetailRollups(DateTime generatedAt, Guid artist, CancellationToken cancellationToken)
+    )> ReadDetailRollups(
+        Npgsql.NpgsqlConnection connection,
+        DateTime generatedAt,
+        Guid artist,
+        CancellationToken cancellationToken
+    )
     {
-        // Use the same replica path as other popularity calculations. Release
-        // the read-only rollup snapshot before publishing this artist.
-        await using var connection = db.CreateConnection(longTimeout: true, readOnly: true);
-        await connection.OpenAsync(cancellationToken);
         await using var snapshot = await connection.BeginTransactionAsync(cancellationToken);
         await connection.ExecuteAsync(
             new CommandDefinition(

@@ -397,6 +397,44 @@ public sealed class TestPopularityStore
     }
 
     [Test]
+    public async Task DetailRefreshPublishesWhenTheReplicaIsUnavailable()
+    {
+        var redis = new RedisService(RedisService.BuildConfiguration("redis://127.0.0.1:16379"));
+        using var redisConnection = redis.connection;
+        var jobs = System.Reflection.DispatchProxy.Create<IBackgroundJobClient, NoRefresh>();
+        var service = new PopularityService(
+            db,
+            new PopularityCacheService(redis),
+            jobs,
+            NullLogger<PopularityService>.Instance
+        );
+
+        await ClearDetails();
+        var replica = DbService.ReadOnlyConnStr;
+        try
+        {
+            // Isolate the route so the replica connection cannot fall back to the primary.
+            DbService.ReadOnlyConnStr = "Host=127.0.0.1;Port=1;Timeout=1;Pooling=false";
+
+            await service.RefreshDetailPopulations(artist, CancellationToken.None);
+
+            (
+                await connection.ExecuteScalarAsync<bool>(
+                    "SELECT EXISTS (SELECT FROM popularity_detail_publications WHERE artist_uuid=@artist)",
+                    new { artist }
+                )
+            )
+                .Should()
+                .BeTrue();
+        }
+        finally
+        {
+            DbService.ReadOnlyConnStr = replica;
+            await ClearDetails();
+        }
+    }
+
+    [Test]
     public async Task Refresh_publishes_the_same_calculation_to_Postgres_and_legacy_Redis()
     {
         var options = RedisService.BuildConfiguration("redis://127.0.0.1:16379");
