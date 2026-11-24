@@ -23,8 +23,112 @@ public sealed class TestPopularityStore
     private readonly Guid artist = Guid.NewGuid();
     private readonly Guid show = Guid.NewGuid();
     private readonly Guid emptyArtist = Guid.NewGuid();
+    private readonly Guid source = Guid.NewGuid();
     private readonly Guid year = Guid.NewGuid();
     private readonly Guid track = Guid.NewGuid();
+
+    [Test]
+    public async Task ANewerUnchangedPublicationStillRejectsLateChanges()
+    {
+        var first = DateTime.UtcNow.AddMinutes(-10);
+        try
+        {
+            var original = new RecordingPopularity(source, new() { plays_1y = 17 });
+            await store.PublishDetails(artist, [], [original], [], first, CancellationToken.None);
+            await store.PublishDetails(
+                artist,
+                [],
+                [original],
+                [],
+                first.AddMinutes(2),
+                CancellationToken.None
+            );
+            await store.PublishDetails(
+                artist,
+                [],
+                [new(source, new() { plays_1y = 90 })],
+                [],
+                first.AddMinutes(1),
+                CancellationToken.None
+            );
+
+            var published = await connection.QuerySingleAsync<StoredPopularity>(
+                "SELECT uuid,plays_1y,generated_at FROM recording_popularity WHERE uuid=@source",
+                new { source }
+            );
+            published.plays_1y.Should().Be(17);
+            // Late empty results must not delete the recording either.
+            await store.PublishDetails(
+                artist,
+                [],
+                [],
+                [],
+                first.AddMinutes(1),
+                CancellationToken.None
+            );
+            (
+                await connection.ExecuteScalarAsync<long>(
+                    "SELECT plays_1y FROM recording_popularity WHERE uuid=@source",
+                    new { source }
+                )
+            )
+                .Should()
+                .Be(17);
+        }
+        finally
+        {
+            await ClearDetails();
+        }
+    }
+
+    [Test]
+    public async Task APublicationWithNoPlaysDeletesStaleRowsAndOmitsPlaceholders()
+    {
+        var first = DateTime.UtcNow.AddMinutes(-3);
+        await store.PublishDetails(
+            artist,
+            [new(show, "song_fixture", new() { plays_1y = 8 })],
+            [new(source, new() { plays_1y = 8 })],
+            [new("song_fixture", new() { plays_1y = 8 })],
+            first,
+            CancellationToken.None
+        );
+        try
+        {
+            await store.PublishDetails(
+                artist,
+                [new(show, "song_fixture", new())],
+                [new(source, new())],
+                [new("song_fixture", new())],
+                first.AddMinutes(1),
+                CancellationToken.None
+            );
+            var remaining = await connection.ExecuteScalarAsync<int>(
+                """
+                SELECT (SELECT count(*) FROM recording_popularity WHERE artist_uuid=@artist)
+                     + (SELECT count(*) FROM song_performance_popularity WHERE artist_uuid=@artist)
+                     + (SELECT count(*) FROM song_popularity WHERE artist_uuid=@artist)
+                """,
+                new { artist }
+            );
+            remaining.Should().Be(0);
+        }
+        finally
+        {
+            await ClearDetails();
+        }
+    }
+
+    private Task ClearDetails() =>
+        connection.ExecuteAsync(
+            """
+            DELETE FROM recording_popularity WHERE artist_uuid=@artist;
+            DELETE FROM song_performance_popularity WHERE artist_uuid=@artist;
+            DELETE FROM song_popularity WHERE artist_uuid=@artist;
+            DELETE FROM popularity_detail_publications WHERE artist_uuid=@artist;
+            """,
+            new { artist }
+        );
 
     [OneTimeSetUp]
     public async Task Start()
@@ -50,7 +154,7 @@ public sealed class TestPopularityStore
                 SELECT @show,a.id,y.id,'1985-07-07','1985-07-07',now()
                 FROM artists a JOIN years y ON y.artist_id=a.id WHERE a.uuid=@artist;
             INSERT INTO sources(uuid,artist_id,show_id,upstream_identifier,display_date,is_soundboard,is_remaster,has_jamcharts,updated_at)
-                SELECT @show,a.id,s.id,@show::text,'1985-07-07',false,false,false,now()
+                SELECT @source,a.id,s.id,@source::text,'1985-07-07',false,false,false,now()
                 FROM artists a JOIN shows s ON s.artist_id=a.id WHERE a.uuid=@artist;
             INSERT INTO source_tracks(uuid,artist_id,source_id,track_position,title,slug,mp3_url,duration,updated_at)
                 SELECT @track,a.id,s.id,1,'Fixture','fixture','https://example.test/file.mp3',120,now()
@@ -60,6 +164,7 @@ public sealed class TestPopularityStore
             {
                 artist,
                 show,
+                source,
                 year,
                 track,
                 emptyArtist,
@@ -176,8 +281,8 @@ public sealed class TestPopularityStore
             .Json.JsonConvert.SerializeObject(rows[0].ToMetrics())
             .Should()
             .Be(Newtonsoft.Json.JsonConvert.SerializeObject(global));
-        rows[1].ToMetrics().momentum_score.Should().Be(0.9);
-        rows[1].ToMetrics(organic: true).momentum_score.Should().Be(0.6);
+        rows[1].ToMetrics()!.momentum_score.Should().Be(0.9);
+        rows[1].ToMetrics(organic: true)!.momentum_score.Should().Be(0.6);
 
         await store.ReplaceArtistShows(
             artist,
@@ -459,7 +564,7 @@ public sealed class TestPopularityStore
     }
 
     [Test]
-    public async Task YearlyRollupSplitsUtcMonthEdgesAndCountsSourceDaysOnce()
+    public async Task YearlyRollupIncludesEachUtcDayAcrossMonthEdges()
     {
         var showId = Guid.NewGuid();
         var source = Guid.NewGuid();
@@ -510,21 +615,6 @@ public sealed class TestPopularityStore
                     );
             }
 
-            // Both files played on 2023-03-02: the performance and its source each
-            // count that day once.
-            (
-                await PlayRollupReader.ReadPerformances(
-                    connection,
-                    [new PerformancePlaysRequest([firstTrack, secondTrack], source)],
-                    throughLeapDay,
-                    null,
-                    CancellationToken.None
-                )
-            )
-                .Should()
-                .Equal(
-                    new PerformancePlays(Index: 0, Plays: 5, Days: 3, SourcePlays: 5, SourceDays: 3)
-                );
             await AssertMonthTurnoverReadsDailyTail(showId, firstTrack);
         }
         finally

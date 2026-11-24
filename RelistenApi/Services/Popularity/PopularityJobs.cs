@@ -15,8 +15,9 @@ namespace Relisten.Services.Popularity
             this.popularityService = popularityService;
         }
 
-        /// <summary>Explicit full backfill/repair; this is not a recurring job.</summary>
+        /// <summary>Nightly full refresh and the operator entry point for backfill or repair.</summary>
         [Queue("default")]
+        [DisableConcurrentExecution(3600)]
         public Task RefreshReadModel(CancellationToken cancellationToken) =>
             popularityService.RefreshReadModel(cancellationToken);
 

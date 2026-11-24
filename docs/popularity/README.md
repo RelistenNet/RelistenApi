@@ -64,11 +64,12 @@ uses the existing scoped calculations. Retries recalculate even if Postgres has
 become fresh: a previous attempt may have committed there and then failed to
 publish Redis. This keeps partial-failure recovery straightforward.
 
-`PopularityJobs.RefreshReadModel` remains an explicit full backfill/repair action,
-also available through admin refresh-all. There is no automatic schedule.
-A full repair visits every catalog artist. Results whose plays aged out become
-zero/null rows. Normal reads request only populations they use; unused artists
-require no automatic work.
+The nightly `PopularityJobs.RefreshReadModel` job starts at 05:00 UTC,
+before full catalog ingestion at 07:00 UTC and the search rebuild at 11:00
+UTC. The admin refresh-all action can run the same job on demand. A full
+refresh visits every catalog artist and clears scores for plays that aged out.
+Existing read-triggered refreshes still cover the artist, show, and year
+populations a request uses.
 
 ## Publication and failure
 
@@ -139,8 +140,8 @@ The yearly window covers 365 UTC dates through the calculation date. Complete
 months come from the monthly rollup. The partial month at each edge comes
 from the daily rollup. At month turnover, the real-time monthly view reads the
 daily aggregate for buckets it has yet to materialize. The daily aggregate's
-own freshness still bounds what these reads can see. Performance pages read
-their few files and sources from the daily rollups directly.
+own freshness still bounds what these reads can see. Song and performance
+pages read the published performance and source rows.
 
 Popularity jobs run in Hangfire on API pods started with
 `ENABLE_HANGFIRE_SERVER`. Each refresh calculates the yearly window, with JIT
@@ -357,3 +358,29 @@ Run these steps in order. Run SQL on the primary unless a step says otherwise.
 
 To repair a historical month with changed raw plays, refresh its daily track
 buckets first, then the monthly track and daily source buckets for that month.
+
+
+## Song performances and recordings
+
+Migration 26 adds `song_performance_popularity`, `recording_popularity`, and
+`song_popularity`. The nightly job reads rollups for one artist at a time and
+publishes that artist's three populations in one transaction. An artist
+publication timestamp rejects late calculations even when the newer run
+skipped rewriting unchanged metric rows. A failed artist leaves its prior
+publication readable. The job visits the remaining artists and reports the
+failures at the end.
+
+Song performance momentum compares versions of the same song. Recording
+momentum compares sources of the same show. Song momentum compares songs by
+the same artist. Song totals add up the published performances and include
+soundchecks. A file that contains two songs credits one start to each song
+for every playback. Listening time is split evenly among the songs because
+the catalog has no per-song timing for that file. The recording keeps the
+complete file's starts and hours.
+
+The nightly job stores only rows with activity. V4 returns null until a new
+item's popularity is published and for items without recorded activity.
+Search copies the published windows during indexing. Its song ranking uses
+the same stored yearly starts as the displayed song popularity. Exact-file
+starts still help choose previews. The Redis maps and request-triggered
+refreshes for artists, shows, and years use their existing cadence.

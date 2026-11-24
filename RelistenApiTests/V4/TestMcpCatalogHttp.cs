@@ -2,7 +2,12 @@ using System.Net;
 using System.Text.Json.Nodes;
 using Dapper;
 using FluentAssertions;
+using Microsoft.Extensions.Hosting.Internal;
+using Microsoft.Extensions.Logging.Abstractions;
 using Relisten.Identifiers;
+using Relisten.Services.Popularity;
+using RelistenApiTests.Popularity;
+using StackExchange.Redis;
 
 namespace RelistenApiTests.V4;
 
@@ -230,11 +235,34 @@ public sealed partial class TestV4CatalogHttp
     }
 
     [Test]
-    public async Task Mcp_performance_popularity_counts_overlapping_track_days_once()
+    public async Task AShowWithoutAPopularityPublicationHasNullPlaybackWindows()
+    {
+        var artist = UuidTypeId.Format(
+            "artist",
+            Guid.Parse("00000000-0000-0000-0000-000000000014")
+        );
+        var list = await GetJson($"/api/v4/artists/{artist}/performances?song_id=song_00000004");
+        var show = list["items"]!.AsArray().Single()!;
+        show.AsObject().ContainsKey("popularity").Should().BeTrue();
+        show["popularity"].Should().BeNull();
+        show["representative"]!["popularity"].Should().BeNull();
+
+        var song = await GetJson("/api/v4/songs/song_00000004");
+        var appearance = song["shows"]!.AsArray().Single()!;
+        appearance.AsObject().ContainsKey("song_popularity").Should().BeTrue();
+        appearance["song_popularity"].Should().BeNull();
+    }
+
+    [Test]
+    public async Task SongAndPerformancePopularityIncludeSoundcheckPlays()
     {
         await using var connection = await MigratedTestDatabase.OpenAsync();
         var firstTrack = Guid.Parse("00000000-0000-0000-0000-000000000341");
         var secondTrack = Guid.Parse("00000000-0000-0000-0000-000000000342");
+        var originalTitle = await connection.QuerySingleAsync<string>(
+            "SELECT title FROM source_tracks WHERE uuid=@secondTrack",
+            new { secondTrack }
+        );
         var through = DateTime.UtcNow.Date;
         var completeMonth = new DateTime(
             through.Year,
@@ -248,16 +276,14 @@ public sealed partial class TestV4CatalogHttp
         var firstPlay = completeMonth.AddDays(3);
         var secondPlay = completeMonth.AddDays(8);
         var end = completeMonth.AddMonths(1);
+        var recentDay = through.AddDays(-1);
+        var recentPlay = recentDay.AddHours(12);
+        var recentEnd = recentDay.AddDays(1);
 
         async Task RefreshRollups()
         {
             foreach (
-                var aggregate in new[]
-                {
-                    "source_track_plays_daily",
-                    "source_track_plays_monthly",
-                    "source_plays_daily",
-                }
+                var aggregate in new[] { "source_track_plays_daily", "source_track_plays_monthly" }
             )
             {
                 await connection.ExecuteAsync(
@@ -272,50 +298,126 @@ public sealed partial class TestV4CatalogHttp
             }
         }
 
+        async Task RefreshRecent()
+        {
+            foreach (
+                var aggregate in new[] { "source_track_plays_hourly", "source_track_plays_daily" }
+            )
+            {
+                await connection.ExecuteAsync(
+                    "CALL refresh_continuous_aggregate(@aggregate::regclass,@start::timestamptz,@end::timestamptz,force => true)",
+                    new
+                    {
+                        aggregate,
+                        start = DateTime.SpecifyKind(recentDay, DateTimeKind.Utc),
+                        end = DateTime.SpecifyKind(recentEnd, DateTimeKind.Utc),
+                    }
+                );
+            }
+        }
+
+        var artistUuid = Guid.Parse("00000000-0000-0000-0000-000000000301");
+        async Task RefreshCatalogPopularity()
+        {
+            var catalog = new Relisten.DbService(
+                LocalTestDatabase.DatabaseUrl,
+                null,
+                null,
+                new HostingEnvironment { EnvironmentName = "Production" },
+                NullLogger<Relisten.DbService>.Instance
+            );
+            var redis = new Relisten.RedisService(ConfigurationOptions.Parse("127.0.0.1:16379"));
+            try
+            {
+                var cache = new PopularityCacheService(redis);
+                var service = new PopularityService(
+                    catalog,
+                    cache,
+                    new RecordingPopularityJobs(),
+                    NullLogger<PopularityService>.Instance
+                );
+                await service.RefreshDetailPopulations(artistUuid, CancellationToken.None);
+            }
+            finally
+            {
+                await redis.connection.DisposeAsync();
+            }
+        }
+
         await connection.ExecuteAsync(
             """
             INSERT INTO source_track_plays(created_at, source_track_uuid, app_type)
-            VALUES (@firstPlay, @firstTrack, 0), (@firstPlay, @secondTrack, 0), (@secondPlay, @firstTrack, 0)
+            VALUES (@firstPlay, @firstTrack, 0), (@firstPlay, @secondTrack, 0), (@secondPlay, @firstTrack, 0), (@recentPlay, @firstTrack, 0)
             """,
             new
             {
                 firstPlay,
                 secondPlay,
+                recentPlay = DateTime.SpecifyKind(recentPlay, DateTimeKind.Utc),
                 firstTrack,
                 secondTrack,
             }
         );
         try
         {
-            await RefreshRollups();
-            var artist = UuidTypeId.Format(
-                "artist",
-                Guid.Parse("00000000-0000-0000-0000-000000000301")
+            await connection.ExecuteAsync(
+                "UPDATE source_tracks SET title='(soundcheck) ' || @originalTitle WHERE uuid=@secondTrack",
+                new { secondTrack, originalTitle }
             );
+            await RefreshRollups();
+            await RefreshRecent();
+            await RefreshCatalogPopularity();
+            var artist = UuidTypeId.Format("artist", artistUuid);
             var page = await GetJson(
                 $"/api/v4/artists/{artist}/performances?song_id=song_00000101"
             );
             var row = page["items"]!
                 .AsArray()
                 .Single(item => item!["eligible_source_count"]!.GetValue<int>() == 2)!;
-            row["plays_1y"]!.GetValue<int>().Should().Be(3);
-            row["days_with_plays"]!.GetValue<int>().Should().Be(2);
-            row["representative"]!["source_plays_1y"]!.GetValue<int>().Should().Be(2);
-            row["representative"]!["source_days_with_plays"]!.GetValue<int>().Should().Be(2);
+            row["popularity"]!["windows"]!["1y"]!["plays"]!.GetValue<int>().Should().Be(4);
+            row["representative"]!["popularity"]!["windows"]!["1y"]!["plays"]!
+                .GetValue<int>()
+                .Should()
+                .Be(3);
+            var song = await GetJson("/api/v4/songs/song_00000101");
+            var songShow = song["shows"]!
+                .AsArray()
+                .Single(show => show!["show"]!["id"]!.ToString() == row["show_id"]!.ToString())!;
+            var windows = songShow["song_popularity"]!["windows"]!;
+            windows["1y"]!["plays"]!.GetValue<int>().Should().Be(4);
+            foreach (var window in new[] { "48h", "7d", "30d" })
+            {
+                windows[window]!["plays"]!.GetValue<int>().Should().Be(1);
+            }
         }
         finally
         {
             await connection.ExecuteAsync(
-                "DELETE FROM source_track_plays WHERE source_track_uuid IN (@firstTrack,@secondTrack) AND created_at >= @start AND created_at < @end",
+                "UPDATE source_tracks SET title=@originalTitle WHERE uuid=@secondTrack",
+                new { secondTrack, originalTitle }
+            );
+            await connection.ExecuteAsync(
+                "DELETE FROM source_track_plays WHERE source_track_uuid IN (@firstTrack,@secondTrack) AND created_at IN (@firstPlay,@secondPlay,@recentPlay)",
                 new
                 {
                     firstTrack,
                     secondTrack,
-                    start = completeMonth,
-                    end,
+                    firstPlay,
+                    secondPlay,
+                    recentPlay = DateTime.SpecifyKind(recentPlay, DateTimeKind.Utc),
                 }
             );
             await RefreshRollups();
+            await RefreshRecent();
+            await connection.ExecuteAsync(
+                """
+                DELETE FROM song_performance_popularity WHERE artist_uuid=@artistUuid;
+                DELETE FROM recording_popularity WHERE artist_uuid=@artistUuid;
+                DELETE FROM song_popularity WHERE artist_uuid=@artistUuid;
+                DELETE FROM popularity_detail_publications WHERE artist_uuid=@artistUuid;
+                """,
+                new { artistUuid }
+            );
         }
     }
 }

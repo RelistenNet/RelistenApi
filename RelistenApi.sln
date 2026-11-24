@@ -21,6 +21,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Relisten.NormalizationTests
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Relisten.Identifiers", "Relisten.Identifiers\Relisten.Identifiers.csproj", "{36C46049-B4D1-450B-8CCA-35CD2B2186AF}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Relisten.Search.Contracts", "Relisten.Search.Contracts\Relisten.Search.Contracts.csproj", "{360BA89A-E163-4E54-8C14-113F1EB71FE2}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -139,6 +141,18 @@ Global
 		{36C46049-B4D1-450B-8CCA-35CD2B2186AF}.Release|x64.Build.0 = Release|Any CPU
 		{36C46049-B4D1-450B-8CCA-35CD2B2186AF}.Release|x86.ActiveCfg = Release|Any CPU
 		{36C46049-B4D1-450B-8CCA-35CD2B2186AF}.Release|x86.Build.0 = Release|Any CPU
+		{360BA89A-E163-4E54-8C14-113F1EB71FE2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{360BA89A-E163-4E54-8C14-113F1EB71FE2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{360BA89A-E163-4E54-8C14-113F1EB71FE2}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{360BA89A-E163-4E54-8C14-113F1EB71FE2}.Debug|x64.Build.0 = Debug|Any CPU
+		{360BA89A-E163-4E54-8C14-113F1EB71FE2}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{360BA89A-E163-4E54-8C14-113F1EB71FE2}.Debug|x86.Build.0 = Debug|Any CPU
+		{360BA89A-E163-4E54-8C14-113F1EB71FE2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{360BA89A-E163-4E54-8C14-113F1EB71FE2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{360BA89A-E163-4E54-8C14-113F1EB71FE2}.Release|x64.ActiveCfg = Release|Any CPU
+		{360BA89A-E163-4E54-8C14-113F1EB71FE2}.Release|x64.Build.0 = Release|Any CPU
+		{360BA89A-E163-4E54-8C14-113F1EB71FE2}.Release|x86.ActiveCfg = Release|Any CPU
+		{360BA89A-E163-4E54-8C14-113F1EB71FE2}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

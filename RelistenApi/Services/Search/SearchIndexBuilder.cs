@@ -122,28 +122,36 @@ internal sealed class SearchIndexBuilder(
     )
     {
         var collections = await typesense.ReadCollectionNames(cancellationToken);
-        var targets = aliases.Values.ToHashSet(StringComparer.Ordinal);
-        foreach (var name in collections.Where(name => IsBuildCollection(aliasPrefix, name)))
+        // A partially published alias set can reference two builds. An
+        // evidence snapshot reads a whole generation from any one of them.
+        var referenced = aliases
+            .Values.Select(name => BuildId(aliasPrefix, name))
+            .OfType<string>()
+            .ToHashSet(StringComparer.Ordinal);
+        foreach (var name in collections)
         {
-            if (!targets.Contains(name))
+            if (BuildId(aliasPrefix, name) is { } build && !referenced.Contains(build))
             {
                 await typesense.DeleteCollection(name, cancellationToken);
             }
         }
     }
 
-    private static bool IsBuildCollection(string aliasPrefix, string name)
+    private static string? BuildId(string aliasPrefix, string name)
     {
         foreach (var kind in SearchIndexSchema.Collections)
         {
             var prefix = AliasName(aliasPrefix, kind) + "_";
-            if (name.StartsWith(prefix, StringComparison.Ordinal))
+            if (
+                name.StartsWith(prefix, StringComparison.Ordinal)
+                && Guid.TryParseExact(name.AsSpan(prefix.Length), "N", out _)
+            )
             {
-                return Guid.TryParseExact(name.AsSpan(prefix.Length), "N", out _);
+                return name[prefix.Length..];
             }
         }
 
-        return false;
+        return null;
     }
 
     private async Task<long> ImportCollection(
@@ -234,7 +242,13 @@ internal sealed class SearchIndexBuilder(
         CancellationToken cancellationToken
     )
     {
-        foreach (var kind in SearchIndexSchema.Collections)
+        // Evidence readers follow the entities alias. Move it after the
+        // other aliases so a new generation becomes visible as one snapshot.
+        foreach (
+            var kind in SearchIndexSchema.Collections.OrderBy(kind =>
+                kind == SearchIndexSchema.Entities
+            )
+        )
         {
             var alias = AliasName(aliasPrefix, kind);
             var name = CollectionName(aliasPrefix, kind, buildId);
@@ -244,7 +258,7 @@ internal sealed class SearchIndexBuilder(
 
     internal static string AliasName(string prefix, string kind) => $"{prefix}_{kind}";
 
-    private static string CollectionName(string prefix, string kind, string buildId) =>
+    internal static string CollectionName(string prefix, string kind, string buildId) =>
         $"{AliasName(prefix, kind)}_{buildId}";
 }
 

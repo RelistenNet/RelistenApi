@@ -12,16 +12,19 @@ namespace Relisten.Search;
 internal static class SearchRequests
 {
     private const string Fields =
-        "id,kind,label,name,aliases,artist,artist_label,artist_slug,artist_slugs,date,day_key,place,run,country,city_label,venue_label,venue_id,show_id,tour_label,song_id,preview,soundboard,soundcheck,source_id,source_upstream,matrix,track_plays,review_mentions,longest,popularity";
+        "id,kind,label,name,aliases,artist,artist_label,artist_slug,artist_slugs,date,day_key,place,run,country,city_label,location_label,venue_label,venue_id,show_id,tour_label,song_id,preview,soundboard,soundcheck,source_id,source_upstream,taper_label,transferrer_label,matrix,track_plays,avg_rating,num_reviews,review_mentions,longest,popularity,popularity_percentile";
     private const string Relevance = "_text_match:desc,popularity:desc";
     private const string Chronology = "date:desc," + Relevance;
+    private const int ReviewExcerptLength = 240;
 
     public static IReadOnlyList<SearchRequest> Build(
         SearchQuery query,
         SearchScope scope,
         bool typing,
         IReadOnlyCollection<string>? venueIds = null,
-        int page = 1
+        int page = 1,
+        bool includeAllEvidence = true,
+        IReadOnlyCollection<string>? reviewVenueIds = null
     )
     {
         var requests = new List<SearchRequest>(4);
@@ -29,6 +32,10 @@ internal static class SearchRequests
         {
             const string collection = SearchIndexSchema.Entities;
             var filters = Constraints(query, collection);
+            if (query.Reading is ("selected_place" or "place_alias") && venueIds is { Count: > 0 })
+            {
+                filters.Add(Venues(venueIds));
+            }
             if (EntityKindFilter(query, scope) is { } kind)
             {
                 filters.Add(kind);
@@ -39,25 +46,236 @@ internal static class SearchRequests
 
         if (query.Terms.Length > 0 && scope is (SearchScope.All or SearchScope.Shows))
         {
-            requests.Add(Performance(query, typing, venueIds, page));
+            requests.Add(
+                Performance(query, typing, venueIds, page, titleOnly: scope == SearchScope.Shows)
+            );
         }
 
-        // All typeahead omits evidence. A selected evidence scope still searches it.
+        // Artist browsing and typeahead omit recording and review evidence.
+        // A selected evidence scope still searches it.
         var allEvidence =
-            scope == SearchScope.All && !typing && (query.Terms.Length > 0 || query.Matrix);
+            scope == SearchScope.All
+            && !typing
+            && includeAllEvidence
+            && (query.Terms.Length > 0 || query.Matrix);
         if (allEvidence || scope == SearchScope.Sources)
         {
             const string collection = SearchIndexSchema.Recordings;
-            requests.Add(Create(query, collection, Constraints(query, collection), page));
+            var filters = Constraints(query, collection);
+            if (query.Reading is ("selected_place" or "place_alias") && venueIds is { Count: > 0 })
+            {
+                filters.Add(Venues(venueIds));
+            }
+            var recordings = Create(query, collection, filters, page);
+            // All renders one show per matched recording group.
+            requests.Add(
+                scope == SearchScope.Sources
+                    ? recordings with
+                    {
+                        GroupBy = null,
+                        GroupLimit = null,
+                    }
+                    : recordings with
+                    {
+                        GroupLimit = 1,
+                    }
+            );
         }
 
-        if (allEvidence || scope == SearchScope.Reviews)
+        // Artist and date may narrow review search, but browsing a show does
+        // not establish that any of its reviews match the query.
+        if (query.Terms.Length > 0 && (allEvidence || scope == SearchScope.Reviews))
         {
             const string collection = SearchIndexSchema.Reviews;
-            requests.Add(Create(query, collection, Constraints(query, collection), page));
+            var filters = Constraints(query, collection);
+            var reviewVenues =
+                reviewVenueIds ?? (query.Reading == "selected_place" ? venueIds : null);
+            if (reviewVenues is { Count: > 0 })
+            {
+                // Cross-show mentions can displace the venue's own reviews.
+                // Filter before applying the result limit.
+                filters.Add(Venues(reviewVenues));
+            }
+
+            requests.Add(Create(query, collection, filters, page));
         }
 
         return requests;
+    }
+
+    public static SearchRequest PopularArtistShows(SearchQuery query, string artist) =>
+        PopularShows(query with { Terms = "", SelectedArtist = artist }, [], 6);
+
+    public static IEnumerable<SearchRequest> ReviewedSong(
+        SearchInput input,
+        SearchQuery query,
+        ReviewedSongReading reading
+    )
+    {
+        if (
+            input.Scope is (SearchScope.All or SearchScope.Songs)
+            && (!query.HasDate || reading.ReplacesYear)
+            && (reading.Venues.Count == 0 || input.Scope == SearchScope.Songs)
+        )
+        {
+            // For a named place, a performance answers where the song was
+            // played. A standalone song card cannot establish that match.
+            var ids = reading
+                .Targets.Select(song => song.EntityId)
+                .OfType<string>()
+                .Distinct()
+                .ToArray();
+            if (ids.Length > 0)
+            {
+                yield return Create(
+                    query with
+                    {
+                        Terms = "",
+                    },
+                    SearchIndexSchema.Entities,
+                    [$"kind:=song && id:=[{string.Join(',', ids.Select(Literal))}]"],
+                    input.Page
+                ) with
+                {
+                    Optional = true,
+                };
+            }
+        }
+
+        if (input.Scope is SearchScope.All or SearchScope.Shows)
+        {
+            var performance = reading.ReplacesYear ? query with { Year = null } : query;
+            var filters = Constraints(performance, SearchIndexSchema.Performances);
+            filters.Add(ReviewedPerformances(reading.Targets));
+            if (reading.Venues.Count > 0)
+            {
+                filters.Add(Venues(reading.Venues));
+            }
+            yield return Create(
+                performance with
+                {
+                    Terms = "",
+                },
+                SearchIndexSchema.Performances,
+                filters,
+                input.Page
+            ) with
+            {
+                SortBy = SortBy(performance, SearchIndexSchema.Performances),
+                PerPage = input.AddTracks && !input.Typing ? 40 : 15,
+                Optional = true,
+            };
+        }
+    }
+
+    private static string ReviewedPerformances(SearchReviewedNicknames.SongTarget[] targets)
+    {
+        var ids = targets
+            .Where(song => !song.MatchTrackTitle)
+            .Select(song => song.EntityId!)
+            .Distinct()
+            .ToArray();
+        var titles = targets
+            .Where(song => song.MatchTrackTitle)
+            .GroupBy(song => song.Title)
+            .Select(group =>
+                $"(name:={Literal(group.Key)} && artist_slug:=[{string.Join(',', group.Select(song => song.Artist).Distinct().Select(Literal))}])"
+            );
+        var matches =
+            ids.Length == 0
+                ? titles
+                : titles.Prepend($"song_id:=[{string.Join(',', ids.Select(Literal))}]");
+        return $"({string.Join(" || ", matches)})";
+    }
+
+    public static SearchRequest ShowsById(IReadOnlyCollection<string> showIds) =>
+        new(
+            SearchIndexSchema.Entities,
+            "*",
+            "name",
+            Fields,
+            "none",
+            "popularity:desc",
+            showIds.Count
+        )
+        {
+            FilterBy = $"kind:=show && id:=[{string.Join(',', showIds.Select(Literal))}]",
+            Optional = true,
+        };
+
+    public static SearchRequest PopularPlaceShows(
+        SearchQuery query,
+        IReadOnlyCollection<string> venues
+    ) => PopularShows(query with { Terms = "" }, venues, 8);
+
+    public static SearchRequest DatedShowsAtNamedVenue(SearchQuery query, string venue)
+    {
+        var filters = Constraints(query, SearchIndexSchema.Entities);
+        filters.Add("kind:=show");
+        // An imported show can use a different venue ID for the same indexed name.
+        filters.Add($"name:={Literal(venue)}");
+        return Create(query with { Terms = "" }, SearchIndexSchema.Entities, filters, 1) with
+        {
+            QueryBy = "name",
+            QueryByWeights = null,
+            Prefix = false,
+            NumTypos = 0,
+            PerPage = 8,
+            Optional = true,
+        };
+    }
+
+    public static SearchRequest? PopularRunShows(SearchQuery query, SearchVocabulary vocabulary)
+    {
+        foreach (var (artist, run, first, last) in SearchReviewedNamedShows.Runs)
+        {
+            if (query.Terms == run && (query.Artist == null || query.Artist == artist))
+            {
+                return PopularShows(
+                    query with
+                    {
+                        Terms = "",
+                        SelectedArtist = artist,
+                    },
+                    [],
+                    6,
+                    DateRange(first, last)
+                );
+            }
+        }
+
+        var tour = query.Tour ?? query.Terms;
+        return
+            (query.Tour == null || query.Terms.Length == 0) && vocabulary.TourNames.Contains(tour)
+            ? PopularShows(query with { Terms = "", Tour = tour }, [], 6)
+            : null;
+    }
+
+    private static SearchRequest PopularShows(
+        SearchQuery query,
+        IReadOnlyCollection<string> venues,
+        int limit,
+        string? runDates = null
+    )
+    {
+        const string collection = SearchIndexSchema.Entities;
+        var filters = Constraints(query, collection);
+        filters.Add("kind:=show");
+        if (venues.Count > 0)
+        {
+            filters.Add(Venues(venues));
+        }
+        if (runDates != null)
+        {
+            filters.Add(runDates);
+        }
+
+        return Create(query, collection, filters, page: 1) with
+        {
+            SortBy = "popularity:desc,date:desc",
+            PerPage = limit,
+            Optional = true,
+        };
     }
 
     public static SearchRequest? WidenEmptyPerformancePrefix(
@@ -93,13 +311,14 @@ internal static class SearchRequests
         SearchQuery query,
         bool typing,
         IReadOnlyCollection<string>? venueIds,
-        int page
+        int page,
+        bool titleOnly
     )
     {
         const string collection = SearchIndexSchema.Performances;
         var filters = Constraints(query, collection);
         var terms = query.Terms;
-        if (FindSongAlias(query) is { } alias)
+        if (query.Reading != "literal" && FindSongAlias(query) is { } alias)
         {
             // Whole terms only. A nickname can accompany a place or date.
             terms = Regex.Replace(terms, WholeTerm(alias.Alias), alias.Title);
@@ -118,6 +337,8 @@ internal static class SearchRequests
         {
             Q = terms,
             Prefix = exactLetter ? false : null,
+            QueryBy = titleOnly ? "name,aliases" : "name,aliases,artist,place,run",
+            QueryByWeights = titleOnly ? "12,10" : "12,10,3,4,4",
         };
     }
 
@@ -151,6 +372,164 @@ internal static class SearchRequests
         };
     }
 
+    public static PlaceSongMatch? ReadPlaceSong(
+        SearchInput input,
+        SearchQuery query,
+        SearchVocabulary vocabulary
+    )
+    {
+        if (
+            (input.Scope != SearchScope.Reviews && input is not { Scope: SearchScope.All, Page: 1 })
+            || input.Ignore?.Contains("venue") == true
+            || input.ReadingId == "literal"
+            || query.Order != "regular"
+            || query.Chronological
+            || query.Matrix
+            || query.Reading
+                is ("artist_identity" or "artist_name_prefix" or "verified_passage_with_place")
+        )
+        {
+            return null;
+        }
+
+        return vocabulary.ExactPlaceSong(query.Terms, query.Artist);
+    }
+
+    public static SearchRequest ExactPlaceSong(SearchQuery query, PlaceSongMatch match)
+    {
+        var filters = Constraints(query, SearchIndexSchema.Performances);
+        filters.Add($"song_id:=[{string.Join(',', match.SongIds.Select(Literal))}]");
+        filters.Add(Venues(match.VenueIds));
+        filters.Add("soundcheck:=false");
+        return new SearchRequest(
+            SearchIndexSchema.Performances,
+            "*",
+            "name",
+            Fields,
+            "none",
+            "track_plays:desc,popularity:desc",
+            3
+        )
+        {
+            FilterBy = JoinFilters(filters),
+            GroupBy = "show_id",
+            GroupLimit = 1,
+            Optional = true,
+        };
+    }
+
+    public static SearchRequest RelatedSongVersions(SearchQuery query, PlaceSongMatch match)
+    {
+        // Keep the direct show ahead of these versions. A few hits per artist
+        // give other bands' takes a chance to appear after the direct matches.
+        var related = query with
+        {
+            Terms = $"{match.Title} {match.Place}",
+            Year = null,
+            Month = null,
+            DayKey = null,
+        };
+        var filters = Constraints(related, SearchIndexSchema.Performances);
+        filters.Add("soundcheck:=false");
+        return Create(related, SearchIndexSchema.Performances, filters, page: 1) with
+        {
+            QueryBy = "name,aliases",
+            QueryByWeights = "12,10",
+            DropTokensThreshold = 8,
+            NumTypos = 0,
+            Prefix = false,
+            PerPage = 8,
+            GroupBy = "artist_slug",
+            GroupLimit = 2,
+            Optional = true,
+        };
+    }
+
+    public static SearchRequest SongAtRecordingShows(
+        SearchQuery query,
+        string songId,
+        IReadOnlyList<string> showIds
+    )
+    {
+        var filters = Constraints(query, SearchIndexSchema.Performances);
+        filters.Add($"song_id:={Literal(songId)}");
+        filters.Add($"show_id:=[{string.Join(',', showIds.Select(Literal))}]");
+        filters.Add("soundcheck:=false");
+        return new SearchRequest(
+            SearchIndexSchema.Performances,
+            "*",
+            "name",
+            Fields,
+            "none",
+            "track_plays:desc,popularity:desc",
+            showIds.Count
+        )
+        {
+            FilterBy = JoinFilters(filters),
+            GroupBy = "show_id",
+            GroupLimit = 1,
+            Optional = true,
+        };
+    }
+
+    public static SearchRequest? PopularExactSong(
+        SearchInput input,
+        SearchQuery query,
+        IReadOnlyCollection<string> venues,
+        SearchVocabulary vocabulary
+    )
+    {
+        if (
+            input is not { Scope: SearchScope.All, Page: 1 }
+            || query.Order != "regular"
+            || query.Chronological
+            || query.Matrix
+        )
+        {
+            return null;
+        }
+
+        var songs = vocabulary.ExactSongIds(query.Terms, query.Artist);
+        if (songs.Length == 0)
+        {
+            return null;
+        }
+        var focused =
+            songs.Length == 1
+            && (
+                query.Artist != null
+                || !vocabulary
+                    .Lookup(query.Terms, kind: "artist")
+                    .Any(candidate => candidate.CatalogQuality >= 3)
+            );
+
+        // Typesense text scores for the same song can differ by recording
+        // metadata. Search by song ID to give well-played versions a candidate slot.
+        var filters = Constraints(query, SearchIndexSchema.Performances);
+        filters.Add($"song_id:=[{string.Join(',', songs.Select(Literal))}]");
+        filters.Add("soundcheck:=false");
+        if (venues.Count > 0)
+        {
+            filters.Add(Venues(venues));
+        }
+
+        return new SearchRequest(
+            SearchIndexSchema.Performances,
+            "*",
+            "name",
+            Fields,
+            "none",
+            "track_plays:desc,popularity:desc",
+            focused ? (input.Typing ? 12 : 36) : (input.AddTracks && !input.Typing ? 16 : 4)
+        )
+        {
+            FilterBy = JoinFilters(filters),
+            GroupBy = "show_id",
+            GroupLimit = 1,
+            Optional = true,
+        };
+    }
+
     public static SearchRunFallback? NamedRun(
         SearchQuery query,
         IReadOnlyList<SearchRequest> plan,
@@ -173,7 +552,7 @@ internal static class SearchRequests
         }
 
         SearchRunFallback? candidate = null;
-        foreach (var (artist, run, start, end) in SearchVocabularyRules.Runs)
+        foreach (var (artist, run, start, end) in SearchReviewedNamedShows.Runs)
         {
             if (
                 (query.Artist != null && query.Artist != artist)
@@ -207,7 +586,7 @@ internal static class SearchRequests
             // Require both the run text and its dates before the ranker considers a correction.
             var request = performance with
             {
-                Q = wanted[^1] + " " + run,
+                Q = performance.QueryBy == "name,aliases" ? wanted[^1] : wanted[^1] + " " + run,
                 FilterBy = JoinFilters(filters),
                 NumTypos = 0,
                 Prefix = false,
@@ -258,23 +637,82 @@ internal static class SearchRequests
         for (var index = 0; index < plan.Count; index++)
         {
             var result = results[index];
-            var collection = plan[index].Collection;
+            var request = plan[index];
+            var collection = request.Collection;
             if (result.TryGetProperty("code", out var code))
             {
+                ThrowIfCollectionMissing(result);
+
+                if (request.Optional || code.GetInt32() == 404)
+                {
+                    replies[index] = new SearchReply(collection, 0, [], Rejected: true);
+                    continue;
+                }
+
                 throw new InvalidDataException(
                     $"Typesense search of {collection} failed with code {code}: {result.GetProperty("error").GetString()}"
                 );
             }
 
-            var documents = SearchHits(result).Select(hit => DecodeHit(hit, collection)).ToArray();
+            var documents = SearchHits(result)
+                .Select(hit => DecodeHit(hit, request))
+                .OfType<SearchDocument>()
+                .ToArray();
             replies[index] = new SearchReply(
                 collection,
                 result.GetProperty("found").GetInt32(),
-                documents
+                documents,
+                FoundDocuments: result.TryGetProperty("found_docs", out var foundDocs)
+                    ? foundDocs.GetInt32()
+                    : null,
+                KindCounts: ReadKindFacets(result)
             );
         }
 
         return replies;
+    }
+
+    private static Dictionary<string, int>? ReadKindFacets(JsonElement result)
+    {
+        if (!result.TryGetProperty("facet_counts", out var facets))
+        {
+            return null;
+        }
+
+        foreach (var facet in facets.EnumerateArray())
+        {
+            if (facet.GetProperty("field_name").GetString() == "kind")
+            {
+                return facet
+                    .GetProperty("counts")
+                    .EnumerateArray()
+                    .ToDictionary(
+                        count => count.GetProperty("value").GetString()!,
+                        count => count.GetProperty("count").GetInt32()
+                    );
+            }
+        }
+        return null;
+    }
+
+    internal static void ThrowIfCollectionMissing(JsonElement result)
+    {
+        if (
+            result.ValueKind == JsonValueKind.Object
+            && result.TryGetProperty("code", out var code)
+            && code.ValueKind == JsonValueKind.Number
+            && code.GetInt32() == 404
+            && result.TryGetProperty("error", out var message)
+            && message.ValueKind == JsonValueKind.String
+            && string.Equals(
+                message.GetString(),
+                "Collection not found",
+                StringComparison.OrdinalIgnoreCase
+            )
+        )
+        {
+            throw new SearchCollectionMissingException();
+        }
     }
 
     private static IEnumerable<JsonElement> SearchHits(JsonElement result)
@@ -298,11 +736,20 @@ internal static class SearchRequests
         }
     }
 
-    private static SearchDocument DecodeHit(JsonElement hit, string collection)
+    private static SearchDocument? DecodeHit(JsonElement hit, SearchRequest request)
     {
+        var collection = request.Collection;
+        var indexed = hit.GetProperty("document");
         var document =
-            hit.GetProperty("document").Deserialize<SearchDocument>(TypesenseClient.Json)
+            indexed.Deserialize<SearchDocument>(TypesenseClient.Json)
             ?? throw new InvalidDataException("Typesense returned an empty search document.");
+        var reviewText =
+            collection == SearchIndexSchema.Reviews ? ReviewText(indexed, document) : null;
+        if (collection == SearchIndexSchema.Reviews && reviewText == null)
+        {
+            return null;
+        }
+
         var highlights = new Dictionary<string, string>(StringComparer.Ordinal);
         if (hit.TryGetProperty("highlights", out var values))
         {
@@ -320,8 +767,43 @@ internal static class SearchRequests
         {
             Collection = collection,
             Score = hit.TryGetProperty("text_match", out var score) ? score.GetInt64() : 0,
+            TextMatch =
+                request.Q != "*"
+                && request.NumTypos != 0
+                && hit.TryGetProperty("text_match_info", out var match)
+                    ? match.Deserialize<SearchTextMatch>(TypesenseClient.Json)
+                    : null,
             Highlights = highlights,
+            // A legacy title-only review may match name and have no body highlight.
+            // The preview is for display and does not contribute ranking evidence.
+            ReviewExcerpt =
+                reviewText != null
+                && string.IsNullOrWhiteSpace(highlights.GetValueOrDefault("review_text"))
+                    ? ReviewExcerpt(reviewText)
+                    : null,
         };
+    }
+
+    private static string? ReviewText(JsonElement indexed, SearchDocument document)
+    {
+        var text = indexed.TryGetProperty("review_text", out var value) ? value.GetString() : null;
+        return new[] { text, document.Label, document.Name }.FirstOrDefault(part =>
+            !string.IsNullOrWhiteSpace(part)
+        );
+    }
+
+    private static string ReviewExcerpt(string text)
+    {
+        text = text.Trim();
+        if (text.Length <= ReviewExcerptLength)
+        {
+            return text;
+        }
+
+        var end = char.IsHighSurrogate(text[ReviewExcerptLength - 1])
+            ? ReviewExcerptLength - 1
+            : ReviewExcerptLength;
+        return text[..end].TrimEnd() + "…";
     }
 
     private static SearchRequest Create(
@@ -343,13 +825,7 @@ internal static class SearchRequests
                 12,
                 true
             ),
-            SearchIndexSchema.Reviews => (
-                "name,review_text,artist,place,run",
-                "8,3,3,4,2",
-                "review_text",
-                12,
-                true
-            ),
+            SearchIndexSchema.Reviews => ("name,review_text", "8,3", "review_text", 12, true),
             SearchIndexSchema.Performances => (
                 "name,aliases,artist,place,run",
                 "12,10,3,4,4",
@@ -366,7 +842,7 @@ internal static class SearchRequests
             collection,
             query.Terms.Length == 0 ? "*" : query.Terms,
             fields,
-            Fields,
+            collection == SearchIndexSchema.Reviews ? Fields + ",review_text" : Fields,
             highlights,
             SortBy(query, collection),
             size
@@ -394,9 +870,14 @@ internal static class SearchRequests
             SearchScope.Artists => "kind:=artist",
             SearchScope.Songs => "kind:=song",
             SearchScope.Venues => "kind:=venue",
-            SearchScope.All or SearchScope.Shows when query.Terms.Length == 0 && query.HasDate =>
+            SearchScope.All
+            or SearchScope.Shows
+                when query.Terms.Length == 0
+                    && (query.HasDate || query.Reading is ("selected_place" or "place_alias")) =>
                 "kind:=show",
             SearchScope.Shows => "kind:=[show,tour]",
+            // Track resources for marked passages are fetched by ID only.
+            SearchScope.All => "kind:!=passage_track",
             _ => null,
         };
 
@@ -500,7 +981,7 @@ internal static class SearchRequests
     private static (string Artist, string Alias, string Title)? FindSongAlias(SearchQuery query)
     {
         (string Artist, string Alias, string Title)? result = null;
-        foreach (var alias in SearchVocabularyRules.SongAliases)
+        foreach (var alias in SearchReviewedNicknames.CompoundSongAliases)
         {
             if (
                 (query.Artist != null && query.Artist != alias.Artist)
@@ -529,6 +1010,9 @@ internal static class SearchRequests
 
     private static string Literal(string value) => "`" + value + "`";
 
+    internal static string Names(IEnumerable<string> names) =>
+        $"name:=[{string.Join(',', names.Order(StringComparer.Ordinal).Select(Literal))}]";
+
     private static string Venues(IEnumerable<string> ids) =>
         $"venue_id:=[{string.Join(',', ids.Order(StringComparer.Ordinal).Select(Literal))}]";
 
@@ -539,7 +1023,10 @@ internal static class SearchRequests
 internal sealed record SearchReply(
     string Collection,
     int Found,
-    IReadOnlyList<SearchDocument> Documents
+    IReadOnlyList<SearchDocument> Documents,
+    bool Rejected = false,
+    int? FoundDocuments = null,
+    Dictionary<string, int>? KindCounts = null
 );
 
 internal sealed record SearchRunFallback(SearchRequest Request, string Run, string[] Wanted);
@@ -554,6 +1041,9 @@ internal sealed record SearchRequest(
     int PerPage
 )
 {
+    [JsonIgnore]
+    public bool Optional { get; init; }
+
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? QueryByWeights { get; init; }
 
@@ -590,6 +1080,9 @@ internal sealed record SearchRequest(
     public int? GroupLimit { get; init; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? GroupMaxCandidates { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? FilterBy { get; init; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -597,4 +1090,15 @@ internal sealed record SearchRequest(
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? Page { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? Offset { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? Limit { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? FacetBy { get; init; }
 }
+
+internal sealed class SearchCollectionMissingException : Exception;

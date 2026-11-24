@@ -38,7 +38,12 @@ internal static class SearchIndexSchema
         new("artist_label", Index: false),
         new("venue_label", Index: false),
         new("city_label", Index: false),
+        new("location_label", Index: false),
+        new("ranking_signal", "float", Index: false),
+        new("popularity_percentile", "float", Index: false),
         new("tour_label", Index: false),
+        new("display", "object", Index: false),
+        new("display_popularity", "object", Index: false),
     ];
 
     private static readonly IReadOnlyDictionary<string, Field[]> Specific = new Dictionary<
@@ -46,7 +51,13 @@ internal static class SearchIndexSchema
         Field[]
     >
     {
-        [Entities] = [new("song_id", Facet: true)],
+        [Entities] =
+        [
+            new("song_id", Facet: true),
+            // A show's totals, returned for display only.
+            new("track_plays", "int64", Index: false),
+            new("avg_rating", "float", Index: false),
+        ],
         [Performances] =
         [
             new("song_id", Facet: true),
@@ -55,8 +66,10 @@ internal static class SearchIndexSchema
             new("longest", "float"),
             new("track_plays", "int64"),
             new("review_mentions", "int32"),
-            new("files", "object[]", Index: false),
             new("preview", "object", Index: false),
+            new("preview_track_id", Facet: true),
+            new("display_song_id", Index: false),
+            new("display_song_title", Index: false),
         ],
         [Recordings] =
         [
@@ -66,6 +79,10 @@ internal static class SearchIndexSchema
             new("soundboard", "bool", Facet: true),
             new("matrix", "bool", Facet: true),
             new("track_plays", "int64"),
+            new("avg_rating", "float", Index: false),
+            new("num_reviews", "int32", Index: false),
+            new("taper_label", Index: false),
+            new("transferrer_label", Index: false),
         ],
         [Reviews] =
         [

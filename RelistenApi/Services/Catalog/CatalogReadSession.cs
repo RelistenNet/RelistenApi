@@ -19,11 +19,25 @@ public sealed class CatalogReadSession : IAsyncDisposable
         "catalog.read.commands"
     );
 
-    private CatalogReadSession(NpgsqlConnection connection, NpgsqlTransaction transaction)
+    private readonly bool _ownsSnapshot;
+
+    private CatalogReadSession(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        bool ownsSnapshot = true
+    )
     {
         Connection = connection;
         Transaction = transaction;
+        _ownsSnapshot = ownsSnapshot;
     }
+
+    // Search's builder owns the longer snapshot. Catalog metadata readers can
+    // share it without opening another connection or disposing it.
+    internal static CatalogReadSession Borrow(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction
+    ) => new(connection, transaction, ownsSnapshot: false);
 
     public NpgsqlConnection Connection { get; }
     public NpgsqlTransaction Transaction { get; }
@@ -72,13 +86,18 @@ public sealed class CatalogReadSession : IAsyncDisposable
             sql,
             parameters,
             Transaction,
-            commandTimeout: 30,
+            commandTimeout: _ownsSnapshot ? 30 : 600,
             cancellationToken: cancellationToken
         );
     }
 
     public async ValueTask DisposeAsync()
     {
+        if (!_ownsSnapshot)
+        {
+            return;
+        }
+
         try
         {
             await Transaction.DisposeAsync();

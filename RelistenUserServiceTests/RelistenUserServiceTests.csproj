@@ -19,6 +19,7 @@
     <ProjectReference Include="../RelistenIngestionWorker/RelistenIngestionWorker.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <None Update="Fixtures/catalog-search-artist.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures/pre-typed-accounts.sql" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures/playlists/ranks.json" CopyToOutputDirectory="PreserveNewest" />
     <None

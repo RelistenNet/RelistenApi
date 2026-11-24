@@ -1,12 +1,14 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.WebUtilities;
 using Relisten.Accounts.Contracts.Search;
+using Relisten.Search;
 
 namespace RelistenUserService.Search;
 
 internal sealed class PlaylistSearchCandidates(HttpClient client, IConfiguration configuration)
 {
     internal const int PageSize = 20;
+    internal const int AllPageSize = 20;
 
     public async Task<PlaylistCandidate[]> Find(
         MergedSearchRequest request,
@@ -41,13 +43,14 @@ internal sealed class PlaylistSearchCandidates(HttpClient client, IConfiguration
                 ["text_match_type"] = "max_weight",
                 ["drop_tokens_threshold"] = "0",
                 ["filter_by"] = filter,
-                ["include_fields"] = "id,history_generation,revision,published,archived,taken_down",
-                ["highlight_fields"] = "none",
+                ["include_fields"] =
+                    "id,history_generation,revision,published,archived,taken_down,popularity_percentile",
+                ["highlight_fields"] = "description,curator,entry_notes,guide_text,artists,songs",
                 ["sort_by"] = "_text_match:desc,follow_count:desc,updated_at:desc",
                 ["page"] = request.Page.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                ["per_page"] = request.Scope.Equals("all", StringComparison.OrdinalIgnoreCase)
-                    ? "6"
-                    : "20",
+                ["per_page"] = (request.IsAll ? AllPageSize : PageSize).ToString(
+                    System.Globalization.CultureInfo.InvariantCulture
+                ),
             }
         );
         var result = await client.GetFromJsonAsync<PlaylistHits>(path, Json, cancellationToken);
@@ -56,12 +59,55 @@ internal sealed class PlaylistSearchCandidates(HttpClient client, IConfiguration
             throw new JsonException("Typesense returned no playlist hits property.");
         }
 
-        return result.Hits.Select(hit => hit.Document).OfType<PlaylistCandidate>().ToArray();
+        return result
+            .Hits.Where(hit => hit.Document != null)
+            .Select(hit =>
+                hit.Document! with
+                {
+                    SupportingMatch = SupportingMatch(query, hit.Highlights ?? [])
+                        .WithTypoCoverage(query == "*" ? null : hit.TextMatchInfo, weight: .45),
+                }
+            )
+            .ToArray();
+    }
+
+    private static MatchEvidence SupportingMatch(string query, PlaylistHighlight[] highlights)
+    {
+        var fields = highlights
+            .Where(highlight =>
+                highlight.Field
+                    is "description"
+                        or "curator"
+                        or "entry_notes"
+                        or "guide_text"
+                        or "artists"
+                        or "songs"
+            )
+            .Select(highlight =>
+                (
+                    highlight.Field,
+                    (string?)
+                        string.Join(
+                            ' ',
+                            highlight.Snippets
+                                ?? (highlight.Snippet == null ? [] : [highlight.Snippet])
+                        ),
+                    highlight.Field == "description" ? .45 : .32
+                )
+            )
+            .ToArray();
+        return MatchEvidence.Read(query, fields);
     }
 
     private sealed record PlaylistHits(PlaylistHit[]? Hits);
 
-    private sealed record PlaylistHit(PlaylistCandidate? Document);
+    private sealed record PlaylistHit(
+        PlaylistCandidate? Document,
+        PlaylistHighlight[]? Highlights,
+        SearchTextMatch? TextMatchInfo
+    );
+
+    private sealed record PlaylistHighlight(string Field, string? Snippet, string[]? Snippets);
 
     private static readonly JsonSerializerOptions Json = new()
     {
@@ -75,5 +121,7 @@ internal sealed record PlaylistCandidate(
     long Revision,
     bool Published,
     bool Archived,
-    bool TakenDown
+    bool TakenDown,
+    double PopularityPercentile = 0,
+    MatchEvidence? SupportingMatch = null
 );

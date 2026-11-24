@@ -26,6 +26,9 @@ internal sealed class CatalogJsonResult(object resource, bool cacheable = true) 
         DateTimeZoneHandling = DateTimeZoneHandling.Utc,
     };
 
+    internal static string Serialize(object resource) =>
+        JsonConvert.SerializeObject(resource, Settings);
+
     public async Task ExecuteResultAsync(ActionContext context)
     {
         // Buffer UTF-8 once: the validator and body must cover the same bytes.

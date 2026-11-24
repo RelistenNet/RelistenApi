@@ -12,7 +12,7 @@ namespace Relisten.Catalog;
 /// Artists use global scores; years use their artist's population, like ordinary shows.
 /// Missing or inactive scores remain null. Refreshes use the existing stale-read queue.
 /// </summary>
-public sealed class CatalogPopularityMetadataReader(PopularityRefreshRequest refresh)
+public sealed class CatalogPopularityMetadataReader(PopularityRefreshRequest? refresh = null)
 {
     public async Task ApplyArtists(
         CatalogReadSession session,
@@ -25,7 +25,7 @@ public sealed class CatalogPopularityMetadataReader(PopularityRefreshRequest ref
             return;
         }
 
-        refresh.Require(PopularityPopulationKind.Artist);
+        refresh?.Require(PopularityPopulationKind.Artist);
         var rows = await session.Connection.QueryAsync<StoredPopularity>(
             session.Command(
                 $"SELECT {StoredPopularity.ReadColumns} FROM artist_popularity p WHERE p.uuid=ANY(@ids) AND {StoredPopularity.MetadataFilter}",
@@ -53,7 +53,7 @@ public sealed class CatalogPopularityMetadataReader(PopularityRefreshRequest ref
 
         foreach (var artist in years.Select(year => year.artist_uuid).Distinct())
         {
-            refresh.Require(PopularityPopulationKind.Year, artist);
+            refresh?.Require(PopularityPopulationKind.Year, artist);
         }
         var rows = await session.Connection.QueryAsync<StoredPopularity>(
             session.Command(

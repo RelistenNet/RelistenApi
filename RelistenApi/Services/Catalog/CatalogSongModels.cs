@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Relisten.Api.Models.Api.V4;
 
 namespace Relisten.Catalog;
 
@@ -55,6 +56,7 @@ public sealed record CatalogSongWithShows(
 public sealed record CatalogSongShow(
     CatalogShow Show,
     CatalogSongShowStatistics Statistics,
+    PopularityResource? SongPopularity,
     IReadOnlyList<CatalogSongShowTrack>? Tracks
 );
 

@@ -48,6 +48,11 @@
       Include="Fixtures/v4/graphql/persisted/Live/*.graphql"
       LogicalName="Relisten.GraphQL.Operations.Live.%(Filename)%(Extension)"
     />
+    <None
+      Include="../RelistenUserServiceTests/Fixtures/catalog-search-artist.json"
+      Link="Fixtures/catalog-search-artist.json"
+      CopyToOutputDirectory="PreserveNewest"
+    />
     <Content Include="Fixtures\**\*.*">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>

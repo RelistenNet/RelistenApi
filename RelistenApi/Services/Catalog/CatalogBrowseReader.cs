@@ -35,7 +35,7 @@ public sealed class CatalogBrowseReader(
                 )
             )
         ).ToList();
-        await ReadArtistMetadata(session, artists, cancellationToken);
+        await ReadArtistMetadata(session, artists, popularity, cancellationToken);
         return artists;
     }
 
@@ -54,15 +54,22 @@ public sealed class CatalogBrowseReader(
         );
         if (artist is not null)
         {
-            await ReadArtistMetadata(session, [artist], cancellationToken);
+            await ReadArtistMetadata(session, [artist], popularity, cancellationToken);
         }
         return artist;
     }
 
     /// <summary>Hydrates only explicitly requested resolver artists, within the caller's snapshot.</summary>
-    internal async Task<IReadOnlyList<CatalogArtist>> ReadArtists(
+    internal Task<IReadOnlyList<CatalogArtist>> ReadArtists(
         CatalogReadSession session,
         IReadOnlyList<Guid> artistUuids,
+        CancellationToken cancellationToken
+    ) => ReadArtists(session, artistUuids, popularity, cancellationToken);
+
+    internal static async Task<IReadOnlyList<CatalogArtist>> ReadArtists(
+        CatalogReadSession session,
+        IReadOnlyList<Guid> artistUuids,
+        CatalogPopularityMetadataReader popularity,
         CancellationToken cancellationToken
     )
     {
@@ -75,7 +82,7 @@ public sealed class CatalogBrowseReader(
                 )
             )
         ).ToArray();
-        await ReadArtistMetadata(session, artists, cancellationToken);
+        await ReadArtistMetadata(session, artists, popularity, cancellationToken);
         return artists;
     }
 
@@ -215,9 +222,10 @@ public sealed class CatalogBrowseReader(
             )
         );
 
-    private async Task ReadArtistMetadata(
+    private static async Task ReadArtistMetadata(
         CatalogReadSession session,
         IReadOnlyList<CatalogArtist> artists,
+        CatalogPopularityMetadataReader popularity,
         CancellationToken cancellationToken
     )
     {

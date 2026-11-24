@@ -154,7 +154,7 @@ retry can create a copy only if the restored source is public.
 
 ### Public listing rollout
 
-Deploy the catalog API first. Its migration 24 adds
+Deploy the catalog API first. Its migration 26 adds
 `source_track_plays.playlist_id` with a five-second lock timeout and creates
 the daily playlist aggregate with no data. The User Service's play upload
 writes that column, so it fails until the migration has run.
@@ -191,19 +191,52 @@ before running either search backend. An unavailable session store returns
 HTTP 503. The User Service requires a search-only Typesense key in
 `Search__Typesense__SearchKey` outside Development. The worker uses its separate indexing credential.
 
-The default `scope=all` returns the ranked catalog response under `catalog`
-and an additional `playlists` section. Render the catalog's `top` before the
-playlist section. Use `scope=playlists&page=1` for a playlist-only page. The
-response includes `playlist_next_page` when the page is full or the service finds
-more visible matches after a short page. An edit or visibility change can
-shorten a page until the index catches up. Cards show the curator's current
-username. A previous username can still match until the playlist is reindexed.
+Render `results` in response order. Each row has a `kind`, a stable
+`key` and the corresponding v4 resources. Store the envelope's `request_id`
+with the page and derive the one-based position from the row's index. An exact
+owned or followed playlist title can lead Explore before indexing. A playlist
+row has a nested `playlist` card with its current name and curator.
 
-`catalog_availability` and `playlist_availability` are independent. A value of
-`unavailable` calls for an unavailable state even when the other half returned
-results. A scope that omits one half sets its availability to `not_requested`.
-The request accepts the catalog search parameters, including `typing` and
-`request_id`. `artist_id` also scopes playlists by the artists of their tracks.
+A performance includes the song and show identity when there is a catalog song,
+and the exact `preview_track` in every case. Open its source setlist focused on
+that track. Resolve that same track ID through the catalog before adding it.
+When that file contains multiple songs, the performance appears once and
+`songs` lists the songs in file order. The `performance` summary names the
+matched song if known and the file's first song otherwise.
+A show row with a `source` opens that recording. Without it, use the listener's
+source preferences. A `sequence` includes a `passage` with its chosen
+`source_id`, the ordered files, and the song and track ID for each part.
+
+The row's `popularity` uses the v4 listening windows, including `windows["1y"]`.
+It describes the row itself: starts across the show for a show row, on the song's
+files at one show for a performance, and on the selected source for a recording.
+Reviews include the v4 review and the source it describes. A review requires a
+title or body match.
+
+`counts` gives exact totals for the corresponding scope tabs.
+`count_lower_bounds` gives minimum totals when the searches already used to
+build the page cannot establish an exact count. A lower bound of zero means
+the response cannot establish whether that tab has any matches.
+`readings.applied.chips` describe constraints enforced on the results.
+`readings.alternatives` includes inferred interpretations that can be selected
+to narrow the search. Send
+`reading_id` with the original text when the listener chooses one and clear it
+when the text changes.
+
+Scoped results include `next_page` while the index has more matches.
+Visibility checks can leave a page short or empty. Explore All returns one page
+of up to 24 rows, or up to 48 for a focused song. `more_scopes` identifies
+additional versions or recordings. Add Tracks searches the catalog and returns
+up to 48 rows in All, with playable versions first unless a stronger exact
+match has a drill-in.
+
+`availability.catalog` and `availability.playlists` are independent. If
+one is `unavailable`, display the available results with a retry or offline
+fallback. Playlist availability can be `partial` when one of the indexed
+or exact library searches fails. A scope that omits one half sets its
+availability to `not_requested`. An explicit `artist_id` also filters
+playlists by the artists on their tracks.
 
 MCP `find` uses the same search. A valid `library.read` grant adds the listener's
-own playlists to its results.
+own playlists to its results. The `sequences` array includes the titles and
+recording targets of matched passages.

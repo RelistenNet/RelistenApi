@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.Extensions.Configuration;
+using Relisten.Search;
 
 namespace Relisten.Controllers.V4;
 
@@ -34,7 +35,7 @@ public sealed class ReviewSearchRateLimit : IAsyncResourceFilter, IDisposable
 
     public ReviewSearchRateLimit(IConfiguration configuration)
     {
-        if (configuration["MCP_REVIEW_SEARCH_KEY"] is { Length: >= 32 } key)
+        if (configuration[CatalogSearchExchange.KeySetting] is { Length: >= 32 } key)
         {
             serviceKey = Hash(key);
         }

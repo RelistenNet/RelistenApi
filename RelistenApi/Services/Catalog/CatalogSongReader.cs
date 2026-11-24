@@ -4,6 +4,8 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
+using Relisten.Api.Models.Api.V4;
+using Relisten.Services.Popularity;
 
 namespace Relisten.Catalog;
 
@@ -149,6 +151,12 @@ public sealed class CatalogSongReader(
             new { uuids = statistics.Keys.ToArray() },
             cancellationToken
         );
+        var plays = await PopularityStore.ReadSongPerformanceMetrics(
+            session.Connection,
+            song.id,
+            session.Transaction,
+            cancellationToken
+        );
         var files =
             tracks == CatalogSongShowTracks.None
                 ? null
@@ -167,6 +175,9 @@ public sealed class CatalogSongReader(
                 .Select(show => new CatalogSongShow(
                     show,
                     statistics[show.uuid],
+                    plays.TryGetValue(show.uuid, out var popularity)
+                        ? V4CatalogProjection.ProjectPopularity(popularity)
+                        : null,
                     files?[show.uuid].ToArray()
                 ))
                 .ToArray()
@@ -320,10 +331,18 @@ public sealed class CatalogSongReader(
         CancellationToken cancellationToken
     ) => ReadSongDetails(session, null, ids.ToArray(), cancellationToken);
 
-    private async Task<IReadOnlyList<CatalogSongDetail>> ReadSongDetails(
+    private Task<IReadOnlyList<CatalogSongDetail>> ReadSongDetails(
         CatalogReadSession session,
         Guid? artistUuid,
         string[]? ids,
+        CancellationToken cancellationToken
+    ) => ReadSongDetails(session, artistUuid, ids, matches, cancellationToken);
+
+    internal static async Task<IReadOnlyList<CatalogSongDetail>> ReadSongDetails(
+        CatalogReadSession session,
+        Guid? artistUuid,
+        string[]? ids,
+        CatalogSongMatchReader matches,
         CancellationToken cancellationToken
     )
     {

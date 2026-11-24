@@ -1,9 +1,9 @@
 using System.ComponentModel;
-using System.Globalization;
 using System.Text.Json;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 using Relisten.Identifiers;
+using Relisten.Search;
 using RelistenUserService.Authentication;
 using RelistenUserService.Search;
 using static RelistenUserService.Mcp.CatalogToolResponse;
@@ -21,7 +21,7 @@ internal sealed class CatalogBrowseTools(
     [McpServerTool(Name = "find", ReadOnly = true, OpenWorld = false)]
     [McpMeta("securitySchemes", JsonValue = McpSecuritySchemes.NoAuthOrLibraryRead)]
     [Description(
-        "Find artists, shows, songs, venues, tours or playlists by text. Connect with library.read to include your private playlists."
+        "Find artists, shows, songs, song sequences, venues, tours or playlists by text. Connect with library.read to include your private playlists."
     )]
     public Task<CallToolResult> Find(
         string text,
@@ -46,110 +46,134 @@ internal sealed class CatalogBrowseTools(
                 token => authorization.OptionalViewerAsync(RelistenScopes.LibraryRead, token),
                 cancellationToken
             );
-            if (
-                result.CatalogAvailability == "unavailable"
-                && result.PlaylistAvailability == "unavailable"
-            )
+            if (result.Availability is { Catalog: "unavailable", Playlists: "unavailable" })
             {
                 throw new McpCatalogException(
                     "Relisten's catalog search is temporarily unavailable. Playlist search is also unavailable."
                 );
             }
 
-            var sections = result.Catalog is { } body ? Object(body, "sections") : null;
-            IEnumerable<JsonElement> SearchRows(string kind) =>
-                sections is { } group ? Rows(group, kind) : [];
-            var showsAndTours = SearchRows("shows");
             return new
             {
-                catalog_availability = result.CatalogAvailability,
-                playlist_availability = result.PlaylistAvailability,
-                playlists = result.Playlists.Select(item => new
-                {
-                    id = item.Id,
-                    untrusted_listener_text = new
-                    {
-                        name = item.Label,
-                        item.Description,
-                        item.Curator,
-                    },
-                    notice = McpResults.UntrustedTextNotice,
-                    track_count = item.TrackCount,
-                    owned = item.Owned,
-                    public_code = item.PublicCode,
-                }),
-                artists = SearchRows("artists")
-                    .Take(8)
+                catalog_availability = result.Availability.Catalog,
+                playlist_availability = result.Availability.Playlists,
+                playlists = result
+                    .Results.OfType<PlaylistSearchResult>()
                     .Select(item => new
                     {
-                        id = String(item, "id"),
-                        name = String(item, "label"),
-                        slug = String(item, "artist_slug"),
-                    }),
-                // All search can lead a show with one of its performances.
-                shows = showsAndTours
-                    .Where(item => String(item, "kind") == "show")
-                    .Concat(SearchRows("performances"))
-                    .Select(item =>
-                    {
-                        var date = SearchDate(item);
-                        return new
+                        id = item.Playlist.Id,
+                        untrusted_listener_text = new
                         {
-                            id = String(item, "kind") == "performance"
-                                ? String(item, "show_id")
-                                : String(item, "id"),
-                            date,
-                            display_date = date,
-                            artist_id = String(item, "artist_id"),
-                            artist = String(item, "artist_label"),
-                            venue_id = String(item, "venue_id"),
-                            venue = String(item, "venue_label"),
-                        };
-                    })
-                    .DistinctBy(show => show.id)
-                    .Take(8),
-                songs = SearchRows("songs")
-                    .Take(8)
-                    .Select(item => new
-                    {
-                        id = String(item, "id"),
-                        name = String(item, "label"),
-                        artist_id = String(item, "artist_id"),
-                        artist = String(item, "artist_label"),
+                            name = item.Playlist.Name,
+                            item.Playlist.Description,
+                            item.Playlist.Curator,
+                        },
+                        notice = McpResults.UntrustedTextNotice,
+                        track_count = item.Playlist.TrackCount,
+                        owned = item.Playlist.Owned,
+                        public_code = item.Playlist.PublicCode,
                     }),
-                venues = SearchRows("venues")
+                artists = result
+                    .Results.OfType<ArtistSearchResult>()
                     .Take(8)
                     .Select(item => new
                     {
-                        id = String(item, "id"),
-                        name = String(item, "label"),
-                        venue_id = String(item, "venue_id"),
-                        city = String(item, "city_label"),
+                        id = Field(item.Artist, "id"),
+                        name = Field(item.Artist, "name"),
+                        slug = Field(item.Artist, "slug"),
                     }),
-                tours = showsAndTours
-                    .Where(item => String(item, "kind") == "tour")
+                shows = result
+                    .Results.Select<SearchResult, (JsonElement Artist, JsonElement Show)?>(item =>
+                        item switch
+                        {
+                            ShowSearchResult show => (show.Artist, show.Show),
+                            PerformanceSearchResult performance => (
+                                performance.Artist,
+                                performance.Show
+                            ),
+                            _ => null,
+                        }
+                    )
+                    .OfType<(JsonElement Artist, JsonElement Show)>()
+                    .DistinctBy(item => Field(item.Show, "id"))
                     .Take(8)
                     .Select(item => new
                     {
-                        id = String(item, "id"),
-                        name = String(item, "label"),
-                        artist_id = String(item, "artist_id"),
+                        id = Field(item.Show, "id"),
+                        date = ShowDate(item.Show),
+                        display_date = Field(item.Show, "display_date"),
+                        artist_id = Field(item.Artist, "id"),
+                        artist = Field(item.Artist, "name"),
+                        venue_id = Field(ShowVenue(item.Show), "id"),
+                        venue = Field(ShowVenue(item.Show), "name"),
+                    }),
+                songs = result
+                    .Results.OfType<SongSearchResult>()
+                    .Take(8)
+                    .Select(item => new
+                    {
+                        id = Field(item.Song, "id"),
+                        name = Field(item.Song, "name"),
+                        artist_id = Field(item.Artist, "id"),
+                        artist = Field(item.Artist, "name"),
+                    }),
+                sequences = result
+                    .Results.OfType<PassageSearchResult>()
+                    .Select(item => new
+                    {
+                        label = string.Join(
+                            " → ",
+                            item.Passage.Parts.Select(part => Field(part.Song, "name"))
+                        ),
+                        song_ids = item.Passage.Parts.Select(part => Field(part.Song, "id")),
+                        song_titles = item.Passage.Parts.Select(part => Field(part.Song, "name")),
+                        artist_slug = Field(item.Artist, "slug"),
+                        show_id = Field(item.Show, "id"),
+                        source_id = item.Passage.SourceId,
+                        track_ids = item.Passage.Tracks.Select(track => Field(track, "id")),
+                        item.Popularity,
+                        item.Passage.Parts,
+                        date = ShowDate(item.Show),
+                        venue = Field(ShowVenue(item.Show), "name"),
+                    }),
+                venues = result
+                    .Results.OfType<VenueSearchResult>()
+                    .Take(8)
+                    .Select(item => new
+                    {
+                        id = Field(item.Venue, "id"),
+                        name = Field(item.Venue, "name"),
+                        venue_id = Field(item.Venue, "id"),
+                        city = Field(item.Venue, "city"),
+                    }),
+                tours = result
+                    .Results.OfType<TourSearchResult>()
+                    .Take(8)
+                    .Select(item => new
+                    {
+                        id = Field(item.Tour, "id"),
+                        name = Field(item.Tour, "name"),
+                        artist_id = Field(item.Artist, "id"),
                     }),
             };
         });
 
-    private static string? SearchDate(JsonElement show) =>
-        show.TryGetProperty("date", out var value)
-        && value.ValueKind == JsonValueKind.Number
-        && value.TryGetInt32(out var date)
-        && DateOnly.TryParseExact(
-            date.ToString("D8", CultureInfo.InvariantCulture),
-            "yyyyMMdd",
-            CultureInfo.InvariantCulture,
-            DateTimeStyles.None,
-            out var parsed
-        )
-            ? parsed.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+    private static string? ShowDate(JsonElement show) =>
+        Field(show, "date") is { Length: >= 10 } date ? date[..10] : null;
+
+    private static JsonElement ShowVenue(JsonElement show) =>
+        show.TryGetProperty("artist_venue", out var artistVenue)
+        && artistVenue.ValueKind == JsonValueKind.Object
+        && artistVenue.TryGetProperty("venue", out var venue)
+            ? venue
+        : show.TryGetProperty("imported_venue", out var imported) ? imported
+        : default;
+
+    private static string? Field(JsonElement resource, string name) =>
+        resource.ValueKind == JsonValueKind.Object
+        && resource.TryGetProperty(name, out var value)
+        && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
             : null;
 
     [McpServerTool(Name = "browse", ReadOnly = true, OpenWorld = false)]

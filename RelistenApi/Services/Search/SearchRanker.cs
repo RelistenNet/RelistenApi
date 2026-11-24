@@ -58,6 +58,15 @@ internal static class SearchRanker
             kind: kind
         );
         if (
+            query is { VerifiedArtistPrefix: true, ReadingArtist: { } artist }
+            && input.Scope is (SearchScope.All or SearchScope.Artists)
+            && vocabulary.ArtistDocuments.TryGetValue(artist, out var artistDocument)
+        )
+        {
+            return [artistDocument, .. known.Where(document => document.Id != artistDocument.Id)];
+        }
+
+        if (
             known.FirstOrDefault() is not { Kind: "song", CatalogQuality: ExactTitleQuality } first
             || input.Scope is not (SearchScope.All or SearchScope.Songs)
         )
@@ -71,7 +80,10 @@ internal static class SearchRanker
             .Where(result =>
                 result.Kind == "song"
                 && result.CatalogQuality == ExactTitleQuality
-                && result.Name == first.Name
+                && (
+                    result.Name == first.Name
+                    || result.Name == SearchVocabulary.AlternateSongTitle(first.Name)
+                )
             )
             .ToArray();
         if (tied.Length < 2)
@@ -127,7 +139,9 @@ internal static class SearchRanker
         var ordered = query.Chronological
             ? distinct.OrderByDescending(result => result.Date)
             : distinct.AsEnumerable();
-        var prefix = page == 1 ? known.Where(result => InScope(result, scope)).ToArray() : [];
+        // Scoped rows come from one index stream. Prepending vocabulary hits
+        // would put the same result on page one and again at its index offset.
+        var prefix = page == 1 && scope == SearchScope.All ? known : [];
         var ids = prefix.Select(result => result.Id).ToHashSet(StringComparer.Ordinal);
         return prefix
             .Concat(ordered.Where(result => !ids.Contains(result.Id)))
@@ -135,19 +149,6 @@ internal static class SearchRanker
             .Select(LabelSoundcheck)
             .ToArray();
     }
-
-    public static bool InScope(SearchDocument result, SearchScope scope) =>
-        scope switch
-        {
-            SearchScope.All => true,
-            SearchScope.Artists => result.Kind == "artist",
-            SearchScope.Songs => result.Kind == "song",
-            SearchScope.Venues => result.Kind == "venue",
-            SearchScope.Shows => result.Kind is "show" or "tour" or "performance",
-            SearchScope.Sources => result.Kind == "recording",
-            SearchScope.Reviews => result.Kind == "review",
-            _ => false,
-        };
 
     public static IReadOnlyList<SearchDocument> PreferPlayedVenueMatch(
         SearchInput input,
@@ -201,8 +202,10 @@ internal static class SearchRanker
         SearchInput input,
         SearchQuery query,
         SearchDocument song
-    ) =>
-        input is { Scope: SearchScope.All, Page: 1, AddTracks: false }
+    ) => !input.AddTracks && IsUnscopedPlaceQuery(input, query) && song.Name == query.Terms;
+
+    private static bool IsUnscopedPlaceQuery(SearchInput input, SearchQuery query) =>
+        input is { Scope: SearchScope.All, Page: 1 }
         && query
             is {
                 Artist: null,
@@ -215,40 +218,76 @@ internal static class SearchRanker
                 Order: "regular"
             }
         && input.Ignore?.Contains("venue") != true
-        && song.Name == query.Terms
+        && input.ReadingId != "literal"
         && query.Terms.Contains(' ');
 
     private static bool NamesVenueAndSong(
         string terms,
         SearchDocument performance,
         SearchVocabulary vocabulary
+    ) =>
+        PlaceBesideTitle(terms, performance.Name) is { } place
+        && vocabulary.IsVenueAtPlace(place, performance.VenueId);
+
+    public static IReadOnlyList<SearchDocument> PreferPlaceAndSong(
+        SearchInput input,
+        SearchQuery query,
+        IReadOnlyList<SearchDocument> ranked,
+        SearchVocabulary vocabulary
     )
     {
-        var title = performance.Name;
-        if (title.Length == 0)
+        // Let the existing exact-title rule handle queries that also name an item verbatim.
+        if (
+            !IsUnscopedPlaceQuery(input, query)
+            || ranked.Count < 2
+            || ranked.Any(result => result.Name == query.Terms)
+        )
         {
-            return false;
+            return ranked;
         }
 
-        string place;
-        if (terms.EndsWith(" " + title, StringComparison.Ordinal))
-        {
-            place = terms[..^(title.Length + 1)];
-        }
-        else if (terms.StartsWith(title + " ", StringComparison.Ordinal))
-        {
-            place = terms[(title.Length + 1)..];
-        }
-        else
-        {
-            return false;
-        }
+        // "Denver Ghost" can name a performance in Denver or refer to words
+        // in a festival or track title. Prefer the exact title at the named
+        // place, then use comparable performance plays among those matches.
+        var performance = ranked
+            .Where(result =>
+                result is { Kind: "performance", Preview: not null, Soundcheck: false }
+                && PlaceBesideTitle(query.Terms, result.Name) is { } place
+                && (
+                    vocabulary.IsVenueAtPlace(place, result.VenueId)
+                    || (
+                        vocabulary.IsKnownPlace(place) && SearchText.Fold(result.CityLabel) == place
+                    )
+                )
+            )
+            .MaxBy(result => result.TrackPlays);
 
-        return vocabulary.Places(place).Contains(place)
-            && $" {performance.Place} ".Contains($" {place} ", StringComparison.Ordinal);
+        return performance == null || performance.Id == ranked[0].Id
+            ? ranked
+            : [performance, .. ranked.Where(result => result.Id != performance.Id)];
     }
 
-    public static IReadOnlyList<SearchDocument> AddTracksFirst(
+    private static string? PlaceBesideTitle(string terms, string title)
+    {
+        if (title.Length == 0)
+        {
+            return null;
+        }
+
+        if (terms.EndsWith(" " + title, StringComparison.Ordinal))
+        {
+            return terms[..^(title.Length + 1)];
+        }
+
+        if (terms.StartsWith(title + " ", StringComparison.Ordinal))
+        {
+            return terms[(title.Length + 1)..];
+        }
+
+        return null;
+    }
+
+    public static IReadOnlyList<SearchDocument> LeadWithPerformances(
         IReadOnlyList<SearchDocument> visible,
         IEnumerable<SearchDocument> playable,
         bool mixed
@@ -303,16 +342,23 @@ internal static class SearchRanker
         SearchQuery query,
         SearchVocabulary vocabulary,
         IReadOnlyList<SearchDocument> visible
+    ) =>
+        TourRoute(query, vocabulary, visible) is { } tour
+            ? [tour, .. visible.Take(VisibleLimit - 1)]
+            : visible;
+
+    public static bool CanSuggestTourRoute(SearchQuery query) =>
+        query is { Terms.Length: 0, Artist: not null, Country: not null, Year: not null };
+
+    public static SearchDocument? TourRoute(
+        SearchQuery query,
+        SearchVocabulary vocabulary,
+        IReadOnlyList<SearchDocument> visible
     )
     {
-        if (
-            query.Terms.Length != 0
-            || query.Artist == null
-            || query.Country == null
-            || query.Year == null
-        )
+        if (!CanSuggestTourRoute(query) || query.Artist is not { } artist)
         {
-            return visible;
+            return null;
         }
 
         var shows = visible.Where(result => result.Kind == "show").ToArray();
@@ -327,21 +373,17 @@ internal static class SearchRanker
         if (
             tours.Length != 1
             || venues.Count() < 3
-            || vocabulary.FindTour(query.Artist, tours[0]) is not { } tour
+            || vocabulary.FindTour(artist, tours[0]) is not { } tour
         )
         {
-            return visible;
+            return null;
         }
 
-        return
-        [
-            tour with
-            {
-                Country = query.Country,
-                BrowseReason = "one tour spans the matched venues",
-            },
-            .. visible.Take(VisibleLimit - 1),
-        ];
+        return tour with
+        {
+            Country = query.Country!,
+            BrowseReason = "one tour spans the matched venues",
+        };
     }
 
     private static HashSet<string> BoostedArtists(
@@ -413,7 +455,7 @@ internal static class SearchRanker
             );
     }
 
-    private static SearchDocument LabelSoundcheck(SearchDocument result) =>
+    internal static SearchDocument LabelSoundcheck(SearchDocument result) =>
         result is { Soundcheck: true, Preview.Soundcheck: true }
             ? result with
             {

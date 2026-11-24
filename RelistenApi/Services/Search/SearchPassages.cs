@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Dapper;
 using Npgsql;
 using Relisten.Identifiers;
+using Relisten.Services.Popularity;
 
 namespace Relisten.Search;
 
@@ -19,11 +20,16 @@ internal sealed record SearchPassage(
     int Date,
     string Venue,
     ImmutableArray<string> SongIds,
+    ImmutableArray<string> SongTitles,
     ImmutableArray<string> TrackIds,
-    ImmutableArray<SearchPassagePart> Parts
-)
+    ImmutableArray<SearchPassagePart> Parts,
+    long TrackPlays = 0,
+    double PopularityPercentile = 0
+) : ISearchRankItem
 {
     public string Kind => "sequence";
+    public string Label => string.Join(" → ", SongTitles);
+    public string Key => $"sequence:{ShowId}:{string.Join(':', SongIds)}";
 }
 
 internal sealed record SearchPassagePart(
@@ -37,8 +43,14 @@ internal sealed record SearchPassagePart(
 internal sealed class SearchPassages(ImmutableArray<SearchPassages.RuleMatches> rules)
 {
     public static readonly SearchPassages Empty = new([]);
+    private readonly Dictionary<double, double> _percentiles = CalculatePercentiles(rules);
 
-    public IReadOnlyList<SearchPassage> Find(SearchQuery query)
+    public IReadOnlyList<SearchPassage> Find(
+        SearchQuery query,
+        IReadOnlySet<string>? venues = null,
+        bool allowAliases = true,
+        int limit = 8
+    )
     {
         // A passage carries ordered files and place text. Country and recording
         // filters require typed attributes for the chosen source.
@@ -73,11 +85,16 @@ internal sealed class SearchPassages(ImmutableArray<SearchPassages.RuleMatches> 
             var remainder = paddedTerms
                 .Remove(position + 1, phrase.Length)
                 .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var place = string.Join(' ', remainder);
             foreach (var match in rule.Matches)
             {
                 if (
                     query.MatchesDate(match.Passage.Date)
-                    && remainder.All(match.PlaceWords.Contains)
+                    && (venues == null || venues.Contains(match.VenueId))
+                    && (
+                        remainder.All(match.PlaceWords.Contains)
+                        || (allowAliases && match.Aliases?.Contains(place) == true)
+                    )
                 )
                 {
                     matches.Add(match.Passage);
@@ -85,29 +102,82 @@ internal sealed class SearchPassages(ImmutableArray<SearchPassages.RuleMatches> 
             }
         }
 
-        return matches
-            .OrderByDescending(match => match.Date)
+        return BestRecordings(matches)
+            .OrderByDescending(match =>
+                query.Order switch
+                {
+                    "first" => -match.Date,
+                    "last" => match.Date,
+                    _ => 0,
+                }
+            )
+            .ThenByDescending(match => match.TrackPlays)
+            .ThenByDescending(match => match.Date)
             .ThenByDescending(match => match.ShowId, StringComparer.Ordinal)
-            .Take(8)
+            .Take(limit)
+            .Select(match =>
+                match with
+                {
+                    PopularityPercentile = _percentiles.GetValueOrDefault(match.TrackPlays),
+                }
+            )
             .ToArray();
+    }
+
+    internal IEnumerable<string> DisplayTrackIds() =>
+        rules
+            .SelectMany(rule => rule.Matches)
+            .SelectMany(match => match.Passage.TrackIds)
+            .Distinct(StringComparer.Ordinal);
+
+    private static IEnumerable<SearchPassage> BestRecordings(IEnumerable<SearchPassage> matches) =>
+        matches
+            .GroupBy(match => match.Key, StringComparer.Ordinal)
+            .Select(group => group.MaxBy(match => match.TrackPlays)!);
+
+    private static Dictionary<double, double> CalculatePercentiles(
+        ImmutableArray<RuleMatches> rules
+    )
+    {
+        var distribution = new SearchPercentiles();
+        // Each show and ordered sequence contributes once across the snapshot.
+        // Extra tapes and alternate spellings of a query cannot move the scale.
+        foreach (
+            var match in BestRecordings(
+                rules.SelectMany(rule => rule.Matches).Select(match => match.Passage)
+            )
+        )
+        {
+            distribution.Observe(match.Kind, match.TrackPlays);
+        }
+
+        return distribution.Calculate().GetValueOrDefault("sequence") ?? [];
     }
 
     public static async Task<SearchPassages> Load(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
         SearchVocabulary vocabulary,
+        IReadOnlyDictionary<string, SearchProjectionRows.Venue> venues,
+        IReadOnlyDictionary<Guid, TrackStartTotal> trackStarts,
         CancellationToken cancellationToken
     )
     {
         var resolved = new List<ResolvedRule>();
-        foreach (var rule in SearchVocabularyRules.Passages)
+        foreach (var rule in SearchReviewedNamedShows.Passages)
         {
             var songs = rule
-                .SongTitles.Select(title => vocabulary.FindSong(rule.Artist, title)?.Id)
+                .SongTitles.Select(title => vocabulary.FindSong(rule.Artist, title))
                 .ToArray();
             if (songs.All(song => song is not null))
             {
-                resolved.Add(new(rule, songs.Select(song => song!).ToImmutableArray()));
+                resolved.Add(
+                    new(
+                        rule,
+                        songs.Select(song => song!.Id).ToImmutableArray(),
+                        songs.Select(song => song!.Label).ToImmutableArray()
+                    )
+                );
             }
         }
 
@@ -136,14 +206,19 @@ internal sealed class SearchPassages(ImmutableArray<SearchPassages.RuleMatches> 
         {
             if (set.Count > 0 && set[0].SetId != row.SetId)
             {
-                AddSet(set, candidates, matches);
+                AddSet(set, candidates, matches, trackStarts, vocabulary);
                 set.Clear();
             }
 
-            set.Add(row);
+            set.Add(
+                row with
+                {
+                    VenueId = SearchProjectionRows.CurrentVenue(venues, row.VenueId)?.Id,
+                }
+            );
         }
 
-        AddSet(set, candidates, matches);
+        AddSet(set, candidates, matches, trackStarts, vocabulary);
         return new SearchPassages(
             resolved
                 .Select(rule => new RuleMatches(rule.Rule, matches[rule].ToImmutableArray()))
@@ -154,7 +229,9 @@ internal sealed class SearchPassages(ImmutableArray<SearchPassages.RuleMatches> 
     private static void AddSet(
         List<PartRow> rows,
         ILookup<(string Artist, string FirstSong), ResolvedRule> candidates,
-        Dictionary<ResolvedRule, List<PassageMatch>> matches
+        Dictionary<ResolvedRule, List<PassageMatch>> matches,
+        IReadOnlyDictionary<Guid, TrackStartTotal> trackStarts,
+        SearchVocabulary vocabulary
     )
     {
         var parts = rows.GroupBy(row => row.Position)
@@ -184,7 +261,7 @@ internal sealed class SearchPassages(ImmutableArray<SearchPassages.RuleMatches> 
                 var path = parts.AsSpan(index, count);
                 if (MatchesSongs(path, rule.SongIds))
                 {
-                    matches[rule].Add(Describe(path, rule.SongIds, date));
+                    matches[rule].Add(Describe(path, rule, date, trackStarts, vocabulary));
                 }
             }
         }
@@ -224,14 +301,23 @@ internal sealed class SearchPassages(ImmutableArray<SearchPassages.RuleMatches> 
 
     private static PassageMatch Describe(
         ReadOnlySpan<PartRow> path,
-        ImmutableArray<string> songs,
-        int date
+        ResolvedRule rule,
+        int date,
+        IReadOnlyDictionary<Guid, TrackStartTotal> trackStarts,
+        SearchVocabulary vocabulary
     )
     {
         var first = path[0];
         var parts = ImmutableArray.CreateBuilder<SearchPassagePart>(path.Length);
+        var files = new HashSet<Guid>();
+        long plays = 0;
         foreach (var row in path)
         {
+            if (files.Add(row.TrackUuid))
+            {
+                // A medley can supply several song parts from the same file.
+                plays += trackStarts.GetValueOrDefault(row.TrackUuid).Plays;
+            }
             parts.Add(
                 new(
                     row.SongId!,
@@ -245,16 +331,13 @@ internal sealed class SearchPassages(ImmutableArray<SearchPassages.RuleMatches> 
 
         var proof = parts.MoveToImmutable();
         var place = SearchText.Fold(first.Venue + " " + first.Location);
-        var aliases = SearchVocabularyRules
-            .PlaceAliases.Where(alias =>
-                alias.Artist == first.Artist
-                && place.Contains(alias.Place, StringComparison.Ordinal)
-            )
-            .Select(alias => alias.Alias);
-        var placeWords = place
-            .Split(' ', StringSplitOptions.RemoveEmptyEntries)
-            .Concat(aliases.SelectMany(alias => alias.Split(' ')))
-            .ToFrozenSet();
+        var venueId =
+            first.VenueId
+            ?? (
+                first.ImportedVenueUuid is { } uuid ? UuidTypeId.Format("imported_venue", uuid) : ""
+            );
+        var aliases = vocabulary.AliasesAtVenue(venueId);
+        var placeWords = place.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToFrozenSet();
         return new(
             new SearchPassage(
                 first.Artist,
@@ -263,11 +346,15 @@ internal sealed class SearchPassages(ImmutableArray<SearchPassages.RuleMatches> 
                 first.SetName,
                 date,
                 first.Venue,
-                songs,
+                rule.SongIds,
+                rule.SongTitles,
                 proof.Select(part => part.TrackId).Distinct().ToImmutableArray(),
-                proof
+                proof,
+                plays
             ),
-            placeWords
+            placeWords,
+            venueId,
+            aliases.ToFrozenSet(StringComparer.Ordinal)
         );
     }
 
@@ -291,12 +378,16 @@ internal sealed class SearchPassages(ImmutableArray<SearchPassages.RuleMatches> 
             SELECT artist.slug, artist.id AS artist_id, show.uuid AS show_uuid, show.date,
                    coalesce(venue.name, '') AS venue, coalesce(venue.location, '') AS location,
                    source.uuid AS source_uuid, source.id AS source_id, sets.id AS set_id,
-                   coalesce(sets.name, '') AS set_name
+                 coalesce(sets.name, '') AS set_name,
+                 CASE WHEN feature.norm_catalogue THEN mapped.venue_id END AS venue_id,
+                 venue.uuid AS imported_venue_uuid
             FROM candidate_sets candidate JOIN source_sets sets ON sets.id = candidate.source_set_id
             JOIN sources source ON source.id = sets.source_id
             JOIN shows show ON show.id = source.show_id AND show.artist_id = source.artist_id
             JOIN artists artist ON artist.id = source.artist_id
+          LEFT JOIN features feature ON feature.artist_id = artist.id
             LEFT JOIN venues venue ON venue.id = show.venue_id
+            LEFT JOIN norm.show_venues mapped ON mapped.show_uuid = show.uuid
             WHERE artist.slug = ANY(@artists)
         )
         SELECT header.slug AS Artist, header.show_uuid AS ShowUuid, header.date AS Date,
@@ -310,7 +401,8 @@ internal sealed class SearchPassages(ImmutableArray<SearchPassages.RuleMatches> 
                CASE WHEN part.resolved THEN
                    (SELECT jsonb_object_agg(id, canonical_id) FROM song_map) ->> part.song_id
                END AS SongId,
-               coalesce(part.segue_after, false) AS SegueAfter
+               coalesce(part.segue_after, false) AS SegueAfter,
+               header.venue_id AS VenueId, header.imported_venue_uuid AS ImportedVenueUuid
         FROM set_headers header
         JOIN source_tracks track ON track.source_set_id = header.set_id AND track.source_id = header.source_id
                                 AND track.artist_id = header.artist_id AND NOT track.is_orphaned
@@ -319,15 +411,21 @@ internal sealed class SearchPassages(ImmutableArray<SearchPassages.RuleMatches> 
         """;
 
     internal sealed record RuleMatches(
-        SearchVocabularyRules.PassageRule Rule,
+        SearchReviewedNamedShows.PassageRule Rule,
         ImmutableArray<PassageMatch> Matches
     );
 
-    internal sealed record PassageMatch(SearchPassage Passage, FrozenSet<string> PlaceWords);
+    internal sealed record PassageMatch(
+        SearchPassage Passage,
+        FrozenSet<string> PlaceWords,
+        string VenueId = "",
+        FrozenSet<string>? Aliases = null
+    );
 
     private sealed record ResolvedRule(
-        SearchVocabularyRules.PassageRule Rule,
-        ImmutableArray<string> SongIds
+        SearchReviewedNamedShows.PassageRule Rule,
+        ImmutableArray<string> SongIds,
+        ImmutableArray<string> SongTitles
     );
 
     internal sealed record PartRow(
@@ -344,6 +442,8 @@ internal sealed class SearchPassages(ImmutableArray<SearchPassages.RuleMatches> 
         bool Playable,
         int Part,
         string? SongId,
-        bool SegueAfter
+        bool SegueAfter,
+        string? VenueId = null,
+        Guid? ImportedVenueUuid = null
     );
 }

@@ -13,8 +13,10 @@ public sealed class StoredPopularity
 {
     // Keep the result shape stable when a migration adds columns. Read queries
     // alias the popularity table as p.
-    internal const string ReadColumns = """
-        p.uuid, p.plays_30d, p.hours_30d, p.hot_score_30d,
+    internal const string ReadColumns = "p.uuid, " + MetricColumns;
+
+    internal const string MetricColumns = """
+        p.plays_30d, p.hours_30d, p.hot_score_30d,
         p.plays_7d, p.hours_7d, p.hot_score_7d,
         p.plays_48h, p.hours_48h, p.hot_score_48h,
         p.trend_ratio, p.momentum_score, p.plays_1y, p.hours_1y, p.hot_score_1y
@@ -28,6 +30,10 @@ public sealed class StoredPopularity
 
     public Guid uuid { get; set; }
     public Guid artist_uuid { get; set; }
+
+    [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+    public string? song_id { get; set; }
+
     public long plays_30d { get; set; }
     public double hours_30d { get; set; }
     public double hot_score_30d { get; set; }
@@ -116,6 +122,11 @@ public sealed class StoredPopularity
             plays_48h = value.windows.hours_48h.plays,
             hours_48h = Math.Round(value.windows.hours_48h.hours, 4),
             hot_score_48h = Math.Round(value.windows.hours_48h.hot_score, 4),
+            plays_1y = value.windows.Year?.plays,
+            hours_1y = value.windows.Year is { } year ? Math.Round(year.hours, 4) : null,
+            hot_score_1y = value.windows.Year is { } yearly
+                ? Math.Round(yearly.hot_score, 4)
+                : null,
             trend_ratio = roundScores ? Math.Round(value.trend_ratio, 4) : value.trend_ratio,
             momentum_score = roundScores
                 ? Math.Round(value.momentum_score, 4)

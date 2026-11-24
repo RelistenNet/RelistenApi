@@ -1,0 +1,18 @@
+{
+  "_note": "Interim fan names for shows, runs and segues. Port these rules to norm when the admin UI can manage them.",
+  "routes": [
+    { "artist": "grateful-dead", "terms": "cornell", "date": 19770508, "requires_artist": true },
+    { "artist": "grateful-dead", "terms": "sunshine daydream", "date": 19720827, "requires_artist": false },
+    { "artist": "phish", "terms": "went gin", "date": 19970817, "song": "bathtub gin", "requires_artist": false }
+  ],
+  "runs": [
+    { "artist": "phish", "name": "bakers dozen", "start_date": 20170721, "end_date": 20170806 }
+  ],
+  "passages": [
+    { "artist": "grateful-dead", "phrases": ["scarlet fire"], "song_titles": ["scarlet begonias", "fire on the mountain"] },
+    { "artist": "grateful-dead", "phrases": ["help slip frank", "help slip franklin"], "song_titles": ["help on the way", "slipknot", "franklins tower"] },
+    { "artist": "grateful-dead", "phrases": ["china rider"], "song_titles": ["china cat sunflower", "i know you rider"] },
+    { "artist": "phish", "phrases": ["mikes groove"], "song_titles": ["mikes song", "i am hydrogen", "weekapaug groove"] },
+    { "artist": "phish", "phrases": ["tweezabella"], "song_titles": ["tweezer", "izabella"], "date": 19971206 }
+  ]
+}

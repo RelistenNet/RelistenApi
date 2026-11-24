@@ -22,6 +22,7 @@ using Microsoft.OpenApi;
 using Relisten;
 using Relisten.Controllers.V4;
 using Relisten.Identifiers;
+using Relisten.Search;
 using RelistenApiTests.Popularity;
 
 namespace RelistenApiTests.V4;
@@ -55,7 +56,7 @@ public sealed partial class TestV4CatalogHttp
             NullLogger<DbService>.Instance
         );
         var builder = WebApplication.CreateBuilder();
-        builder.Configuration["MCP_REVIEW_SEARCH_KEY"] = ReviewServiceKey;
+        builder.Configuration[CatalogSearchExchange.KeySetting] = ReviewServiceKey;
         builder.Configuration["Catalog:ReviewSearchTrustedProxyNetworks:0"] = "127.0.0.1/32";
         builder.WebHost.ConfigureKestrel(server => server.Listen(IPAddress.Loopback, 0));
         builder.Services.AddSingleton(db);

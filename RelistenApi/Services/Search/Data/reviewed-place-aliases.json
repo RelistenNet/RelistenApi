@@ -1,0 +1,540 @@
+{
+  "_note": "Interim approved search names. Restore the audited import and city-name table with the norm and admin UI port. Retire this file when production uses the stored names with search parity. The admin UI needs short venue names, city names, and artist and song nicknames. venue_names_check only allows date ranges on official names; RAC, CCCC, BBT and BGCC are undated short names.",
+  "reviewed_by": "Alec (moderator), Place Nickname Review artifact XJwiKpUPenRB5uNBCTDM6g, 2026-11-23",
+  "venue_names": [
+    {
+      "venue_id": "venue_s7phdst7",
+      "name": "AMH",
+      "kind": "short",
+      "target": "Ardmore Music Hall · Ardmore, PA",
+      "evidence": "66 mentions at this venue · 78 catalog-wide"
+    },
+    {
+      "venue_id": "venue_f5786kyx",
+      "name": "BBT",
+      "kind": "short",
+      "target": "PlayStation Theater · New York, NY",
+      "evidence": "3 mentions at this venue · 10 catalog-wide"
+    },
+    {
+      "venue_id": "venue_ws69nt06",
+      "name": "BEC",
+      "kind": "short",
+      "target": "1stBank Center · Broomfield, CO",
+      "evidence": "4 mentions at this venue · 4 catalog-wide"
+    },
+    {
+      "venue_id": "venue_061ghrsj",
+      "name": "BGCA",
+      "kind": "short",
+      "target": "Bill Graham Civic Auditorium · San Francisco, CA",
+      "evidence": "37 mentions at this venue · 77 catalog-wide"
+    },
+    {
+      "venue_id": "venue_061ghrsj",
+      "name": "BGCC",
+      "kind": "short",
+      "target": "Bill Graham Civic Auditorium · San Francisco, CA",
+      "evidence": "2 mentions at this venue · 4 catalog-wide"
+    },
+    {
+      "venue_id": "venue_285e9185",
+      "name": "CCCC",
+      "kind": "short",
+      "target": "Cross Insurance Arena · Portland, ME",
+      "evidence": "14 mentions at this venue · 18 catalog-wide"
+    },
+    {
+      "venue_id": "venue_c579bg17",
+      "name": "DPAC",
+      "kind": "short",
+      "target": "Durham Performing Arts Center · Durham, NC",
+      "evidence": "3 mentions at this venue · 3 catalog-wide"
+    },
+    {
+      "venue_id": "venue_ymvfkbde",
+      "name": "EFF",
+      "kind": "short",
+      "target": "Electric Forest Festival · Rothbury, MI",
+      "evidence": "9 mentions at this venue · 11 catalog-wide"
+    },
+    {
+      "venue_id": "venue_pz6b1254",
+      "name": "GAMH",
+      "kind": "short",
+      "target": "Great American Music Hall · San Francisco, CA",
+      "evidence": "62 mentions at this venue · 98 catalog-wide"
+    },
+    {
+      "venue_id": "venue_602y6cfz",
+      "name": "GRF",
+      "kind": "short",
+      "target": "Greenfield Community College · Greenfield, MA",
+      "evidence": "3 mentions at this venue · 4 catalog-wide"
+    },
+    {
+      "venue_id": "venue_5r14ef6f",
+      "name": "HAMF",
+      "kind": "short",
+      "target": "Hot August Music Festival · Cockeysville, MD",
+      "evidence": "5 mentions at this venue · 5 catalog-wide"
+    },
+    {
+      "venue_id": "venue_wwrsykhn",
+      "name": "HJK",
+      "kind": "short",
+      "target": "Oakland Auditorium · Oakland, CA",
+      "evidence": "22 mentions at this venue · 34 catalog-wide"
+    },
+    {
+      "venue_id": "venue_8pqfk1mt",
+      "name": "HNS",
+      "kind": "short",
+      "target": "High Noon Saloon · Madison, WI",
+      "evidence": "6 mentions at this venue · 17 catalog-wide"
+    },
+    {
+      "venue_id": "venue_7hm14224",
+      "name": "HSMF",
+      "kind": "short",
+      "target": "Plumas-Sierra County Fairgrounds · Quincy, CA",
+      "evidence": "40 mentions at this venue · 149 catalog-wide"
+    },
+    {
+      "venue_id": "venue_wrtsj4r0",
+      "name": "ICC",
+      "kind": "short",
+      "target": "Internationales Congress Centrum · Berlin",
+      "evidence": "8 mentions at this venue · 11 catalog-wide"
+    },
+    {
+      "venue_id": "venue_sjcsh7rb",
+      "name": "JC13",
+      "kind": "short",
+      "target": "The Atrium · MSC Divina",
+      "evidence": "4 mentions at this venue · 4 catalog-wide"
+    },
+    {
+      "venue_id": "venue_ekkmp3dw",
+      "name": "JHMF",
+      "kind": "short",
+      "target": "John Hartford Memorial Festival 8 · Bean Blossom, IN",
+      "evidence": "33 mentions at this venue · 44 catalog-wide"
+    },
+    {
+      "venue_id": "venue_8cxan1a9",
+      "name": "JLL",
+      "kind": "short",
+      "target": "Jiffy Lube Live · Bristow, VA",
+      "evidence": "2 mentions at this venue · 2 catalog-wide"
+    },
+    {
+      "venue_id": "venue_7sgwtc8w",
+      "name": "JTMF",
+      "kind": "short",
+      "target": "Joshua Tree Lake Campground · Joshua Tree, CA",
+      "evidence": "3 mentions at this venue · 3 catalog-wide"
+    },
+    {
+      "venue_id": "venue_b5dybnw3",
+      "name": "LBC",
+      "kind": "short",
+      "target": "Lafayette Brewing Co. · Lafayette, IN",
+      "evidence": "3 mentions at this venue · 6 catalog-wide"
+    },
+    {
+      "venue_id": "venue_6vthb2b5",
+      "name": "LCC",
+      "kind": "short",
+      "target": "Last Concert Cafe · Houston, TX",
+      "evidence": "4 mentions at this venue · 5 catalog-wide"
+    },
+    {
+      "venue_id": "venue_v36k2g3x",
+      "name": "LJVMC",
+      "kind": "short",
+      "target": "Lawrence Joel Veterans Memorial Coliseum · Winston-Salem, NC",
+      "evidence": "2 mentions at this venue · 2 catalog-wide"
+    },
+    {
+      "venue_id": "venue_qn9x5hh9",
+      "name": "MPP",
+      "kind": "short",
+      "target": "Merriweather Post Pavilion · Columbia, MD",
+      "evidence": "95 mentions at this venue · 178 catalog-wide"
+    },
+    {
+      "venue_id": "venue_e1sh3vvx",
+      "name": "MSA",
+      "kind": "short",
+      "target": "Market Square Arena · Indianapolis, IN",
+      "evidence": "6 mentions at this venue · 11 catalog-wide"
+    },
+    {
+      "venue_id": "venue_1bnw1b5x",
+      "name": "MSG",
+      "kind": "short",
+      "target": "Madison Square Garden · New York, NY",
+      "evidence": "908 mentions at this venue · 1,592 catalog-wide"
+    },
+    {
+      "venue_id": "venue_t16rqgv3",
+      "name": "NLQP",
+      "kind": "short",
+      "target": "nelson ledges quarry park · Garrettsville, OH",
+      "evidence": "14 mentions at this venue · 21 catalog-wide"
+    },
+    {
+      "venue_id": "venue_k4wzq8vz",
+      "name": "OCF",
+      "kind": "short",
+      "target": "Old Renaissance Faire Grounds · Veneta, OR",
+      "evidence": "10 mentions at this venue · 26 catalog-wide"
+    },
+    {
+      "venue_id": "venue_1zmbqeh8",
+      "name": "PHOME",
+      "kind": "short",
+      "target": "Portland House of Music and Events · Portland, ME",
+      "evidence": "7 mentions at this venue · 9 catalog-wide"
+    },
+    {
+      "venue_id": "venue_4jy9a00b",
+      "name": "QTB",
+      "kind": "short",
+      "target": "Quixote's True Blue · Denver, CO",
+      "evidence": "12 mentions at this venue · 12 catalog-wide"
+    },
+    {
+      "venue_id": "venue_kbzmv979",
+      "name": "RAC",
+      "kind": "short",
+      "target": "Jersey Mike's Arena · Piscataway, NJ",
+      "evidence": "6 mentions at this venue · 8 catalog-wide"
+    },
+    {
+      "venue_id": "venue_r9xh71dg",
+      "name": "RCMH",
+      "kind": "short",
+      "target": "Radio City Music Hall · New York, NY",
+      "evidence": "26 mentions at this venue · 48 catalog-wide"
+    },
+    {
+      "venue_id": "venue_ss61yrfd",
+      "name": "SOH",
+      "kind": "short",
+      "target": "Sheridan Opera House · Telluride, CO",
+      "evidence": "3 mentions at this venue · 4 catalog-wide"
+    },
+    {
+      "venue_id": "venue_79vag27b",
+      "name": "SOSMP",
+      "kind": "short",
+      "target": "Spirit of the Suwannee Music Park · Live Oak, FL",
+      "evidence": "7 mentions at this venue · 16 catalog-wide"
+    },
+    {
+      "venue_id": "venue_bqd92t1v",
+      "name": "SPAC",
+      "kind": "short",
+      "target": "Saratoga Performing Arts Center · Saratoga Springs, NY",
+      "evidence": "464 mentions at this venue · 746 catalog-wide"
+    },
+    {
+      "venue_id": "venue_78a7p04k",
+      "name": "TBF",
+      "kind": "short",
+      "target": "Telluride Town Park · Telluride, CO",
+      "evidence": "18 mentions at this venue · 25 catalog-wide"
+    },
+    {
+      "venue_id": "venue_06x5xksr",
+      "name": "TLA",
+      "kind": "short",
+      "target": "Theatre of the Living Arts · Philadelphia, PA",
+      "evidence": "45 mentions at this venue · 65 catalog-wide"
+    },
+    {
+      "venue_id": "venue_b3r8fpzh",
+      "name": "UPAC",
+      "kind": "short",
+      "target": "Ulster Performing Arts Center · Kingston, NY",
+      "evidence": "2 mentions at this venue · 7 catalog-wide"
+    },
+    {
+      "venue_id": "venue_mmd3ykzn",
+      "name": "VPAC",
+      "kind": "short",
+      "target": "Vilar Performing Arts Center · Beaver Creek, CO",
+      "evidence": "4 mentions at this venue · 5 catalog-wide"
+    },
+    {
+      "venue_id": "venue_vyah39z5",
+      "name": "WCL",
+      "kind": "short",
+      "target": "World Cafe Live · Philadelphia, PA",
+      "evidence": "7 mentions at this venue · 9 catalog-wide"
+    },
+    {
+      "venue_id": "venue_qwaqespv",
+      "name": "Cap Centre",
+      "kind": "short",
+      "target": "Capital Centre · Landover",
+      "evidence": "45 mentions at this venue · 74 catalog-wide"
+    },
+    {
+      "venue_id": "venue_bvhfka1g",
+      "name": "Cornell",
+      "kind": "short",
+      "target": "Barton Hall · Ithaca",
+      "evidence": "133 mentions at this venue · 686 catalog-wide"
+    },
+    {
+      "venue_id": "venue_ktvptd6h",
+      "name": "DTE",
+      "kind": "short",
+      "target": "Pine Knob Music Theatre · Clarkston",
+      "evidence": "14 mentions at this venue · 26 catalog-wide"
+    },
+    {
+      "venue_id": "venue_zce38p69",
+      "name": "Englishtown",
+      "kind": "short",
+      "target": "Raceway Park · Englishtown",
+      "evidence": "17 mentions at this venue · 229 catalog-wide"
+    },
+    {
+      "venue_id": "venue_km9n8bpj",
+      "name": "Jazz Fest",
+      "kind": "short",
+      "target": "Fair Grounds Race Course · New Orleans",
+      "evidence": "9 mentions at this venue · 239 catalog-wide"
+    },
+    {
+      "venue_id": "venue_pyyrn6t3",
+      "name": "Limestone",
+      "kind": "short",
+      "target": "Loring Commerce Centre · Limestone",
+      "evidence": "31 mentions at this venue · 279 catalog-wide"
+    },
+    {
+      "venue_id": "venue_vp47f44m",
+      "name": "the Meadowlands",
+      "kind": "short",
+      "target": "Giants Stadium · East Rutherford",
+      "evidence": "13 mentions at this venue · 73 catalog-wide"
+    },
+    {
+      "venue_id": "venue_k4wzq8vz",
+      "name": "Veneta",
+      "kind": "short",
+      "target": "Old Renaissance Faire Grounds · Veneta",
+      "evidence": "45 mentions at this venue · 179 catalog-wide"
+    },
+    {
+      "venue_id": "venue_51zmgwv0",
+      "name": "Watkins Glen",
+      "kind": "short",
+      "target": "Grand Prix Racecourse · Watkins Glen",
+      "evidence": "30 mentions at this venue · 157 catalog-wide"
+    }
+  ],
+  "city_names": [
+    {
+      "name": "ABQ",
+      "city": "albuquerque",
+      "region": "NM",
+      "country": "US",
+      "evidence": "11 mentions near this city · 23 catalog-wide"
+    },
+    {
+      "name": "ATL",
+      "city": "atlanta",
+      "region": "GA",
+      "country": "US",
+      "evidence": "78 mentions near this city · 277 catalog-wide"
+    },
+    {
+      "name": "ATX",
+      "city": "austin",
+      "region": "TX",
+      "country": "US",
+      "evidence": "13 mentions near this city · 17 catalog-wide"
+    },
+    {
+      "name": "Beantown",
+      "city": "boston",
+      "region": "MA",
+      "country": "US",
+      "evidence": "36 mentions near this city · 113 catalog-wide"
+    },
+    {
+      "name": "Big Easy",
+      "city": "new orleans",
+      "region": "LA",
+      "country": "US",
+      "evidence": "8 mentions near this city · 209 catalog-wide"
+    },
+    {
+      "name": "Bmore",
+      "city": "baltimore",
+      "region": "MD",
+      "country": "US",
+      "evidence": "6 mentions near this city · 12 catalog-wide"
+    },
+    {
+      "name": "Cbus",
+      "city": "columbus",
+      "region": "OH",
+      "country": "US",
+      "evidence": "3 mentions near this city · 6 catalog-wide"
+    },
+    {
+      "name": "Chi-town",
+      "city": "chicago",
+      "region": "IL",
+      "country": "US",
+      "evidence": "62 mentions near this city · 112 catalog-wide"
+    },
+    {
+      "name": "Cincy",
+      "city": "cincinnati",
+      "region": "OH",
+      "country": "US",
+      "evidence": "46 mentions near this city · 100 catalog-wide"
+    },
+    {
+      "name": "DC",
+      "city": "washington",
+      "region": "DC",
+      "country": "US",
+      "evidence": "1,313 mentions near this city · 3,833 catalog-wide"
+    },
+    {
+      "name": "Indy",
+      "city": "indianapolis",
+      "region": "IN",
+      "country": "US",
+      "evidence": "111 mentions near this city · 217 catalog-wide"
+    },
+    {
+      "name": "Jax",
+      "city": "jacksonville",
+      "region": "FL",
+      "country": "US",
+      "evidence": "7 mentions near this city · 55 catalog-wide"
+    },
+    {
+      "name": "Motor City",
+      "city": "detroit",
+      "region": "MI",
+      "country": "US",
+      "evidence": "15 mentions near this city · 56 catalog-wide"
+    },
+    {
+      "name": "Mpls",
+      "city": "minneapolis",
+      "region": "MN",
+      "country": "US",
+      "evidence": "31 mentions near this city · 73 catalog-wide"
+    },
+    {
+      "name": "Music City",
+      "city": "nashville",
+      "region": "TN",
+      "country": "US",
+      "evidence": "19 mentions near this city · 36 catalog-wide"
+    },
+    {
+      "name": "NOLA",
+      "city": "new orleans",
+      "region": "LA",
+      "country": "US",
+      "evidence": "165 mentions near this city · 336 catalog-wide"
+    },
+    {
+      "name": "NYC",
+      "city": "new york",
+      "region": "NY",
+      "country": "US",
+      "evidence": "5,440 mentions near this city · 9,022 catalog-wide"
+    },
+    {
+      "name": "OKC",
+      "city": "oklahoma city",
+      "region": "OK",
+      "country": "US",
+      "evidence": "32 mentions near this city · 59 catalog-wide"
+    },
+    {
+      "name": "PDX",
+      "city": "portland",
+      "region": "OR",
+      "country": "US",
+      "evidence": "62 mentions near this city · 95 catalog-wide"
+    },
+    {
+      "name": "Pgh",
+      "city": "pittsburgh",
+      "region": "PA",
+      "country": "US",
+      "evidence": "18 mentions near this city · 38 catalog-wide"
+    },
+    {
+      "name": "Philly",
+      "city": "philadelphia",
+      "region": "PA",
+      "country": "US",
+      "evidence": "755 mentions near this city · 1,633 catalog-wide"
+    },
+    {
+      "name": "RVA",
+      "city": "richmond",
+      "region": "VA",
+      "country": "US",
+      "evidence": "16 mentions near this city · 63 catalog-wide"
+    },
+    {
+      "name": "San Fran",
+      "city": "san francisco",
+      "region": "CA",
+      "country": "US",
+      "evidence": "56 mentions near this city · 166 catalog-wide"
+    },
+    {
+      "name": "SF",
+      "city": "san francisco",
+      "region": "CA",
+      "country": "US",
+      "evidence": "445 mentions near this city · 1,549 catalog-wide"
+    },
+    {
+      "name": "SLC",
+      "city": "salt lake city",
+      "region": "UT",
+      "country": "US",
+      "evidence": "44 mentions near this city · 85 catalog-wide"
+    },
+    {
+      "name": "STL",
+      "city": "st louis",
+      "region": "MO",
+      "country": "US",
+      "evidence": "41 mentions near this city · 77 catalog-wide"
+    },
+    {
+      "name": "Twin Cities",
+      "city": "minneapolis",
+      "region": "MN",
+      "country": "US",
+      "evidence": "24 mentions near this city · 55 catalog-wide"
+    },
+    {
+      "name": "Vegas",
+      "city": "las vegas",
+      "region": "NV",
+      "country": "US",
+      "evidence": "1,166 mentions near this city · 5,581 catalog-wide"
+    }
+  ]
+}

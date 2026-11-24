@@ -34,6 +34,9 @@ public sealed class TestArtistSearchReindex
 
         await using var index = new TestIndex();
         await index.Build();
+        var artistId = UuidTypeId.Format("artist", first.Uuid);
+        var percentile = (await index.Document("entities", artistId))!.PopularityPercentile;
+        percentile.Should().BeGreaterThan(0);
         var removed = (await index.Performances(old.Show)).Should().ContainSingle().Subject;
         var venue = (await index.Document("entities", SharedVenue))!;
         venue.ArtistSlugs.Should().BeEquivalentTo(first.Slug, second.Slug);
@@ -62,6 +65,7 @@ public sealed class TestArtistSearchReindex
         var added = await SeedShow(connection, first, NewVenue, day: 2);
         await index.Reindex(first.Uuid);
 
+        (await index.Document("entities", artistId))!.PopularityPercentile.Should().Be(percentile);
         (await index.Document("performances", removed.Id)).Should().BeNull();
         (await index.Document("entities", UuidTypeId.Format("show", added.Show)))
             .Should()

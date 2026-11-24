@@ -34,6 +34,7 @@ public sealed record SongWithShowsResource : SongDetailResource
 public sealed record SongShowResource(
     ShowSummaryResource Show,
     SongShowTimingsResource Timings,
+    PopularityResource? SongPopularity,
     [property: JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         IReadOnlyList<SongShowTrackResource>? Tracks
 );

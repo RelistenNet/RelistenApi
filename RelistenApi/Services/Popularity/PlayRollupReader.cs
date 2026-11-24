@@ -11,63 +11,70 @@ namespace Relisten.Services.Popularity;
 /// <summary>Reads anonymous track starts from the Timescale rollups.</summary>
 public static class PlayRollupReader
 {
-    /// <summary>
-    /// Reads 365 UTC days ending on the given date for each performance: the plays
-    /// of its files with the union of their play days, and the same totals for its
-    /// representative source. One source can appear for several performances.
-    /// Returns exactly one row per request, in request order; a performance with
-    /// no plays has zero counts.
-    /// </summary>
-    internal static Task<IEnumerable<PerformancePlays>> ReadPerformances(
+    internal static Task<IEnumerable<PlayPopularityRow>> ReadTrackPopularity(
         IDbConnection connection,
-        IReadOnlyList<PerformancePlaysRequest> performances,
-        DateOnly through,
         IDbTransaction? transaction,
-        CancellationToken cancellationToken
+        DateOnly through,
+        CancellationToken cancellationToken,
+        Guid artist
     )
     {
-        // A page holds a few dozen files, so the daily rollups stay cheap and
-        // count each play day once across a performance's overlapping files.
-        var files = performances
-            .SelectMany((performance, index) => performance.Tracks.Select(id => (id, index)))
-            .ToArray();
-        var window = Window(through);
-        return connection.QueryAsync<PerformancePlays>(
+        const string filter = "artist_uuid = @artist";
+        var window = Window(through, artist);
+        var now = DateTime.UtcNow;
+        var currentHour = now.Date.AddHours(now.Hour);
+        var lastHour = currentHour < window.EndDay ? currentHour : window.EndDay;
+
+        return connection.QueryAsync<PlayPopularityRow>(
             new CommandDefinition(
-                """
-                WITH performances AS (
-                    SELECT (ordinal - 1)::int AS index, source_uuid
-                    FROM unnest(@sources::uuid[]) WITH ORDINALITY p(source_uuid, ordinal)
-                ), file_plays AS (
-                    SELECT f.index, sum(p.plays)::bigint AS plays, count(DISTINCT p.play_day) AS days
-                    FROM unnest(@files::uuid[], @fileIndices::int[]) f(id, index)
-                    JOIN source_track_plays_daily p ON p.source_track_uuid = f.id
-                    WHERE p.play_day >= @startDay AND p.play_day < @endDay
-                    GROUP BY f.index
-                ), source_plays AS (
-                    SELECT p.source_uuid, sum(p.plays)::bigint AS plays, count(*) AS days
-                    FROM source_plays_daily p
-                    WHERE p.source_uuid = ANY(@sources)
-                      AND p.play_day >= @startDay AND p.play_day < @endDay
-                    GROUP BY p.source_uuid
+                $"""
+                WITH windows AS (
+                    SELECT source_track_uuid, source_uuid, 1 AS grain, plays, total_track_seconds AS seconds,
+                           play_day >= @week AS is_week, play_day >= @month AS is_month, false AS is_recent
+                    FROM source_track_plays_daily
+                    WHERE play_day >= @quarter AND play_day < @endDay AND {filter}
+                    UNION ALL
+                    SELECT source_track_uuid, source_uuid, 2, plays, total_track_seconds, false, false, play_hour >= @shortWindow
+                    FROM source_track_plays_hourly
+                    WHERE play_hour >= @recent AND play_hour < @lastHour AND {filter}
+                    UNION ALL
+                    SELECT source_track_uuid, source_uuid, 3, plays, total_track_seconds, false, false, false
+                    FROM ({YearlyTrackRows(
+                    filter,
+                    "source_track_uuid,source_uuid,total_track_seconds"
+                )}) AS yearly
                 )
-                SELECT p.index, coalesce(f.plays, 0) AS plays, coalesce(f.days, 0) AS days,
-                       coalesce(s.plays, 0) AS sourcePlays, coalesce(s.days, 0) AS sourceDays
-                FROM performances p
-                LEFT JOIN file_plays f ON f.index = p.index
-                LEFT JOIN source_plays s ON s.source_uuid = p.source_uuid
-                ORDER BY p.index
+                SELECT coalesce(source_track_uuid,source_uuid) AS id,
+                       source_track_uuid IS NULL AS isRecording,
+                       coalesce(sum(plays) FILTER (WHERE grain = 2), 0)::bigint AS plays48h,
+                       coalesce(sum(seconds) FILTER (WHERE grain = 2), 0)::bigint AS seconds48h,
+                       coalesce(sum(plays) FILTER (WHERE is_week), 0)::bigint AS plays7d,
+                       coalesce(sum(seconds) FILTER (WHERE is_week), 0)::bigint AS seconds7d,
+                       coalesce(sum(plays) FILTER (WHERE is_month), 0)::bigint AS plays30d,
+                       coalesce(sum(seconds) FILTER (WHERE is_month), 0)::bigint AS seconds30d,
+                       coalesce(sum(plays) FILTER (WHERE grain = 1), 0)::bigint AS plays90d,
+                       coalesce(sum(plays) FILTER (WHERE is_recent), 0)::bigint AS plays6h,
+                       coalesce(sum(plays) FILTER (WHERE grain = 3), 0)::bigint AS plays1y,
+                       coalesce(sum(seconds) FILTER (WHERE grain = 3), 0)::bigint AS seconds1y
+                FROM windows
+                GROUP BY GROUPING SETS ((source_track_uuid), (source_uuid))
                 """,
                 new
                 {
-                    sources = performances.Select(performance => performance.Source).ToArray(),
-                    files = files.Select(file => file.id).ToArray(),
-                    fileIndices = files.Select(file => file.index).ToArray(),
+                    artist,
                     window.StartDay,
                     window.EndDay,
+                    window.FirstWholeMonth,
+                    window.EndOfWholeMonths,
+                    week = window.EndDay.AddDays(-7),
+                    month = window.EndDay.AddDays(-30),
+                    quarter = window.EndDay.AddDays(-90),
+                    recent = lastHour.AddHours(-48),
+                    shortWindow = lastHour.AddHours(-6),
+                    lastHour,
                 },
-                transaction: transaction,
-                commandTimeout: 30,
+                transaction,
+                commandTimeout: 600,
                 cancellationToken: cancellationToken
             )
         );
@@ -176,13 +183,3 @@ public static class PlayRollupReader
 internal sealed record YearlyPopularityTotal(Guid Id, long Plays, long Seconds);
 
 internal readonly record struct TrackStartTotal(Guid Id, long Plays);
-
-internal sealed record PerformancePlaysRequest(Guid[] Tracks, Guid Source);
-
-internal sealed record PerformancePlays(
-    int Index,
-    long Plays,
-    long Days,
-    long SourcePlays,
-    long SourceDays
-);

@@ -51,20 +51,19 @@ public sealed partial class TestMcpHttp
             var catalogAvailable = true;
             await StartApp(
                 playlistAlias: alias,
-                catalogResponse: _ => new
-                {
-                    availability = catalogAvailable ? "full" : "unavailable",
-                    top = new[]
-                    {
-                        new
-                        {
-                            id = track.Artist.ToString(),
-                            kind = "artist",
-                            label = "Grateful Dead",
-                        },
-                    },
-                    sections = new { },
-                }
+                catalogResponse: _ =>
+                    catalogAvailable
+                        ? CatalogAnswer(
+                            new ArtistSearchResult(
+                                FixtureResource(
+                                    new { id = track.Artist.ToString(), name = "Grateful Dead" }
+                                )
+                            )
+                            {
+                                Key = $"artist:{track.Artist}",
+                            }
+                        )
+                        : CatalogUnavailable()
             );
             var fields = AuthorizeFields(Native, NativeRedirect, ReadScopes);
             var cookie = await SignIn(fields);
@@ -90,8 +89,13 @@ public sealed partial class TestMcpHttp
             await AssertPublicPlaylistSearch(fixture, track.Artist);
             catalogAvailable = false;
             var partial = await SearchHttp("Dead Mondays", "all");
-            partial.GetProperty("catalog_availability").GetString().Should().Be("unavailable");
-            PlaylistIds(partial).Should().Equal(fixture.Mondays.Value);
+            partial
+                .GetProperty("availability")
+                .GetProperty("catalog")
+                .GetString()
+                .Should()
+                .Be("unavailable");
+            RankedIds(partial).Should().Equal(fixture.Mondays.Value);
             catalogAvailable = true;
             await AssertPrivatePlaylistSearch(fixture.Private, native.Access, mcp.Access);
             await AssertStalePlaylistSearch(fixture, owner);
@@ -119,24 +123,246 @@ public sealed partial class TestMcpHttp
     public async Task MergedSearchReturnsTheAvailableHalf(bool catalogAvailable)
     {
         await StartApp(
-            catalogResponse: _ => new { availability = catalogAvailable ? "full" : "unavailable" },
+            catalogResponse: _ => catalogAvailable ? CatalogAnswer() : CatalogUnavailable(),
             playlistSearch: new PlaylistSearchStub(
                 catalogAvailable ? HttpStatusCode.ServiceUnavailable : HttpStatusCode.OK
             )
         );
         var response = await SearchHttp("a playlist", "all", requestId: "roundtrip");
         response
-            .GetProperty("catalog_availability")
+            .GetProperty("availability")
+            .GetProperty("catalog")
             .GetString()
             .Should()
             .Be(catalogAvailable ? "full" : "unavailable");
         response
-            .GetProperty("playlist_availability")
+            .GetProperty("availability")
+            .GetProperty("playlists")
             .GetString()
             .Should()
             .Be(catalogAvailable ? "unavailable" : "full");
         response.GetProperty("request_id").GetString().Should().Be("roundtrip");
     }
+
+    [Test]
+    public async Task UnavailableCatalogCannotValidateASelectedPlaylistReading()
+    {
+        await StartApp(
+            catalogResponse: _ => CatalogUnavailable(),
+            playlistSearch: new PlaylistSearchStub(HttpStatusCode.OK)
+        );
+        var response = await SearchHttp(
+            "a playlist",
+            "all",
+            reading: $"artist:{new ArtistId(Guid.NewGuid())}"
+        );
+        response
+            .GetProperty("availability")
+            .GetProperty("playlists")
+            .GetString()
+            .Should()
+            .Be("unavailable");
+    }
+
+    [TestCase(null, 19770508, false)]
+    [TestCase("place:cornell", null, true)]
+    public async Task CatalogEventConstraintsExcludeMatchingPlaylists(
+        string? reading,
+        int? date,
+        bool place
+    )
+    {
+        var constraints = new SearchConstraints(null, null, false);
+        var playlistIndex = new PlaylistSearchStub(HttpStatusCode.OK);
+        await StartApp(
+            catalogResponse: _ => CatalogAnswer() with { Constraints = constraints },
+            playlistSearch: playlistIndex
+        );
+        var playlist = await SeedCatalogMergePlaylist(playlistIndex);
+        PlaylistIds(await SearchHttp("Scarlet", "all")).Should().Contain(playlist.Id.Value);
+
+        constraints = new(null, date, place);
+        var result = await SearchHttp("Scarlet", "all", reading: reading);
+        PlaylistIds(result).Should().BeEmpty();
+        result
+            .GetProperty("availability")
+            .GetProperty("playlists")
+            .GetString()
+            .Should()
+            .Be("not_requested");
+    }
+
+    [Test]
+    public async Task AnOrdinaryPlaylistAppearsAfterThePerformanceAndBeforeTheReview()
+    {
+        var performance = new PerformanceSearchResult(
+            FixtureResource(new { }),
+            FixtureResource(new { }),
+            null,
+            FixtureResource(new { id = "track_example", title = "Scarlet" })
+        )
+        {
+            Key = "performance:track:track_example",
+        };
+        var review = new ReviewSearchResult(
+            FixtureResource(new { }),
+            FixtureResource(new { }),
+            FixtureResource(new { }),
+            FixtureResource(new { id = "source_review_example", title = "Scarlet encore" })
+        )
+        {
+            Key = "review:source_review_example",
+        };
+        var catalog = CatalogAnswer(performance, review) with
+        {
+            Candidates =
+            [
+                new(performance, new(SearchIdentityPriority.None, false, 1_500, 0)),
+                new(review, new(SearchIdentityPriority.None, false, 1_000, 0)),
+            ],
+        };
+        var playlistIndex = new PlaylistSearchStub(HttpStatusCode.OK);
+        await StartApp(catalogResponse: _ => catalog, playlistSearch: playlistIndex);
+        var playlist = await SeedCatalogMergePlaylist(playlistIndex);
+
+        RankedIds(await SearchHttp("Scarlet", "all"))
+            .Should()
+            .Equal("track_example", playlist.Id.Value, "source_review_example");
+    }
+
+    private async Task<Playlist> SeedCatalogMergePlaylist(PlaylistSearchStub index)
+    {
+        var curator = await database.CreateUserAsync($"catalog{Guid.NewGuid():N}"[..19]);
+        await using var db = database.CreateContext();
+        var playlist = SeedNamedPlaylist(curator, publish: true);
+        playlist.Name = "Scarlet favorites";
+        db.Playlists.Add(playlist);
+        await db.SaveChangesAsync();
+        var history = await db.HistoryGenerations.Select(row => row.Value).SingleAsync();
+        index.Hits =
+        [
+            new
+            {
+                document = new
+                {
+                    id = playlist.Id.Value,
+                    history_generation = history,
+                    revision = playlist.Revision,
+                    published = true,
+                },
+            },
+        ];
+        return playlist;
+    }
+
+    [Test]
+    public async Task AllSearchLeadsWithAnExactLibraryTitleEvenWithoutAnIndexHit()
+    {
+        var catalogReplyBroken = false;
+        await StartApp(
+            catalogResponse: _ =>
+                catalogReplyBroken
+                    ? "{malformed"
+                    : CatalogAnswer(
+                        new PerformanceSearchResult(
+                            FixtureResource(new { }),
+                            FixtureResource(new { }),
+                            null,
+                            FixtureResource(new { id = "catalog-row", title = "Light" })
+                        )
+                        {
+                            Key = "performance:track:catalog-row",
+                        },
+                        new ReviewSearchResult(
+                            FixtureResource(new { }),
+                            FixtureResource(new { }),
+                            FixtureResource(new { }),
+                            FixtureResource(
+                                new { id = "review-row", title = "Field Notes from My Shelf" }
+                            )
+                        )
+                        {
+                            Key = "review:review-row",
+                        }
+                    ),
+            playlistSearch: new PlaylistSearchStub(HttpStatusCode.ServiceUnavailable)
+        );
+        var fields = AuthorizeFields(Native, NativeRedirect, ReadScopes);
+        var cookie = await SignIn(fields);
+        using var authorize = await Authorize(fields, cookie);
+        var native = await Exchange(Native, NativeRedirect, ReadCode(authorize));
+        using var profile = await Get(AccountsOrigin + "/v1/me", native.Access);
+        var owner = UserId.Parse((await Json(profile)).GetProperty("user_id").GetString()!);
+        var other = await database.CreateUserAsync("othercataloglistener");
+
+        await using var db = database.CreateContext();
+        var owned = SeedNamedPlaylist(owner);
+        var followed = SeedNamedPlaylist(other, publish: true);
+        db.Playlists.AddRange(owned, followed);
+        db.PlaylistFollows.Add(new PlaylistFollow { UserId = owner, PlaylistId = followed.Id });
+        await db.SaveChangesAsync();
+
+        var signedIn = await SearchHttp($" {owned.Name.ToLowerInvariant()} ", "all", native.Access);
+        signedIn
+            .GetProperty("availability")
+            .GetProperty("playlists")
+            .GetString()
+            .Should()
+            .Be("partial");
+        RankedIds(signedIn)
+            .Should()
+            .Equal(owned.Id.Value, followed.Id.Value, "catalog-row", "review-row");
+        RankedIds(await SearchHttp(owned.Name, "all")).Should().Equal("catalog-row", "review-row");
+        RankedIds(await SearchHttp(owned.Name, "all", native.Access, mode: "add_tracks"))
+            .Should()
+            .Equal("catalog-row", "review-row");
+
+        followed.Published = false;
+        await db.SaveChangesAsync();
+        RankedIds(await SearchHttp(owned.Name, "all", native.Access))
+            .Should()
+            .Equal(owned.Id.Value, "catalog-row", "review-row");
+
+        catalogReplyBroken = true;
+        var fallback = await SearchHttp(owned.Name, "all", native.Access);
+        fallback
+            .GetProperty("availability")
+            .GetProperty("catalog")
+            .GetString()
+            .Should()
+            .Be("unavailable");
+        RankedIds(fallback).Should().Equal(owned.Id.Value);
+    }
+
+    private static Playlist SeedNamedPlaylist(UserId owner, bool publish = false) =>
+        new()
+        {
+            Id = PlaylistId.New(),
+            OwnerId = owner,
+            Name = "Field Notes from My Shelf",
+            Revision = 1,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+            Published = publish,
+            PublicCode = publish ? Guid.NewGuid().ToString("N") : null,
+        };
+
+    private static string?[] RankedIds(JsonElement response) =>
+        response
+            .GetProperty("results")
+            .EnumerateArray()
+            .Select(row =>
+                row.GetProperty(
+                        row.GetProperty("kind").GetString()! switch
+                        {
+                            "performance" => "preview_track",
+                            var kind => kind,
+                        }
+                    )
+                    .GetProperty("id")
+                    .GetString()
+            )
+            .ToArray();
 
     [Test]
     public async Task CancellingTheRequestInterruptsPlaylistLookahead()
@@ -203,7 +429,12 @@ public sealed partial class TestMcpHttp
         using var response = await Send(new(HttpMethod.Get, path));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        (await Json(response)).GetProperty("catalog_availability").GetString().Should().Be("full");
+        (await Json(response))
+            .GetProperty("availability")
+            .GetProperty("catalog")
+            .GetString()
+            .Should()
+            .Be("full");
         var forwarded = catalog.LastRequest!;
         forwarded.AbsolutePath.Should().Be(CatalogSearchPath);
         var query = QueryHelpers.ParseQuery(forwarded.Query);
@@ -343,17 +574,17 @@ public sealed partial class TestMcpHttp
     {
         var byName = await SearchHttp("Dead Mondays");
         PlaylistIds(byName).Should().Contain(fixture.Mondays.Value);
-        byName.GetProperty("catalog_availability").GetString().Should().Be("not_requested");
-
-        var byArtist = await SearchHttp("grateful dead", "all");
-        byArtist
+        byName
+            .GetProperty("availability")
             .GetProperty("catalog")
-            .GetProperty("top")[0]
-            .GetProperty("kind")
             .GetString()
             .Should()
-            .Be("artist");
-        PlaylistIds(byArtist).Should().Equal(fixture.Mondays.Value, fixture.RoadTrip.Value);
+            .Be("not_requested");
+
+        var byArtist = await SearchHttp("grateful dead", "all");
+        RankedIds(byArtist)
+            .Should()
+            .Equal(artist.ToString(), fixture.Mondays.Value, fixture.RoadTrip.Value);
         PlaylistIds(await SearchHttp("bertha", artist: artist.ToString()))
             .Should()
             .Equal(fixture.RoadTrip.Value);
@@ -369,6 +600,7 @@ public sealed partial class TestMcpHttp
         const string query = "Afterhours Notebook";
         PlaylistIds(await SearchHttp(query)).Should().BeEmpty();
         PlaylistIds(await SearchHttp(query, token: native)).Should().Equal(id.Value);
+        RankedIds(await SearchHttp(query, "all", native)).First().Should().Be(id.Value);
         var guest = await ConnectChatGpt("google-shared");
         (await Call("find", new { text = query }, guest.Access))
             .GetProperty("structuredContent")
@@ -426,13 +658,21 @@ public sealed partial class TestMcpHttp
         await db.SaveChangesAsync();
         var oldHandle = await SearchHttp("curatorbluejay");
         var card = oldHandle
-            .GetProperty("playlists")
+            .GetProperty("results")
             .EnumerateArray()
             .Should()
             .ContainSingle()
             .Subject;
-        card.GetProperty("id").GetString().Should().Be(fixture.RoadTrip.Value);
-        card.GetProperty("curator").GetString().Should().Be("curatornewhandle");
+        card.GetProperty("playlist")
+            .GetProperty("id")
+            .GetString()
+            .Should()
+            .Be(fixture.RoadTrip.Value);
+        card.GetProperty("playlist")
+            .GetProperty("curator")
+            .GetString()
+            .Should()
+            .Be("curatornewhandle");
         PlaylistIds(await SearchHttp("Road Trip Reels")).Should().Contain(fixture.RoadTrip.Value);
     }
 
@@ -467,7 +707,7 @@ public sealed partial class TestMcpHttp
 
         var shortPage = await SearchHttp("pagination needle");
         PlaylistIds(shortPage).Should().HaveCount(19).And.NotContain(stale.Value);
-        var nextPage = shortPage.GetProperty("playlist_next_page").GetInt32();
+        var nextPage = shortPage.GetProperty("next_page").GetInt32();
         PlaylistIds(await SearchHttp("pagination needle", page: nextPage)).Should().ContainSingle();
     }
 
@@ -488,7 +728,9 @@ public sealed partial class TestMcpHttp
         string? token = null,
         string? artist = null,
         string? requestId = null,
-        int page = 1
+        int page = 1,
+        string mode = "explore",
+        string? reading = null
     )
     {
         var path = QueryHelpers.AddQueryString(
@@ -497,9 +739,11 @@ public sealed partial class TestMcpHttp
             {
                 ["q"] = query,
                 ["scope"] = scope,
+                ["mode"] = mode,
                 ["typing"] = "true",
                 ["artist_id"] = artist,
                 ["request_id"] = requestId,
+                ["reading_id"] = reading,
                 ["page"] = page.ToString(System.Globalization.CultureInfo.InvariantCulture),
             }
         );
@@ -518,9 +762,19 @@ public sealed partial class TestMcpHttp
 
     private static string?[] PlaylistIds(JsonElement response) =>
         response
-            .GetProperty("playlists")
+            .GetProperty("results")
             .EnumerateArray()
-            .Select(row => row.GetProperty("id").GetString())
+            .Select(row =>
+                row.GetProperty(
+                        row.GetProperty("kind").GetString()! switch
+                        {
+                            "performance" => "preview_track",
+                            var kind => kind,
+                        }
+                    )
+                    .GetProperty("id")
+                    .GetString()
+            )
             .ToArray();
 
     private static async Task<(ArtistId Artist, TrackId Track)> GratefulDeadTrack(DbService catalog)
@@ -607,6 +861,8 @@ public sealed partial class TestMcpHttp
 
     private sealed class PlaylistSearchStub(HttpStatusCode status) : HttpMessageHandler
     {
+        public object[] Hits { get; set; } = [];
+
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken
@@ -614,7 +870,7 @@ public sealed partial class TestMcpHttp
             Task.FromResult(
                 new HttpResponseMessage(status)
                 {
-                    Content = JsonContent.Create(new { hits = Array.Empty<object>() }),
+                    Content = JsonContent.Create(new { hits = Hits }),
                 }
             );
     }

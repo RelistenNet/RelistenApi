@@ -31,5 +31,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Relisten.Accounts.Contracts\Relisten.Accounts.Contracts.csproj" />
+    <ProjectReference Include="..\Relisten.Search.Contracts\Relisten.Search.Contracts.csproj" />
   </ItemGroup>
 </Project>

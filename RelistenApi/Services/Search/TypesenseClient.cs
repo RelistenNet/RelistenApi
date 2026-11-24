@@ -39,14 +39,26 @@ internal sealed class TypesenseClient(HttpClient http)
         await EnsureSuccess(response, cancellationToken);
     }
 
-    public async Task<ImportResult> Import(
+    public Task<ImportResult> Import(
         string collection,
         string jsonl,
         bool upsert,
         CancellationToken cancellationToken
+    ) => WriteDocuments(collection, jsonl, upsert ? "upsert" : "create", cancellationToken);
+
+    public Task<ImportResult> Update(
+        string collection,
+        string jsonl,
+        CancellationToken cancellationToken
+    ) => WriteDocuments(collection, jsonl, "update", cancellationToken);
+
+    private async Task<ImportResult> WriteDocuments(
+        string collection,
+        string jsonl,
+        string action,
+        CancellationToken cancellationToken
     )
     {
-        var action = upsert ? "upsert" : "create";
         using var body = new StringContent(jsonl, Encoding.UTF8, "text/plain");
         using var response = await http.PostAsync(
             $"collections/{collection}/documents/import?action={action}",
@@ -138,15 +150,47 @@ internal sealed class TypesenseClient(HttpClient http)
     public Task DeleteDocument(string collection, string id, CancellationToken cancellationToken) =>
         Delete($"collections/{collection}/documents/{Uri.EscapeDataString(id)}", cancellationToken);
 
-    public async IAsyncEnumerable<IndexedDocument> ExportDocuments(
+    public IAsyncEnumerable<IndexedDocument> ExportDocuments(
         string collection,
+        string filter,
+        CancellationToken cancellationToken,
+        bool includeVocabularyFields = false
+    ) =>
+        Export<IndexedDocument>(
+            collection,
+            "id,venue_id,kind,popularity_percentile,follow_count"
+                + (
+                    includeVocabularyFields
+                        ? ",name,popularity,display_popularity.windows.1y.plays"
+                        : ""
+                ),
+            filter,
+            cancellationToken
+        );
+
+    public IAsyncEnumerable<IndexedSongName> ExportSongNames(
+        string collection,
+        string filter,
+        CancellationToken cancellationToken
+    ) =>
+        Export<IndexedSongName>(
+            collection,
+            "id,name,artist_slug,song_id",
+            filter,
+            cancellationToken
+        );
+
+    private async IAsyncEnumerable<T> Export<T>(
+        string collection,
+        string fields,
         string filter,
         [EnumeratorCancellation] CancellationToken cancellationToken
     )
+        where T : class
     {
         var path =
-            $"collections/{collection}/documents/export"
-            + $"?filter_by={Uri.EscapeDataString(filter)}&include_fields=id,venue_id,kind";
+            $"collections/{collection}/documents/export?include_fields={fields}"
+            + (filter.Length > 0 ? $"&filter_by={Uri.EscapeDataString(filter)}" : "");
         using var response = await http.GetAsync(
             path,
             HttpCompletionOption.ResponseHeadersRead,
@@ -158,7 +202,7 @@ internal sealed class TypesenseClient(HttpClient http)
         );
         while (await reader.ReadLineAsync(cancellationToken) is { Length: > 0 } line)
         {
-            yield return JsonSerializer.Deserialize<IndexedDocument>(line, Json)
+            yield return JsonSerializer.Deserialize<T>(line, Json)
                 ?? throw new InvalidDataException(
                     "Typesense returned a null document in its export."
                 );
@@ -254,5 +298,25 @@ internal sealed class TypesenseClient(HttpClient http)
 
     internal sealed record ImportResult(int Accepted, int Rejected, string? FirstError);
 
-    internal sealed record IndexedDocument(string Id, string? VenueId, string? Kind);
+    internal sealed record IndexedSongName(
+        string Id,
+        string Name,
+        string ArtistSlug,
+        string? SongId
+    );
+
+    internal sealed record IndexedDocument(
+        string Id,
+        string? VenueId,
+        string? Kind,
+        double PopularityPercentile,
+        long FollowCount,
+        string? Name = null,
+        double Popularity = 0,
+        IndexedPopularity? DisplayPopularity = null
+    );
+
+    internal sealed record IndexedPopularity(Dictionary<string, IndexedPlayWindow> Windows);
+
+    internal sealed record IndexedPlayWindow(long Plays);
 }

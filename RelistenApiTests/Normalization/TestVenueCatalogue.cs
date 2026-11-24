@@ -862,15 +862,17 @@ public class TestVenueCatalogue
 
         await new VenueMatch(database).RunAsync(artists, CancellationToken.None);
 
-        (
-            await Strings(
-                "SELECT title FROM norm.review_items WHERE key LIKE 'same:%' AND resolved_at IS NULL"
-            )
-        )
+        var questions = await Strings(
+            "SELECT title FROM norm.review_items WHERE key LIKE 'same:%' AND resolved_at IS NULL"
+        );
+        var title = questions.Should().ContainSingle().Subject;
+        const string heading = "Kiel Opera House — St. Louis: ";
+        title.Should().StartWith(heading);
+        // The two venues have equal evidence counts. Either can appear first.
+        title[heading.Length..]
+            .Split(" / ")
             .Should()
-            .Equal(
-                "Kiel Opera House — St. Louis: site (0 rows) / room of Kiel Auditorium (0 rows)"
-            );
+            .BeEquivalentTo("site (0 rows)", "room of Kiel Auditorium (0 rows)");
     }
 
     [TestCase(true, false)]

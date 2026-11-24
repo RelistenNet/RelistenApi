@@ -128,7 +128,7 @@ internal static class SearchPlayTieBreak
         }
 
         var songId = hit.Kind == "song" ? hit.Id : hit.SongId;
-        var songPlays = evidence.ConcertSongPlays(songId);
+        var songPlays = evidence.SongPlays(songId);
         if (songPlays == 0)
         {
             songPlays = evidence.TitlePlays(hit.ArtistSlug, hit.Name);
