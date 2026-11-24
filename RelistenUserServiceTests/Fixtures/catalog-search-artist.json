@@ -1,0 +1,79 @@
+{
+  "page": {
+    "q": "matched artist",
+    "request_id": null,
+    "scope": "artists",
+    "availability": {
+      "catalog": "full",
+      "playlists": "not_requested"
+    },
+    "counts": {
+      "artists": 1
+    },
+    "readings": {
+      "applied": {
+        "id": "query",
+        "chips": [
+          {
+            "key": "artist",
+            "label": "Matched Artist",
+            "value": "artist_0000000000000000000000000m"
+          }
+        ]
+      },
+      "alternatives": [
+        {
+          "id": "literal",
+          "chips": []
+        }
+      ]
+    },
+    "next_page": null,
+    "more_scopes": [],
+    "count_lower_bounds": {}
+  },
+  "constraints": {
+    "artist_id": "artist_0000000000000000000000000m",
+    "date": null,
+    "place_selected": false
+  },
+  "candidates": [
+    {
+      "result": {
+        "kind": "artist",
+        "artist": {
+          "created_at": "2000-01-01T00:00:00Z",
+          "featured": 0,
+          "features": "10493952",
+          "id": "artist_0000000000000000000000000m",
+          "musicbrainz_id": null,
+          "name": "Matched Artist",
+          "popularity": null,
+          "show_count": 2,
+          "slug": "v4-review-4",
+          "sort_name": null,
+          "source_count": 2,
+          "updated_at": "2000-01-01T00:00:00Z",
+          "upstream_sources": [
+            {
+              "provider": null,
+              "upstream_identifier": "matched-upstream"
+            }
+          ]
+        },
+        "key": "artist:artist_0000000000000000000000000m",
+        "match": {
+          "reading": "query"
+        },
+        "popularity": null
+      },
+      "order": {
+        "identity": 2,
+        "related": false,
+        "score": 0,
+        "popularity": 0
+      }
+    }
+  ],
+  "page_limit": 1
+}

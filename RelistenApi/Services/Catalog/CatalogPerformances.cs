@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.WebUtilities;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 using Npgsql;
+using Relisten.Api.Models.Api.V4;
 using Relisten.Identifiers;
 using Relisten.Services.Popularity;
 
@@ -572,7 +573,7 @@ public sealed class CatalogPerformances(DbService db, CatalogSongMetadataReader 
             ORDER BY current_part.part
             """;
 
-    private static async Task<PerformancePlays[]> ReadPopularity(
+    private static async Task<PerformancePopularity[]> ReadPopularity(
         CatalogReadSession session,
         PerformanceRow[] page,
         CancellationToken cancellationToken
@@ -583,21 +584,39 @@ public sealed class CatalogPerformances(DbService db, CatalogSongMetadataReader 
             return [];
         }
 
-        var plays = await PlayRollupReader.ReadPerformances(
+        var performances = await PopularityStore.ReadSelectedPerformances(
             session.Connection,
-            page.Select(row => new PerformancePlaysRequest(row.TrackUuids, row.SourceUuid))
-                .ToArray(),
-            DateOnly.FromDateTime(DateTime.UtcNow),
+            page.Select(row => row.ShowUuid).ToArray(),
+            page.Select(row => row.SongId).ToArray(),
             session.Transaction,
             cancellationToken
         );
-        return plays.ToArray();
+        var sources = await PopularityStore.ReadRecordingMetrics(
+            session.Connection,
+            page.Select(row => row.SourceUuid).Distinct().ToArray(),
+            session.Transaction,
+            cancellationToken
+        );
+        return page.Select(row => new PerformancePopularity(
+                performances.TryGetValue((row.ShowUuid, row.SongId), out var performance)
+                    ? V4CatalogProjection.ProjectPopularity(performance)
+                    : null,
+                sources.TryGetValue(row.SourceUuid, out var source)
+                    ? V4CatalogProjection.ProjectPopularity(source)
+                    : null
+            ))
+            .ToArray();
     }
+
+    private sealed record PerformancePopularity(
+        PopularityResource? Performance,
+        PopularityResource? Source
+    );
 
     private static CatalogPerformance Project(
         PerformanceRow row,
         string slug,
-        PerformancePlays popularity
+        PerformancePopularity popularity
     ) =>
         new(
             new(row.ShowUuid),
@@ -619,11 +638,9 @@ public sealed class CatalogPerformances(DbService db, CatalogSongMetadataReader 
                     : new(row.PreviousId, row.PreviousSong!, row.SegueFrom),
                 row.NextId is null ? null : new(row.NextId, row.NextSong!, row.SegueInto),
                 CatalogWebLinks.Source(slug, row.DisplayDate, row.SourceUuid),
-                popularity.SourcePlays,
-                popularity.SourceDays
+                popularity.Source
             ),
-            popularity.Plays,
-            popularity.Days
+            popularity.Performance
         );
 
     private sealed record Artist(int Id, string Slug, bool Approved);
@@ -664,6 +681,10 @@ public sealed record CatalogPerformancePage(
 [JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
 public sealed record CatalogPerformanceNeighbor(string Id, string Song, bool Segue);
 
+/// <summary>Identifies a song performed at a show, independent of any recording.</summary>
+[JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
+public record CatalogPerformanceSummary(ShowId ShowId, string SongId, string Song);
+
 [JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
 public sealed record CatalogPerformance(
     ShowId ShowId,
@@ -677,10 +698,8 @@ public sealed record CatalogPerformance(
     long EligibleSourceReviewCount,
     IReadOnlyList<TrackId> TrackIds,
     CatalogPerformanceRecording Representative,
-    [property: JsonProperty("plays_1y", NullValueHandling = NullValueHandling.Ignore)]
-        long? Plays1y,
-    [property: JsonProperty(NullValueHandling = NullValueHandling.Ignore)] long? DaysWithPlays
-);
+    PopularityResource? Popularity
+) : CatalogPerformanceSummary(ShowId, SongId, Song);
 
 /// <summary>The longest eligible playable file, including any other songs in that file.</summary>
 [JsonObject(NamingStrategyType = typeof(SnakeCaseNamingStrategy))]
@@ -691,7 +710,5 @@ public sealed record CatalogPerformanceRecording(
     CatalogPerformanceNeighbor? Previous,
     CatalogPerformanceNeighbor? Next,
     string Link,
-    [property: JsonProperty("source_plays_1y", NullValueHandling = NullValueHandling.Ignore)]
-        long? SourcePlays1y,
-    [property: JsonProperty(NullValueHandling = NullValueHandling.Ignore)] long? SourceDaysWithPlays
+    PopularityResource? Popularity
 );

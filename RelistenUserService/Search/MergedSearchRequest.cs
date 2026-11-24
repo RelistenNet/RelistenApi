@@ -21,11 +21,15 @@ public sealed record MergedSearchRequest
     [FromQuery(Name = "request_id")]
     public string? RequestId { get; init; }
 
+    [FromQuery(Name = "reading_id")]
+    public string? ReadingId { get; init; }
+
     internal bool IsValid()
     {
         var boosts = Values(BoostArtistIds).ToArray();
         return (Q?.Length ?? 0) <= 256
             && (RequestId?.Length ?? 0) <= 128
+            && (ReadingId?.Length ?? 0) <= 192
             && Page is >= 1 and <= 100
             && (Mode is "explore" or "add_tracks")
             && (
@@ -46,8 +50,10 @@ public sealed record MergedSearchRequest
     }
 
     internal bool WantsCatalog => !Scope.Equals("playlists", StringComparison.OrdinalIgnoreCase);
+    internal bool IsAll => Scope.Equals("all", StringComparison.OrdinalIgnoreCase);
     internal bool WantsPlaylists =>
-        (!WantsCatalog || Scope.Equals("all", StringComparison.OrdinalIgnoreCase))
+        (!WantsCatalog || IsAll)
+        && Mode != "add_tracks"
         && !Values(Ignore).Contains("playlists", StringComparer.OrdinalIgnoreCase);
 
     internal string CatalogPath()
@@ -61,6 +67,7 @@ public sealed record MergedSearchRequest
         query.Add(new("typing", Typing ? "true" : "false"));
         query.Add(new("page", Page.ToString(System.Globalization.CultureInfo.InvariantCulture)));
         query.Add(new("request_id", RequestId));
+        query.Add(new("reading_id", ReadingId));
         query.AddRange(
             Values(BoostArtistIds)
                 .Select(value => new KeyValuePair<string, string?>("boost_artist_ids", value))
@@ -68,7 +75,8 @@ public sealed record MergedSearchRequest
         query.AddRange(
             (Ignore ?? []).Select(value => new KeyValuePair<string, string?>("ignore", value))
         );
-        return "api/v4/search" + QueryString.Create(query.Where(pair => pair.Value != null));
+        return Relisten.Search.CatalogSearchExchange.Path.TrimStart('/')
+            + QueryString.Create(query.Where(pair => pair.Value != null));
     }
 
     private static IEnumerable<string> Values(string[]? values) =>

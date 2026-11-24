@@ -18,6 +18,7 @@ using Microsoft.Extensions.Logging;
 using NUnit.Framework;
 using OpenIddict.Abstractions;
 using OpenIddict.Validation;
+using Relisten.Search;
 using RelistenIngestionWorker.AccountDeletion;
 using RelistenUserService;
 using RelistenUserService.Authentication;
@@ -35,7 +36,7 @@ public sealed partial class TestMcpHttp
     private const string McpOrigin = "https://mcp.relisten.localhost:5443";
     private const string Resource = McpOrigin + "/mcp";
     private const string MetadataPath = "/.well-known/oauth-protected-resource/mcp";
-    private const string CatalogSearchPath = "/api/v4/search";
+    private const string CatalogSearchPath = CatalogSearchExchange.Path;
     private const string ChatGpt = "https://chatgpt.com/oauth/client.json";
     private const string ChatGptRedirect = "https://chatgpt.com/connector_platform_oauth_redirect";
     private const string Codex = "https://chatgpt.com/oauth/codex/client.json";
@@ -311,46 +312,43 @@ public sealed partial class TestMcpHttp
             uri.AbsolutePath.Should().Be(CatalogSearchPath);
             query["q"].ToString().Should().Be("Harbor Hall 1998");
             query["artist_id"].ToString().Should().Be(artistId);
-            return new
-            {
-                availability = "full",
-                sections = new
+            var artist = FixtureResource(new { id = artistId, name = "Example Artist" });
+            var venue = FixtureResource(new { id = venueId, name = "Harbor Hall" });
+            var show = FixtureResource(
+                new
                 {
-                    shows = new[]
-                    {
-                        new
-                        {
-                            kind = "tour",
-                            id = tourId,
-                            label = "Autumn Tour",
-                        },
-                    },
-                    performances = new[]
-                    {
-                        new
-                        {
-                            kind = "performance",
-                            id = "perf_example",
-                            show_id = showId,
-                            date = 19981001,
-                            artist_id = artistId,
-                            artist_label = "Example Artist",
-                            venue_id = venueId,
-                            venue_label = "Harbor Hall",
-                        },
-                    },
-                    songs = new[]
-                    {
-                        new
-                        {
-                            id = "song_example",
-                            label = "The Harbor Song",
-                            artist_id = artistId,
-                        },
-                    },
-                    venues = new[] { new { id = venueId, label = "Harbor Hall" } },
+                    id = showId,
+                    date = "1998-10-01",
+                    display_date = "1998-10-01",
+                    imported_venue = venue,
+                }
+            );
+            return CatalogAnswer(
+                new TourSearchResult(
+                    artist,
+                    FixtureResource(new { id = tourId, name = "Autumn Tour" })
+                )
+                {
+                    Key = $"tour:{tourId}",
                 },
-            };
+                new PerformanceSearchResult(
+                    artist,
+                    show,
+                    null,
+                    FixtureResource(new { id = "track_example" })
+                )
+                {
+                    Key = "performance:track:track_example",
+                },
+                new SongSearchResult(
+                    artist,
+                    FixtureResource(new { id = "song_example", name = "The Harbor Song" })
+                )
+                {
+                    Key = "song:song_example",
+                },
+                new VenueSearchResult(venue, artist) { Key = $"venue:{venueId}" }
+            );
         });
 
         var result = await Call("find", new { text = "Harbor Hall 1998", artist = artistId });
@@ -367,9 +365,85 @@ public sealed partial class TestMcpHttp
     }
 
     [Test]
+    public async Task FindReturnsTheSequenceTitlesWithTheirExactRecordingTarget()
+    {
+        const string showId = "show_example";
+        const string sourceId = "source_example";
+        const string trackId = "track_first";
+        var passage = new PassageSearchResult(
+            FixtureResource(new { slug = "example" }),
+            FixtureResource(new { id = showId, date = "1998-10-01" }),
+            new(
+                sourceId,
+                [
+                    FixtureResource(new { id = trackId }),
+                    FixtureResource(new { id = "track_second" }),
+                ],
+                [
+                    new(
+                        FixtureResource(new { id = "song_first", name = "First Song" }),
+                        trackId,
+                        0
+                    ),
+                    new(
+                        FixtureResource(new { id = "song_second", name = "Second Song" }),
+                        "track_second",
+                        0
+                    ),
+                ]
+            )
+        )
+        {
+            Key = "sequence:show_example:song_first:song_second",
+        };
+        await StartApp(catalogResponse: _ => CatalogAnswer(passage));
+
+        var result = await Call("find", new { text = "first song second song" });
+
+        var row = result.GetProperty("structuredContent").GetProperty("sequences")[0];
+        row.GetProperty("label").GetString().Should().Be("First Song → Second Song");
+        row.GetProperty("song_titles")
+            .EnumerateArray()
+            .Select(title => title.GetString())
+            .Should()
+            .Equal("First Song", "Second Song");
+        row.GetProperty("show_id").GetString().Should().Be(showId);
+        row.GetProperty("source_id").GetString().Should().Be(sourceId);
+        row.GetProperty("track_ids")[0].GetString().Should().Be(trackId);
+        row.GetProperty("parts")[0].GetProperty("track_id").GetString().Should().Be(trackId);
+    }
+
+    [Test]
+    public async Task SearchAndFindReadTheSameCatalogApiReply()
+    {
+        // Captured from the Catalog API's internal exchange, not serialized by this test.
+        var reply = await File.ReadAllTextAsync(
+            Path.Combine(
+                TestContext.CurrentContext.TestDirectory,
+                "Fixtures",
+                "catalog-search-artist.json"
+            )
+        );
+        await StartApp(catalogResponse: _ => reply);
+
+        var response = await SearchHttp("matched artist", "artists");
+        var searchArtist = response.GetProperty("results")[0].GetProperty("artist");
+        searchArtist.GetProperty("name").GetString().Should().Be("Matched Artist");
+        response.GetProperty("availability").GetProperty("catalog").GetString().Should().Be("full");
+
+        var find = await Call("find", new { text = "matched artist" });
+        var artist = find.GetProperty("structuredContent").GetProperty("artists")[0];
+        artist
+            .GetProperty("id")
+            .GetString()
+            .Should()
+            .Be(searchArtist.GetProperty("id").GetString());
+    }
+
+    [Test]
     public async Task FindReportsSearchUnavailability()
     {
-        await StartApp(catalogResponse: _ => new { availability = "unavailable" });
+        await StartApp(catalogResponse: _ => CatalogUnavailable());
 
         var result = await Call("find", new { text = "Harbor Hall 1998" });
 
@@ -876,7 +950,7 @@ public sealed partial class TestMcpHttp
                 ["Accounts:McpCatalogBaseUrl"] = "https://catalog.example.test",
                 ["Accounts:CatalogBaseUrl"] = "https://catalog.example.test",
                 ["Search:PlaylistAlias"] = playlistAlias,
-                ["MCP_REVIEW_SEARCH_KEY"] = ReviewServiceKey,
+                [CatalogSearchExchange.KeySetting] = ReviewServiceKey,
                 ["MCP_WRITE_ID_KEY"] = WriteIdKey,
                 ["Sonos:PublicBaseUrl"] = sonos is null ? null : "https://sonos.example.test/",
                 ["Sonos:ClientId"] = sonos is null ? null : "test-id",
@@ -1254,6 +1328,39 @@ public sealed partial class TestMcpHttp
 
     private sealed record TokenPair(string Access, string Refresh);
 
+    private static JsonElement FixtureResource(object body) =>
+        JsonSerializer.SerializeToElement(body, SearchJson.Options);
+
+    private static CatalogSearchEnvelope CatalogAnswer(params SearchResult[] rows) =>
+        new(
+            new SearchPage(
+                "",
+                null,
+                "all",
+                new("full", "not_requested"),
+                new Dictionary<string, int> { ["songs"] = 1 },
+                SearchReadings.Empty,
+                null,
+                []
+            ),
+            new(null, null, false),
+            rows.Select(row => new SearchCandidate(
+                    row,
+                    new(SearchIdentityPriority.None, false, row is ReviewSearchResult ? 0 : 100, 0)
+                ))
+                .ToArray(),
+            24
+        );
+
+    private static CatalogSearchEnvelope CatalogUnavailable()
+    {
+        var result = CatalogAnswer();
+        return result with
+        {
+            Page = result.Page with { Availability = new("unavailable", "not_requested") },
+        };
+    }
+
     private sealed class CatalogStub(Func<Uri, object?>? respond) : HttpMessageHandler
     {
         public Uri? LastRequest { get; private set; }
@@ -1273,22 +1380,21 @@ public sealed partial class TestMcpHttp
                 AuthorizedReviewRequests++;
             }
             var body = respond is null
-                ? new
-                {
-                    availability = "full",
-                    sections = new
-                    {
-                        artists = new[]
-                        {
+                ? CatalogAnswer(
+                    new ArtistSearchResult(
+                        FixtureResource(
                             new
                             {
                                 id = "artist_example",
-                                label = "Synthetic Artist",
-                                artist_slug = "synthetic",
-                            },
-                        },
-                    },
-                }
+                                name = "Synthetic Artist",
+                                slug = "synthetic",
+                            }
+                        )
+                    )
+                    {
+                        Key = "artist:artist_example",
+                    }
+                )
                 : respond(request.RequestUri!);
 
             return Task.FromResult(
@@ -1296,7 +1402,19 @@ public sealed partial class TestMcpHttp
                     ? new HttpResponseMessage(HttpStatusCode.NotFound)
                     : new HttpResponseMessage(HttpStatusCode.OK)
                     {
-                        Content = JsonContent.Create(body),
+                        Content = body switch
+                        {
+                            string raw => new StringContent(
+                                raw,
+                                System.Text.Encoding.UTF8,
+                                "application/json"
+                            ),
+                            CatalogSearchEnvelope envelope => JsonContent.Create(
+                                envelope,
+                                options: SearchJson.Options
+                            ),
+                            _ => JsonContent.Create(body),
+                        },
                     }
             );
         }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -15,59 +16,105 @@ namespace Relisten.Search;
 /// <summary>Coordinates one search request against the current catalog aliases.</summary>
 public sealed class CatalogSearchCoordinator
 {
-    // Leave room for a recovery request and playable browsing after the primary
-    // multi-search, while capping the serial work each keystroke can trigger.
-    private const int ExtraSearchLimit = 2;
-
-    private readonly record struct PlaybackContext(string? Artist, bool Promote, bool Browse);
-
     private readonly TypesenseClient _typesense;
     private readonly CatalogQueryEvidenceStore _evidence;
+    private readonly CatalogQueryEvidenceRefreshService? _refresh;
     private readonly ILogger<CatalogSearchCoordinator> _logger;
     private readonly string _prefix;
 
     internal CatalogSearchCoordinator(
         TypesenseClient typesense,
         CatalogQueryEvidenceStore evidence,
+        CatalogQueryEvidenceRefreshService? refresh,
         ILogger<CatalogSearchCoordinator> logger,
         string prefix
     )
     {
         _typesense = typesense;
         _evidence = evidence;
+        _refresh = refresh;
         _logger = logger;
         _prefix = prefix;
     }
 
-    internal async Task<SearchResponse> Search(
+    internal Task<CatalogSearchEnvelope> Search(
         SearchInput input,
         CancellationToken cancellationToken
     )
     {
         var evidence = _evidence.Current;
-        var query = SearchInterpretationReader.Read(input, evidence);
-        var conflictingCountry = input.Country != null && query.Country != input.Country;
-        if (conflictingCountry)
+        var collections = new SearchCollections(_prefix, evidence.Collection);
+        return new CatalogSearchRun(_typesense, _logger, collections, _refresh).Search(
+            input,
+            evidence,
+            cancellationToken
+        );
+    }
+}
+
+// Evidence and resources must come from the same generation. A daily publish
+// can swap several aliases while one request is retrieving and attaching rows.
+internal sealed class SearchCollections(string prefix, string? entities)
+{
+    private readonly string? _build = Build(prefix, entities);
+
+    private static string? Build(string prefix, string? entities)
+    {
+        var stem = SearchIndexBuilder.AliasName(prefix, SearchIndexSchema.Entities) + "_";
+        return entities?.StartsWith(stem, StringComparison.Ordinal) == true
+            ? entities[stem.Length..]
+            : null;
+    }
+
+    public string Name(string kind) =>
+        _build is { Length: > 0 } generation
+            ? SearchIndexBuilder.CollectionName(prefix, kind, generation)
+            : SearchIndexBuilder.AliasName(prefix, kind);
+}
+
+internal sealed class CatalogSearchRun(
+    TypesenseClient _typesense,
+    ILogger<CatalogSearchCoordinator> _logger,
+    SearchCollections collections,
+    CatalogQueryEvidenceRefreshService? refresh
+)
+{
+    // Spend up to two extras in this order: verified place/song and related
+    // versions or dated browse, nicknames, alternate readings, ordinary browse,
+    // popular versions, empty-result recovery, then playable promotion.
+    // Scoped paging probes and render/verification reads are outside this budget.
+    private const int ExtraSearchLimit = 2;
+
+    private readonly record struct PlaybackContext(string? Artist, bool Promote, bool Browse);
+
+    private sealed record CatalogBrowse(SearchRequest Request, string? Match);
+
+    public async Task<CatalogSearchEnvelope> Search(
+        SearchInput input,
+        CatalogQueryEvidence evidence,
+        CancellationToken cancellationToken
+    )
+    {
+        // The client can return from a selected reading to the ordinary query.
+        var usePrimary = input.ReadingId == "query";
+        if (usePrimary)
         {
-            query = query with { Country = input.Country };
+            input = input with { ReadingId = null };
         }
 
-        var reviewsAvailable = evidence.HasReviews(query.Artist ?? query.ReadingArtist);
-        var venues = RecognizedVenues(input, query, evidence.Vocabulary);
-        var interpretation = query.Interpretation(Chips(query, evidence.Vocabulary, venues));
-
+        var reading = Interpret(input, evidence, usePrimary);
         if (evidence.Collection == null)
         {
-            return Response(input, interpretation, reviewsAvailable, "unavailable");
+            return Empty(input, reading, "unavailable");
         }
 
         if (
-            (input.ArtistId != null && query.SelectedArtist == null)
-            || (input.Scope == SearchScope.Reviews && !reviewsAvailable)
-            || conflictingCountry
+            (input.ArtistId != null && reading.Query.SelectedArtist == null)
+            || (input.Scope == SearchScope.Reviews && !reading.ReviewsAvailable)
+            || reading.ConflictingCountry
         )
         {
-            return Response(input, interpretation, reviewsAvailable, "full");
+            return Empty(input, reading, "full");
         }
 
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -76,81 +123,570 @@ public sealed class CatalogSearchCoordinator
         deadline.CancelAfter(input.Typing ? TimeSpan.FromSeconds(3) : TimeSpan.FromSeconds(5));
         try
         {
-            return await Run(
-                input,
-                query,
-                evidence,
-                venues,
-                reviewsAvailable,
-                interpretation,
-                deadline.Token
-            );
+            var candidates = await Run(input, reading, evidence, deadline.Token);
+            return await RenderPage(input, candidates, reading.Constraints, deadline.Token);
+        }
+        catch (SearchCollectionMissingException)
+        {
+            // Do not combine stale ranking evidence with a different index. The
+            // loader follows the latest entities alias immediately for later requests.
+            refresh?.RefreshNow();
+            return Empty(input, reading, "unavailable");
         }
         catch (Exception error)
             when (!cancellationToken.IsCancellationRequested
-                && error
-                    is HttpRequestException
-                        or OperationCanceledException
-                        or InvalidDataException
-                        or System.Text.Json.JsonException
+                && (IsSearchFailure(error) || error is OperationCanceledException)
             )
         {
             _logger.LogWarning(error, "Catalog search is temporarily unavailable");
-            return Response(input, interpretation, reviewsAvailable, "unavailable");
+            return Empty(input, reading, "unavailable");
         }
     }
 
-    internal async Task<SearchPerformance?> Files(string key, CancellationToken cancellationToken)
-    {
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        deadline.CancelAfter(TimeSpan.FromSeconds(5));
-        var alias = Alias(SearchIndexSchema.Performances);
-        var document = await _typesense.ReadDocument(alias, key, deadline.Token);
-        if (document is not { Kind: "performance" })
-        {
-            if (await _typesense.ReadAlias(alias, deadline.Token) == null)
-            {
-                throw new InvalidDataException("The performance search alias is unavailable.");
-            }
+    private sealed record InterpretedQuery(
+        SearchQuery Query,
+        IReadOnlySet<string> Venues,
+        SearchReadings Readings,
+        SearchConstraints Constraints,
+        CatalogReading? Alternative,
+        bool ReviewsAvailable,
+        bool ConflictingCountry,
+        bool UsePrimary
+    );
 
-            return null;
+    private static InterpretedQuery Interpret(
+        SearchInput input,
+        CatalogQueryEvidence evidence,
+        bool usePrimary = false
+    )
+    {
+        var query = SearchInterpretationReader.Read(input, evidence);
+        var conflictingCountry = input.Country != null && query.Country != input.Country;
+        if (conflictingCountry)
+        {
+            query = query with { Country = input.Country };
         }
 
-        return new SearchPerformance(
-            document.Id,
-            document.ShowId,
-            document.SongId,
-            document.Label,
-            (document.Files ?? [])
-                .GroupBy(file => file.SourceId)
-                .Select(source => new SearchPerformanceSource(
-                    source.Key,
-                    source.OrderBy(file => file.SetIndex).ThenBy(file => file.Position).ToArray()
-                ))
-                .ToArray()
+        var venues = RecognizedVenues(input, query, evidence.Vocabulary);
+        var options = CatalogReading.Options(input, query, venues, evidence);
+        var picked = options.FirstOrDefault(option => option.Option.Id == input.ReadingId);
+        // A verified place answers the former venue name or city first.
+        // Then try a unique artist initialism, then the literal query.
+        var alternative =
+            options.FirstOrDefault(option => option.Query.Reading == "place_alias")
+            ?? options.FirstOrDefault(option => option.Query.Reading == "artist_initialism")
+            ?? options.FirstOrDefault(option => option.Option.Id == "literal");
+
+        // Scoped pages use one query per collection. Interleaving independent
+        // pages of literal and inferred hits repeats the same item on later pages.
+        // A review must match its own text. Keep the place words when the
+        // request selects Reviews, even if the place also has a catalog alias.
+        var scopedPlace =
+            !usePrimary
+            && input.Scope is not (SearchScope.All or SearchScope.Reviews)
+            && alternative?.Query.Reading == "place_alias"
+                ? alternative
+                : null;
+        var active = picked ?? scopedPlace;
+        if (active != null)
+        {
+            query = active.Query;
+            venues = active.Venues;
+            if (query.Reading == "place_alias")
+            {
+                query = query with { Reading = "selected_place" };
+            }
+            if (active.Option.Id.StartsWith("artist:", StringComparison.Ordinal))
+            {
+                query = query with { SelectedArtist = query.Artist };
+            }
+        }
+
+        // A page can only advertise constraints shared by its primary and
+        // mixed readings. Scoped tabs run one reading, so inferred filters count.
+        var mixed = active == null && input.Scope == SearchScope.All ? alternative : null;
+        var enforcedArtist =
+            query.SelectedArtist ?? (input.Scope != SearchScope.All ? query.ImpliedArtist : null);
+        var artist = enforcedArtist is { } slug
+            ? evidence.Vocabulary.ArtistDocuments.GetValueOrDefault(slug)
+            : null;
+        var constraints = new SearchConstraints(
+            artist?.Id ?? input.ArtistId,
+            mixed == null || mixed.Query.Date == query.Date ? query.Date : null,
+            query.Reading == "selected_place"
+        );
+        var readings = Readings(input, query, artist, options, active, mixed);
+
+        return new(
+            query,
+            venues,
+            readings,
+            constraints,
+            mixed,
+            evidence.HasReviews(enforcedArtist),
+            conflictingCountry,
+            usePrimary
         );
     }
 
-    private async Task<SearchResponse> Run(
+    private async Task<CatalogPage> Run(
         SearchInput input,
-        SearchQuery query,
+        InterpretedQuery reading,
         CatalogQueryEvidence evidence,
-        IReadOnlySet<string> venues,
-        bool reviewsAvailable,
-        SearchInterpretation interpretation,
         CancellationToken cancellationToken
     )
     {
+        var retrieval = PlanRetrieval(input, reading, evidence.Vocabulary);
+        if (input.Scope == SearchScope.Shows)
+        {
+            return await RunScopedShows(input, reading, evidence, retrieval, cancellationToken);
+        }
+
+        var batches = await Retrieve(retrieval, cancellationToken);
+        var primary = await ResolvePrimaryHits(
+            input,
+            reading,
+            evidence,
+            retrieval,
+            batches,
+            cancellationToken
+        );
+        return await RankResults(
+            input,
+            reading,
+            evidence,
+            retrieval,
+            batches,
+            primary,
+            cancellationToken
+        );
+    }
+
+    private async Task<CatalogPage> RunScopedShows(
+        SearchInput input,
+        InterpretedQuery reading,
+        CatalogQueryEvidence evidence,
+        RetrievalPlan retrieval,
+        CancellationToken cancellationToken
+    )
+    {
+        var passages = FindPassages(input, reading, evidence);
+        var scoped = await RetrieveScopedShows(
+            input,
+            reading,
+            evidence,
+            retrieval,
+            passages.Count,
+            cancellationToken
+        );
+        var batches = scoped.Batches;
+        var visible = batches
+            .Primary.SelectMany(reply => reply.Documents)
+            .Select(SearchRanker.LabelSoundcheck)
+            .ToArray();
+        IReadOnlyList<SearchDocument> results =
+            scoped.TourRoute != null && input.Page == 1 ? [scoped.TourRoute, .. visible] : visible;
+
+        var recovered =
+            input.Page == 1
+            && scoped.Window.Total == 0
+            && !scoped.Partial
+            && batches.ExtraRequests < ExtraSearchLimit;
+        if (recovered)
+        {
+            (results, _) = await RecoverEmptyResults(
+                input,
+                reading.Query,
+                evidence,
+                reading.Venues,
+                retrieval.Primary,
+                ExtraSearchLimit - batches.ExtraRequests,
+                cancellationToken
+            );
+        }
+
+        var candidates = await RateMatches(
+            input,
+            reading,
+            evidence,
+            retrieval.NicknameReading,
+            batches,
+            new PrimaryHits(Documents: results, ExactPlaceSong: [], Related: [], NextPage: null),
+            cancellationToken
+        );
+        candidates.AddRange(
+            passages
+                .Skip(scoped.Window.Passages.Offset)
+                .Take(scoped.Window.Passages.Count)
+                .Select(passage =>
+                    CatalogSearchRanking.Passage(passage, reading.Readings.Applied.Id)
+                )
+        );
+        // Add Tracks promotes playable matches within this window. Pulling
+        // additional versions here would put them on two pages.
+        var ranked = RankedCandidate.Order(
+            candidates,
+            input.AddTracks,
+            reading.Query.Chronological,
+            reading.Query.Order
+        );
+        if (recovered)
+        {
+            ranked = ranked.Take(ScopedShowPage.Size).ToArray();
+        }
+        var counts = SearchTabCounts.Empty();
+        counts.Add(
+            SearchScope.Shows,
+            recovered && ranked.Length > 0 ? ranked.Length : scoped.Total.Count,
+            scoped.Total.Exact && (!recovered || ranked.Length == 0)
+        );
+        var nextPage =
+            input.Page < ScopedShowPage.LastPage
+            && scoped.Window.Total > input.Page * ScopedShowPage.Size
+                ? input.Page + 1
+                : (int?)null;
+        return new(
+            DescribeRetrieval(reading, retrieval, batches),
+            scoped.Partial ? "partial" : "full",
+            counts,
+            ranked,
+            nextPage
+        );
+    }
+
+    private sealed record ScopedShowResults(
+        ScopedShowPage.Window Window,
+        RetrievalBatch Batches,
+        SearchDocument? TourRoute,
+        (int Count, bool Exact) Total,
+        bool Partial
+    );
+
+    private async Task<ScopedShowResults> RetrieveScopedShows(
+        SearchInput input,
+        InterpretedQuery reading,
+        CatalogQueryEvidence evidence,
+        RetrievalPlan retrieval,
+        int passageCount,
+        CancellationToken cancellationToken
+    )
+    {
+        (RetrievalRole Role, SearchRequest Request)[] streams =
+        [
+            .. retrieval.Primary.Select(request => (RetrievalRole.Primary, request)),
+            .. retrieval.Nickname.Select(request => (RetrievalRole.Nickname, request)),
+        ];
+        var priorRows = Math.Max(0, (input.Page - 1) * ScopedShowPage.Size - passageCount);
+        var initialOffset = priorRows / Math.Max(1, streams.Length);
+        var requests = streams.Select(stream => stream.Request).ToArray();
+        var probe = requests
+            .Select(request => ScopedShowPage.Request(request, initialOffset, ScopedShowPage.Size))
+            .ToArray();
+        var replies = await Execute(probe, cancellationToken);
+        var tour =
+            passageCount == 0
+                ? await ScopedTourRoute(
+                    reading.Query,
+                    evidence.Vocabulary,
+                    probe,
+                    replies,
+                    initialOffset,
+                    cancellationToken
+                )
+                : null;
+        var leadingCount = passageCount + (tour == null ? 0 : 1);
+        var window = ScopedShowPage.Select(
+            input.Page,
+            leadingCount,
+            replies.Select(reply => reply.Found).ToArray()
+        );
+        var page = await ReadShowWindow(
+            requests,
+            replies,
+            window.Catalog,
+            initialOffset,
+            cancellationToken
+        );
+        var groups = streams.Zip(page).ToLookup(pair => pair.First.Role, pair => pair.Second);
+        var batches = new RetrievalBatch(
+            Primary: groups[RetrievalRole.Primary].ToArray(),
+            Supplemental: null,
+            Alternative: [],
+            Browse: null,
+            Related: null,
+            Nickname: groups[RetrievalRole.Nickname].ToArray(),
+            ExtraRequests: retrieval.Nickname.Length
+        );
+        var partial = page.Any(reply => reply.Rejected);
+        return new(
+            window,
+            batches,
+            tour,
+            CountScopedShows(probe, replies, leadingCount, partial),
+            partial
+        );
+    }
+
+    private async Task<SearchDocument?> ScopedTourRoute(
+        SearchQuery query,
+        SearchVocabulary vocabulary,
+        SearchRequest[] probe,
+        IReadOnlyList<SearchReply> replies,
+        int initialOffset,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!SearchRanker.CanSuggestTourRoute(query))
+        {
+            return null;
+        }
+
+        var entityStream = Array.FindIndex(
+            probe,
+            request => request.Collection == SearchIndexSchema.Entities
+        );
+        if (entityStream < 0)
+        {
+            return null;
+        }
+
+        // The first page can add a tour shortcut. Use the same first-page
+        // evidence on later pages so its slot never skips a show.
+        var anchor =
+            initialOffset == 0
+                ? replies[entityStream]
+                : (await Execute([probe[entityStream] with { Offset = 0 }], cancellationToken))[0];
+        return SearchRanker.TourRoute(query, vocabulary, anchor.Documents);
+    }
+
+    private static (int Count, bool Exact) CountScopedShows(
+        SearchRequest[] probe,
+        IReadOnlyList<SearchReply> replies,
+        int leadingCount,
+        bool partial
+    )
+    {
+        var streams = probe.Zip(replies);
+        var exact =
+            !partial && streams.All(pair => SearchTabCounts.ExactTotal(pair.First, pair.Second));
+        var rows = streams.Sum(pair =>
+            exact ? pair.Second.Found : SearchTabCounts.MinimumTotal(pair.First, pair.Second)
+        );
+        return (leadingCount + rows, exact);
+    }
+
+    // The initial offsets assume both index streams have hits. If one has
+    // ended, read the actual offset of the surviving stream before ranking.
+    private async Task<SearchReply[]> ReadShowWindow(
+        SearchRequest[] requests,
+        IReadOnlyList<SearchReply> replies,
+        ScopedShowPage.Slice[] slices,
+        int initialOffset,
+        CancellationToken cancellationToken
+    )
+    {
+        var page = replies.ToArray();
+        var missing = new List<(int Stream, SearchRequest Request)>();
+        for (var index = 0; index < slices.Length; index++)
+        {
+            var slice = slices[index];
+            var skip = slice.Offset - initialOffset;
+            if (
+                slice.Count == 0
+                || (skip >= 0 && skip + slice.Count <= page[index].Documents.Count)
+            )
+            {
+                page[index] = page[index] with
+                {
+                    Documents =
+                        slice.Count == 0
+                            ? []
+                            : page[index].Documents.Skip(skip).Take(slice.Count).ToArray(),
+                };
+                continue;
+            }
+
+            missing.Add(
+                (index, ScopedShowPage.Request(requests[index], slice.Offset, slice.Count))
+            );
+        }
+
+        var corrected = await Execute(
+            missing.Select(item => item.Request).ToArray(),
+            cancellationToken
+        );
+        foreach (var (item, reply) in missing.Zip(corrected))
+        {
+            page[item.Stream] = reply;
+        }
+        return page;
+    }
+
+    // Supplemental, alternative, browse and related retrieval are All-only.
+    private sealed record RetrievalPlan(
+        SearchRequest[] Primary,
+        SearchRequest? Supplemental,
+        SearchRequest[] Alternative,
+        CatalogBrowse? Browse,
+        SearchRequest? Related,
+        SearchRequest[] Nickname,
+        ReviewedSongReading? NicknameReading,
+        PlaybackContext Playback,
+        PlaceSongMatch? PlaceSong,
+        bool ExactPlaceSong
+    );
+
+    private static RetrievalPlan PlanRetrieval(
+        SearchInput input,
+        InterpretedQuery reading,
+        SearchVocabulary vocabulary
+    )
+    {
+        var query = reading.Query;
+        var venues = reading.Venues;
+        var alternative = reading.Alternative;
         var playback =
             input.AddTracks && input.Scope is (SearchScope.All or SearchScope.Shows)
-                ? ReadPlaybackContext(query, evidence.Vocabulary, venues)
+                ? ReadPlaybackContext(query, vocabulary, venues)
                 : default;
-        var plan = Plan(input, query, venues, reviewsAvailable, playback);
-        var replies = await Execute(plan, cancellationToken);
+        var placeSong = SearchRequests.ReadPlaceSong(input, query, vocabulary);
+        var datedVenues =
+            input is { Scope: SearchScope.All, Page: 1, ReadingId: null }
+            && input.Ignore?.Contains("venue") != true
+            && query.HasDate
+            && !query.Chronological
+                ? vocabulary.VenuesQualifiedByCity(query.Terms)
+                : FrozenSet<string>.Empty;
+        var plan = Plan(
+            input,
+            query,
+            venues,
+            reading.ReviewsAvailable,
+            playback,
+            placeSong?.VenueIds ?? (datedVenues.Count > 0 ? datedVenues : null),
+            RecordingSong(input, query, vocabulary) != null
+        );
+        var exactSearch =
+            input.Scope == SearchScope.All && placeSong != null
+                ? SearchRequests.ExactPlaceSong(query, placeSong)
+                : null;
+        var datedBrowse = DatedPlaceBrowse(input, query, vocabulary, datedVenues, placeSong);
+        var related =
+            exactSearch != null
+            && placeSong != null
+            && datedBrowse == null
+            && !input.Typing
+            && input.ReadingId == null
+            && query.Date == null
+                ? SearchRequests.RelatedSongVersions(query, placeSong)
+                : null;
+        var reserved =
+            (exactSearch == null ? 0 : 1)
+            + (datedBrowse == null ? 0 : 1)
+            + (related == null ? 0 : 1);
+        var nickname = vocabulary.ReadReviewedSong(
+            input,
+            query,
+            query.Reading == "selected_place" ? venues : null
+        );
+        var nicknamePlan =
+            nickname == null
+                ? []
+                : SearchRequests
+                    .ReviewedSong(input, query, nickname)
+                    .Take(ExtraSearchLimit - reserved)
+                    .ToArray();
+        reserved += nicknamePlan.Length;
+        if (input.Scope != SearchScope.All && nicknamePlan.Length > 0)
+        {
+            // A scoped tab advances one result stream per collection. A
+            // verified nickname supplies that stream instead of a second page.
+            var nicknameCollections = nicknamePlan
+                .Select(request => request.Collection)
+                .ToHashSet();
+            plan = plan.Where(request => !nicknameCollections.Contains(request.Collection))
+                .ToArray();
+        }
+        var alternativePlan = AlternativeSearches(
+            input,
+            query,
+            alternative,
+            ExtraSearchLimit - reserved
+        );
+        var budget = ExtraSearchLimit - reserved - alternativePlan.Length;
+        var browse = datedBrowse ?? (budget > 0 ? BrowseCatalog(input, query, vocabulary) : null);
+        if (browse != null && datedBrowse == null)
+        {
+            budget--;
+        }
+        var supplemental =
+            exactSearch
+            ?? (
+                budget > 0
+                    ? SearchRequests.PopularExactSong(input, query, venues, vocabulary)
+                    : null
+            );
+        return new(
+            plan.Select(request =>
+                    input.Scope == SearchScope.All
+                    && request.Collection == SearchIndexSchema.Entities
+                        ? request with
+                        {
+                            FacetBy = "kind",
+                        }
+                        : request
+                )
+                .ToArray(),
+            supplemental,
+            alternativePlan,
+            browse,
+            related,
+            nicknamePlan,
+            nickname,
+            playback,
+            placeSong,
+            exactSearch != null
+        );
+    }
+
+    private sealed record PrimaryHits(
+        IReadOnlyList<SearchDocument> Documents,
+        SearchDocument[] ExactPlaceSong,
+        SearchDocument[] Related,
+        int? NextPage
+    );
+
+    private async Task<PrimaryHits> ResolvePrimaryHits(
+        SearchInput input,
+        InterpretedQuery reading,
+        CatalogQueryEvidence evidence,
+        RetrievalPlan retrieval,
+        RetrievalBatch batches,
+        CancellationToken cancellationToken
+    )
+    {
+        var query = reading.Query;
+        var venues = reading.Venues;
+        var plan = retrieval.Primary;
+        var replies = batches.Primary;
+        var additional = batches.Supplemental is { } extra
+            ? SupplementalPerformances(extra, query.Soundboard)
+            : [];
+        var exact = retrieval.ExactPlaceSong ? additional : [];
+        var browse =
+            retrieval.Browse is { } browsing && batches.Browse is { } browseReply
+                ? BrowseResults(query, evidence, browseReply, browsing.Match)
+                : [];
+        var related =
+            batches.Related is { } relatedReply
+            && retrieval.PlaceSong is { } placeSong
+            && exact.Length > 0
+                ? RelatedVersions(relatedReply, query.Soundboard, placeSong)
+                : [];
 
         var visible = PrimaryResults(input, query, evidence, plan, replies);
-        var searchesLeft = ExtraSearchLimit;
-        if (visible.Count == 0)
+        var searchesLeft = ExtraSearchLimit - batches.ExtraRequests;
+        if (visible.Count == 0 && additional.Length == 0 && browse.Length == 0 && searchesLeft > 0)
         {
             (visible, searchesLeft) = await RecoverEmptyResults(
                 input,
@@ -158,16 +694,17 @@ public sealed class CatalogSearchCoordinator
                 evidence,
                 venues,
                 plan,
+                searchesLeft,
                 cancellationToken
             );
         }
 
-        if (playback.Promote)
+        if (retrieval.Playback.Promote && searchesLeft > 0)
         {
             visible = await PrioritizePlayable(
                 input,
                 query,
-                playback,
+                retrieval.Playback,
                 venues,
                 visible,
                 searchesLeft,
@@ -176,15 +713,478 @@ public sealed class CatalogSearchCoordinator
         }
 
         visible = SearchPlayTieBreak.Rank(input, query, visible, evidence);
-        return DecorateResults(
-            input,
-            query,
-            evidence,
-            reviewsAvailable,
-            interpretation,
-            visible,
-            replies
+        visible =
+            exact.Length > 0 && !visible.Any(result => result.Name == query.Terms)
+                ? SearchRanker.LeadWithPerformances(visible, exact, mixed: true)
+                : SearchRanker.PreferPlaceAndSong(input, query, visible, evidence.Vocabulary);
+        if (!retrieval.ExactPlaceSong && additional.Length > 0)
+        {
+            // These are ordinary candidates. Keep explicit place promotions separate.
+            visible = [.. visible, .. additional];
+        }
+        var pageReplies = replies
+            .Zip(plan)
+            .Concat(batches.Alternative.Zip(retrieval.Alternative))
+            .Concat(batches.Nickname.Zip(retrieval.Nickname));
+        var nextPage =
+            input.Scope != SearchScope.All
+            && input.Page < 100
+            && pageReplies.Any(pair => pair.First.Found > input.Page * pair.Second.PerPage)
+                ? input.Page + 1
+                : (int?)null;
+        return new([.. visible, .. browse], exact, related, nextPage);
+    }
+
+    private enum RetrievalRole
+    {
+        Primary,
+        Supplemental,
+        Alternative,
+        Browse,
+        Related,
+        Nickname,
+    }
+
+    private sealed record RetrievalBatch(
+        SearchReply[] Primary,
+        SearchReply? Supplemental,
+        SearchReply[] Alternative,
+        SearchReply? Browse,
+        SearchReply? Related,
+        SearchReply[] Nickname,
+        int ExtraRequests
+    );
+
+    private async Task<RetrievalBatch> Retrieve(
+        RetrievalPlan plan,
+        CancellationToken cancellationToken
+    )
+    {
+        static IEnumerable<(RetrievalRole, SearchRequest)> One(
+            RetrievalRole role,
+            SearchRequest? request
+        )
+        {
+            if (request != null)
+            {
+                yield return (role, request);
+            }
+        }
+
+        (RetrievalRole Role, SearchRequest Request)[] requests =
+        [
+            .. plan.Primary.Select(request => (RetrievalRole.Primary, request)),
+            .. One(RetrievalRole.Supplemental, plan.Supplemental),
+            .. plan.Alternative.Select(request => (RetrievalRole.Alternative, request)),
+            .. One(RetrievalRole.Browse, plan.Browse?.Request),
+            .. One(RetrievalRole.Related, plan.Related),
+            .. plan.Nickname.Select(request => (RetrievalRole.Nickname, request)),
+        ];
+        var replies = await Execute(
+            requests.Select(request => request.Request).ToArray(),
+            cancellationToken
         );
+        var groups = requests.Zip(replies).ToLookup(pair => pair.First.Role, pair => pair.Second);
+        return new(
+            groups[RetrievalRole.Primary].ToArray(),
+            groups[RetrievalRole.Supplemental].SingleOrDefault(),
+            groups[RetrievalRole.Alternative].ToArray(),
+            groups[RetrievalRole.Browse].SingleOrDefault(),
+            groups[RetrievalRole.Related].SingleOrDefault(),
+            groups[RetrievalRole.Nickname].ToArray(),
+            requests.Length - plan.Primary.Length
+        );
+    }
+
+    private static SearchReadings Readings(
+        SearchInput input,
+        SearchQuery query,
+        SearchDocument? artist,
+        CatalogReading[] options,
+        CatalogReading? picked,
+        CatalogReading? mixed
+    )
+    {
+        var appliedId = picked?.Option.Id ?? "query";
+        var chips = new HashSet<(string Key, string Value)>();
+        SearchReading Unique(SearchReading reading) =>
+            reading with
+            {
+                Chips = reading.Chips.Where(chip => chips.Add((chip.Key, chip.Value))).ToArray(),
+            };
+
+        var applied = Unique(
+            new SearchReading(
+                appliedId,
+                [.. picked?.Option.Chips ?? [], .. Chips(input, query, artist, mixed?.Query)]
+            )
+        );
+        var alternatives = options
+            .Select(option => option.Option)
+            .Where(option => option.Id != appliedId)
+            .Select(Unique)
+            .Where(option => option.Id == "literal" || option.Chips.Count > 0)
+            .ToList();
+
+        if (appliedId != "query" && alternatives.All(option => option.Id != "query"))
+        {
+            alternatives.Insert(0, new SearchReading("query", []));
+        }
+
+        return new(applied, alternatives);
+    }
+
+    private static SearchReadings DescribeRetrieval(
+        InterpretedQuery reading,
+        RetrievalPlan plan,
+        RetrievalBatch batches
+    )
+    {
+        if (
+            plan.NicknameReading?.ReplacesYear != true
+            || !batches.Nickname.Any(reply => reply.Found > 0)
+        )
+        {
+            return reading.Readings;
+        }
+
+        // This reading interpreted the apparent year as part of the title.
+        var applied = reading.Readings.Applied;
+        return reading.Readings with
+        {
+            Applied = applied with
+            {
+                Chips = applied.Chips.Where(chip => chip.Key != "year").ToArray(),
+            },
+        };
+    }
+
+    private async Task<CatalogSearchEnvelope> RenderPage(
+        SearchInput input,
+        CatalogPage page,
+        SearchConstraints constraints,
+        CancellationToken token
+    )
+    {
+        var pool = page.Ranked;
+        var available = new Dictionary<string, SearchResult>(StringComparer.Ordinal);
+        var rejected = new HashSet<string>(StringComparer.Ordinal);
+        var display = new CatalogSearchDisplay(_typesense, collections);
+        RankedCandidate[] selected;
+        string[] moreScopes;
+        // A shortlist has the IDs to score cheaply. Fetch v4 payloads only for
+        // the page, then reapply diversity if a missing resource rejects a row.
+        do
+        {
+            var eligible = pool.Where(candidate => !rejected.Contains(candidate.Row.Key)).ToArray();
+            (selected, moreScopes) = SelectPage(input, eligible, page.SongFocused);
+            var missing = selected
+                .Where(candidate => !available.ContainsKey(candidate.Row.Key))
+                .ToArray();
+            if (missing.Length == 0)
+            {
+                break;
+            }
+
+            var resources = await display.Read(missing, token);
+            var resolved = CatalogSearchResults.Attach(missing, resources);
+            foreach (var candidate in missing)
+            {
+                if (resolved.TryGetValue(candidate.Row.Key, out var result))
+                {
+                    available.Add(candidate.Row.Key, result);
+                }
+                else
+                {
+                    rejected.Add(candidate.Row.Key);
+                }
+            }
+        } while (rejected.Count > 0);
+
+        var leadSong = RankedCandidate.LeadSong(
+            pool.Where(candidate => !rejected.Contains(candidate.Row.Key))
+        );
+        var candidates = selected
+            .Where(candidate => available.ContainsKey(candidate.Row.Key))
+            .Select(candidate => new SearchCandidate(
+                available[candidate.Row.Key],
+                candidate.MergeOrder(candidate.Row.Key == leadSong)
+            ))
+            .DistinctBy(candidate => candidate.Result.Key, StringComparer.Ordinal)
+            .ToArray();
+        var availability = rejected.Count == 0 ? page.Availability : "partial";
+        var scope = input.Scope.ToString().ToLowerInvariant();
+        if (availability == "partial" && input.Scope != SearchScope.All)
+        {
+            page.Counts.Exact.Remove(scope);
+            page.Counts.Add(input.Scope, candidates.Length, exact: false);
+        }
+        var limit =
+            input.Scope == SearchScope.All
+                ? (input.AddTracks || page.SongFocused ? SearchDiversity.SongPageSize : 24)
+                : candidates.Length;
+        return new(
+            new SearchPage(
+                input.Text,
+                input.RequestId,
+                scope,
+                new(availability, "not_requested"),
+                page.Counts.Exact,
+                page.Readings,
+                page.NextPage,
+                moreScopes
+            )
+            {
+                CountLowerBounds = page.Counts.LowerBounds,
+            },
+            constraints,
+            candidates,
+            limit
+        );
+    }
+
+    private static (RankedCandidate[] Results, string[] MoreScopes) SelectPage(
+        SearchInput input,
+        RankedCandidate[] ranked,
+        bool songFocused
+    )
+    {
+        if (input.Scope != SearchScope.All)
+        {
+            return (ranked, []);
+        }
+
+        return input.AddTracks
+            ? (SearchDiversity.AddTracksPage(ranked, songFocused), [])
+            : SearchDiversity.ExplorePage(ranked, songFocused);
+    }
+
+    private static CatalogSearchEnvelope Empty(
+        SearchInput input,
+        InterpretedQuery reading,
+        string availability
+    )
+    {
+        var counts = SearchTabCounts.Empty();
+        if (availability == "full" && input.Scope != SearchScope.All)
+        {
+            counts.Add(input.Scope, 0, exact: true);
+        }
+        return new(
+            new SearchPage(
+                input.Text,
+                input.RequestId,
+                input.Scope.ToString().ToLowerInvariant(),
+                new(availability, "not_requested"),
+                counts.Exact,
+                reading.Readings,
+                null,
+                []
+            ),
+            reading.Constraints,
+            [],
+            24
+        );
+    }
+
+    private sealed record CatalogPage(
+        SearchReadings Readings,
+        string Availability,
+        SearchTabCounts Counts,
+        RankedCandidate[] Ranked,
+        int? NextPage
+    )
+    {
+        public bool SongFocused { get; init; }
+    }
+
+    private static SearchRequest[] AlternativeSearches(
+        SearchInput input,
+        SearchQuery query,
+        CatalogReading? alternative,
+        int budget
+    )
+    {
+        if (
+            alternative == null
+            || budget == 0
+            || alternative.Query.Terms == query.Terms && alternative.Query.Artist == query.Artist
+        )
+        {
+            return [];
+        }
+
+        var initialism = alternative.Query.Reading == "artist_initialism";
+        var placeAlias = alternative.Query.Reading == "place_alias";
+        if (!initialism && !placeAlias && input.Scope != SearchScope.All)
+        {
+            return [];
+        }
+
+        var artistAndDateOnly =
+            query is { ImpliedArtist: not null, Terms.Length: 0 } && query.HasDate;
+        return SearchRequests
+            .Build(alternative.Query, input.Scope, typing: true, alternative.Venues, input.Page)
+            .Take(budget)
+            .Select(request =>
+                initialism || placeAlias ? request with { Optional = true }
+                : artistAndDateOnly ? request with { NumTypos = 0, Optional = true }
+                : request
+            )
+            .ToArray();
+    }
+
+    private static CatalogBrowse? BrowseCatalog(
+        SearchInput input,
+        SearchQuery query,
+        SearchVocabulary vocabulary
+    )
+    {
+        if (
+            input is not { Scope: SearchScope.All, Page: 1 }
+            || input.AddTracks
+            || query.Order != "regular"
+            || query.Chronological
+            || query.Soundboard
+            || query.Matrix
+        )
+        {
+            return null;
+        }
+
+        if (query.NamedArtist is { } artist)
+        {
+            return new(SearchRequests.PopularArtistShows(query, artist), null);
+        }
+        if (
+            input.ReadingId != "literal"
+            && input.Ignore?.Contains("run") != true
+            && SearchRequests.PopularRunShows(query, vocabulary) is { } run
+        )
+        {
+            return new(run, "run_browse");
+        }
+        if (input.Ignore?.Contains("venue") != true && input.ReadingId == null)
+        {
+            var venues = vocabulary
+                .VenuesFor(query.Terms)
+                .Select(venue => venue.VenueId)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            if (venues.Length > 0)
+            {
+                return new(SearchRequests.PopularPlaceShows(query, venues), "place_browse");
+            }
+        }
+
+        return null;
+    }
+
+    private static CatalogBrowse? DatedPlaceBrowse(
+        SearchInput input,
+        SearchQuery query,
+        SearchVocabulary vocabulary,
+        IReadOnlySet<string> qualifiedVenues,
+        PlaceSongMatch? song
+    )
+    {
+        if (
+            input is not { Scope: SearchScope.All, Page: 1, ReadingId: null }
+            || input.Ignore?.Contains("venue") == true
+            || !query.HasDate
+            || query.Chronological
+            || query.Soundboard
+            || query.Matrix
+            || query.Order != "regular"
+        )
+        {
+            return null;
+        }
+
+        if (qualifiedVenues.Count > 0)
+        {
+            return new(
+                SearchRequests.PopularPlaceShows(query, qualifiedVenues),
+                "dated_place_browse"
+            );
+        }
+        if (song != null)
+        {
+            return null;
+        }
+
+        // A venue and an explicit date can still find a show when another
+        // term isn't in the vocabulary, such as an unfamiliar nickname.
+        if (
+            vocabulary.ReadPlaceAlias(query.Terms, query.Artist) is
+            { Place.IsCity: true, Remainder.Length: > 0 } place
+        )
+        {
+            return new(
+                SearchRequests.PopularPlaceShows(query, place.Place.VenueIds),
+                "dated_place_browse"
+            );
+        }
+        if (
+            query.Date != null
+            && vocabulary
+                .Places(query.Terms)
+                .OrderByDescending(phrase => phrase.Length)
+                .FirstOrDefault(phrase =>
+                    phrase.Length < query.Terms.Length
+                    && vocabulary.VenueOptions(phrase).Take(2).Count() == 1
+                )
+                is { } venue
+        )
+        {
+            return new(SearchRequests.DatedShowsAtNamedVenue(query, venue), "dated_place_browse");
+        }
+        return null;
+    }
+
+    private static SearchDocument[] BrowseResults(
+        SearchQuery query,
+        CatalogQueryEvidence evidence,
+        SearchReply reply,
+        string? match
+    ) =>
+        query.NamedArtist is { } artist
+            ? [.. reply.Documents, .. evidence.PopularSongs(artist)]
+            : reply.Documents.Select(document => document with { CatalogMatch = match }).ToArray();
+
+    private SearchDocument[] SupplementalPerformances(SearchReply reply, bool soundboard)
+    {
+        if (reply.Rejected)
+        {
+            _logger.LogWarning("Typesense rejected the optional performance search");
+            return [];
+        }
+
+        return reply
+            .Documents.Where(result =>
+                result.Preview is { } preview && (!soundboard || preview.Soundboard)
+            )
+            .ToArray();
+    }
+
+    private SearchDocument[] RelatedVersions(
+        SearchReply reply,
+        bool soundboard,
+        PlaceSongMatch match
+    )
+    {
+        var phrase = $"{match.Title} {match.Place}";
+        return SupplementalPerformances(reply, soundboard)
+            .Where(result =>
+                match.SongIds.Contains(result.SongId)
+                || MatchEvidence.Read(match.Title, ("title", result.Name, 1)).Tier
+                    == MatchTier.Exact
+                || (
+                    result.SongId.Length == 0
+                    && MatchEvidence.Read(phrase, ("title", result.Name, 1)).Relevance == 1
+                )
+            )
+            .ToArray();
     }
 
     private async Task<(
@@ -196,11 +1196,11 @@ public sealed class CatalogSearchCoordinator
         CatalogQueryEvidence evidence,
         IReadOnlySet<string> venues,
         IReadOnlyList<SearchRequest> plan,
+        int searchesLeft,
         CancellationToken cancellationToken
     )
     {
         IReadOnlyList<SearchDocument> visible = [];
-        var searchesLeft = ExtraSearchLimit;
         if (input.Page == 1 && SearchRequests.NamedRun(query, plan, venues) is { } run)
         {
             var fallback = await Execute([run.Request], cancellationToken);
@@ -233,53 +1233,517 @@ public sealed class CatalogSearchCoordinator
         return (visible, searchesLeft);
     }
 
-    private static SearchResponse DecorateResults(
+    private async Task<CatalogPage> RankResults(
         SearchInput input,
-        SearchQuery query,
+        InterpretedQuery reading,
         CatalogQueryEvidence evidence,
-        bool reviewsAvailable,
-        SearchInterpretation interpretation,
-        IReadOnlyList<SearchDocument> visible,
-        IReadOnlyList<SearchReply> replies
+        RetrievalPlan retrieval,
+        RetrievalBatch batches,
+        PrimaryHits primary,
+        CancellationToken cancellationToken
     )
     {
+        var query = reading.Query;
+        var replies =
+            input.Scope != SearchScope.All
+                ? batches.Primary.Concat(batches.Nickname).ToArray()
+                : batches.Primary;
+        var candidates = await RateMatches(
+            input,
+            reading,
+            evidence,
+            retrieval.NicknameReading,
+            batches,
+            primary,
+            cancellationToken
+        );
+        var isAll = input.Scope == SearchScope.All;
+        var ranked = RankedCandidate.Order(
+            isAll ? await RecordingsAsShows(candidates, replies, cancellationToken) : candidates,
+            input.AddTracks,
+            query.Chronological,
+            query.Order,
+            mixed: isAll
+        );
+        var songFocused = isAll && SearchDiversity.FocusedSong(ranked) != null;
+        if (isAll)
+        {
+            ranked = ranked
+                .DistinctBy(
+                    candidate =>
+                        candidate.Row
+                            is SearchDocument
+                            {
+                                Kind: "performance",
+                                Preview.TrackId.Length: > 0
+                            } performance
+                            ? $"performance:track:{performance.Preview.TrackId}"
+                            : candidate.Row.Key,
+                    StringComparer.Ordinal
+                )
+                .ToArray();
+            ranked = LimitAllCandidates(input, evidence.Vocabulary, ranked, songFocused);
+        }
+
+        var counts = CountTabs(input, reading, evidence, retrieval, batches);
+        return new(
+            DescribeRetrieval(reading, retrieval, batches),
+            replies.Any(reply => reply.Rejected) ? "partial" : "full",
+            counts,
+            ranked,
+            primary.NextPage
+        )
+        {
+            SongFocused = songFocused,
+        };
+    }
+
+    private async Task<List<RankedCandidate>> RateMatches(
+        SearchInput input,
+        InterpretedQuery reading,
+        CatalogQueryEvidence evidence,
+        ReviewedSongReading? nickname,
+        RetrievalBatch batches,
+        PrimaryHits primary,
+        CancellationToken cancellationToken
+    )
+    {
+        var query = reading.Query;
+        var venues = reading.Venues;
+        var primaryReading = reading.Readings.Applied.Id;
+        var alternative = reading.Alternative;
         var artistIds = evidence.Vocabulary.ArtistDocuments;
-        var decorated = visible
-            .Select(result =>
-                artistIds.TryGetValue(result.ArtistSlug, out var artist)
-                    ? result with
+        var contextualPlaces =
+            input.Scope == SearchScope.All
+            && (query.HasDate || query.Artist != null)
+            && input.ReadingId == null
+            && input.Ignore?.Contains("venue") != true
+                ? evidence
+                    .Vocabulary.VenuesFor(query.Terms)
+                    .Select(place => place.VenueId)
+                    .ToHashSet(StringComparer.Ordinal)
+                : [];
+        RankedCandidate Rate(
+            SearchDocument document,
+            SearchQuery interpretation,
+            IReadOnlySet<string> places,
+            string? id
+        ) =>
+            CatalogSearchRanking.Candidate(
+                artistIds.TryGetValue(document.ArtistSlug, out var artist)
+                    ? document with
                     {
                         ArtistId = artist.Id,
                     }
-                    : result
-            )
-            .ToArray();
+                    : document,
+                input,
+                interpretation,
+                evidence,
+                places.Count == 0 && interpretation.Terms == query.Terms
+                    ? contextualPlaces
+                    : places,
+                id
+            );
+        var rows =
+            input.Scope == SearchScope.All
+                ? primary.Documents.Concat(
+                    batches
+                        .Primary.SelectMany(reply => reply.Documents)
+                        .Where(row =>
+                            row.Kind is "recording" or "review" || query.Order == "regular"
+                        )
+                )
+                : primary.Documents;
 
-        var passages = input.Scope is (SearchScope.All or SearchScope.Shows)
-            ? evidence.Passages.Find(query)
-            : [];
-        return Response(
+        var candidates = rows.Select(row => Rate(row, query, venues, primaryReading)).ToList();
+        if (nickname != null)
+        {
+            candidates.AddRange(
+                batches
+                    .Nickname.SelectMany(reply => reply.Documents)
+                    .Select(row =>
+                        CatalogSearchRanking.ReviewedSong(
+                            Rate(
+                                input.Scope == SearchScope.Shows
+                                    ? SearchRanker.LabelSoundcheck(row)
+                                    : row,
+                                query,
+                                nickname.Venues,
+                                primaryReading
+                            ),
+                            nickname.Contextual
+                        )
+                    )
+            );
+        }
+        candidates.AddRange(
+            primary.ExactPlaceSong.Select(row =>
+            {
+                var rated = Rate(row, query, venues, primaryReading);
+                return rated with
+                {
+                    Match = new(MatchTier.Exact, ["title", "place"], 1),
+                    ExactPriority = CatalogSearchRanking.VerifiedIdentityPriority,
+                    Confidence = 1,
+                };
+            })
+        );
+        if (alternative != null)
+        {
+            candidates.AddRange(
+                batches
+                    .Alternative.SelectMany(reply => reply.Documents)
+                    .Select(row =>
+                        Rate(
+                            alternative.Query
+                                is {
+                                    Reading: "place_alias",
+                                    Terms.Length: 0,
+                                    HasDate: false,
+                                    Artist: null
+                                }
+                                ? row with
+                                {
+                                    CatalogMatch = "place_browse",
+                                }
+                                : row,
+                            alternative.Query,
+                            alternative.Venues,
+                            alternative.Option.Id
+                        )
+                    )
+            );
+        }
+        if (input.Scope == SearchScope.All)
+        {
+            AddPassageCandidates(input, reading, evidence, candidates);
+        }
+        candidates.AddRange(
+            primary.Related.Select(row =>
+                Rate(row, query, venues, primaryReading) with
+                {
+                    Related = true,
+                }
+            )
+        );
+        var verifiedNotes = await VerifyRecordingSongMatches(
             input,
-            interpretation,
-            reviewsAvailable,
-            "full",
-            decorated,
-            replies,
-            passages
+            query,
+            evidence.Vocabulary,
+            batches.Primary,
+            cancellationToken
+        );
+        candidates.AddRange(
+            verifiedNotes.Select(row =>
+                Rate(row, query, venues, primaryReading) with
+                {
+                    Related = true,
+                }
+            )
+        );
+
+        ApplyResultConstraints(
+            input,
+            query,
+            venues,
+            contextualPlaces,
+            primary.ExactPlaceSong,
+            candidates
+        );
+        return candidates;
+    }
+
+    private static void ApplyResultConstraints(
+        SearchInput input,
+        SearchQuery query,
+        IReadOnlySet<string> venues,
+        IReadOnlySet<string> contextualPlaces,
+        IReadOnlyList<SearchDocument> exact,
+        List<RankedCandidate> candidates
+    )
+    {
+        if (contextualPlaces.Count > 0)
+        {
+            // A note about another night's venue should not turn this
+            // recording into a show match for an artist or date at that place.
+            candidates.RemoveAll(candidate =>
+                candidate.Row is SearchDocument { Kind: "recording" } row
+                && !contextualPlaces.Contains(row.VenueId)
+            );
+        }
+
+        if (exact.Count > 0)
+        {
+            // A named place plus song is a setlist lookup. Matching one token
+            // in another venue's taper notes does not make that show a hit.
+            var matchedVenues = exact.Select(row => row.VenueId).ToHashSet(StringComparer.Ordinal);
+            candidates.RemoveAll(candidate =>
+                candidate.Row is SearchDocument { Kind: "recording" or "review" } row
+                && !matchedVenues.Contains(row.VenueId)
+            );
+        }
+
+        if (input.Scope == SearchScope.All && query.Matrix && !input.Typing)
+        {
+            // Every show returned for an explicit recording format must open a
+            // source with that format, even if the listener prefers another one.
+            candidates.RemoveAll(candidate =>
+                candidate.Row is not SearchDocument { Kind: "recording", Matrix: true }
+            );
+        }
+
+        if (query.SelectedArtist is { } artist)
+        {
+            candidates.RemoveAll(candidate =>
+                candidate.Row switch
+                {
+                    SearchDocument row => row.ArtistSlug != artist
+                        && !row.ArtistSlugs.Contains(artist),
+                    SearchPassage passage => passage.ArtistSlug != artist,
+                    _ => false,
+                }
+            );
+        }
+
+        if (query.Reading == "selected_place")
+        {
+            candidates.RemoveAll(candidate =>
+                candidate.Row is SearchDocument row && !venues.Contains(row.VenueId)
+            );
+        }
+    }
+
+    private static RankedCandidate[] LimitAllCandidates(
+        SearchInput input,
+        SearchVocabulary vocabulary,
+        RankedCandidate[] ranked,
+        bool songFocused
+    )
+    {
+        var distinct = VenueSearchIdentity.Collapse(ranked, vocabulary).ToArray();
+        var limit = input.AddTracks || songFocused ? SearchDiversity.SongPageSize + 24 : 36;
+        var relatedTracks = input.AddTracks
+            ? distinct
+                .Where(candidate => candidate.Related && candidate.Playable)
+                .Take(SearchDiversity.RelatedTrackLimit)
+                .ToArray()
+            : [];
+        return distinct
+            .Except(relatedTracks)
+            .Take(limit - relatedTracks.Length)
+            .Concat(relatedTracks)
+            .ToArray();
+    }
+
+    private async Task<IReadOnlyList<SearchDocument>> VerifyRecordingSongMatches(
+        SearchInput input,
+        SearchQuery query,
+        SearchVocabulary vocabulary,
+        IReadOnlyList<SearchReply> replies,
+        CancellationToken cancellationToken
+    )
+    {
+        if (RecordingSong(input, query, vocabulary) is not { } song)
+        {
+            return [];
+        }
+
+        var shows = replies
+            .Where(reply => reply.Collection == SearchIndexSchema.Recordings)
+            .SelectMany(reply => reply.Documents)
+            .Select(row => row.ShowId)
+            .Where(id => id.Length > 0)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (shows.Length == 0)
+        {
+            return [];
+        }
+
+        // A notes hit suggests a show. Confirm it has a playable file for the
+        // song. A failed optional proof leaves the required hits usable.
+        try
+        {
+            var proof = await Execute(
+                [SearchRequests.SongAtRecordingShows(query, song, shows)],
+                cancellationToken
+            );
+            return SupplementalPerformances(proof[0], query.Soundboard);
+        }
+        catch (Exception error) when (IsSearchFailure(error))
+        {
+            _logger.LogWarning(error, "Could not verify song matches mentioned in recordings");
+            return [];
+        }
+    }
+
+    private static IReadOnlyList<SearchPassage> FindPassages(
+        SearchInput input,
+        InterpretedQuery reading,
+        CatalogQueryEvidence evidence
+    ) =>
+        evidence.Passages.Find(
+            reading.Query,
+            reading.Query.Reading == "selected_place" ? reading.Venues : null,
+            input.ReadingId != "literal" && input.Ignore?.Contains("venue") != true,
+            limit: input.Scope == SearchScope.All ? 8 : int.MaxValue
+        );
+
+    private static void AddPassageCandidates(
+        SearchInput input,
+        InterpretedQuery reading,
+        CatalogQueryEvidence evidence,
+        List<RankedCandidate> candidates
+    )
+    {
+        var query = reading.Query;
+        var allowAliases = input.ReadingId != "literal" && input.Ignore?.Contains("venue") != true;
+        var passages = FindPassages(input, reading, evidence);
+        if (passages.Count == 0)
+        {
+            return;
+        }
+
+        if (allowAliases && evidence.Vocabulary.ReadPlaceAlias(query.Terms, query.Artist) != null)
+        {
+            // The marked sequence verifies the place reading. Keep the other
+            // takes as related results so they don't crowd out its show.
+            var matchingShows = passages.Select(passage => passage.ShowId).ToHashSet();
+            for (var i = 0; i < candidates.Count; i++)
+            {
+                var candidate = candidates[i];
+                if (
+                    candidate.Row is SearchDocument { Kind: "performance" } row
+                    && !matchingShows.Contains(row.ShowId)
+                )
+                {
+                    candidates[i] = candidate with { Related = true };
+                }
+            }
+        }
+
+        candidates.AddRange(
+            passages.Select(passage =>
+                CatalogSearchRanking.Passage(passage, reading.Readings.Applied.Id)
+            )
         );
     }
+
+    private async Task<IEnumerable<RankedCandidate>> RecordingsAsShows(
+        IReadOnlyList<RankedCandidate> candidates,
+        IReadOnlyList<SearchReply> replies,
+        CancellationToken cancellationToken
+    )
+    {
+        var rows = candidates.Select(candidate => candidate.Row).OfType<SearchDocument>().ToArray();
+        var recordings = rows.Where(row => row.Kind == "recording").ToArray();
+        if (recordings.Length == 0)
+        {
+            return candidates;
+        }
+
+        var recordingShowIds = recordings
+            .Where(row => row.ShowId.Length > 0)
+            .Select(row => row.ShowId)
+            .ToHashSet(StringComparer.Ordinal);
+        var shows = rows.Where(row => row.Kind == "show")
+            .DistinctBy(row => row.ShowId)
+            .ToDictionary(row => row.ShowId, StringComparer.Ordinal);
+        foreach (var document in replies.SelectMany(reply => reply.Documents))
+        {
+            if (document.Kind == "show" && recordingShowIds.Contains(document.ShowId))
+            {
+                // An explicit recording format can exclude the direct show result.
+                shows.TryAdd(document.ShowId, document);
+            }
+        }
+
+        var missing = recordingShowIds.Where(id => !shows.ContainsKey(id)).ToArray();
+        if (missing.Length > 0)
+        {
+            // A notes or credits hit may have no counterpart in the text shortlist.
+            // Fetch all missing parents together before ranking the show cards.
+            foreach (var show in await ReadShowParents(missing, cancellationToken))
+            {
+                shows.Add(show.ShowId, show);
+            }
+        }
+
+        return CatalogSearchRanking.RecordingsAsShows(candidates, shows);
+    }
+
+    private async Task<IReadOnlyList<SearchDocument>> ReadShowParents(
+        string[] missing,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            var replies = await Execute([SearchRequests.ShowsById(missing)], cancellationToken);
+            if (!replies[0].Rejected)
+            {
+                return replies[0].Documents;
+            }
+
+            _logger.LogWarning("Typesense rejected the search for recording parent shows");
+        }
+        catch (Exception error) when (IsSearchFailure(error))
+        {
+            _logger.LogWarning(error, "Could not load recording parent shows");
+        }
+
+        return [];
+    }
+
+    private static string? RecordingSong(
+        SearchInput input,
+        SearchQuery query,
+        SearchVocabulary vocabulary
+    ) =>
+        input is { AddTracks: true, Typing: false, Scope: SearchScope.All, Page: 1 }
+        && query is { Reading: "artist_with_context", HasDate: false, Artist: { } artist }
+            ? vocabulary.FindSong(artist, query.Terms)?.Id
+            : null;
 
     private static IReadOnlyList<SearchRequest> Plan(
         SearchInput input,
         SearchQuery query,
         IReadOnlySet<string> venues,
         bool reviewsAvailable,
-        PlaybackContext playback
+        PlaybackContext playback,
+        IReadOnlySet<string>? reviewVenueIds,
+        bool retainNoteQuery
     )
     {
         var requests = string.IsNullOrWhiteSpace(input.Text)
             ? []
-            : SearchRequests.Build(query, input.Scope, input.Typing, venues, input.Page);
+            : SearchRequests.Build(
+                query,
+                input.Scope,
+                input.Typing,
+                venues,
+                input.Page,
+                includeAllEvidence: input.AddTracks || query.NamedArtist == null,
+                reviewVenueIds: reviewVenueIds
+            );
+        if (input.AddTracks && input.Scope == SearchScope.All && !input.Typing)
+        {
+            requests = requests
+                .Select(request =>
+                    request.Collection == SearchIndexSchema.Performances
+                        ? request with
+                        {
+                            PerPage = 40,
+                        }
+                    : retainNoteQuery && request.Collection == SearchIndexSchema.Recordings
+                        ? request with
+                        {
+                            Q = SearchText.Fold(input.Text),
+                        }
+                    : request
+                )
+                .ToArray();
+        }
         if (input.Scope == SearchScope.Shows && playback.Browse)
         {
             // The browse results need their own stable upstream page. Adding them
@@ -429,8 +1893,8 @@ public sealed class CatalogSearchCoordinator
         var candidates = visible;
         if (input.Scope == SearchScope.All && searchesLeft > 0 && playback.Browse)
         {
-            var browse = SearchRequests.ScopedTracks(query, playback.Artist, venues);
-            var replies = await Execute([browse], cancellationToken);
+            var playablePromotion = SearchRequests.ScopedTracks(query, playback.Artist, venues);
+            var replies = await Execute([playablePromotion], cancellationToken);
             candidates = replies[0].Documents;
         }
 
@@ -440,7 +1904,7 @@ public sealed class CatalogSearchCoordinator
             && (venues.Count == 0 || venues.Contains(result.VenueId))
             && (!query.Soundboard || result.Preview.Soundboard)
         );
-        return SearchRanker.AddTracksFirst(visible, playable, input.Scope == SearchScope.All);
+        return SearchRanker.LeadWithPerformances(visible, playable, input.Scope == SearchScope.All);
     }
 
     private async Task<IReadOnlyList<SearchReply>> Execute(
@@ -456,15 +1920,13 @@ public sealed class CatalogSearchCoordinator
         var searches = plan.Select(request =>
                 request with
                 {
-                    Collection = Alias(request.Collection),
+                    Collection = collections.Name(request.Collection),
                 }
             )
             .ToArray();
         using var response = await _typesense.MultiSearch(new { searches }, cancellationToken);
         return SearchRequests.Decode(response, plan);
     }
-
-    private string Alias(string collection) => SearchIndexBuilder.AliasName(_prefix, collection);
 
     private static IReadOnlySet<string> RecognizedVenues(
         SearchInput input,
@@ -474,40 +1936,42 @@ public sealed class CatalogSearchCoordinator
         !input.AddTracks
         || query.Reading is "artist_identity" or "artist_name_prefix"
         || input.Ignore?.Contains("venue") == true
+        || vocabulary.ReadPlaceAlias(query.Terms, query.Artist) != null
             ? new HashSet<string>()
             : vocabulary.RecognizeVenues(query.Terms);
 
+    private static bool IsSearchFailure(Exception error) =>
+        error is HttpRequestException or InvalidDataException or System.Text.Json.JsonException;
+
     private static List<SearchChip> Chips(
+        SearchInput input,
         SearchQuery query,
-        SearchVocabulary vocabulary,
-        IReadOnlySet<string> venues
+        SearchDocument? artist,
+        SearchQuery? alternate
     )
     {
         var chips = new List<SearchChip>();
-        if (
-            (query.ImpliedArtist ?? query.ReadingArtist) is { } artist
-            && vocabulary.ArtistDocuments.TryGetValue(artist, out var artistDocument)
-        )
+        if (artist != null)
         {
-            chips.Add(new("artist", artistDocument.Label, artistDocument.Id));
+            chips.Add(new("artist", artist.Label, artist.Id));
         }
-        if (query.Country is { } country)
+        if (query.Country is { } country && (alternate == null || alternate.Country == country))
         {
             chips.Add(new("country", country, country));
         }
-        if (query.Date is int date)
+        if (query.Date is int date && (alternate == null || alternate.Date == date))
         {
             var label = FormattableString.Invariant(
                 $"{date / 10000:0000}-{date / 100 % 100:00}-{date % 100:00}"
             );
             chips.Add(new("date", label, label));
         }
-        if (query.Year is int year)
+        if (query.Year is int year && (alternate == null || alternate.Year == year))
         {
             var label = year.ToString(CultureInfo.InvariantCulture);
             chips.Add(new("year", label, label));
         }
-        if (query.Month is int month)
+        if (query.Month is int month && (alternate == null || alternate.Month == month))
         {
             chips.Add(
                 new(
@@ -517,149 +1981,99 @@ public sealed class CatalogSearchCoordinator
                 )
             );
         }
-        if (query.DayKey is int day)
+        if (query.DayKey is int day && (alternate == null || alternate.DayKey == day))
         {
             var label = FormattableString.Invariant($"{day / 100}/{day % 100}");
             chips.Add(new("day", label, label));
         }
-        if (query.Soundboard)
+        if (query.Soundboard && input.Scope == SearchScope.Sources)
         {
             chips.Add(new("soundboard", "Soundboard", "true"));
         }
-        if (query.Matrix)
+        if (
+            query.Matrix
+            && (
+                input.Scope == SearchScope.Sources
+                || (input.Scope == SearchScope.All && !input.Typing)
+            )
+        )
         {
             chips.Add(new("matrix", "Matrix", "true"));
         }
-        if (query.Tour is { } tour)
+        if (query.Tour is { } tour && (alternate == null || alternate.Tour == tour))
         {
             chips.Add(new("run", tour, tour));
         }
-        if (query.Order != "regular")
-        {
-            chips.Add(new("order", query.Order, query.Order));
-        }
-        if (
-            venues.Count > 0
-            && vocabulary
-                .Places(query.Terms)
-                .OrderByDescending(place => place.Length)
-                .FirstOrDefault()
-                is { } location
-        )
-        {
-            chips.Add(new("venue", location, location));
-        }
-
         return chips;
     }
 
-    private static SearchResponse Response(
+    private static SearchTabCounts CountTabs(
         SearchInput input,
-        SearchInterpretation interpretation,
-        bool reviewsAvailable,
-        string availability,
-        IReadOnlyList<SearchDocument>? visible = null,
-        IReadOnlyList<SearchReply>? replies = null,
-        IReadOnlyList<SearchPassage>? passages = null
+        InterpretedQuery reading,
+        CatalogQueryEvidence evidence,
+        RetrievalPlan retrieval,
+        RetrievalBatch batches
     )
     {
-        var primary = visible ?? [];
-        var sources = replies?.FirstOrDefault(reply =>
-            reply.Collection == SearchIndexSchema.Recordings
-        );
-        var reviews = replies?.FirstOrDefault(reply =>
-            reply.Collection == SearchIndexSchema.Reviews
-        );
-        var counts = new Dictionary<string, int>
-        {
-            ["artists"] = primary.Count(result => result.Kind == "artist"),
-            ["songs"] = primary.Count(result => result.Kind == "song"),
-            ["venues"] = primary.Count(result => result.Kind == "venue"),
-            ["shows"] = primary.Count(result => SearchRanker.InScope(result, SearchScope.Shows)),
-            ["sources"] = sources?.Found ?? 0,
-        };
-        if (reviewsAvailable)
-        {
-            counts["reviews"] = reviews?.Found ?? 0;
-        }
-
+        var counts = SearchTabCounts.Empty();
+        var observed = retrieval
+            .Primary.Zip(batches.Primary)
+            .Concat(retrieval.Nickname.Zip(batches.Nickname))
+            .Concat(retrieval.Alternative.Zip(batches.Alternative))
+            .ToArray();
         if (input.Scope != SearchScope.All)
         {
-            var key = input.Scope.ToString().ToLowerInvariant();
-            if (counts.ContainsKey(key) && replies != null)
+            var totals = observed
+                .Select(pair => SearchTabCounts.Read(pair.First, [pair]))
+                .ToArray();
+            counts.Add(
+                input.Scope,
+                totals.Sum(total => total.Count),
+                totals.All(total => total.Exact)
+            );
+            return counts;
+        }
+
+        foreach (var scope in Enum.GetValues<SearchScope>())
+        {
+            if (
+                scope == SearchScope.All
+                || (scope == SearchScope.Reviews && !reading.ReviewsAvailable)
+            )
             {
-                counts[key] = Math.Max(counts[key], replies.Sum(reply => reply.Found));
+                continue;
             }
 
-            return new SearchResponse(
-                input.Text,
-                input.RequestId,
-                interpretation,
-                availability,
-                counts,
-                Results: primary,
-                Page: input.Page
+            // Reuse totals from the requests already made in All. A different
+            // reading or filter is a different result set, so a missing total is
+            // unknown rather than zero. No requests are sent for tab counts.
+            var scoped = input with
+            {
+                Scope = scope,
+                Page = 1,
+            };
+            var tabReading = Interpret(scoped, evidence, reading.UsePrimary);
+            var tab = PlanRetrieval(scoped, tabReading, evidence.Vocabulary);
+            var requests = tab.Primary.Concat(tab.Nickname);
+            if (scope == SearchScope.Shows)
+            {
+                requests = requests.Select(request =>
+                    ScopedShowPage.Request(request, 0, ScopedShowPage.Size)
+                );
+            }
+
+            var totals = requests
+                .Select(request => SearchTabCounts.Read(request, observed))
+                .ToArray();
+            var passages =
+                scope == SearchScope.Shows ? FindPassages(scoped, tabReading, evidence).Count : 0;
+            counts.Add(
+                scope,
+                passages + totals.Sum(total => total.Count),
+                totals.All(total => total.Exact)
             );
         }
 
-        var sections = new SearchSections(
-            primary.Where(result => result.Kind == "artist").ToArray(),
-            primary.Where(result => result.Kind == "song").ToArray(),
-            primary.Where(result => result.Kind == "venue").ToArray(),
-            primary.Where(result => result.Kind is "show" or "tour").ToArray(),
-            primary.Where(result => result.Kind == "performance").ToArray(),
-            sources?.Documents ?? [],
-            reviewsAvailable ? reviews?.Documents ?? [] : null,
-            passages ?? []
-        );
-        return new SearchResponse(
-            input.Text,
-            input.RequestId,
-            interpretation,
-            availability,
-            counts,
-            Top: primary,
-            Sections: sections
-        );
+        return counts;
     }
 }
-
-internal sealed record SearchResponse(
-    string Q,
-    string? RequestId,
-    SearchInterpretation Interpretation,
-    string Availability,
-    Dictionary<string, int> Counts,
-    [property: JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
-        IReadOnlyList<SearchDocument>? Top = null,
-    [property: JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
-        SearchSections? Sections = null,
-    [property: JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
-        IReadOnlyList<SearchDocument>? Results = null,
-    [property: JsonProperty(NullValueHandling = NullValueHandling.Ignore)] int? Page = null
-);
-
-internal sealed record SearchSections(
-    IReadOnlyList<SearchDocument> Artists,
-    IReadOnlyList<SearchDocument> Songs,
-    IReadOnlyList<SearchDocument> Venues,
-    IReadOnlyList<SearchDocument> Shows,
-    IReadOnlyList<SearchDocument> Performances,
-    IReadOnlyList<SearchDocument> Sources,
-    [property: JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
-        IReadOnlyList<SearchDocument>? Reviews,
-    IReadOnlyList<SearchPassage> Passages
-);
-
-internal sealed record SearchPerformance(
-    string PerformanceKey,
-    string ShowId,
-    string SongId,
-    string Label,
-    IReadOnlyList<SearchPerformanceSource> Sources
-);
-
-internal sealed record SearchPerformanceSource(
-    string SourceId,
-    IReadOnlyList<CatalogSearchProjection.SearchFile> Files
-);

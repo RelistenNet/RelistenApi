@@ -1,14 +1,18 @@
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
+using Microsoft.Extensions.Logging;
 
 namespace Relisten.Services.Popularity;
 
 public partial class PopularityService
 {
     /// <summary>
-    /// Processes a read's stale set using the existing dual-publishing calculations.
+    /// Refreshes request-time populations queued by PopularityRefreshRequest.
     /// Retries recalculate even if Postgres is fresh: an earlier attempt may have
     /// committed there before Redis publication failed.
     /// </summary>
@@ -45,8 +49,8 @@ public partial class PopularityService
 
     /// <summary>
     /// Publishes the rolling populations to Postgres and the legacy Redis maps.
-    /// Each population commits independently; a failed job retries without
-    /// discarding successful populations or the last successful failed one.
+    /// The shared maps run first. After that, a failed artist leaves its last
+    /// publication readable and lets later artists finish before the job retries.
     /// </summary>
     public async Task RefreshReadModel(CancellationToken cancellationToken = default)
     {
@@ -55,19 +59,58 @@ public partial class PopularityService
         await RefreshGlobalShowPopularityMap();
         await RefreshGlobalYearPopularityMap();
 
-        var artists = await db.WithConnection(connection =>
-            connection.QueryAsync<Guid>(
-                new CommandDefinition(
-                    "SELECT uuid FROM artists ORDER BY uuid",
-                    cancellationToken: cancellationToken
-                )
-            )
-        );
+        var artists = await ReadOwners(cancellationToken);
+        var started = Stopwatch.StartNew();
+        var failures = new List<Exception>();
+        long performances = 0;
+        long recordings = 0;
+        long songs = 0;
+
         foreach (var artist in artists)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await RefreshShowPopularityMapForArtist(artist);
-            await RefreshYearPopularityMapForArtist(artist);
+            try
+            {
+                await RefreshShowPopularityMapForArtist(artist);
+                await RefreshYearPopularityMapForArtist(artist);
+                var counts = await RefreshDetailPopulations(artist, cancellationToken);
+                performances += counts.Performances;
+                recordings += counts.Recordings;
+                songs += counts.Songs;
+            }
+            catch (Exception error) when (!cancellationToken.IsCancellationRequested)
+            {
+                logger.LogWarning(
+                    error,
+                    "Could not refresh popularity for artist {Artist}",
+                    artist
+                );
+                failures.Add(error);
+            }
+        }
+
+        logger.LogInformation(
+            "Refreshed popularity for {Performances} performances, {Recordings} recordings, and {Songs} songs in {Elapsed}",
+            performances,
+            recordings,
+            songs,
+            started.Elapsed
+        );
+        if (failures.Count > 0)
+        {
+            throw new AggregateException("Some artist popularity populations failed.", failures);
         }
     }
+
+    private async Task<Guid[]> ReadOwners(CancellationToken cancellationToken) =>
+        (
+            await db.WithConnection(connection =>
+                connection.QueryAsync<Guid>(
+                    new CommandDefinition(
+                        "SELECT uuid FROM artists ORDER BY uuid",
+                        cancellationToken: cancellationToken
+                    )
+                )
+            )
+        ).ToArray();
 }

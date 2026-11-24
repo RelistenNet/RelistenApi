@@ -369,6 +369,21 @@ namespace Relisten
             Relisten.GraphQL.CatalogGraphRegistration.UseCatalogGraph(app);
             app.UseMvc();
 
+            if (
+                !env.IsDevelopment()
+                && !string.IsNullOrEmpty(Configuration["ENABLE_HANGFIRE_SERVER"])
+                && Configuration["ENABLE_HANGFIRE_SERVER"] != "false"
+            )
+            {
+                app.ApplicationServices.GetRequiredService<IRecurringJobManager>()
+                    .AddOrUpdate<Relisten.Services.Popularity.PopularityJobs>(
+                        "popularity:nightly",
+                        job => job.RefreshReadModel(default),
+                        Cron.Daily(hour: 5),
+                        new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc }
+                    );
+            }
+
             if (!env.IsDevelopment())
             {
                 app.UseHangfireDashboard(

@@ -5,6 +5,7 @@ using ModelContextProtocol.AspNetCore;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 using OpenIddict.Abstractions;
+using Relisten.Search;
 using RelistenUserService.Authentication.OpenIdConnect;
 using RelistenUserService.Configuration;
 
@@ -33,7 +34,7 @@ internal static class McpEndpoints
         if (string.IsNullOrWhiteSpace(reviewSearchKey) || reviewSearchKey.Length < 32)
         {
             throw new InvalidOperationException(
-                "Configure MCP_REVIEW_SEARCH_KEY with at least 32 characters when an MCP host is configured."
+                $"Configure {CatalogSearchExchange.KeySetting} with at least 32 characters when an MCP host is configured."
             );
         }
 

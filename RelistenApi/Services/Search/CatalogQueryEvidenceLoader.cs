@@ -19,7 +19,9 @@ internal static class CatalogQueryEvidenceLoader
 {
     public static async Task<CatalogQueryEvidence> Load(
         DbService db,
+        TypesenseClient typesense,
         string collection,
+        string performances,
         string? exportPath,
         CancellationToken cancellationToken
     )
@@ -40,20 +42,54 @@ internal static class CatalogQueryEvidenceLoader
             )
         );
 
+        var rows = new SearchProjectionRows(connection, transaction);
+        var shortNames = (await rows.ShortVenueNames(cancellationToken)).ToArray();
+        var aliasKeys = shortNames
+            .SelectMany(row => SearchPlaceAliases.Keys(row.Name, row.Normalized))
+            .ToHashSet(StringComparer.Ordinal);
+        // Use the index's popularity scale and check short venue names against
+        // indexed artists and songs, including imported songs absent from norm.
+        var (percentiles, indexedSongPlays, reservedInitialismKeys, placeCollisions) =
+            await LoadIndexedVocabulary(typesense, collection, aliasKeys, cancellationToken);
+        var venues = (await rows.Venues(cancellationToken)).ToDictionary(venue => venue.Id);
+        var placeAliases = SearchPlaceAliases.Build(
+            venues,
+            shortNames,
+            SearchReviewedPlaceNames.CityNames,
+            await rows.ImportedPlacesForAliases(cancellationToken),
+            placeCollisions
+        );
         var vocabulary = await LoadVocabulary(
-            new SearchProjectionRows(connection, transaction),
+            rows,
+            venues,
+            percentiles,
+            reservedInitialismKeys,
+            placeAliases,
+            await LoadNicknameSongs(typesense, collection, performances, cancellationToken),
+            cancellationToken
+        );
+        var trackStarts = await SearchPlayTotals.Load(
+            connection,
+            transaction,
+            DateOnly.FromDateTime(DateTime.UtcNow),
+            exportPath,
             cancellationToken
         );
         var passages = await SearchPassages.Load(
             connection,
             transaction,
             vocabulary,
+            venues,
+            trackStarts,
             cancellationToken
         );
-        var (songPlays, titlePlays, soundcheckOnlyPlays) = await LoadPlayback(
+        await RemoveMappedTracks(connection, transaction, trackStarts, cancellationToken);
+        var titlePlays = new Dictionary<(string Artist, string Title), long>();
+        await AddUnmappedTitleStarts(
             connection,
             transaction,
-            exportPath,
+            trackStarts,
+            titlePlays,
             cancellationToken
         );
         var reviewArtists = await LoadReviewArtists(connection, transaction, cancellationToken);
@@ -62,22 +98,128 @@ internal static class CatalogQueryEvidenceLoader
             collection,
             vocabulary,
             passages,
-            songPlays,
+            indexedSongPlays.ToFrozenDictionary(),
             reviewArtists,
-            titlePlays,
-            soundcheckOnlyPlays
+            titlePlays.ToFrozenDictionary()
         );
+    }
+
+    internal static async Task<(
+        Dictionary<string, double> Percentiles,
+        Dictionary<string, long> SongPlays,
+        HashSet<string> ReservedInitialismKeys,
+        HashSet<string> PlaceCollisions
+    )> LoadIndexedVocabulary(
+        TypesenseClient typesense,
+        string collection,
+        IReadOnlySet<string> placeNames,
+        CancellationToken cancellationToken
+    )
+    {
+        // The HTTP client timeout ends at the headers for this streaming export.
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(TimeSpan.FromSeconds(30));
+        var percentiles = new Dictionary<string, double>(StringComparer.Ordinal);
+        var songPlays = new Dictionary<string, long>(StringComparer.Ordinal);
+        var reservedInitialismKeys = new HashSet<string>(StringComparer.Ordinal);
+        var placeCollisions = new HashSet<string>(StringComparer.Ordinal);
+        var establishedSongPopularity = Math.Log(1d + ArtistInitialisms.MinimumSongShows);
+        await foreach (
+            var row in typesense.ExportDocuments(
+                collection,
+                "kind:=[artist,song,venue]",
+                deadline.Token,
+                includeVocabularyFields: true
+            )
+        )
+        {
+            if (row.PopularityPercentile > 0)
+            {
+                percentiles.Add(row.Id, row.PopularityPercentile);
+            }
+
+            if (
+                row.Kind == "song"
+                && row.DisplayPopularity?.Windows?.GetValueOrDefault("1y") is { Plays: > 0 } year
+            )
+            {
+                songPlays.Add(row.Id, year.Plays);
+            }
+            if (row.Name is { } name)
+            {
+                ArtistInitialisms.ReserveName(reservedInitialismKeys, name);
+                if (row.Kind == "song" && row.Popularity >= establishedSongPopularity)
+                {
+                    // Derived song initials reserve a token. Search uses only
+                    // the song aliases that are actually in the vocabulary.
+                    ArtistInitialisms.ReserveName(
+                        reservedInitialismKeys,
+                        ArtistInitialisms.TitleInitials(name)
+                    );
+                }
+                if (row.Kind is ("artist" or "song") && placeNames.Contains(name))
+                {
+                    placeCollisions.Add(name);
+                }
+            }
+        }
+
+        return (percentiles, songPlays, reservedInitialismKeys, placeCollisions);
+    }
+
+    private static async Task<SearchReviewedNicknames.SongTarget[]> LoadNicknameSongs(
+        TypesenseClient typesense,
+        string entities,
+        string performances,
+        CancellationToken cancellationToken
+    )
+    {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(TimeSpan.FromSeconds(30));
+        var targets = new HashSet<SearchReviewedNicknames.SongTarget>();
+        var songNames = SearchRequests.Names(SearchReviewedNicknames.SongLookupNames);
+        await foreach (
+            var song in typesense.ExportSongNames(
+                entities,
+                $"kind:=song && {songNames}",
+                deadline.Token
+            )
+        )
+        {
+            if (song.Id.StartsWith("imported_song_", StringComparison.Ordinal))
+            {
+                targets.Add(new(song.ArtistSlug, song.Name, song.Id, MatchTrackTitle: true));
+            }
+        }
+
+        // Some artists only have performance titles. Read the reviewed titles
+        // in bulk and collapse them to one name per artist.
+        var trackNames = SearchRequests.Names(SearchReviewedNicknames.SongTitles);
+        await foreach (
+            var track in typesense.ExportSongNames(performances, trackNames, deadline.Token)
+        )
+        {
+            if (string.IsNullOrEmpty(track.SongId))
+            {
+                targets.Add(new(track.ArtistSlug, track.Name, null, MatchTrackTitle: true));
+            }
+        }
+        return targets.ToArray();
     }
 
     private static async Task<SearchVocabulary> LoadVocabulary(
         SearchProjectionRows rows,
+        IReadOnlyDictionary<string, SearchProjectionRows.Venue> venues,
+        IReadOnlyDictionary<string, double> percentiles,
+        HashSet<string> reservedInitialismKeys,
+        SearchPlaceAliases.Readings placeAliases,
+        SearchReviewedNicknames.SongTarget[] indexedNicknameSongs,
         CancellationToken cancellationToken
     )
     {
         var artists = (await rows.Artists(cancellationToken)).ToDictionary(artist => artist.Id);
         var artistsByUuid = artists.Values.ToDictionary(artist => artist.Uuid);
         var shows = await rows.Shows(cancellationToken);
-        var venues = await rows.Venues(cancellationToken);
         var songs = await rows.Songs(cancellationToken);
         var tours = await rows.Tours(cancellationToken);
 
@@ -87,11 +229,12 @@ internal static class CatalogQueryEvidenceLoader
         foreach (var show in shows)
         {
             artistShows[show.ArtistId] = artistShows.GetValueOrDefault(show.ArtistId) + 1;
-            if (show.CanonicalVenueId is not { Length: > 0 } venueId)
+            if (SearchProjectionRows.CurrentVenue(venues, show.CanonicalVenueId) is not { } venue)
             {
                 continue;
             }
 
+            var venueId = venue.Id;
             venueShows[venueId] = venueShows.GetValueOrDefault(venueId) + 1;
             if (!venueArtists.TryGetValue(venueId, out var slugs))
             {
@@ -114,12 +257,21 @@ internal static class CatalogQueryEvidenceLoader
             )
             .Concat(
                 venues
-                    .Where(venue =>
+                    .Values.Where(venue =>
                         string.IsNullOrEmpty(venue.MergedInto) && venueShows.ContainsKey(venue.Id)
                     )
                     .Select(venue =>
                         VenueEntry(venue, venueShows[venue.Id], venueArtists[venue.Id])
                     )
+            )
+            .Select(entry =>
+                (
+                    entry.Document with
+                    {
+                        PopularityPercentile = percentiles.GetValueOrDefault(entry.Document.Id),
+                    },
+                    entry.Aliases
+                )
             );
         var tourDocuments = tours
             .Where(tour => artists.ContainsKey(tour.ArtistId))
@@ -131,7 +283,16 @@ internal static class CatalogQueryEvidenceLoader
                 Name = Fold(tour.Name),
                 ArtistSlug = artists[tour.ArtistId].Slug,
             });
-        return new SearchVocabulary(entries, tourDocuments);
+        var setlistSongs = await rows.ReviewedSetlistSongs(cancellationToken);
+        return new SearchVocabulary(
+            entries,
+            tourDocuments,
+            reservedInitialismKeys,
+            placeAliases.Aliases,
+            placeAliases.NoUnqualifiedReading,
+            setlistSongs.ToDictionary(song => (song.Id, song.ArtistSlug), song => song.Uuid),
+            indexedNicknameSongs
+        );
     }
 
     private static (SearchDocument Document, string[] Aliases) ArtistEntry(
@@ -139,10 +300,7 @@ internal static class CatalogQueryEvidenceLoader
         int shows
     )
     {
-        var aliases = SearchVocabularyRules
-            .ArtistAliases.Where(rule => rule.Value == artist.Slug)
-            .Select(rule => rule.Key)
-            .ToArray();
+        var aliases = SearchReviewedNicknames.ArtistNameAliases(artist.Slug).ToArray();
         return (
             new SearchDocument
             {
@@ -198,6 +356,7 @@ internal static class CatalogQueryEvidenceLoader
                 Name = Fold(venue.Name),
                 VenueLabel = venue.Name,
                 CityLabel = venue.City ?? "",
+                LocationLabel = venue.LocationLabel,
                 ArtistSlugs = artists.Order(StringComparer.Ordinal).ToImmutableArray(),
                 Popularity = shows,
                 Aliases = string.Join(' ', aliases),
@@ -206,112 +365,33 @@ internal static class CatalogQueryEvidenceLoader
         );
     }
 
-    private static async Task<(
-        FrozenDictionary<string, long> Songs,
-        FrozenDictionary<(string Artist, string Title), long> Titles,
-        FrozenDictionary<string, long> Soundchecks
-    )> LoadPlayback(
-        NpgsqlConnection connection,
-        NpgsqlTransaction transaction,
-        string? exportPath,
-        CancellationToken cancellationToken
-    )
-    {
-        var through = DateOnly.FromDateTime(DateTime.UtcNow);
-        var starts = await SearchPlayTotals.Load(
-            connection,
-            transaction,
-            through,
-            exportPath,
-            cancellationToken
-        );
-        if (starts.Count == 0)
-        {
-            return (
-                FrozenDictionary<string, long>.Empty,
-                FrozenDictionary<(string, string), long>.Empty,
-                FrozenDictionary<string, long>.Empty
-            );
-        }
-
-        var titles = new Dictionary<(string Artist, string Title), long>();
-        var (songs, soundchecks) = await ReadMappedSongStarts(
-            connection,
-            transaction,
-            starts,
-            cancellationToken
-        );
-        await AddUnmappedTitleStarts(connection, transaction, starts, titles, cancellationToken);
-        return (
-            songs.ToFrozenDictionary(),
-            titles.ToFrozenDictionary(),
-            soundchecks.ToFrozenDictionary()
-        );
-    }
-
-    private static async Task<(
-        Dictionary<string, long> Songs,
-        Dictionary<string, long> Soundchecks
-    )> ReadMappedSongStarts(
+    private static async Task RemoveMappedTracks(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
         Dictionary<Guid, TrackStartTotal> starts,
         CancellationToken cancellationToken
     )
     {
-        var songs = new Dictionary<string, long>();
-        var mapped = new HashSet<Guid>();
-        var concertPerformances = new HashSet<(string Song, Guid Show)>();
-        var soundchecks = new Dictionary<(string Song, Guid Show), long>();
-        // The catalog matcher returns one edge per canonical song and file,
-        // so a reprise within the same file counts its starts once for that song.
-        var matches = connection.QueryUnbufferedAsync<MappedSongTrack>(
+        if (starts.Count == 0)
+        {
+            return;
+        }
+
+        // A matched file is represented by its published song totals. Keep
+        // only unmatched title evidence for artists without a song identity.
+        var matches = connection.QueryUnbufferedAsync<Guid>(
             """
-            SELECT match.track_uuid AS TrackUuid, match.song_id AS SongId,
-                   match.show_uuid AS ShowUuid, track.title AS Title
+            SELECT DISTINCT match.track_uuid
             FROM artists artist JOIN features feature ON feature.artist_id = artist.id AND feature.norm_catalogue
             CROSS JOIN LATERAL norm.song_recording_matches(artist.uuid, NULL::text[]) match
-            JOIN source_tracks track ON track.uuid = match.track_uuid
-            WHERE nullif(track.mp3_url, '') IS NOT NULL OR nullif(track.flac_url, '') IS NOT NULL
             """,
             transaction: transaction,
             commandTimeout: 600
         );
-        await foreach (var match in matches.WithCancellation(cancellationToken))
+        await foreach (var track in matches.WithCancellation(cancellationToken))
         {
-            var performance = (match.SongId, match.ShowUuid);
-            var soundcheck = Soundcheck().IsMatch(match.Title ?? "");
-            if (!soundcheck)
-            {
-                concertPerformances.Add(performance);
-            }
-
-            if (!starts.TryGetValue(match.TrackUuid, out var total) || total.Plays <= 0)
-            {
-                continue;
-            }
-
-            songs[match.SongId] = songs.GetValueOrDefault(match.SongId) + total.Plays;
-            mapped.Add(match.TrackUuid);
-            if (soundcheck)
-            {
-                soundchecks[performance] = soundchecks.GetValueOrDefault(performance) + total.Plays;
-            }
+            starts.Remove(track);
         }
-
-        // Mapped files have already contributed to their canonical title.
-        foreach (var id in mapped)
-        {
-            starts.Remove(id);
-        }
-
-        // A performance is marked soundcheck only when every file is a soundcheck.
-        // The venue rule keeps its existing all-files song totals.
-        var soundcheckOnlyPlays = soundchecks
-            .Where(pair => !concertPerformances.Contains(pair.Key))
-            .GroupBy(pair => pair.Key.Song)
-            .ToDictionary(group => group.Key, group => group.Sum(pair => pair.Value));
-        return (songs, soundcheckOnlyPlays);
     }
 
     private static async Task AddUnmappedTitleStarts(
@@ -342,24 +422,12 @@ internal static class CatalogQueryEvidenceLoader
         );
         await foreach (var track in tracks.WithCancellation(cancellationToken))
         {
-            if (Soundcheck().IsMatch(track.Title))
-            {
-                continue;
-            }
-
             var key = (track.Artist, Fold(RawTitle(track.Title)));
             titles[key] = titles.GetValueOrDefault(key) + starts[track.TrackUuid].Plays;
         }
     }
 
     private sealed record RawTitleTrack(Guid TrackUuid, string Artist, string Title);
-
-    private sealed record MappedSongTrack(
-        Guid TrackUuid,
-        string SongId,
-        Guid ShowUuid,
-        string? Title
-    );
 
     private static async Task<FrozenSet<string>> LoadReviewArtists(
         NpgsqlConnection connection,

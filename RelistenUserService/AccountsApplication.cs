@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Relisten.Search;
 using RelistenUserService.Authentication;
 using RelistenUserService.Authentication.Authorization;
 using RelistenUserService.Authentication.Browser;
@@ -82,7 +83,7 @@ public static class AccountsApplication
             builder.Logging.AddFilter("ModelContextProtocol", LogLevel.Information);
             builder.Services.AddMcpEndpoints(
                 mcp,
-                builder.Configuration["MCP_REVIEW_SEARCH_KEY"],
+                builder.Configuration[CatalogSearchExchange.KeySetting],
                 builder.Configuration["MCP_WRITE_ID_KEY"]
             );
         }

@@ -59,6 +59,18 @@
   <ItemGroup>
     <EmbeddedResource Include="Migrations\Sql\*.sql" />
     <EmbeddedResource
+      Include="Services/Search/Data/reviewed-place-aliases.json"
+      LogicalName="Relisten.Search.ReviewedPlaceAliases.json"
+    />
+    <EmbeddedResource
+      Include="Services/Search/Data/reviewed-nicknames.json"
+      LogicalName="Relisten.Search.ReviewedNicknames.json"
+    />
+    <EmbeddedResource
+      Include="Services/Search/Data/reviewed-named-shows.json"
+      LogicalName="Relisten.Search.ReviewedNamedShows.json"
+    />
+    <EmbeddedResource
       Include="GraphQL/Operations/Catalog/*.graphql"
       LogicalName="Relisten.GraphQL.Operations.Catalog.%(Filename)%(Extension)"
     />
@@ -74,6 +86,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Relisten.Normalization\Relisten.Normalization.csproj" />
     <ProjectReference Include="..\Relisten.Identifiers\Relisten.Identifiers.csproj" />
+    <ProjectReference Include="..\Relisten.Search.Contracts\Relisten.Search.Contracts.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Content Update="appsettings.json">

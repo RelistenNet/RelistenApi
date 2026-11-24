@@ -75,6 +75,40 @@ public sealed class TestPlaylistSearchIndex
     }
 
     [Test]
+    public async Task FullBuildStoresFollowerPercentileAndRenamePreservesIt()
+    {
+        var owner = await database.CreateUserAsync("percentileowner");
+        var follower = await database.CreateUserAsync("percentilefollower");
+        var popular = await Seed(database, owner, "Popular playlist");
+        var quiet = await Seed(database, owner, "Quiet playlist");
+
+        await using var db = database.CreateContext();
+        db.PlaylistFollows.Add(new PlaylistFollow { UserId = follower, PlaylistId = popular });
+        await db.SaveChangesAsync();
+        await index.Rebuild(CancellationToken.None);
+
+        var percentile = (await Read(http, alias, popular))!
+            .Value.GetProperty("popularity_percentile")
+            .GetDouble();
+        var quietPercentile = (await Read(http, alias, quiet))!
+            .Value.GetProperty("popularity_percentile")
+            .GetDouble();
+        percentile.Should().BeGreaterThan(quietPercentile);
+
+        var renamed = await db.Playlists.SingleAsync(row => row.Id == popular);
+        renamed.Name = "Renamed playlist";
+        renamed.Revision++;
+        await db.SaveChangesAsync();
+        await index.Sync(popular.Value, CancellationToken.None);
+
+        (await Read(http, alias, popular))!
+            .Value.GetProperty("popularity_percentile")
+            .GetDouble()
+            .Should()
+            .Be(percentile);
+    }
+
+    [Test]
     public async Task PlaylistEditedDuringRebuildRemainsSearchableAfterTheSwap()
     {
         var owner = await database.CreateUserAsync("curator");

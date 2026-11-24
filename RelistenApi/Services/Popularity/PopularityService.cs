@@ -1351,9 +1351,9 @@ namespace Relisten.Services.Popularity
             long plays6h,
             long plays48h,
             long plays90d,
-            long seconds30d,
-            long seconds7d,
-            long seconds48h
+            double seconds30d,
+            double seconds7d,
+            double seconds48h
         )
         {
             return new PopularityMetrics

@@ -98,10 +98,14 @@ public static class V4CatalogRegistration
             }
         );
         services.AddSingleton<CatalogQueryEvidenceStore>();
-        services.AddHostedService<CatalogQueryEvidenceRefreshService>();
+        services.AddSingleton<CatalogQueryEvidenceRefreshService>();
+        services.AddHostedService(provider =>
+            provider.GetRequiredService<CatalogQueryEvidenceRefreshService>()
+        );
         services.AddTransient(provider => new CatalogSearchCoordinator(
             provider.GetRequiredService<TypesenseClient>(),
             provider.GetRequiredService<CatalogQueryEvidenceStore>(),
+            provider.GetRequiredService<CatalogQueryEvidenceRefreshService>(),
             provider.GetRequiredService<ILogger<CatalogSearchCoordinator>>(),
             provider.GetRequiredService<IConfiguration>()["Search:AliasPrefix"] ?? "catalog"
         ));

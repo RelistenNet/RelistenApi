@@ -19,7 +19,7 @@ public sealed class CatalogShowMetadataReader(
     CatalogArtistVenueMetadataReader artistVenueMetadata,
     CatalogTourMetadataReader tourMetadata,
     CatalogPopularityMetadataReader popularityMetadata,
-    PopularityRefreshRequest refresh
+    PopularityRefreshRequest? refresh = null
 )
 {
     /// <summary>
@@ -116,7 +116,7 @@ public sealed class CatalogShowMetadataReader(
         {
             foreach (var artist in shows.Select(show => show.artist_uuid).Distinct())
             {
-                refresh.Require(PopularityPopulationKind.Show, artist);
+                refresh?.Require(PopularityPopulationKind.Show, artist);
             }
             map = await PopularityStore.ReadArtistLocalShowMetrics(
                 session.Connection,

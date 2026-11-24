@@ -3815,6 +3815,523 @@
           "show_date": "2015-08-18"
         }
       ]
+    },
+    {
+      "id": "DG01",
+      "query": "denver ghost",
+      "surface": "catalog_api",
+      "cohort": "cross_catalog",
+      "tier": "starter",
+      "search_mode": "explore",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Find a performance by the song and the place it was played",
+      "expected": "Phish’s Ghost from 1997-11-17 leads in explore.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "Ghost",
+          "show_date": "1997-11-17"
+        }
+      ]
+    },
+    {
+      "id": "DG02",
+      "query": "denver ghost",
+      "surface": "catalog_api",
+      "cohort": "cross_catalog",
+      "tier": "starter",
+      "search_mode": "add_tracks",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Find a performance by the song and the place it was played",
+      "expected": "Phish’s Ghost from 1997-11-17 leads in add tracks.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "Ghost",
+          "show_date": "1997-11-17"
+        }
+      ]
+    },
+    {
+      "id": "RG01",
+      "query": "radio city ghost",
+      "surface": "catalog_api",
+      "cohort": "cross_catalog",
+      "tier": "starter",
+      "search_mode": "explore",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Find a performance by the song and the place it was played",
+      "expected": "Phish’s Ghost from 2000-05-22 leads in explore.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "Ghost",
+          "show_date": "2000-05-22"
+        }
+      ]
+    },
+    {
+      "id": "RG02",
+      "query": "radio city ghost",
+      "surface": "catalog_api",
+      "cohort": "cross_catalog",
+      "tier": "starter",
+      "search_mode": "add_tracks",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Find a performance by the song and the place it was played",
+      "expected": "Phish’s Ghost from 2000-05-22 leads in add tracks.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "Ghost",
+          "show_date": "2000-05-22"
+        }
+      ]
+    },
+    {
+      "id": "TT01",
+      "query": "tahoe tweezer",
+      "surface": "catalog_api",
+      "cohort": "cross_catalog",
+      "tier": "starter",
+      "search_mode": "add_tracks",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Find a performance by the song and the place it was played",
+      "expected": "Phish’s Tweezer from 2013-07-31 leads in add tracks.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "Tweezer",
+          "show_date": "2013-07-31"
+        }
+      ]
+    },
+    {
+      "id": "SFL01",
+      "query": "phish sf light",
+      "surface": "catalog_api",
+      "cohort": "cross_catalog",
+      "tier": "starter",
+      "search_mode": "explore",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Find a performance by city and exact song title",
+      "expected": "Phish’s August 19, 2012 “Light” from Bill Graham Civic Auditorium leads.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "Light",
+          "show_date": "2012-08-19"
+        }
+      ]
+    },
+    {
+      "id": "SFL02",
+      "query": "phish sf light",
+      "surface": "catalog_api",
+      "cohort": "cross_catalog",
+      "tier": "starter",
+      "search_mode": "add_tracks",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Find a performance by city and exact song title",
+      "expected": "Phish’s August 19, 2012 “Light” from Bill Graham Civic Auditorium leads.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "Light",
+          "show_date": "2012-08-19"
+        }
+      ]
+    },
+    {
+      "id": "SFL03",
+      "query": "san francisco light",
+      "surface": "catalog_api",
+      "cohort": "cross_catalog",
+      "tier": "starter",
+      "search_mode": "explore",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Find a performance by city and exact song title",
+      "expected": "Phish’s August 19, 2012 “Light” from Bill Graham Civic Auditorium leads.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "Light",
+          "show_date": "2012-08-19"
+        }
+      ]
+    },
+    {
+      "id": "SFL04",
+      "query": "san francisco light",
+      "surface": "catalog_api",
+      "cohort": "cross_catalog",
+      "tier": "starter",
+      "search_mode": "add_tracks",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Find a performance by city and exact song title",
+      "expected": "Phish’s August 19, 2012 “Light” from Bill Graham Civic Auditorium leads.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "Light",
+          "show_date": "2012-08-19"
+        }
+      ]
+    },
+    {
+      "id": "SFL05",
+      "query": "light san francisco",
+      "surface": "catalog_api",
+      "cohort": "cross_catalog",
+      "tier": "starter",
+      "search_mode": "explore",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Find a performance by city and exact song title",
+      "expected": "Phish’s August 19, 2012 “Light” from Bill Graham Civic Auditorium leads.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "Light",
+          "show_date": "2012-08-19"
+        }
+      ]
+    },
+    {
+      "id": "SFL06",
+      "query": "light san francisco",
+      "surface": "catalog_api",
+      "cohort": "cross_catalog",
+      "tier": "starter",
+      "search_mode": "add_tracks",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Find a performance by city and exact song title",
+      "expected": "Phish’s August 19, 2012 “Light” from Bill Graham Civic Auditorium leads.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "Light",
+          "show_date": "2012-08-19"
+        }
+      ]
+    },
+    {
+      "id": "READ01",
+      "query": "billy breathes",
+      "surface": "catalog_api",
+      "cohort": "cross_catalog",
+      "tier": "extended",
+      "search_mode": "explore",
+      "check": "rank",
+      "max_rank": 5,
+      "intent": "Find a song whose first word can name an artist",
+      "expected": "An exact literal title match for Billy Breathes remains in the first five results.",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "phish",
+          "name": "Billy Breathes"
+        }
+      ]
+    },
+    {
+      "id": "READ02",
+      "query": "dead leaves and the dirty ground",
+      "surface": "catalog_api",
+      "cohort": "cross_catalog",
+      "tier": "extended",
+      "search_mode": "explore",
+      "check": "rank",
+      "max_rank": 5,
+      "intent": "Find a song whose first word can name an artist",
+      "expected": "An exact literal title match for Dead Leaves and the Dirty Ground remains in the first five results.",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "ryan-adams",
+          "name": "Dead Leaves and the Dirty Ground"
+        }
+      ]
+    },
+    {
+      "id": "READ03",
+      "query": "billy bragg",
+      "surface": "catalog_api",
+      "cohort": "cross_catalog",
+      "tier": "extended",
+      "search_mode": "explore",
+      "check": "rank",
+      "max_rank": 5,
+      "intent": "Find Billy Bragg by artist name",
+      "expected": "Billy Bragg remains findable even though Billy is also shorthand for Billy Strings.",
+      "targets": [
+        {
+          "kinds": [
+            "artist"
+          ],
+          "name": "Billy Bragg",
+          "artist_slug": "billy-bragg"
+        }
+      ]
+    },
+    {
+      "id": "ARP01",
+      "query": "yonder mountain string",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Yonder Mountain String Band ranks first for the unique full-word artist prefix.",
+      "targets": [
+        {
+          "kinds": [
+            "artist"
+          ],
+          "artist_slug": "yonder"
+        }
+      ]
+    },
+    {
+      "id": "ARP02",
+      "query": "joe russos almost",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Joe Russo's Almost Dead ranks first for the unique full-word artist prefix.",
+      "targets": [
+        {
+          "kinds": [
+            "artist"
+          ],
+          "artist_slug": "jrad"
+        }
+      ]
+    },
+    {
+      "id": "ARP03",
+      "query": "bela fleck and",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Bela Fleck and the Flecktones ranks first for the unique full-word artist prefix.",
+      "targets": [
+        {
+          "kinds": [
+            "artist"
+          ],
+          "artist_slug": "bela-fleck"
+        }
+      ]
+    },
+    {
+      "id": "ARP04",
+      "query": "north mississippi",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "North Mississippi Allstars ranks first for the unique full-word artist prefix.",
+      "targets": [
+        {
+          "kinds": [
+            "artist"
+          ],
+          "artist_slug": "north-mississippi-allstars"
+        }
+      ]
+    },
+    {
+      "id": "ARP05",
+      "query": "the sam chase",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "The Sam Chase & The Untraditional ranks first for the unique full-word artist prefix.",
+      "targets": [
+        {
+          "kinds": [
+            "artist"
+          ],
+          "artist_slug": "the-sam-chase-the-untraditional"
+        }
+      ]
+    },
+    {
+      "id": "ARP06",
+      "query": "the wood",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "The Wood Brothers ranks first for the unique full-word artist prefix.",
+      "targets": [
+        {
+          "kinds": [
+            "artist"
+          ],
+          "artist_slug": "the-wood-brothers"
+        }
+      ]
+    },
+    {
+      "id": "AIN01",
+      "query": "kglw rattlesnake",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "King Gizzard’s song leads after inferring the artist from the catalog name.",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "kgatlw",
+          "name": "Rattlesnake"
+        }
+      ]
+    },
+    {
+      "id": "AIN02",
+      "query": "ttb midnight in harlem",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "A Tedeschi Trucks Band result for Midnight in Harlem leads.",
+      "targets": [
+        {
+          "kinds": [
+            "song",
+            "performance"
+          ],
+          "artist_slug": "tedeschi-trucks",
+          "name": "Midnight in Harlem"
+        }
+      ]
+    },
+    {
+      "id": "AIN03",
+      "query": "dso scarlet begonias",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "A Dark Star Orchestra result for Scarlet Begonias leads.",
+      "targets": [
+        {
+          "kinds": [
+            "song",
+            "performance"
+          ],
+          "artist_slug": "dark-star-orchestra",
+          "name": "Scarlet Begonias"
+        }
+      ]
+    },
+    {
+      "id": "AIN04",
+      "query": "ymsb",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "The full artist identity leads.",
+      "targets": [
+        {
+          "kinds": [
+            "artist"
+          ],
+          "artist_slug": "yonder",
+          "name": "Yonder Mountain String Band"
+        }
+      ]
+    },
+    {
+      "id": "AIN05",
+      "query": "nma",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "The full artist identity leads.",
+      "targets": [
+        {
+          "kinds": [
+            "artist"
+          ],
+          "artist_slug": "north-mississippi-allstars",
+          "name": "North Mississippi Allstars"
+        }
+      ]
+    },
+    {
+      "id": "AIN06",
+      "query": "pop",
+      "surface": "catalog_api",
+      "tier": "starter",
+      "check": "rank",
+      "max_rank": 1,
+      "expected": "Goose’s exact song stays literal. Pickin’ on Phish does not supply an artist reading.",
+      "targets": [
+        {
+          "kinds": [
+            "song"
+          ],
+          "artist_slug": "goose",
+          "name": "POP"
+        }
+      ]
     }
   ],
   "recordings": [

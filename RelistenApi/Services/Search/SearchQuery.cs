@@ -25,7 +25,8 @@ internal sealed record SearchInput(
     IReadOnlyList<string>? BoostArtistIds = null,
     IReadOnlySet<string>? Ignore = null,
     int Page = 1,
-    string? RequestId = null
+    string? RequestId = null,
+    string? ReadingId = null
 );
 
 internal sealed record SearchQuery(
@@ -47,6 +48,11 @@ internal sealed record SearchQuery(
     string? CuratedRoute = null
 )
 {
+    public bool VerifiedArtistPrefix { get; init; }
+    public string? NamedArtist =>
+        Reading is ("artist_identity" or "artist_nickname") || VerifiedArtistPrefix
+            ? ReadingArtist
+            : null;
     public string? Artist => SelectedArtist ?? ImpliedArtist;
     public bool HasDate => Date.HasValue || Year.HasValue || Month.HasValue || DayKey.HasValue;
 
@@ -68,65 +74,21 @@ internal sealed record SearchQuery(
         && Soundboard == other.Soundboard
         && Matrix == other.Matrix
         && Tour == other.Tour;
-
-    public SearchInterpretation Interpretation(IReadOnlyList<SearchChip> chips) =>
-        new(
-            Terms,
-            SelectedArtist ?? "",
-            ImpliedArtist ?? "",
-            Country ?? "",
-            NumberFilters(),
-            Order,
-            Soundboard,
-            Matrix,
-            Chronological,
-            Tour,
-            chips
-        );
-
-    private Dictionary<string, int> NumberFilters()
-    {
-        var numbers = new Dictionary<string, int>();
-        if (Date is int date)
-        {
-            numbers["date"] = date;
-        }
-        if (Year is int year)
-        {
-            numbers["year"] = year;
-        }
-        if (Month is int month)
-        {
-            numbers["month"] = month;
-        }
-        if (DayKey is int dayKey)
-        {
-            numbers["day_key"] = dayKey;
-        }
-
-        return numbers;
-    }
 }
 
-internal sealed record SearchChip(string Key, string Label, string Value);
-
-internal sealed record SearchInterpretation(
-    string Terms,
-    string Selected,
-    string Artist,
-    string Country,
-    IReadOnlyDictionary<string, int> Numbers,
-    string Order,
-    bool Soundboard,
-    bool Matrix,
-    bool Chronological,
-    string? TourFilter,
-    IReadOnlyList<SearchChip> Chips
+internal sealed record PlaceSongMatch(
+    string Title,
+    string Place,
+    string[] SongIds,
+    IReadOnlySet<string> VenueIds
 );
 
-internal sealed record SearchDocument
+internal sealed record SearchDocument : ISearchRankItem
 {
     public string Id { get; init; } = "";
+    public string Key => $"{Kind}:{Id}";
+    public bool Playable =>
+        Kind == "performance" && !Soundcheck && Preview is { TrackId.Length: > 0 };
     public string Kind { get; init; } = "";
     public string Label { get; init; } = "";
     public string Name { get; init; } = "";
@@ -144,6 +106,10 @@ internal sealed record SearchDocument
     public string Run { get; init; } = "";
     public string Country { get; init; } = "";
     public string CityLabel { get; init; } = "";
+
+    [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+    public string? LocationLabel { get; init; }
+
     public string VenueLabel { get; init; } = "";
     public string VenueId { get; init; } = "";
     public string ShowId { get; init; } = "";
@@ -153,19 +119,32 @@ internal sealed record SearchDocument
     [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
     public CatalogSearchProjection.SearchFile? Preview { get; init; }
 
-    [Newtonsoft.Json.JsonIgnore]
-    public CatalogSearchProjection.SearchFile[]? Files { get; init; }
-
     public bool Soundboard { get; init; }
     public bool Soundcheck { get; init; }
     public string SourceId { get; init; } = "";
     public string SourceUpstream { get; init; } = "";
+
+    [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+    public string? TaperLabel { get; init; }
+
+    [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+    public string? TransferrerLabel { get; init; }
+
     public bool Matrix { get; init; }
     public long TrackPlays { get; init; }
+
+    [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+    public float? AvgRating { get; init; }
+
+    [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+    public int? NumReviews { get; init; }
+
     public int ReviewMentions { get; init; }
     public double Longest { get; init; }
     public double Popularity { get; init; }
+    public double PopularityPercentile { get; init; }
     public long Score { get; init; }
+    public SearchTextMatch? TextMatch { get; init; }
 
     [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
     public string? CatalogMatch { get; init; }
@@ -182,5 +161,6 @@ internal sealed record SearchDocument
 
     [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
     public IReadOnlyDictionary<string, string>? Highlights { get; init; }
+    public string? ReviewExcerpt { get; init; }
     public string? PerformanceKey => Kind == "performance" ? Id : null;
 }

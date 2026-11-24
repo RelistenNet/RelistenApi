@@ -8,10 +8,6 @@ namespace Relisten.Search;
 
 internal static partial class SearchInterpretationReader
 {
-    private static readonly KeyValuePair<string, string>[] ArtistPrefixes = SearchVocabularyRules
-        .LeadingArtistAliases.OrderByDescending(pair => pair.Key.Length)
-        .ToArray();
-
     private static readonly Dictionary<string, int> Months = ReadMonths();
     private static readonly string MonthNames = string.Join('|', Months.Keys);
 
@@ -32,7 +28,8 @@ internal static partial class SearchInterpretationReader
     public static SearchQuery Read(
         SearchInput input,
         CatalogQueryEvidence evidence,
-        int? currentYear = null
+        int? currentYear = null,
+        bool literal = false
     )
     {
         var yearLimit = currentYear ?? DateTime.UtcNow.Year;
@@ -40,8 +37,36 @@ internal static partial class SearchInterpretationReader
         var selected = input.ArtistId is { } id
             ? vocabulary.ArtistSlugsById.GetValueOrDefault(id)
             : null;
+        var nickname =
+            literal || input.Ignore?.Contains("artist") == true
+                ? null
+                : vocabulary.ReadReviewedArtist(SearchText.Fold(input.Text), selected);
         var expanded = ExpandInteriorYear(input.Text, vocabulary, yearLimit);
-        var query = ReadDateIntent(expanded, selected, input.Country, yearLimit);
+        var query = ReadDateIntent(
+            expanded,
+            selected,
+            input.Country,
+            yearLimit,
+            vocabulary,
+            literal,
+            nickname
+        );
+        if (literal)
+        {
+            var original = query.Date != null ? query.Terms : SearchText.Fold(input.Text);
+            return IgnoreChips(
+                query with
+                {
+                    Terms = original,
+                    Country = query.Date != null ? query.Country : input.Country,
+                    Year = null,
+                    Month = null,
+                    DayKey = null,
+                    Reading = "literal",
+                },
+                input
+            );
+        }
 
         if (
             query.DayKey != null
@@ -53,10 +78,18 @@ internal static partial class SearchInterpretationReader
             query = query with { Terms = "", ImpliedArtist = dayArtist };
         }
 
-        query = ReadNamedTour(query, expanded, selected, input.Country, vocabulary, yearLimit);
+        query = ReadNamedTour(
+            query,
+            expanded,
+            selected,
+            input.Country,
+            vocabulary,
+            yearLimit,
+            nickname
+        );
         query = ReadCuratedRoute(query);
         query = query with { Chronological = WantsChronology(query, expanded, vocabulary) };
-        query = ChooseReading(input.Text, query, evidence);
+        query = ChooseReading(input.Text, query, evidence, nickname);
 
         if (
             query.Artist is { } artist
@@ -77,10 +110,13 @@ internal static partial class SearchInterpretationReader
         string text,
         string? selected,
         string? country,
-        int currentYear
+        int currentYear,
+        SearchVocabulary vocabulary,
+        bool literal,
+        SearchReviewedNicknames.ArtistNickname? nickname
     )
     {
-        var query = ReadSyntax(text, selected, country, currentYear);
+        var query = ReadSyntax(text, selected, country, currentYear, vocabulary, literal, nickname);
         if (query.Date != null)
         {
             return query;
@@ -96,7 +132,15 @@ internal static partial class SearchInterpretationReader
             && day <= DateTime.DaysInMonth(2000, month)
         )
         {
-            return ReadSyntax(Remove(text, monthDay), selected, country, currentYear) with
+            return ReadSyntax(
+                Remove(text, monthDay),
+                selected,
+                country,
+                currentYear,
+                vocabulary,
+                literal,
+                nickname
+            ) with
             {
                 DayKey = 100 * month + day,
             };
@@ -109,14 +153,19 @@ internal static partial class SearchInterpretationReader
         string text,
         string? selected,
         string? country,
-        int currentYear
+        int currentYear,
+        SearchVocabulary vocabulary,
+        bool literal = false,
+        SearchReviewedNicknames.ArtistNickname? nickname = null
     )
     {
         var remaining = text.ToLowerInvariant();
         var (withoutDate, date) = ExtractDate(remaining);
         remaining = SearchText.Fold(withoutDate);
 
-        var (withoutArtist, implied) = ExtractLeadingArtist(remaining);
+        var (withoutArtist, implied) = literal
+            ? (remaining, null)
+            : ExtractArtist(remaining, selected, vocabulary, nickname, date != null);
         var (withoutYear, year, month) = ExtractYear(
             withoutArtist,
             date,
@@ -171,20 +220,69 @@ internal static partial class SearchInterpretationReader
             break;
         }
 
-        return (text, null);
-    }
-
-    private static (string Text, string? Artist) ExtractLeadingArtist(string text)
-    {
-        foreach (var (name, slug) in ArtistPrefixes)
+        var newYearsEve = NewYearsEveWithYear().Match(text);
+        if (newYearsEve.Success && Number(newYearsEve, "year") is int eveYear)
         {
-            if (text.StartsWith(name + " ", StringComparison.Ordinal))
-            {
-                return (text[(name.Length + 1)..], slug);
-            }
+            return (Remove(text, newYearsEve), FullYear(eveYear) * 10_000 + 1231);
         }
 
         return (text, null);
+    }
+
+    private static (string Text, string? Artist) ExtractArtist(
+        string text,
+        string? selected,
+        SearchVocabulary vocabulary,
+        SearchReviewedNicknames.ArtistNickname? nickname,
+        bool hasFullDate
+    )
+    {
+        for (var end = text.LastIndexOf(' '); end > 0; end = text.LastIndexOf(' ', end - 1))
+        {
+            var name = text[..end];
+            if (
+                !vocabulary.ArtistNames.TryGetValue(name, out var artist)
+                || (selected != null && selected != artist)
+                || vocabulary.IsKnownPlace(name)
+                || vocabulary.ExactPlaceSong(text, selected) != null
+            )
+            {
+                continue;
+            }
+
+            var remainder = text[(end + 1)..];
+            // The early syntax pass needs the artist for short dates and a
+            // full name can disambiguate a shorter nickname such as "dead".
+            // Other readings need catalog evidence before consuming words.
+            if (
+                hasFullDate
+                || FourDigitYear().IsMatch(remainder)
+                || ShortYearAtEnd().IsMatch(remainder)
+                || nickname != null && HasPhrase(name, nickname.Nickname)
+                || vocabulary.ExactPlaceSong(remainder, artist) != null
+            )
+            {
+                return (remainder, artist);
+            }
+        }
+
+        // Some artists publish an initialism as their catalog slug. A verified
+        // leading slug supplies the same context as a full name during parsing.
+        var space = text.IndexOf(' ');
+        if (
+            nickname == null
+            && space > 0
+            && vocabulary.ReadArtistInitialism(text, selected) is { } initialism
+            && text[..space] == initialism.Artist.ArtistSlug
+            && !vocabulary.IsKnownPlace(initialism.Artist.ArtistSlug)
+        )
+        {
+            return (initialism.Remainder, initialism.Artist.ArtistSlug);
+        }
+
+        return nickname != null && HasPhrase(text, nickname.Nickname)
+            ? (RemovePhrase(text, nickname.Nickname), nickname.ArtistSlug)
+            : (text, null);
     }
 
     private static (string Text, int? Year, int? Month) ExtractYear(
@@ -279,7 +377,8 @@ internal static partial class SearchInterpretationReader
         string? selected,
         string? country,
         SearchVocabulary vocabulary,
-        int currentYear
+        int currentYear,
+        SearchReviewedNicknames.ArtistNickname? nickname
     )
     {
         var match = SeasonTour().Match(text);
@@ -298,7 +397,14 @@ internal static partial class SearchInterpretationReader
             return query;
         }
 
-        var remaining = ReadSyntax(Remove(text, match), selected, country, currentYear);
+        var remaining = ReadSyntax(
+            Remove(text, match),
+            selected,
+            country,
+            currentYear,
+            vocabulary,
+            nickname: nickname
+        );
         return remaining.Year is int other && other != year
             ? query
             : remaining with
@@ -315,7 +421,7 @@ internal static partial class SearchInterpretationReader
             return query;
         }
 
-        var matched = SearchVocabularyRules
+        var matched = SearchReviewedNamedShows
             .Routes.Where(route => query.Artist == null || route.Artist == query.Artist)
             .Where(route =>
                 route.Song != null
@@ -365,7 +471,8 @@ internal static partial class SearchInterpretationReader
     private static SearchQuery ChooseReading(
         string text,
         SearchQuery query,
-        CatalogQueryEvidence evidence
+        CatalogQueryEvidence evidence,
+        SearchReviewedNicknames.ArtistNickname? nickname
     )
     {
         var vocabulary = evidence.Vocabulary;
@@ -378,7 +485,28 @@ internal static partial class SearchInterpretationReader
         )
         {
             var original = SearchText.Fold(text);
+            if (nickname is { MatchAsName: false } && original == nickname.Nickname)
+            {
+                return query with
+                {
+                    Terms = vocabulary.ArtistDocuments[nickname.ArtistSlug].Name,
+                    ImpliedArtist = null,
+                    Reading = "artist_nickname",
+                    ReadingArtist = nickname.ArtistSlug,
+                };
+            }
+
             var (artist, kind) = vocabulary.FullArtist(original, query.SelectedArtist);
+            var verifiedPrefix =
+                kind != "artist_identity"
+                    ? vocabulary.VerifiedArtistNamePrefix(original, query.SelectedArtist)
+                    : null;
+            if (verifiedPrefix != null)
+            {
+                artist = verifiedPrefix;
+                kind = "artist_name_prefix";
+            }
+
             if (artist != null && vocabulary.ArtistDocuments.TryGetValue(artist, out var document))
             {
                 var exact = vocabulary
@@ -390,6 +518,7 @@ internal static partial class SearchInterpretationReader
                     ImpliedArtist = null,
                     Reading = kind,
                     ReadingArtist = artist,
+                    VerifiedArtistPrefix = verifiedPrefix != null,
                 };
             }
         }
@@ -404,7 +533,7 @@ internal static partial class SearchInterpretationReader
             .ToArray();
         if (supported.Length == 0)
         {
-            return query;
+            return ReadPlayedArtistTitle(query, evidence);
         }
 
         if (vocabulary.Places(query.Terms).Any() && evidence.Passages.Find(query).Count > 0)
@@ -427,6 +556,39 @@ internal static partial class SearchInterpretationReader
             : query;
     }
 
+    private static SearchQuery ReadPlayedArtistTitle(
+        SearchQuery query,
+        CatalogQueryEvidence evidence
+    )
+    {
+        var vocabulary = evidence.Vocabulary;
+        var terms = query.Terms;
+        for (var end = terms.LastIndexOf(' '); end > 0; end = terms.LastIndexOf(' ', end - 1))
+        {
+            var name = terms[..end];
+            if (
+                !vocabulary.ArtistNames.TryGetValue(name, out var artist)
+                || vocabulary.IsKnownPlace(name)
+            )
+            {
+                continue;
+            }
+
+            // Playback can verify an imported title absent from the song vocabulary.
+            // Keep the compound literal when the remainder also names a place and song.
+            var title = terms[(end + 1)..];
+            if (
+                evidence.TitlePlays(artist, title) > 0
+                && vocabulary.ExactPlaceSong(title, null) == null
+            )
+            {
+                return query with { ImpliedArtist = artist, Terms = title };
+            }
+        }
+
+        return query;
+    }
+
     private static string ExpandInteriorYear(
         string text,
         SearchVocabulary vocabulary,
@@ -438,7 +600,22 @@ internal static partial class SearchInterpretationReader
             return text;
         }
 
-        foreach (Match match in InteriorYear().Matches(text))
+        var shortYears = InteriorYear().Matches(text);
+        if (shortYears.Count == 0)
+        {
+            return text;
+        }
+
+        var folded = SearchText.Fold(text);
+        if (
+            vocabulary.ExactSongIds(folded, null).Length > 0
+            || vocabulary.ArtistNames.ContainsKey(folded)
+        )
+        {
+            return text;
+        }
+
+        foreach (Match match in shortYears)
         {
             // A two-digit number in a title is only a year if the catalog could
             // already contain that year and the surrounding words support a place.
@@ -450,12 +627,12 @@ internal static partial class SearchInterpretationReader
 
             var left = SearchText.Fold(text[..match.Index]);
             var right = SearchText.Fold(text[(match.Index + match.Length)..]);
-            if (left.Length == 0 || right.Length == 0 || !vocabulary.Places(left).Any())
+            if (left.Length == 0 || !vocabulary.Places(left).Any())
             {
                 continue;
             }
 
-            var potentialTitle = match.Value + " " + right;
+            var potentialTitle = SearchText.Fold(match.Value + " " + right);
             if (
                 vocabulary
                     .Lookup(potentialTitle)
@@ -544,6 +721,9 @@ internal static partial class SearchInterpretationReader
 
     [GeneratedRegex(@"(?<![\d/-])\b(?<year>[0-9]{2})\b(?![\d/-])")]
     private static partial Regex InteriorYear();
+
+    [GeneratedRegex(@"\bnye\s+['’]?(?<year>19\d{2}|20\d{2}|\d{2})\b")]
+    private static partial Regex NewYearsEveWithYear();
 
     [GeneratedRegex(
         @"\b(?<season>winter|spring|summer|fall|autumn)(?:\s+tour)?\s+(?<year>19\d{2}|20\d{2}|\d{2})\b",

@@ -426,7 +426,7 @@ In `clusters/relisten3-k3s/apps/relisten-user-service.yaml`:
   address until these are configured. Verify that external callers receive
   independent limits through the real ingress chain, including Cloudflare.
 - Before configuring the MCP hostname, provision the same high-entropy
-  `MCP_REVIEW_SEARCH_KEY` on Catalog and the User Service. Both manifests read
+  `CATALOG_SERVICE_SEARCH_KEY` on Catalog and the User Service. Both manifests read
   the required Secret. The User Service gives each active
   connected account 30 searches per minute. It sends a service credential only
   on those review calls. Catalog allows 120 searches per minute per instance

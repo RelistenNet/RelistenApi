@@ -47,7 +47,20 @@ internal sealed class PlaylistSearchIndex(
         }
         else
         {
-            await Import(target, documents, true, cancellationToken);
+            var previous = await typesense.ReadDocument(target, playlistId, cancellationToken);
+            await Import(
+                target,
+                documents
+                    .Select(document =>
+                        document with
+                        {
+                            PopularityPercentile = previous?.PopularityPercentile ?? 0,
+                        }
+                    )
+                    .ToArray(),
+                true,
+                cancellationToken
+            );
         }
     }
 
@@ -58,6 +71,7 @@ internal sealed class PlaylistSearchIndex(
         var collection = $"{Alias}_{Guid.NewGuid():N}";
         await typesense.CreateCollection(Schema(collection), cancellationToken);
 
+        var percentiles = new SearchPercentiles();
         var after = "";
         while (true)
         {
@@ -66,10 +80,42 @@ internal sealed class PlaylistSearchIndex(
             {
                 break;
             }
+            foreach (var document in documents)
+            {
+                percentiles.Observe("playlist", document.FollowCount);
+            }
             await Import(collection, documents, false, cancellationToken);
             after = documents[^1].Id;
         }
 
+        if (percentiles.Calculate().TryGetValue("playlist", out var ranks))
+        {
+            var updates = typesense
+                .ExportDocuments(collection, "", cancellationToken)
+                .Where(document => document.FollowCount > 0);
+            await foreach (var batch in updates.Chunk(1000).WithCancellation(cancellationToken))
+            {
+                var json = string.Join(
+                    '\n',
+                    batch.Select(document =>
+                        JsonSerializer.Serialize(
+                            new
+                            {
+                                id = document.Id,
+                                popularity_percentile = ranks[document.FollowCount],
+                            }
+                        )
+                    )
+                );
+                var written = await typesense.Update(collection, json, cancellationToken);
+                if (written.Accepted != batch.Length || written.Rejected != 0)
+                {
+                    throw new InvalidOperationException(
+                        "Could not write playlist popularity percentiles."
+                    );
+                }
+            }
+        }
         await typesense.SetAlias(Alias, collection, cancellationToken);
         return startedAt;
     }
@@ -187,6 +233,12 @@ internal sealed class PlaylistSearchIndex(
                 new { name = "archived", type = "bool" },
                 new { name = "taken_down", type = "bool" },
                 new { name = "follow_count", type = "int64" },
+                new
+                {
+                    name = "popularity_percentile",
+                    type = "float",
+                    index = false,
+                },
                 new { name = "updated_at", type = "int64" },
             },
         };

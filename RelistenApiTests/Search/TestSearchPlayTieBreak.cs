@@ -67,22 +67,6 @@ public sealed class TestSearchPlayTieBreak
     }
 
     [Test]
-    public void SoundcheckOnlyPerformancesDoNotBreakSongTies()
-    {
-        var first = Song("one");
-        var second = Song("two");
-        var evidence = Evidence(
-            new() { [first.Id] = 290, [second.Id] = 285 },
-            soundcheckOnlyPlays: new() { [first.Id] = 77 }
-        );
-
-        SearchPlayTieBreak
-            .Rank(Input, Query, [first, second], evidence)
-            .Should()
-            .Equal(second, first);
-    }
-
-    [Test]
     public void ABoostedTieStopsComparisonEvenWithoutAPlayCount()
     {
         var first = Performance("one", 20);
@@ -116,8 +100,7 @@ public sealed class TestSearchPlayTieBreak
     private static CatalogQueryEvidence Evidence(
         Dictionary<string, long> songPlays,
         Dictionary<(string, string), long>? titlePlays = null,
-        SearchVocabulary? vocabulary = null,
-        Dictionary<string, long>? soundcheckOnlyPlays = null
+        SearchVocabulary? vocabulary = null
     ) =>
         new(
             "entities_fixture",
@@ -125,8 +108,7 @@ public sealed class TestSearchPlayTieBreak
             SearchPassages.Empty,
             songPlays.ToFrozenDictionary(),
             FrozenSet<string>.Empty,
-            titlePlays?.ToFrozenDictionary(),
-            soundcheckOnlyPlays?.ToFrozenDictionary()
+            titlePlays?.ToFrozenDictionary()
         );
 
     private static SearchDocument Song(string artist) =>

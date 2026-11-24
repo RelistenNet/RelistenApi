@@ -298,5 +298,6 @@ internal sealed record PlaylistSearchDocument(
     string HistoryGeneration,
     long Revision,
     long FollowCount,
-    long UpdatedAt
+    long UpdatedAt,
+    double PopularityPercentile = 0
 );

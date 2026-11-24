@@ -6,7 +6,10 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Relisten.Api.Models;
+using Relisten.Api.Models.Api.V4;
 using Relisten.Identifiers;
+using Relisten.Services.Popularity;
 
 namespace Relisten.Search;
 
@@ -15,41 +18,116 @@ using Document = Dictionary<string, object>;
 
 internal sealed partial class CatalogSearchProjection
 {
+    // Keep full shows together so grouping, reviews and preview selection see
+    // every copy. Once a batch's raw rows are read, the same snapshot can load
+    // full v4 facts for just its selected preview files.
+    private const int ShowBatchSize = 1_000;
+    private const int TrackDisplayBatchSize = 5_000;
+
     public async IAsyncEnumerable<Document> Performances(
-        [EnumeratorCancellation] CancellationToken cancellationToken
+        [EnumeratorCancellation] CancellationToken cancellationToken,
+        bool calibrate = false
     )
     {
         var mappings = (await _rows.Mappings(cancellationToken)).ToLookup(
             row => row.TrackUuid,
             row => row.SongId
         );
-        var groups = new Dictionary<string, PerformanceGroup>(StringComparer.Ordinal);
-        ShowContext? show = null;
 
-        await foreach (var track in _rows.Tracks().WithCancellation(cancellationToken))
+        var batches = _shows.Keys.Order().Chunk(ShowBatchSize).ToArray();
+        var ranks = calibrate ? await PerformanceRanks(batches, mappings, cancellationToken) : null;
+        foreach (var showIds in batches)
         {
-            if (show?.Row.Id != track.ShowId)
+            var documents = await BuildPerformances(showIds, mappings, cancellationToken);
+            await foreach (var document in AttachPreviews(documents, cancellationToken))
             {
-                if (show != null)
-                {
-                    foreach (var document in FinishShow(show, groups))
-                    {
-                        yield return document;
-                    }
-
-                    groups.Clear();
-                }
-
-                show = _shows[track.ShowId];
+                yield return WithPercentile(document, ranks);
             }
+        }
+    }
 
-            CollectTrack(show, groups, track, mappings[track.Uuid]);
+    private async Task<IReadOnlyDictionary<double, double>> PerformanceRanks(
+        long[][] batches,
+        ILookup<Guid, string> mappings,
+        CancellationToken cancellationToken
+    )
+    {
+        var histogram = new SearchPercentiles();
+        foreach (var showIds in batches)
+        {
+            // Count the same show/song groups as the document projection,
+            // including groups without plays. Only keep one batch of totals.
+            var totals = new Dictionary<(long Show, string Song), long>();
+            foreach (var track in await _rows.RankingTracks(showIds, cancellationToken))
+            {
+                var plays = _plays.GetValueOrDefault(track.Uuid).Plays;
+                foreach (var song in PerformanceSongs(RawTitle(track.Title), mappings[track.Uuid]))
+                {
+                    var key = (track.ShowId, song);
+                    totals[key] = totals.GetValueOrDefault(key) + plays;
+                }
+            }
+            foreach (var total in totals.Values)
+            {
+                histogram.Observe("performance", SignalBucket(total));
+            }
         }
 
-        if (show != null)
+        return histogram.Calculate().GetValueOrDefault("performance") ?? [];
+    }
+
+    private async Task<List<Document>> BuildPerformances(
+        long[] showIds,
+        ILookup<Guid, string> mappings,
+        CancellationToken cancellationToken
+    )
+    {
+        var imports = (await _rows.ImportedSongsAtShows(showIds, cancellationToken)).ToLookup(
+            song => (song.ShowId, Title: Fold(song.Name))
+        );
+        var popularity = await _resources.PerformancePopularity(
+            showIds.Select(id => _shows[id].Row.Uuid).ToArray(),
+            cancellationToken
+        );
+        var tracks = await _rows.Tracks(showIds, cancellationToken);
+        var documents = new List<Document>();
+
+        foreach (var atShow in tracks.GroupBy(track => track.ShowId))
         {
-            foreach (var document in FinishShow(show, groups))
+            var show = _shows[atShow.Key];
+            var groups = new Dictionary<string, PerformanceGroup>(StringComparer.Ordinal);
+            foreach (var track in atShow)
             {
+                CollectTrack(show, groups, track, mappings[track.Uuid]);
+            }
+
+            documents.AddRange(FinishShow(show, groups, imports, popularity));
+        }
+
+        return documents;
+    }
+
+    private async IAsyncEnumerable<Document> AttachPreviews(
+        IEnumerable<Document> documents,
+        [EnumeratorCancellation] CancellationToken cancellationToken
+    )
+    {
+        foreach (var batch in documents.Chunk(TrackDisplayBatchSize))
+        {
+            var selected = batch
+                .Select(document => (Document: document, File: (SearchFile)document["preview"]))
+                .Select(row => (row.Document, Uuid: UuidTypeId.Parse(row.File.TrackId, "track")))
+                .ToArray();
+            var tracks = await _resources.Tracks(
+                selected.Select(row => row.Uuid).Distinct().ToArray(),
+                _approvedArtists,
+                cancellationToken
+            );
+            foreach (var (document, uuid) in selected)
+            {
+                document["display"] = CatalogSearchResourceProjection.Serialize(
+                    V4CatalogProjection.Track(tracks[uuid])
+                );
                 yield return document;
             }
         }
@@ -89,11 +167,7 @@ internal sealed partial class CatalogSearchProjection
         );
 
         var raw = RawTitle(track.Title);
-        foreach (
-            var key in mappedSongs
-                .DefaultIfEmpty("raw:" + Fold(raw))
-                .Distinct(StringComparer.Ordinal)
-        )
+        foreach (var key in PerformanceSongs(raw, mappedSongs))
         {
             if (!groups.TryGetValue(key, out var group))
             {
@@ -106,9 +180,19 @@ internal sealed partial class CatalogSearchProjection
         }
     }
 
-    private static IEnumerable<Document> FinishShow(
+    private static IEnumerable<string> PerformanceSongs(
+        string rawTitle,
+        IEnumerable<string> mappedSongs
+    ) =>
+        mappedSongs
+            .Distinct(StringComparer.Ordinal)
+            .DefaultIfEmpty(PopularityPerformanceKey.RawTitle(Fold(rawTitle)));
+
+    private IEnumerable<Document> FinishShow(
         ShowContext show,
-        Dictionary<string, PerformanceGroup> groups
+        Dictionary<string, PerformanceGroup> groups,
+        ILookup<(long ShowId, string Title), SearchProjectionRows.ImportedSongMembership> imports,
+        IReadOnlyDictionary<(Guid Show, string Song), PopularityMetrics> popularity
     )
     {
         var mentions = ReviewMentions(show.Reviews, groups.Values);
@@ -118,26 +202,52 @@ internal sealed partial class CatalogSearchProjection
             var files = group.Files.Select(candidate => candidate.File).ToArray();
             var count = mentions.GetValueOrDefault(group);
             var plays = files.Sum(file => file.Plays);
+            var rawTitle = PopularityPerformanceKey.FoldedRawTitle(key);
+            var playbackKey = PopularityPerformanceKey.ForStorage(key);
+            var playback = popularity.GetValueOrDefault((show.Row.Uuid, playbackKey));
+            var imported = rawTitle == null ? null : UniqueImport(imports[(show.Row.Id, rawTitle)]);
+
             var label = group.Label.Length == 0 ? "Untitled track" : group.Label;
 
-            yield return new Document(show.Fields)
+            var preview = Preview(group.Files);
+            var document = new Document(show.Fields)
             {
                 ["id"] = PerformanceId(show.Row.Uuid, key),
                 ["kind"] = "performance",
                 ["label"] = label,
                 ["name"] = Fold(label),
                 ["aliases"] = Join(group.Aliases),
-                ["song_id"] = key.StartsWith("raw:", StringComparison.Ordinal) ? "" : key,
-                ["files"] = files,
-                ["preview"] = Preview(group.Files),
+                ["song_id"] = rawTitle == null ? key : "",
+                ["preview"] = preview,
+                ["preview_track_id"] = preview?.TrackId ?? PerformanceId(show.Row.Uuid, key),
                 ["soundboard"] = files.Any(file => file.Soundboard),
                 ["soundcheck"] = files.All(file => file.Soundcheck),
                 ["longest"] = files.Max(file => file.Duration),
                 ["track_plays"] = plays,
+                ["ranking_signal"] = plays,
                 ["review_mentions"] = count,
                 ["popularity"] = Math.Round(Math.Log(1d + plays) + 0.25 * Math.Log(1d + count), 5),
             };
+
+            // Raw title equality alone cannot establish song identity. The
+            // imported title must also have unambiguous membership in this show.
+            if (rawTitle == null || imported is not null)
+            {
+                var id = imported is null ? key : UuidTypeId.Format("imported_song", imported.Uuid);
+                document["display_song_id"] = id;
+                document["display_song_title"] = imported?.Name ?? label;
+            }
+            CatalogSearchResourceProjection.AttachPopularity(document, playback);
+            yield return document;
         }
+    }
+
+    private static SearchProjectionRows.ImportedSongMembership? UniqueImport(
+        IEnumerable<SearchProjectionRows.ImportedSongMembership> matches
+    )
+    {
+        var candidates = matches.Take(2).ToArray();
+        return candidates.Length == 1 ? candidates[0] : null;
     }
 
     private static SearchFile Preview(List<FileCandidate> candidates)

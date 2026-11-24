@@ -12,7 +12,7 @@ public sealed class AccountsOptions
     public string? McpHost { get; init; }
     public string? McpResourceUri { get; init; }
     public string McpCatalogBaseUrl { get; init; } = DefaultCatalogBaseUrl;
-    public string CatalogBaseUrl { get; init; } = DefaultCatalogBaseUrl;
+    public string CatalogBaseUrl { get; init; } = "http://relistenapi-srv:3823/";
     public string[] WebOrigins { get; init; } =
     ["https://relisten.net", "https://web.relisten.localhost:5173"];
     public string[] TrustedProxyNetworks { get; init; } = [];

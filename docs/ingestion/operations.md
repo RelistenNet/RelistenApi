@@ -500,3 +500,8 @@ access, and persistent payload Redis. The cluster uses manual manifest
 application. Its root kustomization does not include the Temporal bundle;
 provision it before applying an API manifest that selects Temporal. Applying
 infrastructure alone does not switch ingestion ownership or register schedules.
+
+Run migration 26 and publish the nightly popularity read model before
+building the first catalog search generation with typed resources. The search
+build reads the published windows alongside its existing exact-file ranking
+evidence.

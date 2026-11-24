@@ -26,6 +26,30 @@ public sealed class TestSearchIndexBuild
     }
 
     [Test]
+    public async Task FailedBuildSweepKeepsSiblingsOfBothPartiallyPublishedGenerations()
+    {
+        MigratedTestDatabase.RequireLocalDatabase();
+        await using var index = new TestIndex();
+        var first = await index.Build();
+        var second = await index.Build();
+        await index.PointEntitiesAt(first);
+
+        var invalid = new Dictionary<string, object>
+        {
+            ["id"] = "show",
+            ["date"] = new { invalid = true },
+        };
+        Assert.ThrowsAsync<InvalidOperationException>(() =>
+            index.Build(Guid.NewGuid().ToString("N"), invalid)
+        );
+
+        Assert.That(
+            await index.Collections(),
+            Is.EquivalentTo(index.Names(first).Concat(index.Names(second)))
+        );
+    }
+
+    [Test]
     public async Task RebuildSweepsAbandonedCollectionsAndRetirePreservesTheNewAliasTargets()
     {
         MigratedTestDatabase.RequireLocalDatabase();
@@ -90,7 +114,7 @@ public sealed class TestSearchIndexBuild
             return buildId;
         }
 
-        public Task Build(string buildId, Dictionary<string, object> entity) =>
+        public Task Build(string buildId, params Dictionary<string, object>[] entities) =>
             builder.Build(
                 prefix,
                 buildId,
@@ -98,7 +122,7 @@ public sealed class TestSearchIndexBuild
                     Rows("review"),
                     Rows("performance"),
                     Rows("recording"),
-                    new[] { entity }.ToAsyncEnumerable()
+                    entities.ToAsyncEnumerable()
                 ),
                 CancellationToken.None
             );
@@ -132,6 +156,12 @@ public sealed class TestSearchIndexBuild
                     Is.EqualTo(alias + "_" + buildId)
                 );
             }
+        }
+
+        public Task PointEntitiesAt(string buildId)
+        {
+            var alias = Alias(SearchIndexSchema.Entities);
+            return client.SetAlias(alias, alias + "_" + buildId, CancellationToken.None);
         }
 
         public Task Retire(string buildId) =>

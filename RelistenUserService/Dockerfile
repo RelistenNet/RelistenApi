@@ -4,11 +4,13 @@ WORKDIR /src
 
 COPY Relisten.Accounts.Contracts/Relisten.Accounts.Contracts.csproj Relisten.Accounts.Contracts/
 COPY Relisten.Identifiers/Relisten.Identifiers.csproj Relisten.Identifiers/
+COPY Relisten.Search.Contracts/Relisten.Search.Contracts.csproj Relisten.Search.Contracts/
 COPY RelistenUserService/RelistenUserService.csproj RelistenUserService/
 RUN dotnet restore RelistenUserService/RelistenUserService.csproj
 
 COPY Relisten.Accounts.Contracts/ Relisten.Accounts.Contracts/
 COPY Relisten.Identifiers/ Relisten.Identifiers/
+COPY Relisten.Search.Contracts/ Relisten.Search.Contracts/
 COPY Shared/PostgresConnectionString.cs Shared/
 COPY RelistenUserService/ RelistenUserService/
 RUN dotnet publish RelistenUserService/RelistenUserService.csproj \

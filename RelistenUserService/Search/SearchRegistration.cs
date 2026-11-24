@@ -1,3 +1,5 @@
+using System.Net;
+using Relisten.Search;
 using RelistenUserService.Configuration;
 
 namespace RelistenUserService.Search;
@@ -32,6 +34,15 @@ internal static class SearchRegistration
                 client.BaseAddress = new Uri(runtime.Options.CatalogBaseUrl.TrimEnd('/') + "/");
                 // The catalog can use its full five-second submitted-search budget.
                 client.Timeout = TimeSpan.FromSeconds(6);
+                var key = configuration[CatalogSearchExchange.KeySetting];
+                if (string.IsNullOrEmpty(key) && environment.IsDevelopment())
+                {
+                    key = CatalogSearchExchange.DevelopmentKey;
+                }
+                if (!string.IsNullOrEmpty(key))
+                {
+                    client.DefaultRequestHeaders.Add(CatalogSearchExchange.Header, key);
+                }
             })
             .RemoveAllLoggers()
             .ConfigurePrimaryHttpMessageHandler(SearchHandler);
@@ -47,5 +58,10 @@ internal static class SearchRegistration
     }
 
     private static HttpClientHandler SearchHandler() =>
-        new() { AllowAutoRedirect = false, UseCookies = false };
+        new()
+        {
+            AllowAutoRedirect = false,
+            UseCookies = false,
+            AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Brotli,
+        };
 }

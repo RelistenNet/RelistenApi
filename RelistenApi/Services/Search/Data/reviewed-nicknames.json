@@ -1,0 +1,2241 @@
+{
+ "artist_nicknames": [
+  {
+   "artist_slug": "grateful-dead",
+   "artist_name": "Grateful Dead",
+   "nickname": "gdead",
+   "kind": "initialism",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "wsp",
+   "artist_name": "Widespread Panic",
+   "nickname": "panic",
+   "kind": "name_part",
+   "scope": "leading_only"
+  },
+  {
+   "artist_slug": "wsp",
+   "artist_name": "Widespread Panic",
+   "nickname": "wide spread panic",
+   "kind": "initialism",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "wsp",
+   "artist_name": "Widespread Panic",
+   "nickname": "widespread",
+   "kind": "name_part",
+   "scope": "leading_only"
+  },
+  {
+   "artist_slug": "wsp",
+   "artist_name": "Widespread Panic",
+   "nickname": "wsp",
+   "kind": "fan_name",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "dead-and-co",
+   "artist_name": "Dead and Company",
+   "nickname": "deadco",
+   "kind": "initialism",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "jrad",
+   "artist_name": "Joe Russo's Almost Dead",
+   "nickname": "almost dead",
+   "kind": "name_part",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "kgatlw",
+   "artist_name": "King Gizzard & the Lizard Wizard",
+   "nickname": "gizz",
+   "kind": "fan_name",
+   "scope": "leading_only"
+  },
+  {
+   "artist_slug": "kgatlw",
+   "artist_name": "King Gizzard & the Lizard Wizard",
+   "nickname": "gizzard",
+   "kind": "name_part",
+   "scope": "leading_only"
+  },
+  {
+   "artist_slug": "kgatlw",
+   "artist_name": "King Gizzard & the Lizard Wizard",
+   "nickname": "kgatlw",
+   "kind": "initialism",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "kgatlw",
+   "artist_name": "King Gizzard & the Lizard Wizard",
+   "nickname": "king gizzard",
+   "kind": "name_part",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "phil-lesh",
+   "artist_name": "Phil Lesh and Friends",
+   "nickname": "paf",
+   "kind": "initialism",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "phil-lesh",
+   "artist_name": "Phil Lesh and Friends",
+   "nickname": "phil and friends",
+   "kind": "initialism",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "phil-lesh",
+   "artist_name": "Phil Lesh and Friends",
+   "nickname": "pl and f",
+   "kind": "initialism",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "tedeschi-trucks",
+   "artist_name": "Tedeschi Trucks Band",
+   "nickname": "tedeschi",
+   "kind": "name_part",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "tedeschi-trucks",
+   "artist_name": "Tedeschi Trucks Band",
+   "nickname": "tedeschi trucks",
+   "kind": "name_part",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "sci",
+   "artist_name": "String Cheese Incident",
+   "nickname": "the cheese",
+   "kind": "fan_name",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "disco-biscuits",
+   "artist_name": "Disco Biscuits",
+   "nickname": "bisco",
+   "kind": "fan_name",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "disco-biscuits",
+   "artist_name": "Disco Biscuits",
+   "nickname": "biscuits",
+   "kind": "name_part",
+   "scope": "leading_only"
+  },
+  {
+   "artist_slug": "disco-biscuits",
+   "artist_name": "Disco Biscuits",
+   "nickname": "tdb",
+   "kind": "fan_name",
+   "scope": "leading_only"
+  },
+  {
+   "artist_slug": "disco-biscuits",
+   "artist_name": "Disco Biscuits",
+   "nickname": "the biscuits",
+   "kind": "fan_name",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "yonder",
+   "artist_name": "Yonder Mountain String Band",
+   "nickname": "yonder",
+   "kind": "name_part",
+   "scope": "leading_only"
+  },
+  {
+   "artist_slug": "yonder",
+   "artist_name": "Yonder Mountain String Band",
+   "nickname": "yonder mountain",
+   "kind": "name_part",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "radiators",
+   "artist_name": "The Radiators",
+   "nickname": "radiators",
+   "kind": "name_part",
+   "scope": "leading_only"
+  },
+  {
+   "artist_slug": "radiators",
+   "artist_name": "The Radiators",
+   "nickname": "rads",
+   "kind": "fan_name",
+   "scope": "leading_only"
+  },
+  {
+   "artist_slug": "radiators",
+   "artist_name": "The Radiators",
+   "nickname": "the rads",
+   "kind": "fan_name",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "bob-weir",
+   "artist_name": "Bob Weir",
+   "nickname": "bob weir and wolf bros",
+   "kind": "fan_name",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "bob-weir",
+   "artist_name": "Bob Weir",
+   "nickname": "wolf bros",
+   "kind": "fan_name",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "umphreys",
+   "artist_name": "Umphrey's McGee",
+   "nickname": "um",
+   "kind": "initialism",
+   "scope": "leading_only"
+  },
+  {
+   "artist_slug": "umphreys",
+   "artist_name": "Umphrey's McGee",
+   "nickname": "umph",
+   "kind": "fan_name",
+   "scope": "leading_only"
+  },
+  {
+   "artist_slug": "umphreys",
+   "artist_name": "Umphrey's McGee",
+   "nickname": "umphrey",
+   "kind": "fan_name",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "umphreys",
+   "artist_name": "Umphrey's McGee",
+   "nickname": "umphreys",
+   "kind": "name_part",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "max-creek",
+   "artist_name": "Max Creek",
+   "nickname": "maxcreek",
+   "kind": "initialism",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "greensky-bluegrass",
+   "artist_name": "Greensky Bluegrass",
+   "nickname": "greensky",
+   "kind": "name_part",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "greensky-bluegrass",
+   "artist_name": "Greensky Bluegrass",
+   "nickname": "gsbg",
+   "kind": "fan_name",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "trey",
+   "artist_name": "Trey Anastasio",
+   "nickname": "trey anastasio band",
+   "kind": "fan_name",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "railroad-earth",
+   "artist_name": "Railroad Earth",
+   "nickname": "rre",
+   "kind": "fan_name",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "keller-williams",
+   "artist_name": "Keller Williams",
+   "nickname": "kdub",
+   "kind": "fan_name",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "keller-williams",
+   "artist_name": "Keller Williams",
+   "nickname": "keller",
+   "kind": "name_part",
+   "scope": "leading_only"
+  },
+  {
+   "artist_slug": "leftover-salmon",
+   "artist_name": "Leftover Salmon",
+   "nickname": "leftover",
+   "kind": "name_part",
+   "scope": "leading_only"
+  },
+  {
+   "artist_slug": "leftover-salmon",
+   "artist_name": "Leftover Salmon",
+   "nickname": "salmon",
+   "kind": "name_part",
+   "scope": "leading_only"
+  },
+  {
+   "artist_slug": "daniel-donato",
+   "artist_name": "Daniel Donato",
+   "nickname": "donato",
+   "kind": "name_part",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "ekoostik-hookah",
+   "artist_name": "ekoostik hookah",
+   "nickname": "ekoostik",
+   "kind": "name_part",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "ekoostik-hookah",
+   "artist_name": "ekoostik hookah",
+   "nickname": "hookah",
+   "kind": "name_part",
+   "scope": "leading_only"
+  },
+  {
+   "artist_slug": "jerry-joseph",
+   "artist_name": "Jerry Joseph and the Jackmormons",
+   "nickname": "jackmormons",
+   "kind": "name_part",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "drive-by-truckers",
+   "artist_name": "Drive-By Truckers",
+   "nickname": "truckers",
+   "kind": "name_part",
+   "scope": "leading_only"
+  },
+  {
+   "artist_slug": "sts9",
+   "artist_name": "Sound Tribe Sector 9",
+   "nickname": "sound tribe",
+   "kind": "name_part",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "smashing-pumpkins",
+   "artist_name": "Smashing Pumpkins",
+   "nickname": "pumpkins",
+   "kind": "name_part",
+   "scope": "leading_only"
+  },
+  {
+   "artist_slug": "sam-grisman-project",
+   "artist_name": "Sam Grisman Project",
+   "nickname": "sgp",
+   "kind": "initialism",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "los-lobos",
+   "artist_name": "Los Lobos",
+   "nickname": "lobos",
+   "kind": "name_part",
+   "scope": "leading_only"
+  },
+  {
+   "artist_slug": "los-lobos",
+   "artist_name": "Los Lobos",
+   "nickname": "loslobos",
+   "kind": "initialism",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "north-mississippi-allstars",
+   "artist_name": "North Mississippi Allstars",
+   "nickname": "nmas",
+   "kind": "fan_name",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "stringdusters",
+   "artist_name": "Infamous Stringdusters",
+   "nickname": "dusters",
+   "kind": "fan_name",
+   "scope": "leading_only"
+  },
+  {
+   "artist_slug": "stringdusters",
+   "artist_name": "Infamous Stringdusters",
+   "nickname": "the dusters",
+   "kind": "fan_name",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "the-mountain-goats",
+   "artist_name": "The Mountain Goats",
+   "nickname": "goats",
+   "kind": "name_part",
+   "scope": "leading_only"
+  },
+  {
+   "artist_slug": "the-mountain-goats",
+   "artist_name": "The Mountain Goats",
+   "nickname": "tmg",
+   "kind": "initialism",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "kitchen-dwellers",
+   "artist_name": "Kitchen Dwellers",
+   "nickname": "dwellers",
+   "kind": "name_part",
+   "scope": "leading_only"
+  },
+  {
+   "artist_slug": "mr-blotto",
+   "artist_name": "Mr. Blotto",
+   "nickname": "mrblotto",
+   "kind": "initialism",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "bela-fleck",
+   "artist_name": "Bela Fleck and the Flecktones",
+   "nickname": "bela",
+   "kind": "name_part",
+   "scope": "leading_only"
+  },
+  {
+   "artist_slug": "bela-fleck",
+   "artist_name": "Bela Fleck and the Flecktones",
+   "nickname": "bfft",
+   "kind": "fan_name",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "bela-fleck",
+   "artist_name": "Bela Fleck and the Flecktones",
+   "nickname": "flecktones",
+   "kind": "name_part",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "tea-leaf-green",
+   "artist_name": "Tea Leaf Green",
+   "nickname": "tlg",
+   "kind": "initialism",
+   "scope": "leading_only"
+  },
+  {
+   "artist_slug": "perpetual-groove",
+   "artist_name": "Perpetual Groove",
+   "nickname": "pgroove",
+   "kind": "initialism",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "marcus-king-band",
+   "artist_name": "Marcus King Band",
+   "nickname": "marcus king",
+   "kind": "name_part",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "grahame-lesh-and-friends",
+   "artist_name": "Grahame Lesh and Friends",
+   "nickname": "glaf",
+   "kind": "initialism",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "steve-kimock-band",
+   "artist_name": "Steve Kimock Band",
+   "nickname": "skb",
+   "kind": "initialism",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "new-riders-of-the-purple-sage",
+   "artist_name": "New Riders of the Purple Sage",
+   "nickname": "nrps",
+   "kind": "initialism",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "rumpke-mountain-boys",
+   "artist_name": "Rumpke Mountain Boys",
+   "nickname": "rumpke",
+   "kind": "name_part",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "new-mastersounds",
+   "artist_name": "The New Mastersounds",
+   "nickname": "mastersounds",
+   "kind": "name_part",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "new-mastersounds",
+   "artist_name": "The New Mastersounds",
+   "nickname": "nms",
+   "kind": "fan_name",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "greyboy-allstars",
+   "artist_name": "Greyboy Allstars",
+   "nickname": "gba",
+   "kind": "fan_name",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "greyboy-allstars",
+   "artist_name": "Greyboy Allstars",
+   "nickname": "greyboy",
+   "kind": "name_part",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "stu-allen-and-mars-hotel",
+   "artist_name": "Stu Allen and Mars Hotel",
+   "nickname": "stu allen",
+   "kind": "name_part",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "club-d-elf",
+   "artist_name": "Club d'Elf",
+   "nickname": "delf",
+   "kind": "name_part",
+   "scope": "leading_only"
+  },
+  {
+   "artist_slug": "ominous-seapods",
+   "artist_name": "Ominous Seapods",
+   "nickname": "seapods",
+   "kind": "name_part",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "matisyahu",
+   "artist_name": "Matisyahu",
+   "nickname": "matis",
+   "kind": "fan_name",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "splintered-sunlight",
+   "artist_name": "Splintered Sunlight",
+   "nickname": "splintered",
+   "kind": "name_part",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "mj-lenderman",
+   "artist_name": "MJ Lenderman",
+   "nickname": "lenderman",
+   "kind": "name_part",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "godspeed-you-black-emperor",
+   "artist_name": "Godspeed You Black Emperor!",
+   "nickname": "godspeed",
+   "kind": "name_part",
+   "scope": "leading_only"
+  },
+  {
+   "artist_slug": "the-motet",
+   "artist_name": "The Motet",
+   "nickname": "themotet",
+   "kind": "initialism",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "deep-banana-blackout",
+   "artist_name": "Deep Banana Blackout",
+   "nickname": "dbb",
+   "kind": "initialism",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "california-honeydrops",
+   "artist_name": "The California Honeydrops",
+   "nickname": "honeydrops",
+   "kind": "name_part",
+   "scope": "leading_only"
+  },
+  {
+   "artist_slug": "blueground-undergrass",
+   "artist_name": "Blueground Undergrass",
+   "nickname": "bgug",
+   "kind": "fan_name",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "karl-densons-tiny-universe",
+   "artist_name": "Karl Denson's Tiny Universe",
+   "nickname": "denson",
+   "kind": "fan_name",
+   "scope": "anywhere"
+  },
+  {
+   "artist_slug": "grateful-dead",
+   "artist_name": "Grateful Dead",
+   "nickname": "gd",
+   "kind": "initialism",
+   "scope": "leading_only",
+   "match_as_name": true
+  },
+  {
+   "artist_slug": "grateful-dead",
+   "artist_name": "Grateful Dead",
+   "nickname": "dead",
+   "kind": "name_part",
+   "scope": "leading_only",
+   "match_as_name": true
+  },
+  {
+   "artist_slug": "billy-strings",
+   "artist_name": "Billy Strings",
+   "nickname": "billy",
+   "kind": "name_part",
+   "scope": "leading_only",
+   "match_as_name": true
+  },
+  {
+   "artist_slug": "billy-strings",
+   "artist_name": "Billy Strings",
+   "nickname": "bmfs",
+   "kind": "initialism",
+   "scope": "leading_only",
+   "match_as_name": true
+  },
+  {
+   "artist_slug": "jrad",
+   "artist_name": "Joe Russo's Almost Dead",
+   "nickname": "jrad",
+   "kind": "initialism",
+   "scope": "anywhere",
+   "match_as_name": true
+  },
+  {
+   "artist_slug": "sci",
+   "artist_name": "The String Cheese Incident",
+   "nickname": "string cheese",
+   "kind": "name_part",
+   "scope": "leading_only",
+   "match_as_name": true
+  },
+  {
+   "artist_slug": "dead-and-co",
+   "artist_name": "Dead & Company",
+   "nickname": "dead and co",
+   "kind": "name_part",
+   "scope": "leading_only",
+   "match_as_name": true
+  }
+ ],
+ "song_nicknames": [
+  {
+   "artist_slug": "grateful-dead",
+   "song_id": "song_8ak1kyem",
+   "song_source": "norm.songs",
+   "song": "Eyes Of The World",
+   "nickname": "eotw",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "grateful-dead",
+   "song_id": "song_mg7maaeg",
+   "song_source": "norm.songs",
+   "song": "Sugar Magnolia",
+   "nickname": "sugar mags",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "grateful-dead",
+   "song_id": "song_yka62wnx",
+   "song_source": "norm.songs",
+   "song": "Fire On The Mountain",
+   "nickname": "fotm",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "grateful-dead",
+   "song_id": "song_r2npmpma",
+   "song_source": "norm.songs",
+   "song": "Mississippi Half-Step Uptown Toodeloo",
+   "nickname": "halfstep",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "grateful-dead",
+   "song_id": "song_31j0kr4m",
+   "song_source": "norm.songs",
+   "song": "Ramble On Rose",
+   "nickname": "ror",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "grateful-dead",
+   "song_id": "song_jqt0cf3q",
+   "song_source": "norm.songs",
+   "song": "Feel Like A Stranger",
+   "nickname": "flas",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "grateful-dead",
+   "song_id": "song_zq4sykae",
+   "song_source": "norm.songs",
+   "song": "Johnny B. Goode",
+   "nickname": "jbg",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "grateful-dead",
+   "song_id": "song_e89a2fsg",
+   "song_source": "norm.songs",
+   "song": "Weather Report Suite",
+   "nickname": "wrs",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_w23htghp",
+   "song_source": "norm.songs",
+   "song": "Chalk Dust Torture",
+   "nickname": "chalk dust",
+   "kind": "title_word"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_w23htghp",
+   "song_source": "norm.songs",
+   "song": "Chalk Dust Torture",
+   "nickname": "chalkdust",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_w2ehpw9y",
+   "song_source": "norm.songs",
+   "song": "Down with Disease",
+   "nickname": "disease",
+   "kind": "title_word"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_w2ehpw9y",
+   "song_source": "norm.songs",
+   "song": "Down with Disease",
+   "nickname": "dwd",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_880drgbh",
+   "song_source": "norm.songs",
+   "song": "Weekapaug Groove",
+   "nickname": "paug",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_880drgbh",
+   "song_source": "norm.songs",
+   "song": "Weekapaug Groove",
+   "nickname": "weekapaug",
+   "kind": "title_word"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_cm4zrmh4",
+   "song_source": "norm.songs",
+   "song": "Bathtub Gin",
+   "nickname": "gin",
+   "kind": "title_word"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_8drh0rhp",
+   "song_source": "norm.songs",
+   "song": "Bouncing Around the Room",
+   "nickname": "batr",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_8drh0rhp",
+   "song_source": "norm.songs",
+   "song": "Bouncing Around the Room",
+   "nickname": "bouncing",
+   "kind": "title_word"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_xgxgkyzx",
+   "song_source": "norm.songs",
+   "song": "Harry Hood",
+   "nickname": "hood",
+   "kind": "title_word"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_g8eygr69",
+   "song_source": "norm.songs",
+   "song": "Wolfman's Brother",
+   "nickname": "wolfmans",
+   "kind": "title_word"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_tfd57p88",
+   "song_source": "norm.songs",
+   "song": "Also Sprach Zarathustra",
+   "nickname": "2001",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_tfd57p88",
+   "song_source": "norm.songs",
+   "song": "Also Sprach Zarathustra",
+   "nickname": "asz",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_y9zn0c6z",
+   "song_source": "norm.songs",
+   "song": "AC/DC Bag",
+   "nickname": "acdc",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_y9zn0c6z",
+   "song_source": "norm.songs",
+   "song": "AC/DC Bag",
+   "nickname": "bag",
+   "kind": "title_word"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_8wtq5pm9",
+   "song_source": "norm.songs",
+   "song": "The Moma Dance",
+   "nickname": "moma",
+   "kind": "title_word"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_3a1raax6",
+   "song_source": "norm.songs",
+   "song": "Punch You in the Eye",
+   "nickname": "punch",
+   "kind": "title_word"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_3a1raax6",
+   "song_source": "norm.songs",
+   "song": "Punch You in the Eye",
+   "nickname": "pyite",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_9wr7dcxy",
+   "song_source": "norm.songs",
+   "song": "Runaway Jim",
+   "nickname": "jim",
+   "kind": "title_word"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_vd1f3w0f",
+   "song_source": "norm.songs",
+   "song": "My Friend, My Friend",
+   "nickname": "mfmf",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_e6s6z1s9",
+   "song_source": "norm.songs",
+   "song": "David Bowie",
+   "nickname": "bowie",
+   "kind": "title_word"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_6nfx73d2",
+   "song_source": "norm.songs",
+   "song": "Sample in a Jar",
+   "nickname": "sample",
+   "kind": "title_word"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_699vmgsp",
+   "song_source": "norm.songs",
+   "song": "Tweezer Reprise",
+   "nickname": "tweeprise",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_699vmgsp",
+   "song_source": "norm.songs",
+   "song": "Tweezer Reprise",
+   "nickname": "tweprise",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_hzhgz4r0",
+   "song_source": "norm.songs",
+   "song": "The Lizards",
+   "nickname": "lizards",
+   "kind": "title_word"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_pt210p6q",
+   "song_source": "norm.songs",
+   "song": "Slave to the Traffic Light",
+   "nickname": "slave",
+   "kind": "title_word"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_3vv8zjkn",
+   "song_source": "norm.songs",
+   "song": "I Am Hydrogen",
+   "nickname": "hydrogen",
+   "kind": "title_word"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_2rr10z9p",
+   "song_source": "norm.songs",
+   "song": "Suzy Greenberg",
+   "nickname": "suzy",
+   "kind": "title_word"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_83804ssf",
+   "song_source": "norm.songs",
+   "song": "Golgi Apparatus",
+   "nickname": "golgi",
+   "kind": "title_word"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_05ym9r6v",
+   "song_source": "norm.songs",
+   "song": "Guelah Papyrus",
+   "nickname": "guelah",
+   "kind": "title_word"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_q6qb1n04",
+   "song_source": "norm.songs",
+   "song": "Limb by Limb",
+   "nickname": "limb",
+   "kind": "title_word"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_g7enx9wp",
+   "song_source": "norm.songs",
+   "song": "Gotta Jibboo",
+   "nickname": "jibboo",
+   "kind": "title_word"
+  },
+  {
+   "artist_slug": "grateful-dead",
+   "song_id": "song_j6736ex2",
+   "song_source": "norm.songs",
+   "song": "Viola Lee Blues",
+   "nickname": "viola",
+   "kind": "title_word"
+  },
+  {
+   "artist_slug": "grateful-dead",
+   "song_id": "song_j6736ex2",
+   "song_source": "norm.songs",
+   "song": "Viola Lee Blues",
+   "nickname": "viola lee",
+   "kind": "title_word"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_xxp0mbd2",
+   "song_source": "norm.songs",
+   "song": "Boogie on Reggae Woman",
+   "nickname": "boogie on",
+   "kind": "title_word"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_ppbe5shv",
+   "song_source": "norm.songs",
+   "song": "Kill Devil Falls",
+   "nickname": "kdf",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_ydhgwa2j",
+   "song_source": "norm.songs",
+   "song": "The Wedge",
+   "nickname": "wedge",
+   "kind": "title_word"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_v312k194",
+   "song_source": "norm.songs",
+   "song": "No Men in No Man's Land",
+   "nickname": "no men",
+   "kind": "title_word"
+  },
+  {
+   "artist_slug": "grateful-dead",
+   "song_id": "song_q1ycey2n",
+   "song_source": "norm.songs",
+   "song": "Attics Of My Life",
+   "nickname": "attics",
+   "kind": "title_word"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_ebtj2vmk",
+   "song_source": "norm.songs",
+   "song": "Backwards Down the Number Line",
+   "nickname": "bdtnl",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_4kyswnk9",
+   "song_source": "norm.songs",
+   "song": "Colonel Forbin's Ascent",
+   "nickname": "forbin",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_4kyswnk9",
+   "song_source": "norm.songs",
+   "song": "Colonel Forbin's Ascent",
+   "nickname": "forbins",
+   "kind": "title_word"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_9ap2vvq0",
+   "song_source": "norm.songs",
+   "song": "Fly Famous Mockingbird",
+   "nickname": "mockingbird",
+   "kind": "title_word"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_5xpf77wr",
+   "song_source": "norm.songs",
+   "song": "Sneakin' Sally Through the Alley",
+   "nickname": "sneakin sally",
+   "kind": "title_word"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_5jzqc2zz",
+   "song_source": "norm.songs",
+   "song": "Wading in the Velvet Sea",
+   "nickname": "wading",
+   "kind": "title_word"
+  },
+  {
+   "artist_slug": "jrad",
+   "song_id": "song_7wa9cakc",
+   "song_source": "norm.songs",
+   "song": "Dancing In The Street",
+   "nickname": "dancin",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_k3snzxgc",
+   "song_source": "norm.songs",
+   "song": "Seven Below",
+   "nickname": "7 below",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_jf503bn9",
+   "song_source": "norm.songs",
+   "song": "Set Your Soul Free",
+   "nickname": "sysf",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_eknapqaj",
+   "song_source": "norm.songs",
+   "song": "A Song I Heard the Ocean Sing",
+   "nickname": "asihtos",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "moe",
+   "song_id": "song_c3tcjkkw",
+   "song_source": "norm.songs",
+   "song": "Rebubula",
+   "nickname": "rebub",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "disco-biscuits",
+   "song_id": "song_cn20pcht",
+   "song_source": "norm.songs",
+   "song": "Mindless Dribble",
+   "nickname": "dribble",
+   "kind": "title_word"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_z2c3a7e7",
+   "song_source": "norm.songs",
+   "song": "Destiny Unbound",
+   "nickname": "destiny",
+   "kind": "title_word"
+  },
+  {
+   "artist_slug": "disco-biscuits",
+   "song_id": "song_zaz41rnr",
+   "song_source": "norm.songs",
+   "song": "Above The Waves",
+   "nickname": "atw",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "disco-biscuits",
+   "song_id": "song_64emztdn",
+   "song_source": "norm.songs",
+   "song": "Run Like Hell",
+   "nickname": "rlh",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "jrad",
+   "song_id": "song_e5msjeam",
+   "song_source": "norm.songs",
+   "song": "Mississippi Half-Step Uptown Toodeloo",
+   "nickname": "halfstep",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "phil-lesh",
+   "song_id": "title:uncle johns band",
+   "song_source": "track titles",
+   "song": "uncle johns band",
+   "nickname": "ujb",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_0qcwv4mw",
+   "song_source": "norm.songs",
+   "song": "Big Black Furry Creature From Mars",
+   "nickname": "bbfcfm",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_0qcwv4mw",
+   "song_source": "norm.songs",
+   "song": "Big Black Furry Creature From Mars",
+   "nickname": "bbfcm",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "disco-biscuits",
+   "song_id": "song_5g7w8nab",
+   "song_source": "norm.songs",
+   "song": "Little Shimmy In A Conga Line",
+   "nickname": "shimmy",
+   "kind": "title_word"
+  },
+  {
+   "artist_slug": "dead-and-co",
+   "song_id": "song_dh0fz9t3",
+   "song_source": "norm.songs",
+   "song": "Dancing in the Street",
+   "nickname": "dancin",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "sci",
+   "song_id": "title:round the wheel",
+   "song_source": "track titles",
+   "song": "round the wheel",
+   "nickname": "rtw",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "disco-biscuits",
+   "song_id": "song_88236r98",
+   "song_source": "norm.songs",
+   "song": "House Dog Party Favor",
+   "nickname": "hdpf",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "disco-biscuits",
+   "song_id": "song_8fmgtyeg",
+   "song_source": "norm.songs",
+   "song": "The Very Moon",
+   "nickname": "tvm",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_p2k8zm8e",
+   "song_source": "norm.songs",
+   "song": "Walls of the Cave",
+   "nickname": "walls",
+   "kind": "title_word"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_p2k8zm8e",
+   "song_source": "norm.songs",
+   "song": "Walls of the Cave",
+   "nickname": "wotc",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "moe",
+   "song_id": "song_1e7dcwvf",
+   "song_source": "norm.songs",
+   "song": "Seat Of My Pants",
+   "nickname": "somp",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "moe",
+   "song_id": "song_tv1hqxdk",
+   "song_source": "norm.songs",
+   "song": "Happy Hour Hero",
+   "nickname": "hhh",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "disco-biscuits",
+   "song_id": "song_dzb2j83c",
+   "song_source": "norm.songs",
+   "song": "Shem-Rah Boo",
+   "nickname": "srb",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "disco-biscuits",
+   "song_id": "song_pwr6yf0f",
+   "song_source": "norm.songs",
+   "song": "Save The Robots",
+   "nickname": "robots",
+   "kind": "title_word"
+  },
+  {
+   "artist_slug": "disco-biscuits",
+   "song_id": "song_a23rb9s7",
+   "song_source": "norm.songs",
+   "song": "Story Of The World",
+   "nickname": "sotw",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "sci",
+   "song_id": "title:born on the wrong planet",
+   "song_source": "track titles",
+   "song": "born on the wrong planet",
+   "nickname": "botwp",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "disco-biscuits",
+   "song_id": "song_vfmsdnvb",
+   "song_source": "norm.songs",
+   "song": "Jigsaw Earth",
+   "nickname": "jigsaw",
+   "kind": "title_word"
+  },
+  {
+   "artist_slug": "furthur",
+   "song_id": "setlist:2643",
+   "song_source": "setlist_songs",
+   "song": "Uncle John's Band",
+   "nickname": "ujb",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "moe",
+   "song_id": "song_sqvrg1nk",
+   "song_source": "norm.songs",
+   "song": "Bring You Down",
+   "nickname": "byd",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "umphreys",
+   "song_id": "song_29px975a",
+   "song_source": "norm.songs",
+   "song": "Nothing Too Fancy",
+   "nickname": "ntf",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "sci",
+   "song_id": "title:come as you are",
+   "song_source": "track titles",
+   "song": "come as you are",
+   "nickname": "caya",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "moe",
+   "song_id": "song_mxq1s5ph",
+   "song_source": "norm.songs",
+   "song": "Sensory Deprivation Bank",
+   "nickname": "sdb",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "umphreys",
+   "song_id": "song_hjbc6cqb",
+   "song_source": "norm.songs",
+   "song": "Hurt Bird Bath",
+   "nickname": "hbb",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "ween",
+   "song_id": "setlist:8302",
+   "song_source": "setlist_songs",
+   "song": "The HIV Song",
+   "nickname": "hiv song",
+   "kind": "title_word"
+  },
+  {
+   "artist_slug": "ratdog",
+   "song_id": "setlist:11451",
+   "song_source": "setlist_songs",
+   "song": "Friend of the Devil",
+   "nickname": "fotd",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "moe",
+   "song_id": "song_fyz09tfv",
+   "song_source": "norm.songs",
+   "song": "Bring It Back Home",
+   "nickname": "bibh",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "furthur",
+   "song_id": "setlist:2640",
+   "song_source": "setlist_songs",
+   "song": "Bird Song",
+   "nickname": "birdsong",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "ween",
+   "song_id": "setlist:8346",
+   "song_source": "setlist_songs",
+   "song": "Push th' Little Daisies",
+   "nickname": "daisies",
+   "kind": "title_word"
+  },
+  {
+   "artist_slug": "furthur",
+   "song_id": "setlist:2753",
+   "song_source": "setlist_songs",
+   "song": "Weather Report Suite",
+   "nickname": "wrs",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "ratdog",
+   "song_id": "setlist:11376",
+   "song_source": "setlist_songs",
+   "song": "Not Fade Away",
+   "nickname": "nfa",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "dark-star-orchestra",
+   "song_id": "setlist:2271",
+   "song_source": "setlist_songs",
+   "song": "Beat It On Down the Line",
+   "nickname": "biodtl",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "phil-lesh",
+   "song_id": "title:sugar magnolia",
+   "song_source": "track titles",
+   "song": "sugar magnolia",
+   "nickname": "sugar mag",
+   "kind": "abbreviation"
+  },
+  {
+   "artist_slug": "grateful-dead",
+   "song_id": "song_6dec5kmn",
+   "song_source": "norm.songs",
+   "song": "Playing In The Band",
+   "nickname": "itb",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "light song-specific evidence (3 recordings, lift 3.3); confirm fan usage"
+  },
+  {
+   "artist_slug": "grateful-dead",
+   "song_id": "song_8dhmzkjb",
+   "song_source": "norm.songs",
+   "song": "Me And My Uncle",
+   "nickname": "mmu",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "light song-specific evidence (3 recordings, lift 4.2); confirm fan usage"
+  },
+  {
+   "artist_slug": "grateful-dead",
+   "song_id": "song_62mhvjyd",
+   "song_source": "norm.songs",
+   "song": "Scarlet Begonias",
+   "nickname": "scarlets",
+   "kind": "abbreviation",
+   "scope": "artist_context_only",
+   "why": "35 recordings with this song mention it (lift 5.0), but also an English word"
+  },
+  {
+   "artist_slug": "grateful-dead",
+   "song_id": "song_7qy6gdgf",
+   "song_source": "norm.songs",
+   "song": "The Music Never Stopped",
+   "nickname": "mns",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "collides with an artist name or produced initialism (produced_initialism_for)"
+  },
+  {
+   "artist_slug": "grateful-dead",
+   "song_id": "song_r2npmpma",
+   "song_source": "norm.songs",
+   "song": "Mississippi Half-Step Uptown Toodeloo",
+   "nickname": "mhs",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "light song-specific evidence (4 recordings, lift 9.1); confirm fan usage"
+  },
+  {
+   "artist_slug": "grateful-dead",
+   "song_id": "song_q3g5jszw",
+   "song_source": "norm.songs",
+   "song": "Dark Star",
+   "nickname": "ds",
+   "kind": "abbreviation",
+   "scope": "artist_context_only",
+   "why": "two-letter form; high false-positive risk"
+  },
+  {
+   "artist_slug": "grateful-dead",
+   "song_id": "song_n6am2a6n",
+   "song_source": "norm.songs",
+   "song": "Hell In A Bucket",
+   "nickname": "hiab",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "light song-specific evidence (8 recordings, lift 5.3); confirm fan usage"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_hf5bcx7b",
+   "song_source": "norm.songs",
+   "song": "Tweezer",
+   "nickname": "tweez",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "light song-specific evidence (19 recordings, lift 4.2); confirm fan usage"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_w23htghp",
+   "song_source": "norm.songs",
+   "song": "Chalk Dust Torture",
+   "nickname": "cdt",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "collides with an artist name or produced initialism (produced_initialism_for)"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_a6az9x90",
+   "song_source": "norm.songs",
+   "song": "Split Open and Melt",
+   "nickname": "soam",
+   "kind": "abbreviation",
+   "scope": "artist_context_only",
+   "why": "191 recordings with this song mention it (lift 4.5), but also an English word"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_mdp9qccf",
+   "song_source": "norm.songs",
+   "song": "Run Like an Antelope",
+   "nickname": "lope",
+   "kind": "abbreviation",
+   "scope": "artist_context_only",
+   "why": "52 recordings with this song mention it (lift 3.5), but also an English word"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_mdp9qccf",
+   "song_source": "norm.songs",
+   "song": "Run Like an Antelope",
+   "nickname": "rlaa",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "light song-specific evidence (5 recordings, lift 3.9); confirm fan usage"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_mdp9qccf",
+   "song_source": "norm.songs",
+   "song": "Run Like an Antelope",
+   "nickname": "rlta",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "known fan usage but no catalog evidence"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_0dcbb7ch",
+   "song_source": "norm.songs",
+   "song": "Back on the Train",
+   "nickname": "bott",
+   "kind": "abbreviation",
+   "scope": "artist_context_only",
+   "why": "103 recordings with this song mention it (lift 10.5), but also an English word"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_wa94tbd0",
+   "song_source": "norm.songs",
+   "song": "Theme From the Bottom",
+   "nickname": "tftb",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "light song-specific evidence (4 recordings, lift 9.5); confirm fan usage"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_699vmgsp",
+   "song_source": "norm.songs",
+   "song": "Tweezer Reprise",
+   "nickname": "twep",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "known fan usage but no catalog evidence"
+  },
+  {
+   "artist_slug": "wsp",
+   "song_id": "song_3xmfcmp1",
+   "song_source": "norm.songs",
+   "song": "Henry Parsons Died",
+   "nickname": "hpd",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "known fan usage but no catalog evidence"
+  },
+  {
+   "artist_slug": "billy-strings",
+   "song_id": "song_chxcf2bc",
+   "song_source": "norm.songs",
+   "song": "Meet Me At The Creek",
+   "nickname": "mmatc",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "known fan usage but no catalog evidence"
+  },
+  {
+   "artist_slug": "wsp",
+   "song_id": "song_2q1s990m",
+   "song_source": "norm.songs",
+   "song": "Ain't Life Grand",
+   "nickname": "alg",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "light song-specific evidence (4 recordings, lift 3.9); confirm fan usage"
+  },
+  {
+   "artist_slug": "billy-strings",
+   "song_id": "song_cc8bgsj0",
+   "song_source": "norm.songs",
+   "song": "Dust In A Baggie",
+   "nickname": "diab",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "known fan usage but no catalog evidence"
+  },
+  {
+   "artist_slug": "billy-strings",
+   "song_id": "song_x7hmqftz",
+   "song_source": "norm.songs",
+   "song": "Turmoil & Tinfoil",
+   "nickname": "t and t",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "known fan usage but no catalog evidence"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_pt210p6q",
+   "song_source": "norm.songs",
+   "song": "Slave to the Traffic Light",
+   "nickname": "sttfl",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "known fan usage but no catalog evidence"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_pt210p6q",
+   "song_source": "norm.songs",
+   "song": "Slave to the Traffic Light",
+   "nickname": "sttl",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "known fan usage but no catalog evidence"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_z13cs7xr",
+   "song_source": "norm.songs",
+   "song": "Fluffhead",
+   "nickname": "fluff",
+   "kind": "abbreviation",
+   "scope": "artist_context_only",
+   "why": "150 recordings with this song mention it (lift 5.2), but also an English word"
+  },
+  {
+   "artist_slug": "wsp",
+   "song_id": "song_pd25sk5t",
+   "song_source": "norm.songs",
+   "song": "Climb To Safety",
+   "nickname": "cts",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "known fan usage but no catalog evidence"
+  },
+  {
+   "artist_slug": "wsp",
+   "song_id": "song_x27e909p",
+   "song_source": "norm.songs",
+   "song": "Ride Me High",
+   "nickname": "rmh",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "known fan usage but no catalog evidence"
+  },
+  {
+   "artist_slug": "billy-strings",
+   "song_id": "song_7400rqgt",
+   "song_source": "norm.songs",
+   "song": "In The Morning Light",
+   "nickname": "itml",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "known fan usage but no catalog evidence"
+  },
+  {
+   "artist_slug": "billy-strings",
+   "song_id": "song_jhbkq4r9",
+   "song_source": "norm.songs",
+   "song": "Heartbeat of America",
+   "nickname": "hoa",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "known fan usage but no catalog evidence"
+  },
+  {
+   "artist_slug": "dead-and-co",
+   "song_id": "song_jzr5pdax",
+   "song_source": "norm.songs",
+   "song": "Brown Eyed Women",
+   "nickname": "bew",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "light song-specific evidence (1 recordings, lift 4.0); confirm fan usage"
+  },
+  {
+   "artist_slug": "dead-and-co",
+   "song_id": "song_k0pabgrx",
+   "song_source": "norm.songs",
+   "song": "I Know You Rider",
+   "nickname": "ikyr",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "known fan usage but no catalog evidence"
+  },
+  {
+   "artist_slug": "dead-and-co",
+   "song_id": "song_k5qm5718",
+   "song_source": "norm.songs",
+   "song": "China Cat Sunflower",
+   "nickname": "ccs",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "known fan usage but no catalog evidence"
+  },
+  {
+   "artist_slug": "wsp",
+   "song_id": "song_51hc6737",
+   "song_source": "norm.songs",
+   "song": "Imitation Leather Shoes",
+   "nickname": "ils",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "known fan usage but no catalog evidence"
+  },
+  {
+   "artist_slug": "wsp",
+   "song_id": "song_3zbn2wdg",
+   "song_source": "norm.songs",
+   "song": "Low Spark of High Heeled Boys",
+   "nickname": "lsohhb",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "known fan usage but no catalog evidence"
+  },
+  {
+   "artist_slug": "jrad",
+   "song_id": "song_nt7s260g",
+   "song_source": "norm.songs",
+   "song": "The Music Never Stopped",
+   "nickname": "tmns",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "known fan usage but no catalog evidence"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_5jzqc2zz",
+   "song_source": "norm.songs",
+   "song": "Wading in the Velvet Sea",
+   "nickname": "witvs",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "light song-specific evidence (3 recordings, lift 16.9); confirm fan usage"
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_668vtmrt",
+   "song_source": "norm.songs",
+   "song": "Twenty Years Later",
+   "nickname": "tyl",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "light song-specific evidence (8 recordings, lift 38.6); confirm fan usage"
+  },
+  {
+   "artist_slug": "phil-lesh",
+   "song_id": "title:viola lee blues",
+   "song_source": "track titles",
+   "song": "viola lee blues",
+   "nickname": "vlb",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "light song-specific evidence (3 recordings, lift 5.4); confirm fan usage"
+  },
+  {
+   "artist_slug": "dead-and-co",
+   "song_id": "song_7cg8fd8d",
+   "song_source": "norm.songs",
+   "song": "Standing on the Moon",
+   "nickname": "sotm",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "light song-specific evidence (3 recordings, lift 6.7); confirm fan usage"
+  },
+  {
+   "artist_slug": "jrad",
+   "song_id": "song_h6dnyksr",
+   "song_source": "norm.songs",
+   "song": "Here Comes Sunshine",
+   "nickname": "hcs",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "light song-specific evidence (3 recordings, lift 9.2); confirm fan usage"
+  },
+  {
+   "artist_slug": "wsp",
+   "song_id": "song_xa9cb2e4",
+   "song_source": "norm.songs",
+   "song": "Papa Johnny Road",
+   "nickname": "pjr",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "known fan usage but no catalog evidence"
+  },
+  {
+   "artist_slug": "disco-biscuits",
+   "song_id": "song_pwfzmq81",
+   "song_source": "norm.songs",
+   "song": "Basis For A Day",
+   "nickname": "bfad",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "known fan usage but no catalog evidence"
+  },
+  {
+   "artist_slug": "yonder",
+   "song_id": "title:on the run",
+   "song_source": "track titles",
+   "song": "on the run",
+   "nickname": "otr",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "light song-specific evidence (6 recordings, lift 2.5); confirm fan usage"
+  },
+  {
+   "artist_slug": "disco-biscuits",
+   "song_id": "song_p46dwftd",
+   "song_source": "norm.songs",
+   "song": "Spacebirdmatingcall",
+   "nickname": "sbmc",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "light song-specific evidence (7 recordings, lift 6.6); confirm fan usage"
+  },
+  {
+   "artist_slug": "disco-biscuits",
+   "song_id": "song_5g7w8nab",
+   "song_source": "norm.songs",
+   "song": "Little Shimmy In A Conga Line",
+   "nickname": "lsiacl",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "known fan usage but no catalog evidence"
+  },
+  {
+   "artist_slug": "moe",
+   "song_id": "song_1c0k9bh0",
+   "song_source": "norm.songs",
+   "song": "Spine of a Dog",
+   "nickname": "soad",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "light song-specific evidence (3 recordings, lift 3.3); confirm fan usage"
+  },
+  {
+   "artist_slug": "disco-biscuits",
+   "song_id": "song_ty0a6tca",
+   "song_source": "norm.songs",
+   "song": "Hot Air Balloon",
+   "nickname": "hab",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "collides with an artist name or produced initialism (produced_initialism_for)"
+  },
+  {
+   "artist_slug": "disco-biscuits",
+   "song_id": "song_dzb2j83c",
+   "song_source": "norm.songs",
+   "song": "Shem-Rah Boo",
+   "nickname": "shemrah",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "light song-specific evidence (6 recordings, lift 6.0); confirm fan usage"
+  },
+  {
+   "artist_slug": "disco-biscuits",
+   "song_id": "song_pwr6yf0f",
+   "song_source": "norm.songs",
+   "song": "Save The Robots",
+   "nickname": "str",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "light song-specific evidence (3 recordings, lift 8.7); confirm fan usage"
+  },
+  {
+   "artist_slug": "goose",
+   "song_id": "song_rg218gck",
+   "song_source": "norm.songs",
+   "song": "Earthling or Alien?",
+   "nickname": "eoa",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "known fan usage but no catalog evidence"
+  },
+  {
+   "artist_slug": "goose",
+   "song_id": "song_5seqjja7",
+   "song_source": "norm.songs",
+   "song": "Time to Flee",
+   "nickname": "ttf",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "known fan usage but no catalog evidence"
+  },
+  {
+   "artist_slug": "jrad",
+   "song_id": "song_c8tfrz1n",
+   "song_source": "norm.songs",
+   "song": "Me & My Uncle",
+   "nickname": "mamu",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "known fan usage but no catalog evidence"
+  },
+  {
+   "artist_slug": "moe",
+   "song_id": "song_jywby7bk",
+   "song_source": "norm.songs",
+   "song": "Captain America",
+   "nickname": "cap america",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "known fan usage but no catalog evidence"
+  },
+  {
+   "artist_slug": "sci",
+   "song_id": "title:close your eyes",
+   "song_source": "track titles",
+   "song": "close your eyes",
+   "nickname": "cye",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "known fan usage but no catalog evidence"
+  },
+  {
+   "artist_slug": "moe",
+   "song_id": "song_3jh5c62j",
+   "song_source": "norm.songs",
+   "song": "Not Coming Down",
+   "nickname": "ncd",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "light song-specific evidence (12 recordings, lift 4.7); confirm fan usage"
+  },
+  {
+   "artist_slug": "disco-biscuits",
+   "song_id": "song_2a7hkex1",
+   "song_source": "norm.songs",
+   "song": "Little Betty Boop",
+   "nickname": "lbb",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "light song-specific evidence (4 recordings, lift 8.3); confirm fan usage"
+  },
+  {
+   "artist_slug": "sci",
+   "song_id": "title:rhythm of the road",
+   "song_source": "track titles",
+   "song": "rhythm of the road",
+   "nickname": "rotr",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "light song-specific evidence (8 recordings, lift 3.2); confirm fan usage"
+  },
+  {
+   "artist_slug": "disco-biscuits",
+   "song_id": "song_zx08vg1d",
+   "song_source": "norm.songs",
+   "song": "7-11",
+   "nickname": "711",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "light song-specific evidence (8 recordings, lift 9.1); confirm fan usage"
+  },
+  {
+   "artist_slug": "umphreys",
+   "song_id": "song_p9cc0b11",
+   "song_source": "norm.songs",
+   "song": "In The Kitchen",
+   "nickname": "itk",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "light song-specific evidence (4 recordings, lift 5.7); confirm fan usage"
+  },
+  {
+   "artist_slug": "ween",
+   "song_id": "setlist:8361",
+   "song_source": "setlist_songs",
+   "song": "I Can't Put My Finger on It",
+   "nickname": "imo",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "light song-specific evidence (3 recordings, lift 3.5); confirm fan usage"
+  },
+  {
+   "artist_slug": "moe",
+   "song_id": "song_025k9by9",
+   "song_source": "norm.songs",
+   "song": "Stranger Than Fiction",
+   "nickname": "stf",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "light song-specific evidence (5 recordings, lift 7.8); confirm fan usage"
+  },
+  {
+   "artist_slug": "sci",
+   "song_id": "title:got what he wanted",
+   "song_source": "track titles",
+   "song": "got what he wanted",
+   "nickname": "gwhw",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "light song-specific evidence (8 recordings, lift 7.4); confirm fan usage"
+  },
+  {
+   "artist_slug": "sci",
+   "song_id": "title:way back home",
+   "song_source": "track titles",
+   "song": "way back home",
+   "nickname": "wbh",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "light song-specific evidence (3 recordings, lift 8.5); confirm fan usage"
+  },
+  {
+   "artist_slug": "phil-lesh",
+   "song_id": "title:cold rain and snow",
+   "song_source": "track titles",
+   "song": "cold rain and snow",
+   "nickname": "crs",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "light song-specific evidence (3 recordings, lift 8.8); confirm fan usage"
+  },
+  {
+   "artist_slug": "moe",
+   "song_id": "song_gp2rvt6r",
+   "song_source": "norm.songs",
+   "song": "Blue Jeans Pizza",
+   "nickname": "bjp",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "light song-specific evidence (8 recordings, lift 8.1); confirm fan usage"
+  },
+  {
+   "artist_slug": "sci",
+   "song_id": "title:it is what it is",
+   "song_source": "track titles",
+   "song": "it is what it is",
+   "nickname": "iiwii",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "light song-specific evidence (8 recordings, lift 6.5); confirm fan usage"
+  },
+  {
+   "artist_slug": "railroad-earth",
+   "song_id": "title:seven story mountain",
+   "song_source": "track titles",
+   "song": "seven story mountain",
+   "nickname": "ssm",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "light song-specific evidence (3 recordings, lift 2.9); confirm fan usage"
+  },
+  {
+   "artist_slug": "moe",
+   "song_id": "song_yt3v3r31",
+   "song_source": "norm.songs",
+   "song": "Waiting For The Punchline",
+   "nickname": "wftp",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "light song-specific evidence (3 recordings, lift 7.7); confirm fan usage"
+  },
+  {
+   "artist_slug": "umphreys",
+   "song_id": "song_83x94hvx",
+   "song_source": "norm.songs",
+   "song": "Push the Pig",
+   "nickname": "ptp",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "light song-specific evidence (4 recordings, lift 6.9); confirm fan usage"
+  },
+  {
+   "artist_slug": "umphreys",
+   "song_id": "song_xrkmpfqj",
+   "song_source": "norm.songs",
+   "song": "Miss Tinkle's Overture",
+   "nickname": "mto",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "known fan usage but no catalog evidence"
+  },
+  {
+   "artist_slug": "umphreys",
+   "song_id": "song_3ft588vz",
+   "song_source": "norm.songs",
+   "song": "Andy's Last Beer",
+   "nickname": "albeer",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "known fan usage but no catalog evidence"
+  },
+  {
+   "artist_slug": "john-mayer",
+   "song_id": "title:your body is a wonderland",
+   "song_source": "track titles",
+   "song": "your body is a wonderland",
+   "nickname": "ybiaw",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "light song-specific evidence (5 recordings, lift 2.3); confirm fan usage"
+  },
+  {
+   "artist_slug": "umphreys",
+   "song_id": "song_d38z825r",
+   "song_source": "norm.songs",
+   "song": "Pay the Snucka",
+   "nickname": "pts",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "light song-specific evidence (2 recordings, lift 8.2); confirm fan usage"
+  },
+  {
+   "artist_slug": "ween",
+   "song_id": "setlist:8346",
+   "song_source": "setlist_songs",
+   "song": "Push th' Little Daisies",
+   "nickname": "ptld",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "known fan usage but no catalog evidence"
+  },
+  {
+   "artist_slug": "max-creek",
+   "song_id": "title:you let me down again",
+   "song_source": "track titles",
+   "song": "you let me down again",
+   "nickname": "ylmda",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "light song-specific evidence (4 recordings, lift 4.4); confirm fan usage"
+  },
+  {
+   "artist_slug": "jerry-joseph",
+   "song_id": "title:light is like water",
+   "song_source": "track titles",
+   "song": "light is like water",
+   "nickname": "lilw",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "light song-specific evidence (5 recordings, lift 3.7); confirm fan usage"
+  },
+  {
+   "artist_slug": "umphreys",
+   "song_id": "song_8cdvv9ay",
+   "song_source": "norm.songs",
+   "song": "Got Your Milk (Right Here)",
+   "nickname": "gymrh",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "known fan usage but no catalog evidence"
+  },
+  {
+   "artist_slug": "umphreys",
+   "song_id": "song_1b3s60tq",
+   "song_source": "norm.songs",
+   "song": "Women Wine and Song",
+   "nickname": "wws",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "light song-specific evidence (6 recordings, lift 15.1); confirm fan usage"
+  },
+  {
+   "artist_slug": "dark-star-orchestra",
+   "song_id": "setlist:2202",
+   "song_source": "setlist_songs",
+   "song": "Goin' Down the Road Feeling Bad",
+   "nickname": "gdtr",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "known fan usage but no catalog evidence"
+  },
+  {
+   "artist_slug": "dark-star-orchestra",
+   "song_id": "setlist:2202",
+   "song_source": "setlist_songs",
+   "song": "Goin' Down the Road Feeling Bad",
+   "nickname": "gdtrfb",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "known fan usage but no catalog evidence"
+  },
+  {
+   "artist_slug": "furthur",
+   "song_id": "setlist:2757",
+   "song_source": "setlist_songs",
+   "song": "Turn On Your Love Light",
+   "nickname": "lovelight",
+   "kind": "abbreviation",
+   "scope": "default",
+   "why": "known fan usage but no catalog evidence"
+  },
+  {
+   "artist_slug": "grateful-dead",
+   "song_id": "song_6dec5kmn",
+   "song_source": "norm.songs",
+   "song": "Playing In The Band",
+   "nickname": "pitb",
+   "kind": "abbreviation",
+   "scope": "default",
+   "match_with_other_terms": true
+  },
+  {
+   "artist_slug": "grateful-dead",
+   "song_id": "song_af8wn03k",
+   "song_source": "norm.songs",
+   "song": "Morning Dew",
+   "nickname": "dew",
+   "kind": "abbreviation",
+   "scope": "default",
+   "match_with_other_terms": true
+  },
+  {
+   "artist_slug": "phish",
+   "song_id": "song_ezb87f52",
+   "song_source": "norm.songs",
+   "song": "Halley's Comet",
+   "nickname": "halleys",
+   "kind": "abbreviation",
+   "scope": "default",
+   "match_with_other_terms": true
+  }
+ ],
+ "note": "Approved Band and Song Nicknames review and corrected recommendations, 2026-11-24. Repeated title, nickname and scope approvals share one rule across artists. match_as_name aliases are also indexed as artist text. match_with_other_terms aliases expand inside venue or date searches. Port these approvals to norm.song_aliases and an artist-name table when relisten-admin supports editing them."
+}

@@ -15,7 +15,7 @@ namespace Relisten.Services.Popularity;
 /// inactive targets. Per-row timestamps reject late older calculations. Sorted
 /// upserts keep overlapping publications in the same row-lock order.
 /// </summary>
-public sealed class PopularityStore(DbService db)
+public sealed partial class PopularityStore(DbService db)
 {
     /// <summary>Reads only selected artist-local show scores in the caller's connection/snapshot.</summary>
     internal static async Task<
@@ -277,12 +277,8 @@ public sealed class PopularityStore(DbService db)
             $"""
             WITH input AS (
                 SELECT * FROM jsonb_to_recordset(@rows::jsonb) AS x(
-                    uuid uuid,plays_30d bigint,hours_30d double precision,hot_score_30d double precision,
-                    plays_7d bigint,hours_7d double precision,hot_score_7d double precision,
-                    plays_48h bigint,hours_48h double precision,hot_score_48h double precision,
-                    trend_ratio double precision,momentum_score double precision,
-                    organic_momentum_score double precision,
-                    plays_1y bigint,hours_1y double precision,hot_score_1y double precision)
+                    uuid uuid,{MetricInputColumns},organic_momentum_score double precision
+                )
             )
             INSERT INTO {kind}_popularity(uuid,{columns}{ownerColumns},generated_at)
             SELECT entity.uuid,{selected}{ownerValues},@generatedAt
@@ -300,6 +296,14 @@ public sealed class PopularityStore(DbService db)
             }
         );
     }
+
+    private const string MetricInputColumns = """
+        plays_30d bigint,hours_30d double precision,hot_score_30d double precision,
+        plays_7d bigint,hours_7d double precision,hot_score_7d double precision,
+        plays_48h bigint,hours_48h double precision,hot_score_48h double precision,
+        trend_ratio double precision,momentum_score double precision,
+        plays_1y bigint,hours_1y double precision,hot_score_1y double precision
+        """;
 
     private const string Columns =
         "plays_30d,hours_30d,hot_score_30d,plays_7d,hours_7d,hot_score_7d,plays_48h,hours_48h,hot_score_48h,trend_ratio,momentum_score";
