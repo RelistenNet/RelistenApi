@@ -159,11 +159,9 @@ Deploy the catalog API first. Its migration 24 adds
 the daily playlist aggregate with no data. The User Service's play upload
 writes that column, so it fails until the migration has run.
 
-Until the aggregate has materialized a day with playlist plays, its
-real-time tail reads up to 30 days of raw plays on each uncached listing
-(about 2.2 million rows at November 2026 volume). That ends at the first
-hourly refresh after such a day closes, normally within a day of signed-in
-clients sending playlist plays.
+Migration 25 makes the aggregate materialized-only, so listings never read
+raw plays; play counts stay at zero until the first refresh after a day with
+playlist plays closes.
 
 The User Service migration adds `playlist_artists` and the
 `catalog_duration_seconds` and `catalog_indexed_revision` playlist columns.
