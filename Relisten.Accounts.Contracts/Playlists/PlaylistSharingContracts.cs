@@ -58,7 +58,9 @@ public sealed record FollowedPlaylistHead(PlaylistId PlaylistId, bool Available)
 /// One public playlist in a listing. <c>DurationSeconds</c> totals the catalog durations
 /// of its tracks. <c>RecentPlayCount</c> counts plays started from it on the last 30 UTC
 /// days, today included, from signed-in and anonymous listeners. <c>Description</c> is the
-/// author's Markdown, or null when there is none.
+/// author's Markdown, or null when there is none. <c>ArtistIds</c> are the typed v4 IDs
+/// (<c>artist_…</c>) of the artists its tracks belong to, the artist with the most tracks
+/// first; tracks missing from the catalog add none.
 /// </summary>
 public sealed record PublicPlaylistListing(
     PlaylistId PlaylistId,
@@ -70,7 +72,8 @@ public sealed record PublicPlaylistListing(
     int DurationSeconds,
     DateTimeOffset UpdatedAt,
     int FollowerCount,
-    long RecentPlayCount
+    long RecentPlayCount,
+    IReadOnlyList<string> ArtistIds
 );
 
 /// <summary>A page of public playlists. A null <c>NextCursor</c> ends the listing.</summary>
