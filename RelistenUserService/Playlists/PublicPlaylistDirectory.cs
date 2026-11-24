@@ -128,7 +128,13 @@ public sealed class PublicPlaylistDirectory(AccountsDbContext database, TimeProv
                            SELECT coalesce(sum(bucket.plays), 0)::bigint
                            FROM public.source_track_plays_playlist_daily AS bucket
                            WHERE bucket.playlist_id = playlist.id AND bucket.play_day >= @plays_since
-                       ) AS recent_play_count
+                       ) AS recent_play_count,
+                       -- Most tracks first; the UUID breaks ties so the order is stable.
+                       ARRAY(
+                           SELECT artist.artist_uuid FROM user_data.playlist_artists AS artist
+                           WHERE artist.playlist_id = playlist.id
+                           ORDER BY artist.track_count DESC, artist.artist_uuid
+                       ) AS artist_uuids
                 FROM user_data.playlists AS playlist
                 JOIN identity.users AS owner ON owner.id = playlist.owner_id
                 WHERE playlist.published AND NOT playlist.archived AND NOT playlist.taken_down
@@ -142,7 +148,7 @@ public sealed class PublicPlaylistDirectory(AccountsDbContext database, TimeProv
                    owner_id AS "OwnerId", username AS "Username", track_count AS "TrackCount",
                    catalog_duration_seconds AS "DurationSeconds", updated_at AS "UpdatedAt",
                    follower_count AS "FollowerCount", recent_play_count AS "RecentPlayCount",
-                   sort_key AS "SortKey"
+                   artist_uuids AS "ArtistUuids", sort_key AS "SortKey"
             FROM keyed
             {keyset}
             ORDER BY sort_key DESC, id DESC
@@ -193,7 +199,8 @@ public sealed class PublicPlaylistDirectory(AccountsDbContext database, TimeProv
             row.DurationSeconds,
             row.UpdatedAt,
             row.FollowerCount,
-            row.RecentPlayCount
+            row.RecentPlayCount,
+            row.ArtistUuids.Select(uuid => new ArtistId(uuid).ToString()).ToArray()
         );
 
     // Cursors carry only public listing values, so they are encoded rather than protected.
@@ -247,6 +254,7 @@ public sealed class PublicPlaylistDirectory(AccountsDbContext database, TimeProv
         public DateTimeOffset UpdatedAt { get; init; }
         public int FollowerCount { get; init; }
         public long RecentPlayCount { get; init; }
+        public Guid[] ArtistUuids { get; init; } = [];
         public long SortKey { get; init; }
     }
 }

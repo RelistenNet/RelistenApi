@@ -46,7 +46,9 @@ the edge like the public snapshot.
 Each item carries `playlist_id`, `public_code`, `name`, `description` (the
 author's Markdown, or null), `owner` (`id`,
 `username`), `track_count`, `duration_seconds`, `updated_at`,
-`follower_count` and `recent_play_count`. A null `next_cursor` ends the
+`follower_count`, `recent_play_count` and `artist_ids` (the typed IDs of the
+artists its tracks belong to, the artist with the most tracks first; tracks
+missing from the catalog add none). A null `next_cursor` ends the
 listing. Counts can change between pages, so a playlist may move across the
 cursor and be skipped or repeated. An invalid query returns
 `422 invalid_query`.

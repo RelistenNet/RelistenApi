@@ -41,6 +41,10 @@ public sealed partial class TestPlaylistApi
         listing.TrackCount.Should().Be(4);
         // The unknown track counts as a track but adds no catalog duration or artist.
         listing.DurationSeconds.Should().Be(600);
+        // The artist with more tracks comes first.
+        listing
+            .ArtistIds.Should()
+            .Equal(new ArtistId(artist.Uuid).ToString(), new ArtistId(other.Uuid).ToString());
         (await ListArtist(other.Uuid)).Playlists.Should().ContainSingle();
 
         var otherEntry = request.Segments[0].Entries[2].EntryId;
@@ -53,6 +57,7 @@ public sealed partial class TestPlaylistApi
         var edited = (await ListArtist(artist.Uuid)).Playlists.Single();
         edited.DurationSeconds.Should().Be(500);
         edited.TrackCount.Should().Be(3);
+        edited.ArtistIds.Should().Equal(new ArtistId(artist.Uuid).ToString());
 
         // A metadata edit advances the indexed revision without rebuilding, and keeps the facts.
         listing.Description.Should().BeNull();
