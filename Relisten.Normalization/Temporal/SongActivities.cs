@@ -23,6 +23,7 @@ public sealed class SongActivities(
     CatalogueLlm llm,
     CatalogueMatch match,
     SongCounts counts,
+    NormFlags flags,
     ILogger<SongActivities> logger
 )
 {
@@ -66,6 +67,17 @@ public sealed class SongActivities(
         );
         await RefreshCountsAsync(artist);
         return result;
+    }
+
+    /// Match against the published catalogue after a whole-artist import. The explicit
+    /// normalization command can still match artists whose catalogues are unpublished.
+    [Activity("Songs.MatchImportedTracks")]
+    public async Task MatchImportedTracks(Guid artist)
+    {
+        if (await flags.CatalogueOnAsync(artist))
+        {
+            await MatchTracks(artist);
+        }
     }
 
     private async Task RefreshCountsAsync(Guid artist)

@@ -376,11 +376,13 @@ the same artist. Song totals add up the published performances and include
 soundchecks. A file that contains two songs credits one start to each song
 for every playback. Listening time is split evenly among the songs because
 the catalog has no per-song timing for that file. The recording keeps the
-complete file's starts and hours.
+complete file's starts and hours. Replaced files still contribute their playback
+to the recording and to the song they were mapped to. A file without a song
+match contributes under its raw title. Browse and playback use live files.
 
 The nightly job stores only rows with activity. V4 returns null until a new
 item's popularity is published and for items without recorded activity.
-Search copies the published windows during indexing. Its song ranking uses
-the same stored yearly starts as the displayed song popularity. Exact-file
-starts still help choose previews. The Redis maps and request-triggered
+Search copies the published windows during indexing. Song and performance
+ranking use the same published yearly starts as the displayed popularity.
+Exact-file starts still help choose previews. The Redis maps and request-triggered
 refreshes for artists, shows, and years use their existing cadence.

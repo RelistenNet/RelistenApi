@@ -356,9 +356,12 @@ Leave `/health/ready` on the database checks so browse can serve while search
 continues warming after the grace period.
 [Kubernetes startup probe documentation](https://kubernetes.io/docs/concepts/workloads/pods/probes/#startup-probe)
 
-After committing catalog data, artist imports start a background reindex and song
-normalization reindexes its artist. Venue normalization is picked up by the daily
-build. Import and song refresh requests record their start before resolving the
+After a whole-artist import, the worker matches new tracks to existing songs for
+artists with `norm_catalogue` enabled. A match failure is logged and the import
+still finishes. New titles still need an explicit `--norm-songs` run. Artist imports
+start a background reindex after matching, and song normalization reindexes its
+artist. Venue normalization is picked up by the daily build. Import and song
+refresh requests record their start before resolving the
 aliases, using `search_artist_reindexes` from migration 23. Once the full build
 publishes new aliases and starts the retirement timer, it reindexes artists whose
 requests started since its database snapshot began. The next successful daily

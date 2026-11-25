@@ -67,9 +67,15 @@ internal sealed partial class CatalogSearchProjection
                     totals[key] = totals.GetValueOrDefault(key) + plays;
                 }
             }
-            foreach (var total in totals.Values)
+
+            var popularity = await ReadPerformancePopularity(showIds, cancellationToken);
+            foreach (var (key, liveStarts) in totals)
             {
-                histogram.Observe("performance", SignalBucket(total));
+                var playback = PerformancePlayback(popularity, _shows[key.Show].Row.Uuid, key.Song);
+                histogram.Observe(
+                    "performance",
+                    SignalBucket(PerformanceStarts(playback, liveStarts))
+                );
             }
         }
 
@@ -85,10 +91,7 @@ internal sealed partial class CatalogSearchProjection
         var imports = (await _rows.ImportedSongsAtShows(showIds, cancellationToken)).ToLookup(
             song => (song.ShowId, Title: Fold(song.Name))
         );
-        var popularity = await _resources.PerformancePopularity(
-            showIds.Select(id => _shows[id].Row.Uuid).ToArray(),
-            cancellationToken
-        );
+        var popularity = await ReadPerformancePopularity(showIds, cancellationToken);
         var tracks = await _rows.Tracks(showIds, cancellationToken);
         var documents = new List<Document>();
 
@@ -106,6 +109,26 @@ internal sealed partial class CatalogSearchProjection
 
         return documents;
     }
+
+    private Task<Dictionary<(Guid Show, string Song), PopularityMetrics>> ReadPerformancePopularity(
+        long[] showIds,
+        CancellationToken cancellationToken
+    ) =>
+        _resources.PerformancePopularity(
+            showIds.Select(id => _shows[id].Row.Uuid).ToArray(),
+            cancellationToken
+        );
+
+    private static PopularityMetrics? PerformancePlayback(
+        IReadOnlyDictionary<(Guid Show, string Song), PopularityMetrics> popularity,
+        Guid showId,
+        string song
+    ) => popularity.GetValueOrDefault((showId, PopularityPerformanceKey.ForStorage(song)));
+
+    // Published totals include history from replaced files. Until the first publication,
+    // keep the live-file ranking signal, which also supports local play exports.
+    private static long PerformanceStarts(PopularityMetrics? playback, long liveStarts) =>
+        playback?.windows.Year?.plays ?? liveStarts;
 
     private async IAsyncEnumerable<Document> AttachPreviews(
         IEnumerable<Document> documents,
@@ -201,10 +224,9 @@ internal sealed partial class CatalogSearchProjection
         {
             var files = group.Files.Select(candidate => candidate.File).ToArray();
             var count = mentions.GetValueOrDefault(group);
-            var plays = files.Sum(file => file.Plays);
             var rawTitle = PopularityPerformanceKey.FoldedRawTitle(key);
-            var playbackKey = PopularityPerformanceKey.ForStorage(key);
-            var playback = popularity.GetValueOrDefault((show.Row.Uuid, playbackKey));
+            var playback = PerformancePlayback(popularity, show.Row.Uuid, key);
+            var plays = PerformanceStarts(playback, files.Sum(file => file.Plays));
             var imported = rawTitle == null ? null : UniqueImport(imports[(show.Row.Id, rawTitle)]);
 
             var label = group.Label.Length == 0 ? "Untitled track" : group.Label;

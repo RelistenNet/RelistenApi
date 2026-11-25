@@ -1,15 +1,21 @@
+using Dapper;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
+using Npgsql;
 using Relisten.Api.Models;
 using Relisten.Ingestion;
 using Relisten.Ingestion.Providers.Archive;
 using Relisten.Ingestion.Providers.PhantasyTour;
 using Relisten.Ingestion.Providers.PhishIn;
 using Relisten.Ingestion.Workflows;
+using Relisten.Normalization;
+using Relisten.Normalization.Songs;
 using Relisten.Normalization.Temporal;
 using Relisten.Search;
 using Relisten.Vendor.ArchiveOrg;
 using Temporalio.Activities;
 using Temporalio.Client;
+using Temporalio.Common;
 using Temporalio.Exceptions;
 using Temporalio.Testing;
 using Temporalio.Worker;
@@ -45,6 +51,7 @@ public class TestIngestionWorkflows
     [Test]
     public async Task TargetedImportCompletesWhileItsSearchReindexIsStillRunning()
     {
+        var artist = new ArtistId(Guid.NewGuid());
         var searchStarted = new TaskCompletionSource<Guid>(
             TaskCreationOptions.RunContinuationsAsynchronously
         );
@@ -53,9 +60,15 @@ public class TestIngestionWorkflows
         );
         var activities = new RecordingActivities(1)
         {
-            RefreshSearch = async artist =>
+            RefreshSearch = async indexedArtist =>
             {
-                searchStarted.SetResult(artist);
+                // Other workflows in this fixture can leave detached reindexes queued.
+                if (indexedArtist != artist.Value)
+                {
+                    return;
+                }
+
+                searchStarted.SetResult(indexedArtist);
                 await releaseSearch.Task;
                 throw new ApplicationFailureException("Search service unavailable");
             },
@@ -65,7 +78,6 @@ public class TestIngestionWorkflows
             activities,
             async () =>
             {
-                var artist = new ArtistId(Guid.NewGuid());
                 var import = await environment.Client.StartWorkflowAsync(
                     (ArchiveItemImportWorkflow workflow) =>
                         workflow.RunAsync(
@@ -87,13 +99,7 @@ public class TestIngestionWorkflows
                     releaseSearch.TrySetResult();
                 }
 
-                var child = (await import.FetchHistoryAsync())
-                    .Events.Select(e => e.ChildWorkflowExecutionStartedEventAttributes)
-                    .Single(e => e?.WorkflowType.Name == nameof(ArtistSearchReindexWorkflow));
-                await environment
-                    .Client.GetWorkflowHandle(child.WorkflowExecution.WorkflowId)
-                    .GetResultAsync()
-                    .WaitAsync(timeout);
+                await WaitForSearchReindex(await import.FetchHistoryAsync()).WaitAsync(timeout);
                 return true;
             }
         );
@@ -130,6 +136,82 @@ public class TestIngestionWorkflows
         var activities = new RecordingActivities(1) { FailVenues = true };
         (await Run(activities)).Status.Should().Be(ImportStatus.Completed);
         activities.Rebuilds.Should().Equal("shows", "years", "cache", "venues");
+    }
+
+    [Test, Category("LocalIngestion")]
+    public async Task FullImportMatchesANewFileToAKnownSong()
+    {
+        MigratedTestDatabase.RequireLocalDatabase();
+        await using var connection = await MigratedTestDatabase.OpenAsync();
+        var artist = Guid.NewGuid();
+        var run = Guid.NewGuid();
+        var track = Guid.NewGuid();
+        const string song = "song_000005ab";
+        await connection.ExecuteAsync(
+            """
+            WITH owner AS (
+                INSERT INTO artists(name,slug,uuid,updated_at)
+                VALUES ('Import song fixture',@slug,@artist,now()) RETURNING id
+            )
+            INSERT INTO features(artist_id,norm_catalogue) SELECT id,true FROM owner;
+            INSERT INTO norm.runs(uuid,author_type,author_ref)
+            VALUES (@run,'importer','import-song-fixture');
+            INSERT INTO norm.songs(id,artist_uuid,name,slug,kind,author_type,author_ref,run_uuid)
+            VALUES (@song,@artist,'Sugaree','sugaree','song','importer','import-song-fixture',@run)
+            """,
+            new
+            {
+                artist,
+                slug = "import-song-" + artist,
+                run,
+                song,
+            }
+        );
+        var database = new TestNormalizationDatabase();
+        var songs = new SongActivities(
+            null!,
+            new CatalogueMatch(database),
+            new SongCounts(database),
+            new NormFlags(database),
+            NullLogger<SongActivities>.Instance
+        );
+        var activities = new RecordingActivities(1)
+        {
+            PersistArchiveItem = () =>
+                connection.ExecuteAsync(
+                    """
+                    WITH recording AS (
+                        INSERT INTO sources(artist_id,upstream_identifier,display_date,uuid,updated_at,
+                                            is_soundboard,is_remaster,has_jamcharts)
+                        SELECT id,@upstream,'1977-05-08',gen_random_uuid(),now(),false,false,false
+                        FROM artists WHERE uuid=@artist RETURNING id,artist_id
+                    )
+                    INSERT INTO source_tracks(source_id,track_position,title,slug,mp3_url,updated_at,artist_id,uuid)
+                    SELECT id,1,'Sugaree','sugaree','https://example.test/sugaree.mp3',now(),artist_id,@track
+                    FROM recording
+                    """,
+                    new
+                    {
+                        artist,
+                        track,
+                        upstream = "import-song-" + artist,
+                    }
+                ),
+            MatchImportedSongs = songs.MatchImportedTracks,
+        };
+
+        var result = await Run(activities, artistId: new ArtistId(artist));
+
+        result.Status.Should().Be(ImportStatus.Completed);
+        result.CompletedItems.Should().Be(1);
+        (
+            await connection.QuerySingleAsync<string>(
+                "SELECT song_id FROM norm.track_songs WHERE track_uuid=@track AND resolved",
+                new { track }
+            )
+        )
+            .Should()
+            .Be(song);
     }
 
     [TestCase("years")]
@@ -578,14 +660,15 @@ public class TestIngestionWorkflows
 
     private async Task<ArtistImportResult> Run(
         RecordingActivities activities,
-        bool targeted = false
+        bool targeted = false,
+        ArtistId? artistId = null
     )
     {
         return await WithWorkers(
             activities,
             async () =>
             {
-                var artist = new ArtistId(Guid.NewGuid());
+                var artist = artistId ?? new ArtistId(Guid.NewGuid());
                 var options = Options();
                 var result = targeted
                     ? await environment.Client.ExecuteWorkflowAsync(
@@ -606,12 +689,25 @@ public class TestIngestionWorkflows
                         .AddWorkflow<ArtistRefreshWorkflow>()
                         .AddWorkflow<ArchiveItemImportWorkflow>()
                 );
-                await replayer.ReplayWorkflowAsync(
-                    await environment.Client.GetWorkflowHandle(options.Id!).FetchHistoryAsync()
-                );
+                var history = await environment
+                    .Client.GetWorkflowHandle(options.Id!)
+                    .FetchHistoryAsync();
+                await replayer.ReplayWorkflowAsync(history);
+                // Finish the detached child while this test still owns the activity worker.
+                await WaitForSearchReindex(history).WaitAsync(TimeSpan.FromSeconds(20));
                 return result;
             }
         );
+    }
+
+    private Task WaitForSearchReindex(WorkflowHistory history)
+    {
+        var child = history
+            .Events.Select(e => e.ChildWorkflowExecutionStartedEventAttributes)
+            .Single(e => e?.WorkflowType.Name == nameof(ArtistSearchReindexWorkflow));
+        return environment
+            .Client.GetWorkflowHandle(child.WorkflowExecution.WorkflowId)
+            .GetResultAsync();
     }
 
     private TemporalWorker WorkflowWorker() =>
@@ -651,6 +747,11 @@ public class TestIngestionWorkflows
     private static IngestionExecution Execution() =>
         new(Guid.NewGuid().ToString(), DateTimeOffset.UtcNow.AddHours(1));
 
+    private sealed class TestNormalizationDatabase : INormalizationDatabase
+    {
+        public NpgsqlConnection CreateWriteConnection() => new(LocalTestDatabase.ConnectionString);
+    }
+
     public class RecordingActivities(int count)
     {
         public UpstreamProvider Provider { get; init; } = UpstreamProvider.ArchiveOrg;
@@ -662,10 +763,16 @@ public class TestIngestionWorkflows
         public List<int> Applied { get; } = [];
         public List<string> Rebuilds { get; } = [];
         public Func<Guid, Task>? RefreshSearch { get; init; }
+        public Func<Task>? PersistArchiveItem { get; init; }
+        public Func<Guid, Task>? MatchImportedSongs { get; init; }
 
         [Activity(SearchReindexStep.ActivityName)]
         public Task SearchRefresh(Guid artist) =>
             RefreshSearch?.Invoke(artist) ?? Task.CompletedTask;
+
+        [Activity("Songs.MatchImportedTracks")]
+        public Task MatchImportedTracks(Guid artist) =>
+            MatchImportedSongs?.Invoke(artist) ?? Task.CompletedTask;
 
         public string? FailRebuildStep { get; init; }
         public ArtistId[] Artists { get; } =
@@ -843,6 +950,10 @@ public class TestIngestionWorkflows
                 }
                 if (index == SkippedIndex)
                     return new(key, ItemDisposition.Skipped, null, ArchiveSkipReason.DarkItem);
+                if (PersistArchiveItem is not null)
+                {
+                    await PersistArchiveItem();
+                }
                 lock (sync)
                     Applied.Add(index);
                 return new(key, ItemDisposition.Applied, new CatalogSourceId(index + 1));
