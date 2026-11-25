@@ -363,9 +363,9 @@ aliases, using `search_artist_reindexes` from migration 23. Once the full build
 publishes new aliases and starts the retirement timer, it reindexes artists whose
 requests started since its database snapshot began. The next successful daily
 build repairs failed or missed refreshes. Artist scope and review availability
-use the evidence snapshot refreshed at the alias swap and again after a day
-on the same generation. The daily refresh picks up in-place changes without
-rebuilding or writing to the index.
+use the evidence snapshot refreshed at the alias swap and again about an hour
+after the last successful load. Refreshes on running pods keep the existing
+jitter. They pick up in-place changes without writing to the index.
 
 The refresh reads the replica in separate statements, retrying recovery
 conflicts once. It streams vocabulary and published song popularity from the
@@ -373,6 +373,12 @@ current Typesense collections. For confirmed segues it sums published yearly
 song-at-show starts and picks the tape using published recording starts. A failed
 refresh keeps the previous snapshot. The refresh log separates the index exports,
 catalog lookups, and passage reads.
+
+After deploying the hourly refresh, record each Catalog API pod's reload time
+and peak container memory during its first scheduled reload. Compare search
+latency before and during reloads. Return to a daily interval if the hourly
+reloads degrade search latency or leave too little memory headroom. Restore the
+daily interval in the Catalog API and redeploy it.
 
 Retirement drops the old collections. Typesense reclaims their disk space on
 its compaction interval (`--db-compaction-interval=86400`). Raft snapshots

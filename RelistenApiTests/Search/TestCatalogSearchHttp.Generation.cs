@@ -27,7 +27,7 @@ public sealed partial class TestCatalogSearchHttp
         try
         {
             Results(await GetSearch(query)).Should().ContainSingle();
-            _evidenceClock.Advance(TimeSpan.FromDays(1));
+            _evidenceClock.Advance(TimeSpan.FromHours(1));
             refresh.RefreshNow(); // Wake the poll without waiting for its real-time interval.
 
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));

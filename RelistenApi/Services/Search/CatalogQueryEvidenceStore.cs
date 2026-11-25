@@ -54,7 +54,7 @@ internal sealed class CatalogQueryEvidenceRefreshService(
 ) : BackgroundService
 {
     private static readonly TimeSpan AliasPollInterval = TimeSpan.FromSeconds(30);
-    private static readonly TimeSpan MaximumEvidenceAge = TimeSpan.FromDays(1);
+    private static readonly TimeSpan MaximumEvidenceAge = TimeSpan.FromHours(1);
     private static readonly TimeSpan FailedRefreshDelay = TimeSpan.FromSeconds(5);
     private readonly SemaphoreSlim _wake = new(0, 1);
     private int _urgent;
