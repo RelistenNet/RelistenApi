@@ -3905,6 +3905,50 @@
       ]
     },
     {
+      "id": "RG03",
+      "query": "radio city gho",
+      "surface": "catalog_api",
+      "cohort": "cross_catalog",
+      "tier": "starter",
+      "search_mode": "explore",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Find a performance by venue before finishing the song title",
+      "expected": "Phish’s Ghost from Radio City Music Hall on 2000-05-22 ranks first.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "Ghost",
+          "show_date": "2000-05-22"
+        }
+      ]
+    },
+    {
+      "id": "RG04",
+      "query": "radio city gho",
+      "surface": "catalog_api",
+      "cohort": "cross_catalog",
+      "tier": "starter",
+      "search_mode": "add_tracks",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Find a performance to add by venue and part of its song title",
+      "expected": "Phish’s Ghost from Radio City Music Hall on 2000-05-22 ranks first.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "Ghost",
+          "show_date": "2000-05-22"
+        }
+      ]
+    },
+    {
       "id": "TT01",
       "query": "tahoe tweezer",
       "surface": "catalog_api",
@@ -3915,6 +3959,50 @@
       "max_rank": 1,
       "intent": "Find a performance by the song and the place it was played",
       "expected": "Phish’s Tweezer from 2013-07-31 leads in add tracks.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "Tweezer",
+          "show_date": "2013-07-31"
+        }
+      ]
+    },
+    {
+      "id": "TT02",
+      "query": "tahoe twe",
+      "surface": "catalog_api",
+      "cohort": "cross_catalog",
+      "tier": "starter",
+      "search_mode": "explore",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Find a performance by place before finishing the song title",
+      "expected": "Phish’s Tweezer from Tahoe on 2013-07-31 ranks first.",
+      "targets": [
+        {
+          "kinds": [
+            "performance"
+          ],
+          "artist_slug": "phish",
+          "name": "Tweezer",
+          "show_date": "2013-07-31"
+        }
+      ]
+    },
+    {
+      "id": "TT03",
+      "query": "tahoe twe",
+      "surface": "catalog_api",
+      "cohort": "cross_catalog",
+      "tier": "starter",
+      "search_mode": "add_tracks",
+      "check": "rank",
+      "max_rank": 1,
+      "intent": "Find a performance to add by place and part of its song title",
+      "expected": "Phish’s Tweezer from Tahoe on 2013-07-31 ranks first.",
       "targets": [
         {
           "kinds": [
