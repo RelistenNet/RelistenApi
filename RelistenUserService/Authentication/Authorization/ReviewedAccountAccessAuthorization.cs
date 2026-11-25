@@ -35,13 +35,17 @@ public sealed class ReviewedAccountAccessAuthorizationHandler(
             return;
         }
 
-        var nativeSession = await nativeSessions.AuthenticateAsync(context.User);
-        if (nativeSession is null)
+        if (!currentAccount.IsNative)
         {
-            return;
+            var nativeSession = await nativeSessions.AuthenticateAsync(context.User);
+            if (nativeSession is null)
+            {
+                return;
+            }
+
+            currentAccount.SetNative(nativeSession.User, nativeSession.SessionId);
         }
 
-        currentAccount.SetNative(nativeSession.User, nativeSession.SessionId);
         if (context.User.HasScope(rule.NativeScope))
         {
             context.Succeed(requirement);
