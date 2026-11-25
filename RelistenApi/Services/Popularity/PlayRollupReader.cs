@@ -13,22 +13,29 @@ public static class PlayRollupReader
 {
     internal static Task<IEnumerable<PlayPopularityRow>> ReadTrackPopularity(
         IDbConnection connection,
-        IDbTransaction? transaction,
-        DateOnly through,
+        DateTime generatedAt,
         CancellationToken cancellationToken,
-        Guid artist
+        Guid artist,
+        Guid[] tracks,
+        Guid[] sources
     )
     {
-        const string filter = "artist_uuid = @artist";
-        var window = Window(through, artist);
-        var now = DateTime.UtcNow;
-        var currentHour = now.Date.AddHours(now.Hour);
+        // Rollups can carry the old show or source after a catalog move.
+        // A moved file can match either scope. Keep each grouped total in
+        // its own scope so a row read by two batches still counts once per kind.
+        const string trackScope = "source_track_uuid IN (SELECT id FROM track_ids)";
+        const string sourceScope = "source_uuid IN (SELECT id FROM source_ids)";
+        const string filter = $"artist_uuid = @artist AND ({trackScope} OR {sourceScope})";
+        var window = Window(DateOnly.FromDateTime(generatedAt), artist);
+        var currentHour = generatedAt.Date.AddHours(generatedAt.Hour);
         var lastHour = currentHour < window.EndDay ? currentHour : window.EndDay;
 
         return connection.QueryAsync<PlayPopularityRow>(
             new CommandDefinition(
                 $"""
-                WITH windows AS (
+                WITH track_ids AS MATERIALIZED (SELECT unnest(@tracks::uuid[]) AS id),
+                     source_ids AS MATERIALIZED (SELECT unnest(@sources::uuid[]) AS id),
+                     windows AS (
                     SELECT source_track_uuid, source_uuid, 1 AS grain, plays, total_track_seconds AS seconds,
                            play_day >= @week AS is_week, play_day >= @month AS is_month, false AS is_recent
                     FROM source_track_plays_daily
@@ -58,10 +65,13 @@ public static class PlayRollupReader
                        coalesce(sum(seconds) FILTER (WHERE grain = 3), 0)::bigint AS seconds1y
                 FROM windows
                 GROUP BY GROUPING SETS ((source_track_uuid), (source_uuid))
+                HAVING {trackScope} OR {sourceScope}
                 """,
                 new
                 {
                     artist,
+                    tracks,
+                    sources,
                     window.StartDay,
                     window.EndDay,
                     window.FirstWholeMonth,
@@ -73,7 +83,6 @@ public static class PlayRollupReader
                     shortWindow = lastHour.AddHours(-6),
                     lastHour,
                 },
-                transaction,
                 commandTimeout: 600,
                 cancellationToken: cancellationToken
             )

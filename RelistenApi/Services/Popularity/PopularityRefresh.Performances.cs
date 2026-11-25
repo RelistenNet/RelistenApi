@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
+using Npgsql;
 using Relisten.Api.Models;
 using Relisten.Search;
 
@@ -13,59 +14,125 @@ namespace Relisten.Services.Popularity;
 
 public partial class PopularityService
 {
+    private const int DetailShowBatchSize = 64;
+
     internal async Task<(long Performances, long Recordings, long Songs)> RefreshDetailPopulations(
         Guid artist,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        int showBatchSize = DetailShowBatchSize
     )
     {
         var generatedAt = DateTime.UtcNow;
-        var (tracks, recordings) = await ReadDetailRollups(generatedAt, artist, cancellationToken);
-        await using var connection = db.CreateConnection(longTimeout: true, readOnly: true);
-        await connection.OpenAsync(cancellationToken);
-        var (performances, songs) = await CalculatePerformances(
-            connection,
-            artist,
-            tracks,
-            cancellationToken
-        );
-        var sources = await CalculateRecordings(connection, artist, recordings, cancellationToken);
+        var shows = await ReadDetailShowIds(artist, cancellationToken);
+
+        var performances = new List<PerformancePlayback>();
+        var recordings = new List<RecordingPopularity>();
+        var importedSongs = new Dictionary<(Guid Show, string Title), string>();
+        foreach (var batch in shows.Chunk(showBatchSize))
+        {
+            var detail = await ReadDetailBatchWithRetry(
+                artist,
+                batch,
+                generatedAt,
+                cancellationToken
+            );
+            performances.AddRange(detail.Performances);
+            recordings.AddRange(detail.Recordings);
+            foreach (var (key, song) in detail.ImportedSongs)
+            {
+                importedSongs.Add(key, song);
+            }
+        }
+
+        // Song totals and momentum still compare the artist's complete results.
+        var performanceScores = ScorePerformances(performances);
+        var songs = CalculateSongs(performances, importedSongs);
         await store.PublishDetails(
             artist,
-            performances,
-            sources,
+            performanceScores,
+            recordings.ToArray(),
             songs,
             generatedAt,
             cancellationToken
         );
-        return (performances.Length, sources.Length, songs.Length);
+        return (performanceScores.Length, recordings.Count, songs.Length);
     }
 
-    private async Task<(
-        Dictionary<Guid, PlayPopularity> Tracks,
-        Dictionary<Guid, PlayPopularity> Recordings
-    )> ReadDetailRollups(DateTime generatedAt, Guid artist, CancellationToken cancellationToken)
+    private async Task<IEnumerable<Guid>> ReadDetailShowIds(
+        Guid artist,
+        CancellationToken cancellationToken
+    )
     {
-        // Use the same replica path as other popularity calculations. Release
-        // the read-only rollup snapshot before publishing this artist.
-        await using var connection = db.CreateConnection(longTimeout: true, readOnly: true);
-        await connection.OpenAsync(cancellationToken);
-        await using var snapshot = await connection.BeginTransactionAsync(cancellationToken);
-        await connection.ExecuteAsync(
+        await using var connection = db.CreateReplicaConnection();
+        return await connection.QueryAsync<Guid>(
             new CommandDefinition(
-                "SET TRANSACTION READ ONLY; SET LOCAL jit = off",
-                transaction: snapshot,
+                """
+                SELECT sh.uuid FROM shows sh JOIN artists a ON a.id=sh.artist_id
+                WHERE a.uuid=@artist ORDER BY sh.id
+                """,
+                new { artist },
                 cancellationToken: cancellationToken
             )
         );
+    }
+
+    private async Task<DetailBatch> ReadDetailBatchWithRetry(
+        Guid artist,
+        Guid[] shows,
+        DateTime generatedAt,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            return await ReadDetailBatch(artist, shows, generatedAt, cancellationToken);
+        }
+        catch (PostgresException error)
+            when (error.SqlState == PostgresErrorCodes.SerializationFailure)
+        {
+            // Recovery can cancel even a short read if the standby is already behind.
+            await Task.Delay(TimeSpan.FromMilliseconds(100), cancellationToken);
+            return await ReadDetailBatch(artist, shows, generatedAt, cancellationToken);
+        }
+    }
+
+    private async Task<DetailBatch> ReadDetailBatch(
+        Guid artist,
+        Guid[] shows,
+        DateTime generatedAt,
+        CancellationToken cancellationToken
+    )
+    {
+        // Each SELECT gets its own snapshot. A playback or catalog change
+        // between statements can affect this run's approximate totals.
+        await using var connection = db.CreateReplicaConnection();
+        await connection.OpenAsync(cancellationToken);
+        var targets = await ReadPerformanceTargets(connection, artist, shows, cancellationToken);
+        var recordingTargets = await ReadRecordingTargets(
+            connection,
+            artist,
+            shows,
+            cancellationToken
+        );
         var rows = await PlayRollupReader.ReadTrackPopularity(
             connection,
-            snapshot,
-            DateOnly.FromDateTime(generatedAt),
+            generatedAt,
             cancellationToken,
-            artist
+            artist,
+            targets.Select(target => target.Track).Distinct().ToArray(),
+            recordingTargets.Select(target => target.Source).ToArray()
         );
-        return DividePlayback(rows);
+        var (tracks, recordings) = DividePlayback(rows);
+        var imports = await ReadImportedSongIds(connection, artist, shows, cancellationToken);
+        var sources = ScoreRecordings(recordingTargets, recordings);
+        return new(SumPerformances(targets, tracks), sources, imports);
     }
+
+    private sealed record DetailBatch(
+        PerformancePlayback[] Performances,
+        RecordingPopularity[] Recordings,
+        Dictionary<(Guid Show, string Title), string> ImportedSongs
+    );
 
     private static (
         Dictionary<Guid, PlayPopularity> Tracks,
@@ -82,22 +149,11 @@ public partial class PopularityService
         return (tracks, recordings);
     }
 
-    private static async Task<(
-        PerformancePopularity[] Performances,
-        SongPopularity[] Songs
-    )> CalculatePerformances(
-        Npgsql.NpgsqlConnection connection,
-        Guid artist,
-        IReadOnlyDictionary<Guid, PlayPopularity> tracks,
-        CancellationToken cancellationToken
-    )
-    {
-        var rows = await ReadPerformanceTargets(connection, artist, cancellationToken);
-        var performances = SumPerformances(rows, tracks);
-        var imports = await ReadImportedSongIds(connection, artist, cancellationToken);
-
-        // Compare live versions of the same song across shows.
-        var performanceScores = performances
+    // Compare live versions of the same song across shows, including across batches.
+    private static PerformancePopularity[] ScorePerformances(
+        IEnumerable<PerformancePlayback> performances
+    ) =>
+        performances
             .GroupBy(row => row.Song.Key)
             .SelectMany(group =>
                 ScoreDetails(
@@ -107,8 +163,6 @@ public partial class PopularityService
                 )
             )
             .ToArray();
-        return (performanceScores, CalculateSongs(performances, imports));
-    }
 
     private static PerformancePlayback[] SumPerformances(
         IEnumerable<PerformanceTarget> rows,
@@ -189,8 +243,9 @@ public partial class PopularityService
     );
 
     private static Task<IEnumerable<PerformanceTarget>> ReadPerformanceTargets(
-        Npgsql.NpgsqlConnection connection,
+        NpgsqlConnection connection,
         Guid artist,
+        Guid[] shows,
         CancellationToken cancellationToken
     ) =>
         connection.QueryAsync<PerformanceTarget>(
@@ -201,7 +256,7 @@ public partial class PopularityService
                     FROM artists a LEFT JOIN features f ON f.artist_id=a.id WHERE a.uuid=@artist
                 ), matches AS MATERIALIZED (
                     SELECT m.track_uuid,m.song_id
-                    FROM owner a CROSS JOIN LATERAL norm.song_recording_matches(a.uuid,NULL::text[]) m
+                    FROM owner a CROSS JOIN LATERAL norm.song_recording_matches(a.uuid,NULL::text[],@shows) m
                     WHERE a.approved
                 )
                 SELECT h.uuid AS show,t.uuid AS track,m.song_id AS song,coalesce(t.title,'') AS title
@@ -210,17 +265,19 @@ public partial class PopularityService
                 JOIN source_tracks t ON t.source_id=s.id AND t.artist_id=a.id AND NOT t.is_orphaned
                 JOIN source_sets ss ON ss.id=t.source_set_id AND ss.source_id=s.id
                 LEFT JOIN matches m ON m.track_uuid=t.uuid
-                WHERE m.song_id IS NOT NULL OR nullif(t.mp3_url,'') IS NOT NULL OR nullif(t.flac_url,'') IS NOT NULL
+                WHERE h.uuid=ANY(@shows)
+                  AND (m.song_id IS NOT NULL OR nullif(t.mp3_url,'') IS NOT NULL OR nullif(t.flac_url,'') IS NOT NULL)
                 """,
-                new { artist },
+                new { artist, shows },
                 commandTimeout: 600,
                 cancellationToken: cancellationToken
             )
         );
 
     private static async Task<Dictionary<(Guid Show, string Title), string>> ReadImportedSongIds(
-        Npgsql.NpgsqlConnection connection,
+        NpgsqlConnection connection,
         Guid artist,
+        Guid[] shows,
         CancellationToken cancellationToken
     )
     {
@@ -232,9 +289,9 @@ public partial class PopularityService
                 JOIN setlist_shows ss ON ss.artist_id=a.id AND ss.date=sh.date
                 JOIN setlist_songs_plays p ON p.played_setlist_show_id=ss.id
                 JOIN setlist_songs song ON song.id=p.played_setlist_song_id AND song.artist_id=a.id
-                WHERE a.uuid=@artist
+                WHERE a.uuid=@artist AND sh.uuid=ANY(@shows)
                 """,
-                new { artist },
+                new { artist, shows },
                 commandTimeout: 120,
                 cancellationToken: cancellationToken
             )
@@ -248,23 +305,34 @@ public partial class PopularityService
             );
     }
 
-    private static async Task<RecordingPopularity[]> CalculateRecordings(
-        Npgsql.NpgsqlConnection connection,
+    private static Task<IEnumerable<RecordingTarget>> ReadRecordingTargets(
+        NpgsqlConnection connection,
         Guid artist,
-        IReadOnlyDictionary<Guid, PlayPopularity> recordings,
+        Guid[] shows,
         CancellationToken cancellationToken
-    )
-    {
-        var rows = await connection.QueryAsync<RecordingTarget>(
+    ) =>
+        connection.QueryAsync<RecordingTarget>(
             new CommandDefinition(
-                "SELECT s.uuid AS source,s.show_id::bigint AS show FROM sources s JOIN artists a ON a.id=s.artist_id WHERE a.uuid=@artist",
-                new { artist },
+                """
+                SELECT s.uuid AS source,s.show_id::bigint AS show
+                FROM sources s JOIN shows sh ON sh.id=s.show_id
+                JOIN artists a ON a.id=s.artist_id
+                WHERE a.uuid=@artist AND sh.uuid=ANY(@shows)
+                """,
+                new { artist, shows },
                 commandTimeout: 120,
                 cancellationToken: cancellationToken
             )
         );
-        // Compare recordings of the same show.
-        return rows.Where(row => recordings.ContainsKey(row.Source))
+
+    // All recordings of a show are in the same batch, so their scores can be
+    // calculated before the other batches finish.
+    private static RecordingPopularity[] ScoreRecordings(
+        IEnumerable<RecordingTarget> targets,
+        IReadOnlyDictionary<Guid, PlayPopularity> recordings
+    ) =>
+        targets
+            .Where(row => recordings.ContainsKey(row.Source))
             .GroupBy(row => row.Show)
             .SelectMany(group =>
                 ScoreDetails(
@@ -274,7 +342,6 @@ public partial class PopularityService
                 )
             )
             .ToArray();
-    }
 
     private static TRow[] ScoreDetails<TTarget, TRow>(
         IEnumerable<TTarget> cohort,
