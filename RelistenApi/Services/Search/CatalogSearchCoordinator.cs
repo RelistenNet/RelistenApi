@@ -311,7 +311,12 @@ internal sealed class CatalogSearchRun(
             evidence,
             retrieval.NicknameReading,
             batches,
-            new PrimaryHits(Documents: results, ExactPlaceSong: [], Related: [], NextPage: null),
+            new PrimaryHits(
+                Documents: results,
+                PlaceSongPerformances: [],
+                Related: [],
+                NextPage: null
+            ),
             cancellationToken
         );
         candidates.AddRange(
@@ -532,8 +537,7 @@ internal sealed class CatalogSearchRun(
         SearchRequest[] Nickname,
         ReviewedSongReading? NicknameReading,
         PlaybackContext Playback,
-        PlaceSongMatch? PlaceSong,
-        bool ExactPlaceSong
+        PlaceSongMatch? PlaceSong
     );
 
     private static RetrievalPlan PlanRetrieval(
@@ -550,6 +554,7 @@ internal sealed class CatalogSearchRun(
                 ? ReadPlaybackContext(query, vocabulary, venues)
                 : default;
         var placeSong = SearchRequests.ReadPlaceSong(input, query, vocabulary);
+        var exactPlaceSong = placeSong is { Tier: MatchTier.Exact } ? placeSong : null;
         var datedVenues =
             input is { Scope: SearchScope.All, Page: 1, ReadingId: null }
             && input.Ignore?.Contains("venue") != true
@@ -563,25 +568,25 @@ internal sealed class CatalogSearchRun(
             venues,
             reading.ReviewsAvailable,
             playback,
-            placeSong?.VenueIds ?? (datedVenues.Count > 0 ? datedVenues : null),
+            exactPlaceSong?.VenueIds ?? (datedVenues.Count > 0 ? datedVenues : null),
             RecordingSong(input, query, vocabulary) != null
         );
-        var exactSearch =
+        var placeSongSearch =
             input.Scope == SearchScope.All && placeSong != null
-                ? SearchRequests.ExactPlaceSong(query, placeSong)
+                ? SearchRequests.PlaceSongPerformances(query, placeSong)
                 : null;
-        var datedBrowse = DatedPlaceBrowse(input, query, vocabulary, datedVenues, placeSong);
+        var datedBrowse = DatedPlaceBrowse(input, query, vocabulary, datedVenues, exactPlaceSong);
         var related =
-            exactSearch != null
-            && placeSong != null
+            placeSongSearch != null
+            && exactPlaceSong != null
             && datedBrowse == null
             && !input.Typing
             && input.ReadingId == null
             && query.Date == null
-                ? SearchRequests.RelatedSongVersions(query, placeSong)
+                ? SearchRequests.RelatedSongVersions(query, exactPlaceSong)
                 : null;
         var reserved =
-            (exactSearch == null ? 0 : 1)
+            (placeSongSearch == null ? 0 : 1)
             + (datedBrowse == null ? 0 : 1)
             + (related == null ? 0 : 1);
         var nickname = vocabulary.ReadReviewedSong(
@@ -620,7 +625,7 @@ internal sealed class CatalogSearchRun(
             budget--;
         }
         var supplemental =
-            exactSearch
+            placeSongSearch
             ?? (
                 budget > 0
                     ? SearchRequests.PopularExactSong(input, query, venues, vocabulary)
@@ -644,16 +649,16 @@ internal sealed class CatalogSearchRun(
             nicknamePlan,
             nickname,
             playback,
-            placeSong,
-            exactSearch != null
+            placeSong
         );
     }
 
     private sealed record PrimaryHits(
         IReadOnlyList<SearchDocument> Documents,
-        SearchDocument[] ExactPlaceSong,
+        SearchDocument[] PlaceSongPerformances,
         SearchDocument[] Related,
-        int? NextPage
+        int? NextPage,
+        PlaceSongMatch? PlaceSong = null
     );
 
     private async Task<PrimaryHits> ResolvePrimaryHits(
@@ -672,7 +677,8 @@ internal sealed class CatalogSearchRun(
         var additional = batches.Supplemental is { } extra
             ? SupplementalPerformances(extra, query.Soundboard)
             : [];
-        var exact = retrieval.ExactPlaceSong ? additional : [];
+        var atPlace = retrieval.PlaceSong != null ? additional : [];
+        var exact = retrieval.PlaceSong is { Tier: MatchTier.Exact } ? atPlace : [];
         var browse =
             retrieval.Browse is { } browsing && batches.Browse is { } browseReply
                 ? BrowseResults(query, evidence, browseReply, browsing.Match)
@@ -717,7 +723,7 @@ internal sealed class CatalogSearchRun(
             exact.Length > 0 && !visible.Any(result => result.Name == query.Terms)
                 ? SearchRanker.LeadWithPerformances(visible, exact, mixed: true)
                 : SearchRanker.PreferPlaceAndSong(input, query, visible, evidence.Vocabulary);
-        if (!retrieval.ExactPlaceSong && additional.Length > 0)
+        if (retrieval.PlaceSong == null && additional.Length > 0)
         {
             // These are ordinary candidates. Keep explicit place promotions separate.
             visible = [.. visible, .. additional];
@@ -732,7 +738,7 @@ internal sealed class CatalogSearchRun(
             && pageReplies.Any(pair => pair.First.Found > input.Page * pair.Second.PerPage)
                 ? input.Page + 1
                 : (int?)null;
-        return new([.. visible, .. browse], exact, related, nextPage);
+        return new([.. visible, .. browse], atPlace, related, nextPage, retrieval.PlaceSong);
     }
 
     private enum RetrievalRole
@@ -1376,18 +1382,17 @@ internal sealed class CatalogSearchRun(
                     )
             );
         }
-        candidates.AddRange(
-            primary.ExactPlaceSong.Select(row =>
-            {
-                var rated = Rate(row, query, venues, primaryReading);
-                return rated with
-                {
-                    Match = new(MatchTier.Exact, ["title", "place"], 1),
-                    ExactPriority = CatalogSearchRanking.VerifiedIdentityPriority,
-                    Confidence = 1,
-                };
-            })
-        );
+        if (primary.PlaceSong is { } placeSong)
+        {
+            candidates.AddRange(
+                primary.PlaceSongPerformances.Select(row =>
+                    CatalogSearchRanking.VerifiedPlaceSong(
+                        Rate(row, query, venues, primaryReading),
+                        placeSong.Tier
+                    )
+                )
+            );
+        }
         if (alternative != null)
         {
             candidates.AddRange(
@@ -1447,7 +1452,7 @@ internal sealed class CatalogSearchRun(
             query,
             venues,
             contextualPlaces,
-            primary.ExactPlaceSong,
+            primary.PlaceSong is { Tier: MatchTier.Exact } ? primary.PlaceSongPerformances : [],
             candidates
         );
         return candidates;

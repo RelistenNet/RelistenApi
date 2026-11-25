@@ -8,6 +8,16 @@ internal static class CatalogSearchRanking
 {
     internal const int VerifiedIdentityPriority = 2;
 
+    public static RankedCandidate VerifiedPlaceSong(RankedCandidate candidate, MatchTier tier) =>
+        candidate with
+        {
+            // A catalog title and venue corroborate the text. A partial title
+            // still competes as a prefix and can use the performance's own plays.
+            Match = new(tier, ["title", "place"], 1),
+            ExactPriority = tier == MatchTier.Exact ? VerifiedIdentityPriority : 0,
+            Confidence = 1,
+        };
+
     public static RankedCandidate ReviewedSong(RankedCandidate candidate, bool contextual)
     {
         var tier = contextual ? MatchTier.Exact : MatchTier.Prefix;

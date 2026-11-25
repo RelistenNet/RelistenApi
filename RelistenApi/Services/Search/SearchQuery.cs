@@ -80,7 +80,8 @@ internal sealed record PlaceSongMatch(
     string Title,
     string Place,
     string[] SongIds,
-    IReadOnlySet<string> VenueIds
+    IReadOnlySet<string> VenueIds,
+    MatchTier Tier = MatchTier.Exact
 );
 
 internal sealed record SearchDocument : ISearchRankItem

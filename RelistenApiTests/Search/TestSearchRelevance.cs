@@ -874,7 +874,7 @@ public sealed class TestSearchRelevance
         var ordinary = PerformanceRequest(query, input);
         var match = SearchRequests.ReadPlaceSong(input, query, evidence.Vocabulary);
         match.Should().NotBeNull();
-        var exact = SearchRequests.ExactPlaceSong(query, match!);
+        var exact = SearchRequests.PlaceSongPerformances(query, match!);
         using var response = JsonDocument.Parse(
             """
             {"results":[
@@ -1155,6 +1155,85 @@ public sealed class TestSearchRelevance
             .Vocabulary.ExactPlaceSong("tahoe tweezer", null)!
             .VenueIds.Should()
             .Equal(venue.Document.Id);
+    }
+
+    [TestCase(true, false)]
+    [TestCase(false, true)]
+    public void PlaceAndSongPrefixFindsThePlayedVersionAheadOfALiteralTitlePrefix(
+        bool typing,
+        bool addTracks
+    )
+    {
+        var (song, cover, original) = TahoeResults();
+        var venue = TahoeVenue();
+        var phishSong = Song("phish", "tweezer");
+        var aliases = new Dictionary<string, SearchPlaceAlias>
+        {
+            ["tahoe"] = new("Tahoe", new[] { venue.Document.Id }.ToFrozenSet(), false),
+        };
+        var evidence = Evidence(
+            [venue, phishSong, (song, [])],
+            placeAliases: aliases.ToFrozenDictionary()
+        );
+        var input = new SearchInput("tahoe twe", Typing: typing, AddTracks: addTracks);
+        var query = new SearchQuery(input.Text);
+        var reading = SearchRequests.ReadPlaceSong(input, query, evidence.Vocabulary);
+
+        reading.Should().NotBeNull();
+        reading!.SongIds.Should().Equal(phishSong.Document.Id);
+        reading.VenueIds.Should().Equal(venue.Document.Id);
+        var ranked = RankedCandidate.Order(
+            [
+                CatalogSearchRanking.Candidate(
+                    cover with
+                    {
+                        PopularityPercentile = .98,
+                    },
+                    input,
+                    query,
+                    evidence,
+                    FrozenSet<string>.Empty,
+                    "query"
+                ),
+                CatalogSearchRanking.VerifiedPlaceSong(
+                    CatalogSearchRanking.Candidate(
+                        original with
+                        {
+                            PopularityPercentile = .99,
+                        },
+                        input,
+                        query,
+                        evidence,
+                        FrozenSet<string>.Empty,
+                        "query"
+                    ),
+                    reading.Tier
+                ),
+            ],
+            addTracks,
+            chronological: false,
+            order: "regular",
+            mixed: true
+        );
+        ranked.Select(candidate => candidate.Row.Key).Should().Equal(original.Key, cover.Key);
+        SearchRequests
+            .ReadPlaceSong(input with { ReadingId = "literal" }, query, evidence.Vocabulary)
+            .Should()
+            .BeNull();
+    }
+
+    [Test]
+    public void ShortenedVenueNameCanQualifyASongPrefixWithoutAnAlias()
+    {
+        var (hall, aliases) = Venue("hall", "radio city music hall");
+        var song = Song("phish", "ghost");
+        var evidence = Evidence([(hall with { ArtistSlugs = ["phish"] }, aliases), song]);
+        var input = new SearchInput("radio city gho");
+        var reading = SearchRequests.ReadPlaceSong(input, new(input.Text), evidence.Vocabulary);
+
+        reading.Should().NotBeNull();
+        reading!.VenueIds.Should().Equal(hall.VenueId);
+        reading.SongIds.Should().Equal(song.Document.Id);
     }
 
     [Test]
