@@ -182,9 +182,7 @@ public partial class PopularityService
             if (canonical.Length == 0)
             {
                 var title = SearchText.Fold(SearchText.RawTitle(first.Title));
-                var key = PopularityPerformanceKey.ForStorage(
-                    PopularityPerformanceKey.RawTitle(title)
-                );
+                var key = PopularityPerformanceKey.StoredRawTitle(title);
                 Add(new(key, title), playback);
                 continue;
             }
@@ -398,9 +396,10 @@ internal static class PopularityPerformanceKey
         key.StartsWith(RawPrefix, StringComparison.Ordinal) ? key[RawPrefix.Length..] : null;
 
     public static string ForStorage(string titleKey) =>
-        FoldedRawTitle(titleKey) is { } title
-            ? RawPrefix + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(title)))
-            : titleKey;
+        FoldedRawTitle(titleKey) is { } title ? StoredRawTitle(title) : titleKey;
+
+    public static string StoredRawTitle(string foldedTitle) =>
+        RawPrefix + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(foldedTitle)));
 }
 
 internal sealed record PerformancePopularity(Guid Show, string Song, StoredPopularity Metrics);

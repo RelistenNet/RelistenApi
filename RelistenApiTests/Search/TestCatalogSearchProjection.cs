@@ -146,13 +146,7 @@ public sealed class TestCatalogSearchProjection
             FROM sources src JOIN shows s ON s.id=src.show_id JOIN artists a ON a.id=src.artist_id
             WHERE s.uuid=@show
             """,
-            new
-            {
-                show,
-                performance = PopularityPerformanceKey.ForStorage(
-                    PopularityPerformanceKey.RawTitle("lawn boy")
-                ),
-            },
+            new { show, performance = PopularityPerformanceKey.StoredRawTitle("lawn boy") },
             transaction
         );
 

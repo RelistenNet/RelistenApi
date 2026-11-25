@@ -9,7 +9,6 @@ using Dapper;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using Relisten.Identifiers;
-using Relisten.Services.Popularity;
 
 namespace Relisten.Search;
 
@@ -26,6 +25,9 @@ internal static class CatalogQueryEvidenceLoader
         CancellationToken cancellationToken
     )
     {
+        // Replica reads are separate short statements without a shared snapshot.
+        // Later reads can see newly added rows and tolerate missing earlier lookups.
+        // A timeout or replica conflict aborts the reload so the previous evidence stays published.
         await using var connection = db.CreateReplicaConnection(commandTimeout: 20);
         await connection.OpenAsync(cancellationToken);
 
@@ -66,12 +68,7 @@ internal static class CatalogQueryEvidenceLoader
             cancellationToken
         );
         var reviewArtists = await rows.ReviewArtists(cancellationToken);
-        var titlePlays = await LoadTitlePlays(
-            connection,
-            vocabulary,
-            indexed.ImportedTitlePlays,
-            cancellationToken
-        );
+        var titlePlays = await LoadTitlePlays(connection, vocabulary, cancellationToken);
         var matches = await SearchPassages.Discover(
             connection,
             transaction: null,
@@ -112,7 +109,6 @@ internal static class CatalogQueryEvidenceLoader
         deadline.CancelAfter(TimeSpan.FromSeconds(30));
         var percentiles = new Dictionary<string, double>(StringComparer.Ordinal);
         var songPlays = new Dictionary<string, long>(StringComparer.Ordinal);
-        var importedTitlePlays = new Dictionary<(string Artist, string Title), long>();
         var reservedInitialismKeys = new HashSet<string>(StringComparer.Ordinal);
         var placeCollisions = new HashSet<string>(StringComparer.Ordinal);
         var establishedSongPopularity = Math.Log(1d + ArtistInitialisms.MinimumSongShows);
@@ -136,21 +132,6 @@ internal static class CatalogQueryEvidenceLoader
             )
             {
                 songPlays.Add(row.Id, year.Plays);
-                if (
-                    row.Id.StartsWith("imported_song_", StringComparison.Ordinal)
-                    && row.ArtistSlug is { } artist
-                    && row.Name is { } title
-                )
-                {
-                    var key = (
-                        artist,
-                        PopularityPerformanceKey.ForStorage(
-                            PopularityPerformanceKey.RawTitle(title)
-                        )
-                    );
-                    importedTitlePlays[key] =
-                        importedTitlePlays.GetValueOrDefault(key) + year.Plays;
-                }
             }
             if (row.Name is { } name)
             {
@@ -171,22 +152,16 @@ internal static class CatalogQueryEvidenceLoader
             }
         }
 
-        return new(
-            percentiles,
-            songPlays,
-            importedTitlePlays,
-            reservedInitialismKeys,
-            placeCollisions
-        );
+        return new(percentiles, songPlays, reservedInitialismKeys, placeCollisions);
     }
 
     private static async Task<FrozenDictionary<(string Artist, string Title), long>> LoadTitlePlays(
         NpgsqlConnection connection,
         SearchVocabulary vocabulary,
-        Dictionary<(string Artist, string Title), long> importedTitles,
         CancellationToken cancellationToken
     )
     {
+        var titlePlays = new Dictionary<(string Artist, string Title), long>();
         var totals = connection.QueryUnbufferedAsync<RawTitleStarts>(
             """
             SELECT artist.slug AS Artist, raw.song_id AS SongKey, raw.plays
@@ -201,14 +176,13 @@ internal static class CatalogQueryEvidenceLoader
         );
         await foreach (var total in totals.WithCancellation(cancellationToken))
         {
-            if (vocabulary.ArtistDocuments.TryGetValue(total.Artist, out var artist))
+            if (vocabulary.ArtistDocuments.ContainsKey(total.Artist))
             {
-                // Imported-song totals can include the same raw starts.
-                importedTitles.TryAdd((artist.ArtistSlug, total.SongKey), total.Plays);
+                titlePlays[(total.Artist, total.SongKey)] = total.Plays;
             }
         }
 
-        return importedTitles.ToFrozenDictionary();
+        return titlePlays.ToFrozenDictionary();
     }
 
     private sealed record RawTitleStarts(string Artist, string SongKey, long Plays);
@@ -420,7 +394,6 @@ internal static class CatalogQueryEvidenceLoader
     private sealed record IndexedVocabulary(
         Dictionary<string, double> Percentiles,
         Dictionary<string, long> SongPlays,
-        Dictionary<(string Artist, string Title), long> ImportedTitlePlays,
         HashSet<string> ReservedInitialismKeys,
         HashSet<string> PlaceCollisions
     );

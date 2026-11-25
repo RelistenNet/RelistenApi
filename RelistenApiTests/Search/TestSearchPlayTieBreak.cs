@@ -45,9 +45,7 @@ public sealed class TestSearchPlayTieBreak
     {
         var first = Song("one");
         var second = Song("two");
-        var titleKey = PopularityPerformanceKey.ForStorage(
-            PopularityPerformanceKey.RawTitle(Title)
-        );
+        var titleKey = PopularityPerformanceKey.StoredRawTitle(Title);
         var evidence = Evidence(new() { [first.Id] = 20 }, new() { [("two", titleKey)] = 70 });
 
         SearchPlayTieBreak

@@ -33,8 +33,8 @@ public sealed partial class TestCatalogSearchHttp
     private const string JapanShowsQuery = "?q=Pagination%20Japan&scope=shows";
     private const string ScarletSongsQuery = "?q=Scarlet%20Begonias&scope=songs&typing=true";
     private const string PlayedScarlet = "perf_scarlet_most_played";
-    private static readonly string PlayedRawTitle = PopularityPerformanceKey.ForStorage(
-        PopularityPerformanceKey.RawTitle("scarlet begonias fire on the mountain")
+    private static readonly string PlayedRawTitle = PopularityPerformanceKey.StoredRawTitle(
+        "scarlet begonias fire on the mountain"
     );
     private readonly string _prefix = "test_search_http_" + Guid.NewGuid().ToString("N");
     private readonly Guid _review = Guid.NewGuid();

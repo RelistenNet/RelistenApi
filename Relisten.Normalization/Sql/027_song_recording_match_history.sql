@@ -1,6 +1,7 @@
--- Keep a single matcher implementation. NULL show scope preserves full-catalog
--- discovery/recounts; an empty scope returns no files. Explicit access paths avoid
--- a nullable OR hiding the show/source/track indexes in page-scoped reads.
+-- Only the popularity refresh sets include_orphaned to count plays on replaced
+-- files, including files whose set was removed. Existing calls match live files.
+-- NULL show scope searches the full catalog; an empty scope returns no files.
+-- Separate access paths preserve show/source/track indexes for scoped reads.
 CREATE FUNCTION norm.song_recording_matches(artist_uuid uuid,canonical_ids text[],show_uuids uuid[],include_orphaned boolean)
 RETURNS TABLE (
     song_id text,track_uuid uuid,show_uuid uuid,matching_part_ordinals integer[],

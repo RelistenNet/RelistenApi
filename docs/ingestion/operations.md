@@ -367,8 +367,9 @@ publishes new aliases and starts the retirement timer, it reindexes artists whos
 requests started since its database snapshot began. The next successful daily
 build repairs failed or missed refreshes. Catalog API pods refresh query
 evidence after an alias swap and about once an hour, with jitter, to pick up
-in-place index changes. They read catalog metadata from the replica. A failed
-reload keeps the previous snapshot and waits five minutes before trying again.
+in-place index changes. They read catalog metadata from the replica. On failure
+they retry after five seconds until their first successful load. After that,
+they keep the previous snapshot and wait five minutes between attempts.
 
 Retirement drops the old collections. Typesense reclaims their disk space on
 its compaction interval (`--db-compaction-interval=86400`). Raft snapshots

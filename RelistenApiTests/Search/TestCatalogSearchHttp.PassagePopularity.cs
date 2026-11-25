@@ -59,7 +59,7 @@ public sealed partial class TestCatalogSearchHttp
         var query = new SearchQuery("scarlet fire");
 
         var unpublished = await Load();
-        unpublished.TrackPlays.Should().BeNull();
+        unpublished.ShowSongStarts.Should().BeNull();
         unpublished.RecordingPlays.Should().BeNull();
 
         await connection.ExecuteAsync(
@@ -81,7 +81,7 @@ public sealed partial class TestCatalogSearchHttp
         );
 
         var published = await Load();
-        published.TrackPlays.Should().Be(30);
+        published.ShowSongStarts.Should().Be(30);
         published.SourceId.Should().Be(UuidTypeId.Format("source", source));
         published.TrackIds.Should().Equal(UuidTypeId.Format("track", track));
 

@@ -48,7 +48,7 @@ internal sealed class CatalogQueryEvidence(
 
     public long TitlePlays(string artistSlug, string title)
     {
-        var key = PopularityPerformanceKey.ForStorage(PopularityPerformanceKey.RawTitle(title));
+        var key = PopularityPerformanceKey.StoredRawTitle(title);
         var raw = titlePlays?.GetValueOrDefault((artistSlug, key)) ?? 0;
         var canonical = Vocabulary.FindSong(artistSlug, title);
         return raw + (canonical == null ? 0 : SongPlays(canonical.Id));

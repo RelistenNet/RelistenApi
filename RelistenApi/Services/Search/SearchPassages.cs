@@ -23,7 +23,7 @@ internal sealed record SearchPassage(
     ImmutableArray<string> SongTitles,
     ImmutableArray<string> TrackIds,
     ImmutableArray<SearchPassagePart> Parts,
-    long? TrackPlays = null,
+    long? ShowSongStarts = null,
     double PopularityPercentile = 0,
     long? RecordingPlays = null
 ) : ISearchRankItem
@@ -113,7 +113,7 @@ internal sealed class SearchPassages(ImmutableArray<SearchPassages.RuleMatches> 
                     _ => 0,
                 }
             )
-            .ThenByDescending(match => match.TrackPlays)
+            .ThenByDescending(match => match.ShowSongStarts)
             .ThenByDescending(match => match.Date)
             .ThenByDescending(match => match.ShowId, StringComparer.Ordinal)
             .Take(limit)
@@ -121,7 +121,7 @@ internal sealed class SearchPassages(ImmutableArray<SearchPassages.RuleMatches> 
                 match with
                 {
                     PopularityPercentile = _percentiles.GetValueOrDefault(
-                        match.TrackPlays.GetValueOrDefault()
+                        match.ShowSongStarts.GetValueOrDefault()
                     ),
                 }
             )
@@ -146,7 +146,7 @@ internal sealed class SearchPassages(ImmutableArray<SearchPassages.RuleMatches> 
             )
         )
         {
-            distribution.Observe(match.Kind, match.TrackPlays.GetValueOrDefault());
+            distribution.Observe(match.Kind, match.ShowSongStarts.GetValueOrDefault());
         }
 
         return distribution.Calculate().GetValueOrDefault("sequence") ?? [];
@@ -347,18 +347,18 @@ internal sealed class SearchPassages(ImmutableArray<SearchPassages.RuleMatches> 
         IReadOnlyDictionary<Guid, long> recordings
     )
     {
-        long? plays = null;
+        long? showSongStarts = null;
         foreach (var key in ShowSongs(passage))
         {
             if (performances.TryGetValue(key, out var count))
             {
-                plays = plays.GetValueOrDefault() + count;
+                showSongStarts = showSongStarts.GetValueOrDefault() + count;
             }
         }
 
         return passage with
         {
-            TrackPlays = plays,
+            ShowSongStarts = showSongStarts,
             RecordingPlays = recordings.TryGetValue(Source(passage), out var starts)
                 ? starts
                 : null,

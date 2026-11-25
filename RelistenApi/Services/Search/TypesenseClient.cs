@@ -161,7 +161,7 @@ internal sealed class TypesenseClient(HttpClient http)
             "id,venue_id,kind,popularity_percentile,follow_count"
                 + (
                     includeVocabularyFields
-                        ? ",name,artist_slug,popularity,display_popularity.windows.1y.plays"
+                        ? ",name,popularity,display_popularity.windows.1y.plays"
                         : ""
                 ),
             filter,
@@ -313,8 +313,7 @@ internal sealed class TypesenseClient(HttpClient http)
         long FollowCount,
         string? Name = null,
         double Popularity = 0,
-        IndexedPopularity? DisplayPopularity = null,
-        string? ArtistSlug = null
+        IndexedPopularity? DisplayPopularity = null
     );
 
     internal sealed record IndexedPopularity(Dictionary<string, IndexedPlayWindow> Windows);

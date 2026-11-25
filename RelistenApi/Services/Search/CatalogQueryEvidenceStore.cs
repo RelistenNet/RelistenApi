@@ -55,6 +55,7 @@ internal sealed class CatalogQueryEvidenceRefreshService(
 {
     private static readonly TimeSpan AliasPollInterval = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan MaximumEvidenceAge = TimeSpan.FromHours(1);
+    private static readonly TimeSpan FailedInitialLoadDelay = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan FailedRefreshDelay = TimeSpan.FromMinutes(5);
     private readonly SemaphoreSlim _wake = new(0, 1);
     private int _urgent;
@@ -101,7 +102,11 @@ internal sealed class CatalogQueryEvidenceRefreshService(
                 );
                 // Missing-generation traffic may queue a wake-up while the load
                 // is running. That signal must not bypass the retry delay.
-                await Task.Delay(FailedRefreshDelay, store.Clock, stoppingToken);
+                // Retry sooner during startup, when this pod has no search evidence to serve.
+                var delay = store.Current.Collection is null
+                    ? FailedInitialLoadDelay
+                    : FailedRefreshDelay;
+                await Task.Delay(delay, store.Clock, stoppingToken);
                 continue;
             }
 
