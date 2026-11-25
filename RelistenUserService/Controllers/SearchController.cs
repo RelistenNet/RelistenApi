@@ -46,9 +46,14 @@ public sealed class SearchController(
         var principal = User;
         if (!account.IsLoaded)
         {
+            if (!Request.Cookies.ContainsKey(AuthenticationConstants.WebSessionCookie))
+            {
+                return null;
+            }
+
             HttpContext.Features.Set(new WebSessionAuthenticationDeadline(cancellationToken));
             var credential = await HttpContext.AuthenticateAsync(
-                AuthenticationConstants.AccountCredentialScheme
+                AuthenticationConstants.WebSessionScheme
             );
             principal = credential.Principal;
         }

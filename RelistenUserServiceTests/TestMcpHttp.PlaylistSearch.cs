@@ -416,6 +416,13 @@ public sealed partial class TestMcpHttp
             .Should()
             .Equal(owned.Id.Value, followed.Id.Value, "catalog-row", "review-row");
         RankedIds(await SearchHttp(owned.Name, "all")).Should().Equal("catalog-row", "review-row");
+        var queryTokenPath = QueryHelpers.AddQueryString(
+            AccountsOrigin + "/v1/search",
+            new Dictionary<string, string?> { ["q"] = owned.Name, ["access_token"] = native.Access }
+        );
+        using var queryToken = await Send(new(HttpMethod.Get, queryTokenPath));
+        queryToken.StatusCode.Should().Be(HttpStatusCode.OK);
+        RankedIds(await Json(queryToken)).Should().Equal("catalog-row", "review-row");
         RankedIds(await SearchHttp(owned.Name, "all", native.Access, mode: "add_tracks"))
             .Should()
             .Equal("catalog-row", "review-row");
