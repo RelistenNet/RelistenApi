@@ -2,6 +2,7 @@ using System.Collections.Frozen;
 using System.Collections.Generic;
 using FluentAssertions;
 using Relisten.Search;
+using Relisten.Services.Popularity;
 
 namespace RelistenApiTests.Search;
 
@@ -44,7 +45,8 @@ public sealed class TestSearchPlayTieBreak
     {
         var first = Song("one");
         var second = Song("two");
-        var evidence = Evidence(new() { [first.Id] = 20 }, new() { [("two", Title)] = 70 });
+        var titleKey = PopularityPerformanceKey.StoredRawTitle(Title);
+        var evidence = Evidence(new() { [first.Id] = 20 }, new() { [("two", titleKey)] = 70 });
 
         SearchPlayTieBreak
             .Rank(Input, Query, [first, second], evidence)

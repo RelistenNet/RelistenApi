@@ -7,37 +7,38 @@ using Dapper;
 namespace Relisten.Normalization;
 
 /// The per-artist switches (public.features): norm_venues keeps the artist's venues current
-/// in norm (after every import, and in the nightly run); norm_catalogue lets the API read
-/// norm for the artist. Read here, never through the API's Features model, whose generated
-/// writes would reset them on every import.
+/// in norm (after every import, and in the nightly run); norm_catalogue enables song
+/// matching after imports and lets the API read norm for the artist. Read these flags
+/// here because the API's generated Features writes would reset them on every import.
 public sealed class NormFlags(INormalizationDatabase db)
 {
     // A database not yet migrated to the norm schema (a worker deployed before --migrate)
     // has no flags: everything is off, and no import waits on it.
     private const string UndefinedColumn = "42703";
 
-    public async Task<bool> VenuesOnAsync(Guid artist)
+    public Task<bool> VenuesOnAsync(Guid artist) => IsEnabled(artist, "norm_venues");
+
+    public Task<bool> CatalogueOnAsync(Guid artist) => IsEnabled(artist, "norm_catalogue");
+
+    private async Task<bool> IsEnabled(Guid artist, string flag)
     {
         await using var connection = db.CreateWriteConnection();
         try
         {
-            return await VenuesOn(connection, artist);
+            return await connection.ExecuteScalarAsync<bool>(
+                $"""
+                SELECT coalesce(f.{flag}, false)
+                FROM artists a LEFT JOIN features f ON f.artist_id = a.id
+                WHERE a.uuid = @artist
+                """,
+                new { artist }
+            );
         }
         catch (Npgsql.PostgresException e) when (e.SqlState == UndefinedColumn)
         {
             return false;
         }
     }
-
-    private static Task<bool> VenuesOn(Npgsql.NpgsqlConnection connection, Guid artist) =>
-        connection.ExecuteScalarAsync<bool>(
-            """
-            SELECT coalesce(f.norm_venues, false)
-            FROM artists a LEFT JOIN features f ON f.artist_id = a.id
-            WHERE a.uuid = @artist
-            """,
-            new { artist }
-        );
 
     public async Task<IReadOnlyList<Guid>> VenueArtistsAsync()
     {

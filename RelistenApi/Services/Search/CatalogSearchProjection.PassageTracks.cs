@@ -36,17 +36,18 @@ internal sealed partial class CatalogSearchProjection
                     Array.Empty<string>()
                 )
             );
-        var passages = await SearchPassages.Load(
+        var passages = await SearchPassages.Discover(
             _rows.Connection,
             _rows.Transaction,
             new SearchVocabulary(entries, []),
             _venues,
-            _plays,
             cancellationToken
         );
         foreach (
             var ids in passages
-                .DisplayTrackIds()
+                .SelectMany(rule => rule.Matches)
+                .SelectMany(match => match.Passage.TrackIds)
+                .Distinct(StringComparer.Ordinal)
                 .Select(id => UuidTypeId.Parse(id, "track"))
                 .Chunk(TrackDisplayBatchSize)
         )

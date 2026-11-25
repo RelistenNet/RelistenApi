@@ -2,14 +2,13 @@ using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Data;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
+using Microsoft.Extensions.Logging;
 using Npgsql;
 using Relisten.Identifiers;
-using Relisten.Services.Popularity;
 
 namespace Relisten.Search;
 
@@ -22,94 +21,83 @@ internal static class CatalogQueryEvidenceLoader
         TypesenseClient typesense,
         string collection,
         string performances,
-        string? exportPath,
+        ILogger logger,
         CancellationToken cancellationToken
     )
     {
-        // Catalog metadata, marked paths and play totals must agree within one
-        // snapshot. The primary lets the refresh finish even during replica replay.
-        await using var connection = db.CreateConnection(longTimeout: true, readOnly: false);
+        // Replica reads are separate short statements without a shared snapshot.
+        // Later reads can see newly added rows and tolerate missing earlier lookups.
+        // A timeout or replica conflict aborts the reload so the previous evidence stays published.
+        await using var connection = db.CreateReplicaConnection(commandTimeout: 20);
         await connection.OpenAsync(cancellationToken);
-        await using var transaction = await connection.BeginTransactionAsync(
-            IsolationLevel.RepeatableRead,
-            cancellationToken
-        );
-        await connection.ExecuteAsync(
-            new CommandDefinition(
-                "SET TRANSACTION READ ONLY",
-                transaction: transaction,
-                cancellationToken: cancellationToken
-            )
-        );
 
-        var rows = new SearchProjectionRows(connection, transaction);
+        var rows = new SearchProjectionRows(connection, transaction: null);
         var shortNames = (await rows.ShortVenueNames(cancellationToken)).ToArray();
         var aliasKeys = shortNames
             .SelectMany(row => SearchPlaceAliases.Keys(row.Name, row.Normalized))
             .ToHashSet(StringComparer.Ordinal);
         // Use the index's popularity scale and check short venue names against
         // indexed artists and songs, including imported songs absent from norm.
-        var (percentiles, indexedSongPlays, reservedInitialismKeys, placeCollisions) =
-            await LoadIndexedVocabulary(typesense, collection, aliasKeys, cancellationToken);
+        var indexed = await LoadIndexedVocabulary(
+            typesense,
+            collection,
+            aliasKeys,
+            cancellationToken
+        );
+        var nicknameSongs = await LoadNicknameSongs(
+            typesense,
+            collection,
+            performances,
+            cancellationToken
+        );
         var venues = (await rows.Venues(cancellationToken)).ToDictionary(venue => venue.Id);
         var placeAliases = SearchPlaceAliases.Build(
             venues,
             shortNames,
             SearchReviewedPlaceNames.CityNames,
             await rows.ImportedPlacesForAliases(cancellationToken),
-            placeCollisions
+            indexed.PlaceCollisions
         );
         var vocabulary = await LoadVocabulary(
             rows,
             venues,
-            percentiles,
-            reservedInitialismKeys,
+            indexed.Percentiles,
+            indexed.ReservedInitialismKeys,
             placeAliases,
-            await LoadNicknameSongs(typesense, collection, performances, cancellationToken),
+            nicknameSongs,
             cancellationToken
         );
-        var trackStarts = await SearchPlayTotals.Load(
+        var reviewArtists = await rows.ReviewArtists(cancellationToken);
+        var titlePlays = await LoadTitlePlays(connection, vocabulary, cancellationToken);
+        var matches = await SearchPassages.Discover(
             connection,
-            transaction,
-            DateOnly.FromDateTime(DateTime.UtcNow),
-            exportPath,
-            cancellationToken
-        );
-        var passages = await SearchPassages.Load(
-            connection,
-            transaction,
+            transaction: null,
             vocabulary,
             venues,
-            trackStarts,
             cancellationToken
         );
-        await RemoveMappedTracks(connection, transaction, trackStarts, cancellationToken);
-        var titlePlays = new Dictionary<(string Artist, string Title), long>();
-        await AddUnmappedTitleStarts(
+        var passages = await SearchPassages.RankByPublishedStarts(
             connection,
-            transaction,
-            trackStarts,
-            titlePlays,
+            transaction: null,
+            matches,
             cancellationToken
         );
-        var reviewArtists = await LoadReviewArtists(connection, transaction, cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
+        logger.LogDebug(
+            "Read query evidence for {Collection} with playback totals for {TitleCount} artist titles",
+            collection,
+            titlePlays.Count
+        );
         return new CatalogQueryEvidence(
             collection,
             vocabulary,
             passages,
-            indexedSongPlays.ToFrozenDictionary(),
-            reviewArtists,
-            titlePlays.ToFrozenDictionary()
+            indexed.SongPlays.ToFrozenDictionary(),
+            reviewArtists.ToFrozenSet(),
+            titlePlays
         );
     }
 
-    internal static async Task<(
-        Dictionary<string, double> Percentiles,
-        Dictionary<string, long> SongPlays,
-        HashSet<string> ReservedInitialismKeys,
-        HashSet<string> PlaceCollisions
-    )> LoadIndexedVocabulary(
+    private static async Task<IndexedVocabulary> LoadIndexedVocabulary(
         TypesenseClient typesense,
         string collection,
         IReadOnlySet<string> placeNames,
@@ -164,8 +152,40 @@ internal static class CatalogQueryEvidenceLoader
             }
         }
 
-        return (percentiles, songPlays, reservedInitialismKeys, placeCollisions);
+        return new(percentiles, songPlays, reservedInitialismKeys, placeCollisions);
     }
+
+    private static async Task<FrozenDictionary<(string Artist, string Title), long>> LoadTitlePlays(
+        NpgsqlConnection connection,
+        SearchVocabulary vocabulary,
+        CancellationToken cancellationToken
+    )
+    {
+        var titlePlays = new Dictionary<(string Artist, string Title), long>();
+        var totals = connection.QueryUnbufferedAsync<RawTitleStarts>(
+            """
+            SELECT artist.slug AS Artist, raw.song_id AS SongKey, raw.plays
+            FROM (
+                SELECT artist_uuid, song_id, sum(plays_1y)::bigint AS plays
+                FROM song_performance_popularity
+                WHERE song_id LIKE 'raw:%' AND plays_1y > 0
+                GROUP BY artist_uuid, song_id
+            ) raw
+            JOIN artists artist ON artist.uuid = raw.artist_uuid
+            """
+        );
+        await foreach (var total in totals.WithCancellation(cancellationToken))
+        {
+            if (vocabulary.ArtistDocuments.ContainsKey(total.Artist))
+            {
+                titlePlays[(total.Artist, total.SongKey)] = total.Plays;
+            }
+        }
+
+        return titlePlays.ToFrozenDictionary();
+    }
+
+    private sealed record RawTitleStarts(string Artist, string SongKey, long Plays);
 
     private static async Task<SearchReviewedNicknames.SongTarget[]> LoadNicknameSongs(
         TypesenseClient typesense,
@@ -228,6 +248,12 @@ internal static class CatalogQueryEvidenceLoader
         var venueArtists = new Dictionary<string, HashSet<string>>();
         foreach (var show in shows)
         {
+            // A newly replayed artist can appear in shows after the artist read.
+            if (!artists.TryGetValue(show.ArtistId, out var artist))
+            {
+                continue;
+            }
+
             artistShows[show.ArtistId] = artistShows.GetValueOrDefault(show.ArtistId) + 1;
             if (SearchProjectionRows.CurrentVenue(venues, show.CanonicalVenueId) is not { } venue)
             {
@@ -242,7 +268,7 @@ internal static class CatalogQueryEvidenceLoader
                 venueArtists.Add(venueId, slugs);
             }
 
-            slugs.Add(artists[show.ArtistId].Slug);
+            slugs.Add(artist.Slug);
         }
 
         var entries = artists
@@ -365,88 +391,10 @@ internal static class CatalogQueryEvidenceLoader
         );
     }
 
-    private static async Task RemoveMappedTracks(
-        NpgsqlConnection connection,
-        NpgsqlTransaction transaction,
-        Dictionary<Guid, TrackStartTotal> starts,
-        CancellationToken cancellationToken
-    )
-    {
-        if (starts.Count == 0)
-        {
-            return;
-        }
-
-        // A matched file is represented by its published song totals. Keep
-        // only unmatched title evidence for artists without a song identity.
-        var matches = connection.QueryUnbufferedAsync<Guid>(
-            """
-            SELECT DISTINCT match.track_uuid
-            FROM artists artist JOIN features feature ON feature.artist_id = artist.id AND feature.norm_catalogue
-            CROSS JOIN LATERAL norm.song_recording_matches(artist.uuid, NULL::text[]) match
-            """,
-            transaction: transaction,
-            commandTimeout: 600
-        );
-        await foreach (var track in matches.WithCancellation(cancellationToken))
-        {
-            starts.Remove(track);
-        }
-    }
-
-    private static async Task AddUnmappedTitleStarts(
-        NpgsqlConnection connection,
-        NpgsqlTransaction transaction,
-        IReadOnlyDictionary<Guid, TrackStartTotal> starts,
-        Dictionary<(string Artist, string Title), long> titles,
-        CancellationToken cancellationToken
-    )
-    {
-        // Imported song documents have no canonical song ID. Use the same
-        // folded title as the playable raw-track projection for their totals.
-        var tracks = connection.QueryUnbufferedAsync<RawTitleTrack>(
-            """
-            SELECT track.uuid AS TrackUuid, artist.slug AS Artist, track.title AS Title
-            FROM source_tracks track
-            JOIN artists artist ON artist.id = track.artist_id
-            JOIN sources source ON source.id = track.source_id AND source.artist_id = artist.id
-            JOIN shows show ON show.id = source.show_id AND show.artist_id = artist.id
-            JOIN source_sets set ON set.id = track.source_set_id AND set.source_id = source.id
-            WHERE track.uuid = ANY(@TrackIds)
-              AND NOT track.is_orphaned AND nullif(track.title, '') IS NOT NULL
-              AND (nullif(track.mp3_url, '') IS NOT NULL OR nullif(track.flac_url, '') IS NOT NULL)
-            """,
-            new { TrackIds = starts.Keys.ToArray() },
-            transaction: transaction,
-            commandTimeout: 600
-        );
-        await foreach (var track in tracks.WithCancellation(cancellationToken))
-        {
-            var key = (track.Artist, Fold(RawTitle(track.Title)));
-            titles[key] = titles.GetValueOrDefault(key) + starts[track.TrackUuid].Plays;
-        }
-    }
-
-    private sealed record RawTitleTrack(Guid TrackUuid, string Artist, string Title);
-
-    private static async Task<FrozenSet<string>> LoadReviewArtists(
-        NpgsqlConnection connection,
-        NpgsqlTransaction transaction,
-        CancellationToken cancellationToken
-    ) =>
-        (
-            await connection.QueryAsync<string>(
-                new CommandDefinition(
-                    """
-                    SELECT DISTINCT artist.slug
-                    FROM source_reviews review JOIN sources source ON source.id = review.source_id
-                    JOIN shows show ON show.id = source.show_id AND show.artist_id = source.artist_id
-                    JOIN artists artist ON artist.id = show.artist_id
-                    """,
-                    transaction: transaction,
-                    commandTimeout: 120,
-                    cancellationToken: cancellationToken
-                )
-            )
-        ).ToFrozenSet();
+    private sealed record IndexedVocabulary(
+        Dictionary<string, double> Percentiles,
+        Dictionary<string, long> SongPlays,
+        HashSet<string> ReservedInitialismKeys,
+        HashSet<string> PlaceCollisions
+    );
 }

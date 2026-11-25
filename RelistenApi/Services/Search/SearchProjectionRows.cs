@@ -13,15 +13,20 @@ namespace Relisten.Search;
 // The larger inputs are read in show order so the projector can discard each show's files.
 internal sealed class SearchProjectionRows(
     NpgsqlConnection connection,
-    NpgsqlTransaction transaction,
+    NpgsqlTransaction? transaction,
     int? artistId = null
 )
 {
+    internal const int BuildCommandTimeoutSeconds = 600;
+
     public int? ArtistId => artistId;
     internal CatalogReadSession DisplaySession =>
-        CatalogReadSession.Borrow(connection, transaction);
+        CatalogReadSession.Borrow(
+            connection,
+            transaction ?? throw new InvalidOperationException("Projection requires a snapshot.")
+        );
     internal NpgsqlConnection Connection => connection;
-    internal NpgsqlTransaction Transaction => transaction;
+    internal NpgsqlTransaction? Transaction => transaction;
 
     public static async Task<NpgsqlTransaction> BeginSnapshot(
         NpgsqlConnection connection,
@@ -317,6 +322,23 @@ internal sealed class SearchProjectionRows(
             )
         );
 
+    public Task<IEnumerable<string>> ReviewArtists(CancellationToken cancellationToken) =>
+        Read<string>(
+            """
+            SELECT DISTINCT artist.slug
+            FROM artists artist
+            CROSS JOIN LATERAL (
+                SELECT 1
+                FROM sources source
+                JOIN shows show ON show.id = source.show_id AND show.artist_id = source.artist_id
+                WHERE source.artist_id = artist.id
+                  AND EXISTS (SELECT 1 FROM source_reviews review WHERE review.source_id = source.id)
+                LIMIT 1
+            ) reviewed
+            """,
+            cancellationToken
+        );
+
     private Task<IEnumerable<T>> Read<T>(
         string sql,
         CancellationToken cancellationToken,
@@ -327,18 +349,12 @@ internal sealed class SearchProjectionRows(
                 sql,
                 parameters ?? new { ArtistId },
                 transaction: transaction,
-                commandTimeout: 600,
                 cancellationToken: cancellationToken
             )
         );
 
     private IAsyncEnumerable<T> Stream<T>(string sql) =>
-        connection.QueryUnbufferedAsync<T>(
-            sql,
-            new { ArtistId },
-            transaction: transaction,
-            commandTimeout: 600
-        );
+        connection.QueryUnbufferedAsync<T>(sql, new { ArtistId }, transaction: transaction);
 
     internal sealed record Artist(int Id, Guid Uuid, string Slug, string Name, bool Approved);
 

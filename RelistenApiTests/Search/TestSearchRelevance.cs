@@ -2,6 +2,7 @@ using System.Collections.Frozen;
 using System.Text.Json;
 using FluentAssertions;
 using Relisten.Search;
+using Relisten.Services.Popularity;
 
 namespace RelistenApiTests.Search;
 
@@ -137,8 +138,8 @@ public sealed class TestSearchRelevance
             ],
             titlePlays: new Dictionary<(string, string), long>
             {
-                [("quincy-blue", "last train")] = 2,
-                [("quincy-blue", "starlake light")] = 2,
+                [("quincy-blue", PopularityPerformanceKey.StoredRawTitle("last train"))] = 2,
+                [("quincy-blue", PopularityPerformanceKey.StoredRawTitle("starlake light"))] = 2,
             }.ToFrozenDictionary()
         );
 
@@ -624,11 +625,17 @@ public sealed class TestSearchRelevance
                 {
                     SourceId = $"source_{number}",
                     TrackIds = [$"track_a{number}", $"track_b{number}"],
-                    TrackPlays = number,
+                    ShowSongStarts = 8,
+                    RecordingPlays = number,
                 }
             )
             .ToArray();
-        var olderShow = initial with { ShowId = "show_older", Date = 19770507, TrackPlays = 200 };
+        var olderShow = initial with
+        {
+            ShowId = "show_older",
+            Date = 19770507,
+            ShowSongStarts = 200,
+        };
         var recentShows = Enumerable
             .Range(1, 8)
             .Select(number =>
@@ -636,7 +643,7 @@ public sealed class TestSearchRelevance
                 {
                     ShowId = $"show_recent_{number}",
                     Date = 19770509,
-                    TrackPlays = 1,
+                    ShowSongStarts = 1,
                 }
             );
         var place = FrozenSet<string>.Empty;
@@ -653,7 +660,7 @@ public sealed class TestSearchRelevance
 
         var hits = passages.Find(new SearchQuery("scarlet fire"));
 
-        hits.Should().NotContain(hit => hit.TrackPlays == 0);
+        hits.Should().NotContain(hit => hit.ShowSongStarts == 0);
         hits.Select(hit => hit.ShowId).Should().OnlyHaveUniqueItems();
         hits[0].ShowId.Should().Be(olderShow.ShowId);
         hits[1].ShowId.Should().Be(initial.ShowId);
@@ -661,7 +668,7 @@ public sealed class TestSearchRelevance
         var chosen = (SearchPassage)CatalogSearchRanking.Passage(hits[1], "query").Row;
         chosen.SourceId.Should().Be("source_8");
         chosen.TrackIds.Should().Equal("track_a8", "track_b8");
-        chosen.TrackPlays.Should().Be(8);
+        chosen.ShowSongStarts.Should().Be(8);
         chosen.Label.Should().Be("Scarlet Begonias → Fire On The Mountain");
         chosen.Key.Should().Be(CatalogSearchRanking.Passage(initial, "query").Row.Key);
     }

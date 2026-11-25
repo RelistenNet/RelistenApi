@@ -114,6 +114,24 @@ public sealed partial class TestCatalogSearchHttp
         result["readings"]!["applied"]!["chips"]!.AsArray();
 
     [Test]
+    public async Task PlayedRawTitleLetsSearchRecognizeAnArtistWithoutSongDocuments()
+    {
+        var result = await GetSearch(
+            "?q=raw%20artist%20scarlet%20begonias%20fire%20on%20the%20mountain&scope=shows&mode=add_tracks"
+        );
+
+        AppliedChips(result)
+            .Should()
+            .Contain(chip =>
+                (string?)chip!["key"] == "artist" && (string?)chip["value"] == Id("artist", 11)
+            );
+        Results(result)
+            .Select(row => (string?)row?["preview_track"]?["id"])
+            .Should()
+            .Contain(Id("track", 41));
+    }
+
+    [Test]
     public async Task CapturedCatalogReplyMatchesTheUserServiceFixture()
     {
         var reply = await GetCandidates(

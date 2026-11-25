@@ -146,13 +146,7 @@ public sealed class TestCatalogSearchProjection
             FROM sources src JOIN shows s ON s.id=src.show_id JOIN artists a ON a.id=src.artist_id
             WHERE s.uuid=@show
             """,
-            new
-            {
-                show,
-                performance = PopularityPerformanceKey.ForStorage(
-                    PopularityPerformanceKey.RawTitle("lawn boy")
-                ),
-            },
+            new { show, performance = PopularityPerformanceKey.StoredRawTitle("lawn boy") },
             transaction
         );
 
@@ -176,10 +170,11 @@ public sealed class TestCatalogSearchProjection
         review["review_text"].Should().Be("Favorite Lawn Boy lawn boy was the highlight");
 
         var document = await projection
-            .Performances(CancellationToken.None)
+            .Performances(CancellationToken.None, calibrate: true)
             .SingleAsync(document => (string)document["show_id"] == showId);
         document["label"].Should().Be("Lawn Boy");
-        document["track_plays"].Should().Be(11L);
+        document["track_plays"].Should().Be(61L);
+        ((double)document["popularity_percentile"]).Should().BePositive();
         document["review_mentions"].Should().Be(1);
         YearlyPlays(document).Should().Be(61);
 

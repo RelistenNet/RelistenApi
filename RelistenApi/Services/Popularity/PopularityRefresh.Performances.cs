@@ -149,7 +149,7 @@ public partial class PopularityService
         return (tracks, recordings);
     }
 
-    // Compare live versions of the same song across shows, including across batches.
+    // Compare plays of the same song across shows, including across batches.
     private static PerformancePopularity[] ScorePerformances(
         IEnumerable<PerformancePlayback> performances
     ) =>
@@ -182,9 +182,7 @@ public partial class PopularityService
             if (canonical.Length == 0)
             {
                 var title = SearchText.Fold(SearchText.RawTitle(first.Title));
-                var key = PopularityPerformanceKey.ForStorage(
-                    PopularityPerformanceKey.RawTitle(title)
-                );
+                var key = PopularityPerformanceKey.StoredRawTitle(title);
                 Add(new(key, title), playback);
                 continue;
             }
@@ -256,17 +254,19 @@ public partial class PopularityService
                     FROM artists a LEFT JOIN features f ON f.artist_id=a.id WHERE a.uuid=@artist
                 ), matches AS MATERIALIZED (
                     SELECT m.track_uuid,m.song_id
-                    FROM owner a CROSS JOIN LATERAL norm.song_recording_matches(a.uuid,NULL::text[],@shows) m
+                    FROM owner a
+                    CROSS JOIN LATERAL norm.song_recording_matches(a.uuid,NULL::text[],@shows,include_orphaned => true) m
                     WHERE a.approved
                 )
                 SELECT h.uuid AS show,t.uuid AS track,m.song_id AS song,coalesce(t.title,'') AS title
                 FROM owner a JOIN shows h ON h.artist_id=a.id
                 JOIN sources s ON s.show_id=h.id AND s.artist_id=a.id
-                JOIN source_tracks t ON t.source_id=s.id AND t.artist_id=a.id AND NOT t.is_orphaned
-                JOIN source_sets ss ON ss.id=t.source_set_id AND ss.source_id=s.id
+                JOIN source_tracks t ON t.source_id=s.id AND t.artist_id=a.id
+                LEFT JOIN source_sets ss ON ss.id=t.source_set_id AND ss.source_id=s.id
                 LEFT JOIN matches m ON m.track_uuid=t.uuid
                 WHERE h.uuid=ANY(@shows)
-                  AND (m.song_id IS NOT NULL OR nullif(t.mp3_url,'') IS NOT NULL OR nullif(t.flac_url,'') IS NOT NULL)
+                  AND (t.is_orphaned OR ss.id IS NOT NULL)
+                  AND (t.is_orphaned OR m.song_id IS NOT NULL OR nullif(t.mp3_url,'') IS NOT NULL OR nullif(t.flac_url,'') IS NOT NULL)
                 """,
                 new { artist, shows },
                 commandTimeout: 600,
@@ -396,9 +396,10 @@ internal static class PopularityPerformanceKey
         key.StartsWith(RawPrefix, StringComparison.Ordinal) ? key[RawPrefix.Length..] : null;
 
     public static string ForStorage(string titleKey) =>
-        FoldedRawTitle(titleKey) is { } title
-            ? RawPrefix + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(title)))
-            : titleKey;
+        FoldedRawTitle(titleKey) is { } title ? StoredRawTitle(title) : titleKey;
+
+    public static string StoredRawTitle(string foldedTitle) =>
+        RawPrefix + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(foldedTitle)));
 }
 
 internal sealed record PerformancePopularity(Guid Show, string Song, StoredPopularity Metrics);

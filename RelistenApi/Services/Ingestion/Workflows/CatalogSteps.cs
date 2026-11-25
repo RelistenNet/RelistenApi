@@ -12,12 +12,12 @@ namespace Relisten.Ingestion.Workflows;
 /// <summary>Rebuilds derived catalog data in dependency order, after all item work has settled.</summary>
 internal static class CatalogSteps
 {
-    /// matchVenues: after a whole-artist import, bring its new venue rows into norm too. A
-    /// one-item import leaves them to the nightly venue run, which starts with the match.
+    /// Artist refreshes match venues and songs before starting the search reindex.
     internal static async Task RebuildArtist(
         ArtistId artist,
         IngestionExecution execution,
-        bool matchVenues = false
+        bool matchVenues = false,
+        bool matchSongs = false
     )
     {
         var context = new ProviderWorkflowContext(artist, execution);
@@ -41,27 +41,7 @@ internal static class CatalogSteps
             ImportWorkflowOptions.Activity(IngestionQueues.Database)
         );
 
-        // The artist's new venue rows into norm, when its venues are switched on
-        // (features.norm_venues): the free match now, the model in the nightly run. Venues
-        // never fail an import. Patched: imports running at deploy replay without it.
-        if (matchVenues && Workflow.Patched("norm-venue-match"))
-        {
-            try
-            {
-                await Workflow.ExecuteActivityAsync(
-                    (VenueMatchActivities a) => a.MatchArtist(artist.Value),
-                    VenueMatchStep
-                );
-            }
-            catch (ActivityFailureException e) when (!TemporalException.IsCanceledException(e))
-            {
-                Workflow.Logger.LogWarning(
-                    e,
-                    "Venue match after the import of {Artist} failed",
-                    artist.Value
-                );
-            }
-        }
+        await MatchImportedCatalogue(artist, matchVenues, matchSongs);
 
         if (Workflow.Patched("search-after-artist-rebuild"))
         {
@@ -69,7 +49,59 @@ internal static class CatalogSteps
         }
     }
 
-    private static readonly ActivityOptions VenueMatchStep = new()
+    private static async Task MatchImportedCatalogue(
+        ArtistId artist,
+        bool matchVenues,
+        bool matchSongs
+    )
+    {
+        // Each activity checks its artist's norm feature flag. The patch gates keep
+        // imports already in flight replayable when new matching is deployed.
+        if (matchVenues && Workflow.Patched("norm-venue-match"))
+        {
+            await TryMatch(
+                artist,
+                "Venue",
+                () =>
+                    Workflow.ExecuteActivityAsync(
+                        (VenueMatchActivities a) => a.MatchArtist(artist.Value),
+                        MatchStep
+                    )
+            );
+        }
+
+        if (matchSongs && Workflow.Patched("norm-song-match"))
+        {
+            await TryMatch(
+                artist,
+                "Song",
+                () =>
+                    Workflow.ExecuteActivityAsync(
+                        (SongActivities a) => a.MatchImportedTracks(artist.Value),
+                        MatchStep
+                    )
+            );
+        }
+    }
+
+    private static async Task TryMatch(ArtistId artist, string kind, Func<Task> run)
+    {
+        try
+        {
+            await run();
+        }
+        catch (ActivityFailureException e) when (!TemporalException.IsCanceledException(e))
+        {
+            Workflow.Logger.LogWarning(
+                e,
+                "{Kind} match after the import of {Artist} failed",
+                kind,
+                artist.Value
+            );
+        }
+    }
+
+    private static readonly ActivityOptions MatchStep = new()
     {
         TaskQueue = IngestionQueues.Database,
         StartToCloseTimeout = TimeSpan.FromMinutes(20),

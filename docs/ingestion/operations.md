@@ -356,14 +356,20 @@ Leave `/health/ready` on the database checks so browse can serve while search
 continues warming after the grace period.
 [Kubernetes startup probe documentation](https://kubernetes.io/docs/concepts/workloads/pods/probes/#startup-probe)
 
-After committing catalog data, artist imports start a background reindex and song
-normalization reindexes its artist. Venue normalization is picked up by the daily
-build. Import and song refresh requests record their start before resolving the
+After an artist import, including a thin refresh, the worker matches tracks to existing songs for
+artists with `norm_catalogue` enabled. A match failure is logged and the import
+still finishes. New titles still need an explicit `--norm-songs` run. Artist imports
+start a background reindex after matching, and song normalization reindexes its
+artist. Venue normalization is picked up by the daily build. Import and song
+refresh requests record their start before resolving the
 aliases, using `search_artist_reindexes` from migration 23. Once the full build
 publishes new aliases and starts the retirement timer, it reindexes artists whose
 requests started since its database snapshot began. The next successful daily
-build repairs failed or missed refreshes. Artist scope and review availability
-use the evidence snapshot refreshed at the alias swap.
+build repairs failed or missed refreshes. Catalog API pods refresh query
+evidence after an alias swap and about once an hour, with jitter, to pick up
+in-place index changes. They read catalog metadata from the replica. On failure
+they retry after five seconds until their first successful load. After that,
+they keep the previous snapshot and wait five minutes between attempts.
 
 Retirement drops the old collections. Typesense reclaims their disk space on
 its compaction interval (`--db-compaction-interval=86400`). Raft snapshots

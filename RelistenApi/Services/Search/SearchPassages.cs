@@ -23,8 +23,9 @@ internal sealed record SearchPassage(
     ImmutableArray<string> SongTitles,
     ImmutableArray<string> TrackIds,
     ImmutableArray<SearchPassagePart> Parts,
-    long TrackPlays = 0,
-    double PopularityPercentile = 0
+    long? ShowSongStarts = null,
+    double PopularityPercentile = 0,
+    long? RecordingPlays = null
 ) : ISearchRankItem
 {
     public string Kind => "sequence";
@@ -43,6 +44,7 @@ internal sealed record SearchPassagePart(
 internal sealed class SearchPassages(ImmutableArray<SearchPassages.RuleMatches> rules)
 {
     public static readonly SearchPassages Empty = new([]);
+    private const int PopularityBatchSize = 512;
     private readonly Dictionary<double, double> _percentiles = CalculatePercentiles(rules);
 
     public IReadOnlyList<SearchPassage> Find(
@@ -111,29 +113,25 @@ internal sealed class SearchPassages(ImmutableArray<SearchPassages.RuleMatches> 
                     _ => 0,
                 }
             )
-            .ThenByDescending(match => match.TrackPlays)
+            .ThenByDescending(match => match.ShowSongStarts)
             .ThenByDescending(match => match.Date)
             .ThenByDescending(match => match.ShowId, StringComparer.Ordinal)
             .Take(limit)
             .Select(match =>
                 match with
                 {
-                    PopularityPercentile = _percentiles.GetValueOrDefault(match.TrackPlays),
+                    PopularityPercentile = _percentiles.GetValueOrDefault(
+                        match.ShowSongStarts.GetValueOrDefault()
+                    ),
                 }
             )
             .ToArray();
     }
 
-    internal IEnumerable<string> DisplayTrackIds() =>
-        rules
-            .SelectMany(rule => rule.Matches)
-            .SelectMany(match => match.Passage.TrackIds)
-            .Distinct(StringComparer.Ordinal);
-
     private static IEnumerable<SearchPassage> BestRecordings(IEnumerable<SearchPassage> matches) =>
         matches
             .GroupBy(match => match.Key, StringComparer.Ordinal)
-            .Select(group => group.MaxBy(match => match.TrackPlays)!);
+            .Select(group => group.MaxBy(match => match.RecordingPlays)!);
 
     private static Dictionary<double, double> CalculatePercentiles(
         ImmutableArray<RuleMatches> rules
@@ -148,18 +146,17 @@ internal sealed class SearchPassages(ImmutableArray<SearchPassages.RuleMatches> 
             )
         )
         {
-            distribution.Observe(match.Kind, match.TrackPlays);
+            distribution.Observe(match.Kind, match.ShowSongStarts.GetValueOrDefault());
         }
 
         return distribution.Calculate().GetValueOrDefault("sequence") ?? [];
     }
 
-    public static async Task<SearchPassages> Load(
+    public static async Task<ImmutableArray<RuleMatches>> Discover(
         NpgsqlConnection connection,
-        NpgsqlTransaction transaction,
+        NpgsqlTransaction? transaction,
         SearchVocabulary vocabulary,
         IReadOnlyDictionary<string, SearchProjectionRows.Venue> venues,
-        IReadOnlyDictionary<Guid, TrackStartTotal> trackStarts,
         CancellationToken cancellationToken
     )
     {
@@ -183,9 +180,28 @@ internal sealed class SearchPassages(ImmutableArray<SearchPassages.RuleMatches> 
 
         if (resolved.Count == 0)
         {
-            return Empty;
+            return [];
         }
 
+        return await ReadMatches(
+            connection,
+            transaction,
+            resolved,
+            vocabulary,
+            venues,
+            cancellationToken
+        );
+    }
+
+    private static async Task<ImmutableArray<RuleMatches>> ReadMatches(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        List<ResolvedRule> resolved,
+        SearchVocabulary vocabulary,
+        IReadOnlyDictionary<string, SearchProjectionRows.Venue> venues,
+        CancellationToken cancellationToken
+    )
+    {
         var candidates = resolved.ToLookup(rule => (rule.Rule.Artist, rule.SongIds[0]));
         var matches = resolved.ToDictionary(rule => rule, _ => new List<PassageMatch>());
         var rows = connection.QueryUnbufferedAsync<PartRow>(
@@ -195,8 +211,7 @@ internal sealed class SearchPassages(ImmutableArray<SearchPassages.RuleMatches> 
                 artists = resolved.Select(rule => rule.Rule.Artist).Distinct().ToArray(),
                 firstSongs = resolved.Select(rule => rule.SongIds[0]).Distinct().ToArray(),
             },
-            transaction: transaction,
-            commandTimeout: 600
+            transaction: transaction
         );
 
         // One set's rows are enough to establish every adjacent path. Keep the
@@ -206,7 +221,7 @@ internal sealed class SearchPassages(ImmutableArray<SearchPassages.RuleMatches> 
         {
             if (set.Count > 0 && set[0].SetId != row.SetId)
             {
-                AddSet(set, candidates, matches, trackStarts, vocabulary);
+                AddSet(set, candidates, matches, vocabulary);
                 set.Clear();
             }
 
@@ -218,19 +233,151 @@ internal sealed class SearchPassages(ImmutableArray<SearchPassages.RuleMatches> 
             );
         }
 
-        AddSet(set, candidates, matches, trackStarts, vocabulary);
+        AddSet(set, candidates, matches, vocabulary);
+        return resolved
+            .Select(rule => new RuleMatches(rule.Rule, matches[rule].ToImmutableArray()))
+            .ToImmutableArray();
+    }
+
+    public static async Task<SearchPassages> RankByPublishedStarts(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        ImmutableArray<RuleMatches> rules,
+        CancellationToken cancellationToken
+    )
+    {
+        // Only confirmed passages need popularity. Joining metrics to every
+        // candidate setlist row changes the planner's join order and does more work.
+        var passages = rules
+            .SelectMany(rule => rule.Matches)
+            .Select(match => match.Passage)
+            .ToArray();
+        var performances = await ReadPerformanceStarts(
+            connection,
+            transaction,
+            passages.SelectMany(ShowSongs),
+            cancellationToken
+        );
+        var recordings = await ReadRecordingStarts(
+            connection,
+            transaction,
+            passages.Select(Source),
+            cancellationToken
+        );
+
         return new SearchPassages(
-            resolved
-                .Select(rule => new RuleMatches(rule.Rule, matches[rule].ToImmutableArray()))
+            rules
+                .Select(rule =>
+                    rule with
+                    {
+                        Matches = rule
+                            .Matches.Select(match =>
+                                match with
+                                {
+                                    Passage = WithPlays(match.Passage, performances, recordings),
+                                }
+                            )
+                            .ToImmutableArray(),
+                    }
+                )
                 .ToImmutableArray()
         );
     }
+
+    private static async Task<Dictionary<(Guid Show, string Song), long>> ReadPerformanceStarts(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        IEnumerable<(Guid Show, string Song)> songs,
+        CancellationToken cancellationToken
+    )
+    {
+        var starts = new Dictionary<(Guid Show, string Song), long>();
+        foreach (var batch in songs.Distinct().Chunk(PopularityBatchSize))
+        {
+            var metrics = await PopularityStore.ReadSelectedPerformances(
+                connection,
+                batch.Select(item => item.Show).ToArray(),
+                batch.Select(item => item.Song).ToArray(),
+                transaction,
+                cancellationToken
+            );
+            foreach (var (key, value) in metrics)
+            {
+                if (value.windows.Year is { } year)
+                {
+                    starts.Add(key, year.plays);
+                }
+            }
+        }
+
+        return starts;
+    }
+
+    private static async Task<Dictionary<Guid, long>> ReadRecordingStarts(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        IEnumerable<Guid> sources,
+        CancellationToken cancellationToken
+    )
+    {
+        var starts = new Dictionary<Guid, long>();
+        foreach (var batch in sources.Distinct().Chunk(PopularityBatchSize))
+        {
+            var metrics = await PopularityStore.ReadRecordingMetrics(
+                connection,
+                batch,
+                transaction,
+                cancellationToken
+            );
+            foreach (var (source, value) in metrics)
+            {
+                if (value.windows.Year is { } year)
+                {
+                    starts.Add(source, year.plays);
+                }
+            }
+        }
+
+        return starts;
+    }
+
+    private static SearchPassage WithPlays(
+        SearchPassage passage,
+        IReadOnlyDictionary<(Guid Show, string Song), long> performances,
+        IReadOnlyDictionary<Guid, long> recordings
+    )
+    {
+        long? showSongStarts = null;
+        foreach (var key in ShowSongs(passage))
+        {
+            if (performances.TryGetValue(key, out var count))
+            {
+                showSongStarts = showSongStarts.GetValueOrDefault() + count;
+            }
+        }
+
+        return passage with
+        {
+            ShowSongStarts = showSongStarts,
+            RecordingPlays = recordings.TryGetValue(Source(passage), out var starts)
+                ? starts
+                : null,
+        };
+    }
+
+    private static IEnumerable<(Guid Show, string Song)> ShowSongs(SearchPassage passage)
+    {
+        var show = UuidTypeId.Parse(passage.ShowId, "show");
+        return passage.SongIds.Distinct(StringComparer.Ordinal).Select(song => (show, song));
+    }
+
+    private static Guid Source(SearchPassage passage) =>
+        UuidTypeId.Parse(passage.SourceId, "source");
 
     private static void AddSet(
         List<PartRow> rows,
         ILookup<(string Artist, string FirstSong), ResolvedRule> candidates,
         Dictionary<ResolvedRule, List<PassageMatch>> matches,
-        IReadOnlyDictionary<Guid, TrackStartTotal> trackStarts,
         SearchVocabulary vocabulary
     )
     {
@@ -261,7 +408,7 @@ internal sealed class SearchPassages(ImmutableArray<SearchPassages.RuleMatches> 
                 var path = parts.AsSpan(index, count);
                 if (MatchesSongs(path, rule.SongIds))
                 {
-                    matches[rule].Add(Describe(path, rule, date, trackStarts, vocabulary));
+                    matches[rule].Add(Describe(path, rule, date, vocabulary));
                 }
             }
         }
@@ -303,21 +450,13 @@ internal sealed class SearchPassages(ImmutableArray<SearchPassages.RuleMatches> 
         ReadOnlySpan<PartRow> path,
         ResolvedRule rule,
         int date,
-        IReadOnlyDictionary<Guid, TrackStartTotal> trackStarts,
         SearchVocabulary vocabulary
     )
     {
         var first = path[0];
         var parts = ImmutableArray.CreateBuilder<SearchPassagePart>(path.Length);
-        var files = new HashSet<Guid>();
-        long plays = 0;
         foreach (var row in path)
         {
-            if (files.Add(row.TrackUuid))
-            {
-                // A medley can supply several song parts from the same file.
-                plays += trackStarts.GetValueOrDefault(row.TrackUuid).Plays;
-            }
             parts.Add(
                 new(
                     row.SongId!,
@@ -349,8 +488,7 @@ internal sealed class SearchPassages(ImmutableArray<SearchPassages.RuleMatches> 
                 rule.SongIds,
                 rule.SongTitles,
                 proof.Select(part => part.TrackId).Distinct().ToImmutableArray(),
-                proof,
-                plays
+                proof
             ),
             placeWords,
             venueId,
@@ -375,20 +513,27 @@ internal sealed class SearchPassages(ImmutableArray<SearchPassages.RuleMatches> 
             WHERE map.canonical_id = ANY(@firstSongs)
               AND (nullif(track.mp3_url, '') IS NOT NULL OR nullif(track.flac_url, '') IS NOT NULL)
         ), set_headers AS MATERIALIZED (
-            SELECT artist.slug, artist.id AS artist_id, show.uuid AS show_uuid, show.date,
-                   coalesce(venue.name, '') AS venue, coalesce(venue.location, '') AS location,
-                   source.uuid AS source_uuid, source.id AS source_id, sets.id AS set_id,
-                 coalesce(sets.name, '') AS set_name,
-                 CASE WHEN feature.norm_catalogue THEN mapped.venue_id END AS venue_id,
-                 venue.uuid AS imported_venue_uuid
-            FROM candidate_sets candidate JOIN source_sets sets ON sets.id = candidate.source_set_id
-            JOIN sources source ON source.id = sets.source_id
-            JOIN shows show ON show.id = source.show_id AND show.artist_id = source.artist_id
-            JOIN artists artist ON artist.id = source.artist_id
-          LEFT JOIN features feature ON feature.artist_id = artist.id
-            LEFT JOIN venues venue ON venue.id = show.venue_id
-            LEFT JOIN norm.show_venues mapped ON mapped.show_uuid = show.uuid
-            WHERE artist.slug = ANY(@artists)
+            -- OFFSET 0 keeps Postgres from flattening this lateral lookup.
+            -- The set-ID-first plan keeps this read inside the replica's 20 s budget.
+            SELECT header.*
+            FROM candidate_sets candidate
+            CROSS JOIN LATERAL (
+                SELECT artist.slug, artist.id AS artist_id, show.uuid AS show_uuid, show.date,
+                       coalesce(venue.name, '') AS venue, coalesce(venue.location, '') AS location,
+                       source.uuid AS source_uuid, source.id AS source_id, sets.id AS set_id,
+                     coalesce(sets.name, '') AS set_name,
+                     CASE WHEN feature.norm_catalogue THEN mapped.venue_id END AS venue_id,
+                     venue.uuid AS imported_venue_uuid
+                FROM source_sets sets
+                JOIN sources source ON source.id = sets.source_id
+                JOIN shows show ON show.id = source.show_id AND show.artist_id = source.artist_id
+                JOIN artists artist ON artist.id = source.artist_id
+                LEFT JOIN features feature ON feature.artist_id = artist.id
+                LEFT JOIN venues venue ON venue.id = show.venue_id
+                LEFT JOIN norm.show_venues mapped ON mapped.show_uuid = show.uuid
+                WHERE sets.id = candidate.source_set_id AND artist.slug = ANY(@artists)
+                OFFSET 0
+            ) header
         )
         SELECT header.slug AS Artist, header.show_uuid AS ShowUuid, header.date AS Date,
                header.venue AS Venue, header.location AS Location,

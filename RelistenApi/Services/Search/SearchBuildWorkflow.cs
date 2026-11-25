@@ -142,7 +142,9 @@ internal sealed class SearchBuildActivities(
         var timer = Stopwatch.StartNew();
         // Use the primary to avoid recovery canceling a long read on a replica.
         // This snapshot holds back vacuum for the length of the build, acceptable once a day.
-        await using var connection = db.CreateConnection(longTimeout: true, readOnly: false);
+        await using var connection = db.CreatePrimaryConnection(
+            SearchProjectionRows.BuildCommandTimeoutSeconds
+        );
         await connection.OpenAsync(token);
         await using var snapshot = await SearchProjectionRows.BeginSnapshot(connection, token);
         var startedAt = await connection.ExecuteScalarAsync<DateTime>(

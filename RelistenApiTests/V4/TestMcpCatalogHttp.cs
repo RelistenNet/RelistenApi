@@ -253,16 +253,27 @@ public sealed partial class TestV4CatalogHttp
         appearance["song_popularity"].Should().BeNull();
     }
 
-    [Test]
-    public async Task BatchedPopularityPublishesTheSameTotalsIncludingSoundchecks()
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task BatchedPopularityCreditsHistoricalPlaysToTheFilesOwnSong(bool changedSong)
     {
         await using var connection = await MigratedTestDatabase.OpenAsync();
         var firstTrack = Guid.Parse("00000000-0000-0000-0000-000000000341");
         var secondTrack = Guid.Parse("00000000-0000-0000-0000-000000000342");
         var otherShowTrack = Guid.Parse("00000000-0000-0000-0000-000000000343");
+        // The replaced file has its own mapping and is on the same recording
+        // as otherShowTrack, but only the replacement is available for playback.
+        var replacedTrack = Guid.Parse("00000000-0000-0000-0000-000000000344");
+        const string scarlet = "song_00000101";
+        const string fire = "song_00000102";
+        var historicalSong = changedSong ? fire : scarlet;
         var originalTitle = await connection.QuerySingleAsync<string>(
             "SELECT title FROM source_tracks WHERE uuid=@secondTrack",
             new { secondTrack }
+        );
+        var replacedSet = await connection.QuerySingleAsync<long?>(
+            "SELECT source_set_id FROM source_tracks WHERE uuid=@replacedTrack",
+            new { replacedTrack }
         );
         var through = DateTime.UtcNow.Date;
         var completeMonth = new DateTime(
@@ -385,11 +396,24 @@ public sealed partial class TestV4CatalogHttp
                 new { showId, otherShowTrack }
             );
 
+        Task SetHistoricalSong(string song) =>
+            connection.ExecuteAsync(
+                """
+                SELECT set_config('norm.author_type', author_type, true),
+                       set_config('norm.author_ref', author_ref, true),
+                       set_config('norm.run_uuid', run_uuid::text, true)
+                FROM norm.track_songs WHERE track_uuid=@replacedTrack;
+                UPDATE norm.track_songs SET song_id=@song WHERE track_uuid=@replacedTrack;
+                """,
+                new { song, replacedTrack }
+            );
+
         await connection.ExecuteAsync(
             """
             INSERT INTO source_track_plays(created_at, source_track_uuid, app_type)
             VALUES (@firstPlay, @firstTrack, 0), (@firstPlay, @secondTrack, 0), (@secondPlay, @firstTrack, 0), (@recentPlay, @firstTrack, 0),
-                   (@firstPlay, @otherShowTrack, 0), (@recentPlay, @otherShowTrack, 0)
+                   (@firstPlay, @otherShowTrack, 0), (@recentPlay, @otherShowTrack, 0),
+                   (@firstPlay, @replacedTrack, 0)
             """,
             new
             {
@@ -399,14 +423,27 @@ public sealed partial class TestV4CatalogHttp
                 firstTrack,
                 secondTrack,
                 otherShowTrack,
+                replacedTrack,
             }
         );
         try
         {
             await connection.ExecuteAsync(
-                "UPDATE source_tracks SET title='(soundcheck) ' || @originalTitle WHERE uuid=@secondTrack",
-                new { secondTrack, originalTitle }
+                """
+                UPDATE source_tracks SET title='(soundcheck) ' || @originalTitle WHERE uuid=@secondTrack;
+                UPDATE source_tracks SET source_set_id=NULL WHERE uuid=@replacedTrack;
+                """,
+                new
+                {
+                    secondTrack,
+                    originalTitle,
+                    replacedTrack,
+                }
             );
+            if (changedSong)
+            {
+                await SetHistoricalSong(historicalSong);
+            }
             await RefreshRollups();
             await RefreshRecent();
             // A corrected show date leaves the completed month's rollup on
@@ -424,7 +461,27 @@ public sealed partial class TestV4CatalogHttp
                 )
             )
                 .Should()
-                .Be(6);
+                .Be(changedSong ? 6 : 7);
+            if (changedSong)
+            {
+                (
+                    await connection.QuerySingleAsync<long>(
+                        """
+                        SELECT p.plays_1y FROM song_performance_popularity p
+                        JOIN shows sh ON sh.uuid=p.uuid WHERE sh.id=@correctedShow AND p.song_id=@fire
+                        """,
+                        new { correctedShow, fire }
+                    )
+                ).Should().Be(1);
+                (
+                    await connection.QuerySingleAsync<long>(
+                        "SELECT plays_1y FROM song_popularity WHERE song_id=@fire",
+                        new { fire }
+                    )
+                )
+                    .Should()
+                    .Be(4);
+            }
             (
                 await connection.QuerySingleAsync<long>(
                     """
@@ -434,12 +491,24 @@ public sealed partial class TestV4CatalogHttp
                     """,
                     new { otherShowTrack }
                 )
-            ).Should().Be(2);
+            ).Should().Be(3);
 
             var artist = UuidTypeId.Format("artist", artistUuid);
             var page = await GetJson(
                 $"/api/v4/artists/{artist}/performances?song_id=song_00000101"
             );
+            var replacement = page["items"]!
+                .AsArray()
+                .Single(item => item!["eligible_source_count"]!.GetValue<int>() == 1)!;
+            replacement["popularity"]!["windows"]!["1y"]!["plays"]!
+                .GetValue<int>()
+                .Should()
+                .Be(changedSong ? 2 : 3);
+            replacement["track_ids"]!
+                .AsArray()
+                .Select(track => track!.GetValue<string>())
+                .Should()
+                .Equal(UuidTypeId.Format("track", otherShowTrack));
             var row = page["items"]!
                 .AsArray()
                 .Single(item => item!["eligible_source_count"]!.GetValue<int>() == 2)!;
@@ -463,16 +532,30 @@ public sealed partial class TestV4CatalogHttp
         {
             await MoveRecording(previousShow);
             await connection.ExecuteAsync(
-                "UPDATE source_tracks SET title=@originalTitle WHERE uuid=@secondTrack",
-                new { secondTrack, originalTitle }
+                """
+                UPDATE source_tracks SET title=@originalTitle WHERE uuid=@secondTrack;
+                UPDATE source_tracks SET source_set_id=@replacedSet WHERE uuid=@replacedTrack;
+                """,
+                new
+                {
+                    secondTrack,
+                    originalTitle,
+                    replacedTrack,
+                    replacedSet,
+                }
             );
+            if (changedSong)
+            {
+                await SetHistoricalSong(scarlet);
+            }
             await connection.ExecuteAsync(
-                "DELETE FROM source_track_plays WHERE source_track_uuid IN (@firstTrack,@secondTrack,@otherShowTrack) AND created_at IN (@firstPlay,@secondPlay,@recentPlay)",
+                "DELETE FROM source_track_plays WHERE source_track_uuid IN (@firstTrack,@secondTrack,@otherShowTrack,@replacedTrack) AND created_at IN (@firstPlay,@secondPlay,@recentPlay)",
                 new
                 {
                     firstTrack,
                     secondTrack,
                     otherShowTrack,
+                    replacedTrack,
                     firstPlay,
                     secondPlay,
                     recentPlay = DateTime.SpecifyKind(recentPlay, DateTimeKind.Utc),
