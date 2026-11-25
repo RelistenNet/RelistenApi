@@ -28,17 +28,20 @@ public sealed class TestUnifiedSearchRanking
 
     [TestCase(true)]
     [TestCase(false)]
-    public void AllLimitsVersionsWithoutCountingTheirParentRows(bool parentFirst)
+    public void AllKeepsSixPerformancesAndThreeRecordingsPlusTheirParents(bool parentFirst)
     {
         var song = Catalog("song", MatchTier.Exact, 2);
-        song = song with { Row = (TestRankItem)song.Row with { Id = "the-song" } };
+        song = song with
+        {
+            Row = (TestRankItem)song.Row with { Id = "the-song", SongId = "the-song" },
+        };
         var show = Catalog("show", MatchTier.Exact, 2);
         show = show with
         {
             Row = (TestRankItem)show.Row with { Id = "one-show", ShowId = "one-show" },
         };
         var performances = Enumerable
-            .Range(1, 4)
+            .Range(1, 7)
             .Select(number =>
             {
                 var candidate = Catalog("performance", MatchTier.Exact, 1);
@@ -78,7 +81,7 @@ public sealed class TestUnifiedSearchRanking
             .Equal(
                 ranked
                     .Select(candidate => candidate.Row.Key)
-                    .Where(key => key is not ("version-4" or "recording-4"))
+                    .Where(key => key is not ("version-7" or "recording-4"))
             );
         more.Should().BeEquivalentTo("shows", "sources");
     }
@@ -88,7 +91,7 @@ public sealed class TestUnifiedSearchRanking
     {
         var raw = Catalog("performance", MatchTier.Exact, 1);
         var versions = Enumerable
-            .Range(1, 4)
+            .Range(1, 7)
             .Select(number =>
                 raw with
                 {
@@ -113,7 +116,7 @@ public sealed class TestUnifiedSearchRanking
             .Limit(versions.Append(other).ToArray())
             .Results.Select(candidate => candidate.Row.Key)
             .Should()
-            .Equal("raw-1", "raw-2", "raw-3", "other");
+            .Equal("raw-1", "raw-2", "raw-3", "raw-4", "raw-5", "raw-6", "other");
     }
 
     [TestCase(0)]
@@ -366,7 +369,7 @@ public sealed class TestUnifiedSearchRanking
             new(MatchTier.Exact, ["title"], 1)
         );
         var versions = Enumerable
-            .Range(1, 6)
+            .Range(1, 7)
             .Select(index => new RankedCandidate(
                 new TestRankItem("performance")
                 {
@@ -383,7 +386,7 @@ public sealed class TestUnifiedSearchRanking
         RankedCandidate[] ranked = [versions[0], song, show, .. versions.Skip(1)];
         SearchDiversity
             .ExplorePage(ranked)
-            .Results.Take(7)
+            .Results.Take(versions.Length + 1)
             .Select(row => row.Row.Key)
             .Should()
             .Equal(new[] { song.Row.Key }.Concat(versions.Select(row => row.Row.Key)));
@@ -401,7 +404,7 @@ public sealed class TestUnifiedSearchRanking
             .ExplorePage([.. ranked, otherSong])
             .Results.Count(row => row.Playable)
             .Should()
-            .Be(3);
+            .Be(6);
     }
 
     [Test]

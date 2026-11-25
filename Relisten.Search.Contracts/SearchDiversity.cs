@@ -2,7 +2,8 @@ namespace Relisten.Search;
 
 public static class SearchDiversity
 {
-    private const int VersionsPerItem = 3;
+    private const int PerformancesPerSong = 6;
+    private const int RecordingsPerShow = 3;
     public const int AddTracksPageSize = 48;
     public const int SongPageSize = 48;
     public const int RelatedTrackLimit = 6;
@@ -153,7 +154,7 @@ public static class SearchDiversity
         ISearchRankItem? focusedSong = null
     )
     {
-        var occurrences = new Dictionary<(string Scope, string Item), int>();
+        var occurrences = new Dictionary<(string Scope, string Item, int Limit), int>();
         var more = new HashSet<string>(StringComparer.Ordinal);
         var results = new List<RankedCandidate>(ranked.Count);
         foreach (var candidate in ranked)
@@ -164,7 +165,7 @@ public static class SearchDiversity
             )
             {
                 var count = occurrences.GetValueOrDefault(group);
-                if (count == VersionsPerItem)
+                if (count == group.Limit)
                 {
                     more.Add(group.Scope);
                     continue;
@@ -195,18 +196,24 @@ public static class SearchDiversity
             );
     }
 
-    private static (string Scope, string Item)? VersionGroup(ISearchRankItem row) =>
+    private static (string Scope, string Item, int Limit)? VersionGroup(ISearchRankItem row) =>
         row switch
         {
             ISearchRankItem { Kind: "performance", SongId.Length: > 0 } performance => (
                 "shows",
-                performance.SongId
+                performance.SongId,
+                PerformancesPerSong
             ),
             ISearchRankItem { Kind: "performance", Name.Length: > 0, ArtistSlug.Length: > 0 } raw =>
-                ("shows", $"raw:{raw.ArtistSlug}:{MatchEvidence.Fold(raw.Name)}"),
+                (
+                    "shows",
+                    $"raw:{raw.ArtistSlug}:{MatchEvidence.Fold(raw.Name)}",
+                    PerformancesPerSong
+                ),
             ISearchRankItem { Kind: "recording", ShowId.Length: > 0 } recording => (
                 "sources",
-                recording.ShowId
+                recording.ShowId,
+                RecordingsPerShow
             ),
             _ => null,
         };
