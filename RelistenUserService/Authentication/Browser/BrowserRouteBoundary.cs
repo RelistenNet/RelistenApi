@@ -11,6 +11,7 @@ public static class BrowserRouteBoundary
 
     public static bool IsSharedResourcePath(PathString path) =>
         path == "/v1/me"
+        || path == "/v1/search"
         || IsLibraryPath(path)
         || IsPlaylistPath(path)
         || IsPublicPlaylistPath(path);

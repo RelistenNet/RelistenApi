@@ -181,15 +181,22 @@ Cloudflare's cache rule for public snapshots must also match the bare
 
 ## Search
 
-`GET /v1/search` on the accounts host searches the catalog and playlists in one
-request. Anonymous callers see public playlists. A native app caller with library access
-also sees their own playlists. The response uses `Cache-Control: private, no-store`.
+`GET /v1/search` searches the catalog and playlists in one request. Use the
+accounts host with the native app's bearer token or the relative path `/v1/search`
+with the website's session cookie. Callers with library-read access can also
+find their own private playlists. Guests see public playlists. Responses use
+`Cache-Control: private, no-store`.
 
 Requests with an invalid or expired bearer token receive HTTP 401. When
 a request carries a bearer token, the service verifies the native session
-before running either search backend. An unavailable session store returns
-HTTP 503. The User Service requires a search-only Typesense key in
-`Search__Typesense__SearchKey` outside Development. The worker uses its separate indexing credential.
+before running either search backend. An unavailable native session store returns
+HTTP 503. Browser session lookup runs within the playlist search budget. If it
+times out, catalog results can still be returned with playlist availability
+`unavailable`.
+
+The User Service requires a search-only Typesense key in
+`Search__Typesense__SearchKey` outside Development. The worker uses its separate
+indexing credential.
 
 Render `results` in response order. Each row has a `kind`, a stable
 `key` and the corresponding v4 resources. Store the envelope's `request_id`

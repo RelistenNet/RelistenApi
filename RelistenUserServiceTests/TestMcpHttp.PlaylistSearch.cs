@@ -17,6 +17,9 @@ using Relisten.Accounts.Contracts.Identifiers;
 using Relisten.Identifiers;
 using Relisten.Search;
 using RelistenIngestionWorker.PlaylistSearch;
+using RelistenUserService.Authentication;
+using RelistenUserService.Authentication.Sessions;
+using RelistenUserService.Configuration;
 using RelistenUserService.Playlists.Entities;
 using RelistenUserService.Search;
 
@@ -24,6 +27,106 @@ namespace RelistenUserServiceTests;
 
 public sealed partial class TestMcpHttp
 {
+    [Test]
+    public async Task BrowserSearchReturnsOnlyTheSignedInOwnersPrivatePlaylist()
+    {
+        var index = new PlaylistSearchStub(HttpStatusCode.OK);
+        await StartApp(playlistSearch: index);
+        var owner = await database.CreateUserAsync("browsersearchowner");
+        var other = await database.CreateUserAsync("browsersearchother");
+        var ownPlaylist = SeedNamedPlaylist(owner);
+        var otherPlaylist = SeedNamedPlaylist(other);
+        await using var db = database.CreateContext();
+        db.Playlists.AddRange(ownPlaylist, otherPlaylist);
+        await db.SaveChangesAsync();
+        var history = await db.HistoryGenerations.Select(row => row.Value).SingleAsync();
+        index.Hits =
+        [
+            .. new[] { ownPlaylist, otherPlaylist }.Select(playlist => new
+            {
+                document = new
+                {
+                    id = playlist.Id.Value,
+                    history_generation = history,
+                    revision = playlist.Revision,
+                    published = false,
+                },
+            }),
+        ];
+
+        var origin = AuthenticationConstants.CanonicalWebOrigin;
+        var cookie = await IssueSearchWebCookie(owner, origin);
+        var path = "/v1/search?scope=playlists&q=" + Uri.EscapeDataString(ownPlaylist.Name);
+
+        using var signedIn = await BrowserSearch(origin, cookie);
+        signedIn.StatusCode.Should().Be(HttpStatusCode.OK);
+        signedIn.Headers.CacheControl!.NoStore.Should().BeTrue();
+        PlaylistIds(await Json(signedIn)).Should().Equal(ownPlaylist.Id.Value);
+
+        using var anonymous = await BrowserSearch(origin);
+        anonymous.StatusCode.Should().Be(HttpStatusCode.OK);
+        PlaylistIds(await Json(anonymous)).Should().BeEmpty();
+
+        using var wrongHost = await BrowserSearch(AccountsOrigin, cookie);
+        wrongHost.StatusCode.Should().Be(HttpStatusCode.OK);
+        PlaylistIds(await Json(wrongHost)).Should().BeEmpty();
+
+        Task<HttpResponseMessage> BrowserSearch(string host, string? cookie = null)
+        {
+            var request = new HttpRequestMessage(HttpMethod.Get, host + path);
+            if (cookie is not null)
+            {
+                request.Headers.Add(
+                    "Cookie",
+                    $"{AuthenticationConstants.WebSessionCookie}={cookie}"
+                );
+            }
+            return Send(request);
+        }
+    }
+
+    [Test]
+    public async Task SlowBrowserSessionLookupLeavesCatalogSearchAvailable()
+    {
+        await StartApp(
+            catalogResponse: _ => CatalogAnswer(),
+            playlistSearch: new PlaylistSearchStub(HttpStatusCode.OK)
+        );
+        var owner = await database.CreateUserAsync("slowbrowsersearch");
+        var origin = AuthenticationConstants.CanonicalWebOrigin;
+        var cookie = await IssueSearchWebCookie(owner, origin);
+        using var request = new HttpRequestMessage(HttpMethod.Get, origin + "/v1/search?q=phish");
+        request.Headers.Add("Cookie", $"{AuthenticationConstants.WebSessionCookie}={cookie}");
+
+        // Hold the lookup past the search budget without waiting for the database command timeout.
+        await using var db = database.CreateContext();
+        await using var transaction = await db.Database.BeginTransactionAsync();
+        await db.Database.ExecuteSqlRawAsync(
+            "LOCK TABLE identity.sessions IN ACCESS EXCLUSIVE MODE"
+        );
+        using var response = await Send(request).WaitAsync(TimeSpan.FromSeconds(8));
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var availability = (await Json(response)).GetProperty("availability");
+        availability.GetProperty("catalog").GetString().Should().Be("full");
+        availability.GetProperty("playlists").GetString().Should().Be("unavailable");
+    }
+
+    private async Task<string> IssueSearchWebCookie(UserId owner, string origin)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var sessions = scope.ServiceProvider.GetRequiredService<IdentitySessionLifecycle>();
+        var runtime = scope.ServiceProvider.GetRequiredService<AccountsRuntimeConfiguration>();
+        var parent = await sessions.CreateAuthSsoAsync(owner, CancellationToken.None);
+        var session = await sessions.CreateWebAsync(
+            owner,
+            parent.SessionId,
+            origin,
+            runtime.BrowserOrigins.RegistrationId(origin)!,
+            CancellationToken.None
+        );
+        return session.CookieValue;
+    }
+
     [Test]
     public async Task SeededPlaylistSearchEvalThroughHttpAndMcp()
     {
@@ -313,6 +416,13 @@ public sealed partial class TestMcpHttp
             .Should()
             .Equal(owned.Id.Value, followed.Id.Value, "catalog-row", "review-row");
         RankedIds(await SearchHttp(owned.Name, "all")).Should().Equal("catalog-row", "review-row");
+        var queryTokenPath = QueryHelpers.AddQueryString(
+            AccountsOrigin + "/v1/search",
+            new Dictionary<string, string?> { ["q"] = owned.Name, ["access_token"] = native.Access }
+        );
+        using var queryToken = await Send(new(HttpMethod.Get, queryTokenPath));
+        queryToken.StatusCode.Should().Be(HttpStatusCode.OK);
+        RankedIds(await Json(queryToken)).Should().Equal("catalog-row", "review-row");
         RankedIds(await SearchHttp(owned.Name, "all", native.Access, mode: "add_tracks"))
             .Should()
             .Equal("catalog-row", "review-row");

@@ -47,6 +47,9 @@ public sealed class AuthSsoAuthenticationHandler(
     }
 }
 
+// Optional callers can bound the session lookup with the budget of the work it gates.
+internal sealed record WebSessionAuthenticationDeadline(CancellationToken Token);
+
 public sealed class WebSessionAuthenticationHandler(
     IOptionsMonitor<AuthenticationSchemeOptions> options,
     ILoggerFactory logger,
@@ -64,10 +67,11 @@ public sealed class WebSessionAuthenticationHandler(
         }
 
         var cookieValue = Request.Cookies[AuthenticationConstants.WebSessionCookie];
+        var deadline = Context.Features.Get<WebSessionAuthenticationDeadline>();
         var session = await sessions.AuthenticateAsync(
             cookieValue,
             IdentitySessionPurposes.Web,
-            Context.RequestAborted
+            deadline?.Token ?? Context.RequestAborted
         );
         if (
             session is null
