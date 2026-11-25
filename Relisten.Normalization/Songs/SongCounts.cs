@@ -12,7 +12,9 @@ namespace Relisten.Normalization.Songs;
 public sealed record SongCountRefreshResult(int SongsChanged, int ImportedSongsChanged);
 
 /// <summary>
-/// Refreshes canonical recording counts and imported setlist counts after committed writes.
+/// Refreshes stored song recording matches (norm.song_files, which song pages read), the
+/// canonical recording counts derived from them, and imported setlist counts after
+/// committed writes.
 /// Each artist is one autocommitted statement, so full repairs never retain earlier artist
 /// locks. Admin edits call the same SQL function inside their source transaction instead.
 /// </summary>

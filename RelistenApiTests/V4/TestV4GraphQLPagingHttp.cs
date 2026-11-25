@@ -96,6 +96,8 @@ public sealed partial class TestV4CatalogHttp
             await connection.ExecuteAsync(
                 "UPDATE source_tracks SET duration=CASE id WHEN 925041 THEN 600 ELSE 300 END WHERE id IN(925041,925042)"
             );
+            // Timings come from stored song files, which the import's recount refreshes.
+            await V4CatalogFixture.RefreshSongCounts(connection);
             var data = await Graph(
                 """
                 query($include: Boolean!) {
@@ -170,6 +172,7 @@ public sealed partial class TestV4CatalogHttp
                 "UPDATE source_tracks SET duration=@duration WHERE id=@id",
                 original.Select(row => new { id = row.Id, duration = row.Duration })
             );
+            await V4CatalogFixture.RefreshSongCounts(connection);
         }
     }
 

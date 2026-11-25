@@ -150,7 +150,8 @@ public sealed partial class TestV4CatalogHttp
     public async Task Song_show_tracks_come_from_the_client_ranked_matching_source()
     {
         // Show 311 has sources 321 (track 341) and 322 (track 342). Each step promotes
-        // the source that loses the previous step by a higher-precedence rule.
+        // the source that loses the previous step by a higher-precedence rule. Ranks are
+        // stored with the song's files, so each source write is followed by its recount.
         var source321 = new[] { CatalogId("track", 341), CatalogId("track", 343) };
         var source322 = new[] { CatalogId("track", 342), CatalogId("track", 343) };
         await using var connection = await MigratedTestDatabase.OpenAsync();
@@ -185,10 +186,13 @@ public sealed partial class TestV4CatalogHttp
             );
         }
 
-        Task UpdateSources(string assignments) =>
-            connection.ExecuteAsync(
+        async Task UpdateSources(string assignments)
+        {
+            await connection.ExecuteAsync(
                 "UPDATE sources SET " + assignments + " WHERE id IN(925021,925022)"
             );
+            await V4CatalogFixture.RefreshSongCounts(connection);
+        }
 
         async Task<string[]> ShowTrackIds() =>
             (await GetJson(DiscoverySongPath + "?include_tracks=top"))["shows"]!
@@ -341,6 +345,7 @@ public sealed partial class TestV4CatalogHttp
             await connection.ExecuteAsync(
                 "UPDATE source_tracks SET duration=NULL WHERE source_id IN(925021,925022,926020)"
             );
+            await V4CatalogFixture.RefreshSongCounts(connection);
             using var changed = await Conditional(
                 DiscoverySongPath,
                 reclassified.Headers.ETag!.ToString()
@@ -829,7 +834,7 @@ public sealed partial class TestV4CatalogHttp
     }
 
     [Test]
-    public async Task Recording_discovery_converges_with_stored_counts_only_after_explicit_refresh()
+    public async Task Recording_reads_and_counts_converge_only_after_explicit_refresh()
     {
         using var initial = await http.GetAsync(DiscoverySongPath);
         var etag = initial.Headers.ETag!.ToString();
@@ -850,27 +855,26 @@ public sealed partial class TestV4CatalogHttp
                 );
                 await sourceWrite.CommitAsync();
             }
-            // The detail validator covers live membership even before the import's
-            // post-commit recount. Stored counters retain their independent meaning.
+            // Song reads come from the files the import's post-commit recount stores, so
+            // until it runs, membership, shows and counts all keep agreeing with each other.
             (await GetJson(DiscoverySongPath + "/tracks"))["tracks"]!
                 .AsArray()
                 .Should()
-                .HaveCount(2);
-            (await GetJson(DiscoverySongPath))["shows"]!.AsArray().Should().ContainSingle();
+                .HaveCount(3);
             using var stale = await Conditional(DiscoverySongPath, etag);
-            stale.StatusCode.Should().Be(HttpStatusCode.OK);
-            stale.Headers.ETag!.ToString().Should().NotBe(etag);
-            var current = JsonNode.Parse(await stale.Content.ReadAsStringAsync())!;
-            current["matched_show_count"]!.GetValue<int>().Should().Be(2);
-            current["shows"]!.AsArray().Should().ContainSingle();
-            var membershipEtag = stale.Headers.ETag!.ToString();
+            stale.StatusCode.Should().Be(HttpStatusCode.NotModified);
 
             await connection.ExecuteAsync(
                 "SELECT norm.refresh_song_counts('00000000-0000-0000-0000-000000000301'::uuid)"
             );
-            using var refreshed = await Conditional(DiscoverySongPath, membershipEtag);
+            (await GetJson(DiscoverySongPath + "/tracks"))["tracks"]!
+                .AsArray()
+                .Should()
+                .HaveCount(2);
+            using var refreshed = await Conditional(DiscoverySongPath, etag);
             refreshed.StatusCode.Should().Be(HttpStatusCode.OK);
             var detail = JsonNode.Parse(await refreshed.Content.ReadAsStringAsync())!;
+            detail["shows"]!.AsArray().Should().ContainSingle();
             detail["matched_track_count"]!.GetValue<int>().Should().Be(2);
             detail["matched_show_count"]!.GetValue<int>().Should().Be(1);
         }

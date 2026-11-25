@@ -7,22 +7,15 @@ namespace Relisten.Catalog;
 /// the higher weighted rating. relisten-mobile ranks favorited or downloaded sources first,
 /// which is per-listener state the server cannot see, and skips the etree step.
 /// </summary>
+/// <remarks>
+/// The order is defined once, by <c>norm.source_preference</c> (027_song_files.sql), because
+/// <c>norm.refresh_song_counts</c> also stores it as <c>norm.song_files.source_rank</c>. The
+/// etree ID is the last all-digit dot segment of the upstream identifier. Web compares a
+/// missing ID as equal to any ID, which is not a total order, so missing IDs rank last here.
+/// Like web, an unrated source counts as a zero rating. UUID makes the order total.
+/// </remarks>
 public static class CatalogSourceRanking
 {
-    /// <summary>
-    /// ORDER BY terms for a <c>sources</c> row aliased <paramref name="alias"/>. The etree ID
-    /// is the last all-digit dot segment of the upstream identifier. Web compares a missing
-    /// ID as equal to any ID, which is not a total order, so missing IDs rank last here.
-    /// Like web, an unrated source counts as a zero rating. UUID makes the order total.
-    /// </summary>
-    public static string OrderBy(string alias) =>
-        $"""
-            {alias}.is_soundboard DESC,
-            concat({alias}.taper,{alias}.transferrer,{alias}.source) ~* '(charlie miller)|(peter costello)' DESC,
-            (SELECT segment::numeric FROM unnest(string_to_array({alias}.upstream_identifier,'.'))
-                 WITH ORDINALITY etree(segment,position)
-             WHERE segment ~ '^[0-9]+$' ORDER BY position DESC LIMIT 1) DESC NULLS LAST,
-            COALESCE({alias}.avg_rating_weighted,0) DESC,
-            {alias}.uuid
-            """;
+    /// <summary>ORDER BY term for a <c>sources</c> row aliased <paramref name="alias"/>.</summary>
+    public static string OrderBy(string alias) => $"norm.source_preference({alias})";
 }

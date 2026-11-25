@@ -9,9 +9,12 @@ using Dapper;
 namespace Relisten.Catalog;
 
 /// <summary>
-/// Reads stored song counts and live recording matches in the caller's snapshot.
-/// Recounts and discovery use the same SQL membership function. Counts may briefly
-/// lag recording changes; reads never refresh them. The caller owns approval gating.
+/// Reads stored song counts and recording matches in the caller's snapshot. Both are kept
+/// by <c>norm.refresh_song_counts</c>, which every import, normalization run and admin edit
+/// calls after its source writes, so they lag those writes together and reads never refresh
+/// them. Matching a large song live costs hundreds of milliseconds per request (16k files
+/// for Grateful Dead "Drums"); the stored rows also carry each show's ranked sources. The
+/// caller owns approval gating.
 /// </summary>
 public sealed class CatalogSongMatchReader
 {
@@ -58,18 +61,19 @@ public sealed class CatalogSongMatchReader
                 session.Command(
                     """
                     SELECT track_uuid,show_uuid
-                    FROM norm.song_recording_matches(@artistUuid,@canonicalIds::text[])
+                    FROM norm.song_files
+                    WHERE artist_uuid=@artistUuid AND song_id=@canonicalId
                     ORDER BY show_date,show_uuid,source_uuid,track_position,track_uuid
                     """,
-                    new { artistUuid, canonicalIds = new[] { canonicalId } },
+                    new { artistUuid, canonicalId },
                     cancellationToken
                 )
             )
         ).ToArray();
 
     /// <summary>
-    /// Tests candidate shows using the same recording validity as complete REST reads.
-    /// A song shared by several page requests is matched once against their union of shows.
+    /// Tests candidate shows against the stored matches complete REST reads use.
+    /// A song shared by several page requests is read once for their union of shows.
     /// </summary>
     public async Task<IReadOnlyDictionary<string, IReadOnlySet<Guid>>> ReadShowMembershipBatch(
         CatalogReadSession session,
@@ -96,7 +100,8 @@ public sealed class CatalogSongMatchReader
                 )
                 SELECT DISTINCT s.id song_id,m.show_uuid
                 FROM requested_songs s
-                CROSS JOIN LATERAL norm.song_recording_matches(s.artist_uuid,ARRAY[s.id],s.show_uuids) m
+                JOIN norm.song_files m ON m.song_id=s.id AND m.artist_uuid=s.artist_uuid
+                  AND m.show_uuid=ANY(s.show_uuids)
                 """,
                 new
                 {
@@ -145,30 +150,22 @@ public sealed class CatalogSongMatchReader
         {
             return [];
         }
-        // Matching ordinals include this song's merged aliases. Classify each file
-        // once before choosing per-source maxima, even when its parts repeat the song.
+        // Each stored file is classified once (is_multi_song) before per-source maxima,
+        // even when its parts repeat the song or its merged aliases.
         var rows = await session.Connection.QueryAsync<ShowStatisticsRow>(
             session.Command(
                 """
                 WITH inputs AS (
                     SELECT * FROM jsonb_to_recordset(@inputs::jsonb)
                     AS i(ordinal int,artist_uuid uuid,song_id text,show_uuids uuid[])
-                ), files AS (
-                    SELECT i.ordinal,m.track_uuid,m.show_uuid,m.source_uuid,
-                           CASE WHEN bool_or(p.resolved AND p.song_id IS NOT NULL
-                                             AND NOT p.part=ANY(m.matching_part_ordinals)) THEN true
-                                WHEN bool_and(p.resolved) THEN false END is_multi_song,
-                           CASE WHEN t.duration>0 THEN t.duration END duration
-                    FROM inputs i CROSS JOIN LATERAL norm.song_recording_matches(i.artist_uuid,ARRAY[i.song_id],i.show_uuids) m
-                    JOIN source_tracks t ON t.uuid=m.track_uuid
-                    JOIN norm.track_songs p ON p.track_uuid=m.track_uuid
-                    WHERE i.show_uuids IS NULL OR m.show_uuid=ANY(i.show_uuids)
-                    GROUP BY i.ordinal,m.track_uuid,m.show_uuid,m.source_uuid,t.duration
                 ), sources AS (
-                    SELECT ordinal,show_uuid,source_uuid,
-                           max(duration) FILTER (WHERE NOT is_multi_song) single_song_duration,
-                           max(duration) FILTER (WHERE is_multi_song) multi_song_duration
-                    FROM files GROUP BY ordinal,show_uuid,source_uuid
+                    SELECT i.ordinal,f.show_uuid,f.source_uuid,
+                           max(f.duration) FILTER (WHERE NOT f.is_multi_song) single_song_duration,
+                           max(f.duration) FILTER (WHERE f.is_multi_song) multi_song_duration
+                    FROM inputs i
+                    JOIN norm.song_files f ON f.song_id=i.song_id AND f.artist_uuid=i.artist_uuid
+                    WHERE i.show_uuids IS NULL OR f.show_uuid=ANY(i.show_uuids)
+                    GROUP BY i.ordinal,f.show_uuid,f.source_uuid
                 )
                 SELECT ordinal,show_uuid,sample.kind,count(sample.value)::integer source_count,
                        min(sample.value) min,max(sample.value) max,avg(sample.value)::double precision avg,
@@ -236,9 +233,9 @@ public sealed class CatalogSongMatchReader
 
     /// <summary>
     /// One slim row per matched file, including files without usable timing samples.
-    /// Each show's sources containing the song are ordered by <see cref="CatalogSourceRanking"/>;
-    /// Top keeps only the first, so a show's best source overall may not appear when it
-    /// lacks the song. All returns every source's files in that order.
+    /// Each show's sources containing the song are ordered by <see cref="CatalogSourceRanking"/>
+    /// (stored as source_rank); Top keeps only the first, so a show's best source overall may
+    /// not appear when it lacks the song. All returns every source's files in that order.
     /// </summary>
     public async Task<IReadOnlyList<CatalogSongShowTrack>> ReadShowTracks(
         CatalogReadSession session,
@@ -250,29 +247,18 @@ public sealed class CatalogSongMatchReader
         (
             await session.Connection.QueryAsync<CatalogSongShowTrack>(
                 session.Command(
-                    $"""
-                    WITH matches AS MATERIALIZED (
-                        SELECT * FROM norm.song_recording_matches(@artistUuid,@canonicalIds::text[])
-                    ), ranked_sources AS (
-                        SELECT matched.show_uuid,matched.source_uuid,
-                               row_number() OVER (
-                                   PARTITION BY matched.show_uuid
-                                   ORDER BY {CatalogSourceRanking.OrderBy("src")}
-                               ) source_rank
-                        FROM (SELECT DISTINCT show_uuid,source_uuid FROM matches) matched
-                        JOIN sources src ON src.uuid=matched.source_uuid
-                    )
-                    SELECT m.track_uuid uuid,m.source_uuid,m.show_uuid,t.title,t.slug,t.duration,t.mp3_url
-                    FROM matches m
-                    JOIN ranked_sources r ON r.show_uuid=m.show_uuid AND r.source_uuid=m.source_uuid
-                    JOIN source_tracks t ON t.uuid=m.track_uuid
-                    WHERE @allSources OR r.source_rank=1
-                    ORDER BY m.show_date,m.show_uuid,r.source_rank,m.track_position,m.track_uuid
+                    """
+                    SELECT f.track_uuid uuid,f.source_uuid,f.show_uuid,t.title,t.slug,t.duration,t.mp3_url
+                    FROM norm.song_files f
+                    JOIN source_tracks t ON t.uuid=f.track_uuid
+                    WHERE f.artist_uuid=@artistUuid AND f.song_id=@canonicalId
+                      AND (@allSources OR f.source_rank=1)
+                    ORDER BY f.show_date,f.show_uuid,f.source_rank,f.track_position,f.track_uuid
                     """,
                     new
                     {
                         artistUuid,
-                        canonicalIds = new[] { canonicalId },
+                        canonicalId,
                         allSources = selection == CatalogSongShowTracks.All,
                     },
                     cancellationToken
