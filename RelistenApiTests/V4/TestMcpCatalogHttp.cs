@@ -254,11 +254,12 @@ public sealed partial class TestV4CatalogHttp
     }
 
     [Test]
-    public async Task SongAndPerformancePopularityIncludeSoundcheckPlays()
+    public async Task BatchedPopularityPublishesTheSameTotalsIncludingSoundchecks()
     {
         await using var connection = await MigratedTestDatabase.OpenAsync();
         var firstTrack = Guid.Parse("00000000-0000-0000-0000-000000000341");
         var secondTrack = Guid.Parse("00000000-0000-0000-0000-000000000342");
+        var otherShowTrack = Guid.Parse("00000000-0000-0000-0000-000000000343");
         var originalTitle = await connection.QuerySingleAsync<string>(
             "SELECT title FROM source_tracks WHERE uuid=@secondTrack",
             new { secondTrack }
@@ -317,7 +318,7 @@ public sealed partial class TestV4CatalogHttp
         }
 
         var artistUuid = Guid.Parse("00000000-0000-0000-0000-000000000301");
-        async Task RefreshCatalogPopularity()
+        async Task RefreshCatalogPopularity(int showBatchSize)
         {
             var catalog = new Relisten.DbService(
                 LocalTestDatabase.DatabaseUrl,
@@ -336,7 +337,11 @@ public sealed partial class TestV4CatalogHttp
                     new RecordingPopularityJobs(),
                     NullLogger<PopularityService>.Instance
                 );
-                await service.RefreshDetailPopulations(artistUuid, CancellationToken.None);
+                await service.RefreshDetailPopulations(
+                    artistUuid,
+                    CancellationToken.None,
+                    showBatchSize
+                );
             }
             finally
             {
@@ -344,10 +349,47 @@ public sealed partial class TestV4CatalogHttp
             }
         }
 
+        Task ClearCatalogPublication() =>
+            connection.ExecuteAsync(
+                """
+                DELETE FROM song_performance_popularity WHERE artist_uuid=@artistUuid;
+                DELETE FROM recording_popularity WHERE artist_uuid=@artistUuid;
+                DELETE FROM song_popularity WHERE artist_uuid=@artistUuid;
+                DELETE FROM popularity_detail_publications WHERE artist_uuid=@artistUuid;
+                """,
+                new { artistUuid }
+            );
+
+        Task<IEnumerable<string>> PublishedPopularity() =>
+            connection.QueryAsync<string>(
+                """
+                SELECT (to_jsonb(p) - 'generated_at')::text FROM song_performance_popularity p WHERE artist_uuid=@artistUuid
+                UNION ALL
+                SELECT (to_jsonb(p) - 'generated_at')::text FROM recording_popularity p WHERE artist_uuid=@artistUuid
+                UNION ALL
+                SELECT (to_jsonb(p) - 'generated_at')::text FROM song_popularity p WHERE artist_uuid=@artistUuid
+                """,
+                new { artistUuid }
+            );
+
+        var previousShow = await connection.QuerySingleAsync<long>(
+            "SELECT s.show_id FROM source_tracks t JOIN sources s ON s.id=t.source_id WHERE t.uuid=@otherShowTrack",
+            new { otherShowTrack }
+        );
+        var correctedShow = await connection.QuerySingleAsync<long>(
+            "SELECT id FROM shows WHERE uuid='00000000-0000-0000-0000-000000000313'"
+        );
+        Task MoveRecording(long showId) =>
+            connection.ExecuteAsync(
+                "UPDATE sources SET show_id=@showId WHERE id=(SELECT source_id FROM source_tracks WHERE uuid=@otherShowTrack)",
+                new { showId, otherShowTrack }
+            );
+
         await connection.ExecuteAsync(
             """
             INSERT INTO source_track_plays(created_at, source_track_uuid, app_type)
-            VALUES (@firstPlay, @firstTrack, 0), (@firstPlay, @secondTrack, 0), (@secondPlay, @firstTrack, 0), (@recentPlay, @firstTrack, 0)
+            VALUES (@firstPlay, @firstTrack, 0), (@firstPlay, @secondTrack, 0), (@secondPlay, @firstTrack, 0), (@recentPlay, @firstTrack, 0),
+                   (@firstPlay, @otherShowTrack, 0), (@recentPlay, @otherShowTrack, 0)
             """,
             new
             {
@@ -356,6 +398,7 @@ public sealed partial class TestV4CatalogHttp
                 recentPlay = DateTime.SpecifyKind(recentPlay, DateTimeKind.Utc),
                 firstTrack,
                 secondTrack,
+                otherShowTrack,
             }
         );
         try
@@ -366,7 +409,33 @@ public sealed partial class TestV4CatalogHttp
             );
             await RefreshRollups();
             await RefreshRecent();
-            await RefreshCatalogPopularity();
+            // A corrected show date leaves the completed month's rollup on
+            // the former show until Timescale rematerializes it.
+            await MoveRecording(correctedShow);
+            await RefreshCatalogPopularity(int.MaxValue);
+            var oneBatch = await PublishedPopularity();
+            await ClearCatalogPublication();
+
+            await RefreshCatalogPopularity(1);
+            (await PublishedPopularity()).Should().BeEquivalentTo(oneBatch);
+            (
+                await connection.QuerySingleAsync<long>(
+                    "SELECT plays_1y FROM song_popularity WHERE song_id='song_00000101'"
+                )
+            )
+                .Should()
+                .Be(6);
+            (
+                await connection.QuerySingleAsync<long>(
+                    """
+                    SELECT p.plays_1y FROM recording_popularity p
+                    JOIN sources s ON s.uuid=p.uuid
+                    JOIN source_tracks t ON t.source_id=s.id WHERE t.uuid=@otherShowTrack
+                    """,
+                    new { otherShowTrack }
+                )
+            ).Should().Be(2);
+
             var artist = UuidTypeId.Format("artist", artistUuid);
             var page = await GetJson(
                 $"/api/v4/artists/{artist}/performances?song_id=song_00000101"
@@ -392,16 +461,18 @@ public sealed partial class TestV4CatalogHttp
         }
         finally
         {
+            await MoveRecording(previousShow);
             await connection.ExecuteAsync(
                 "UPDATE source_tracks SET title=@originalTitle WHERE uuid=@secondTrack",
                 new { secondTrack, originalTitle }
             );
             await connection.ExecuteAsync(
-                "DELETE FROM source_track_plays WHERE source_track_uuid IN (@firstTrack,@secondTrack) AND created_at IN (@firstPlay,@secondPlay,@recentPlay)",
+                "DELETE FROM source_track_plays WHERE source_track_uuid IN (@firstTrack,@secondTrack,@otherShowTrack) AND created_at IN (@firstPlay,@secondPlay,@recentPlay)",
                 new
                 {
                     firstTrack,
                     secondTrack,
+                    otherShowTrack,
                     firstPlay,
                     secondPlay,
                     recentPlay = DateTime.SpecifyKind(recentPlay, DateTimeKind.Utc),
@@ -409,15 +480,7 @@ public sealed partial class TestV4CatalogHttp
             );
             await RefreshRollups();
             await RefreshRecent();
-            await connection.ExecuteAsync(
-                """
-                DELETE FROM song_performance_popularity WHERE artist_uuid=@artistUuid;
-                DELETE FROM recording_popularity WHERE artist_uuid=@artistUuid;
-                DELETE FROM song_popularity WHERE artist_uuid=@artistUuid;
-                DELETE FROM popularity_detail_publications WHERE artist_uuid=@artistUuid;
-                """,
-                new { artistUuid }
-            );
+            await ClearCatalogPublication();
         }
     }
 }

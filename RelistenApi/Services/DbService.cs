@@ -84,6 +84,19 @@ namespace Relisten
             return new NpgsqlConnection(ConnStr + connectionSuffix);
         }
 
+        // Background reads that should stay off the writer use only the configured
+        // replica host. The ordinary read route can fall back to the primary.
+        internal NpgsqlConnection CreateReplicaConnection()
+        {
+            var options = new NpgsqlConnectionStringBuilder(ReadOnlyConnStr)
+            {
+                CommandTimeout = 300,
+            };
+            options.Host = options.Host?.Split(',', 2)[0];
+            options.Remove("Target Session Attributes");
+            return new NpgsqlConnection(options.ConnectionString);
+        }
+
         public Task<T> WithWriteConnection<T>(
             Func<IDbConnection, Task<T>> getData,
             bool longTimeout = false
