@@ -81,13 +81,12 @@ internal sealed class CatalogQueryEvidenceRefreshService(
         }
 
         var prefix = configuration["Search:AliasPrefix"] ?? "catalog";
-        var exportPath = configuration["Search:PlaysExport"];
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
                 var urgent = Interlocked.Exchange(ref _urgent, 0) != 0;
-                await Refresh(prefix, exportPath, urgent, stoppingToken);
+                await Refresh(prefix, urgent, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -109,12 +108,7 @@ internal sealed class CatalogQueryEvidenceRefreshService(
         }
     }
 
-    private async Task Refresh(
-        string prefix,
-        string? exportPath,
-        bool urgent,
-        CancellationToken cancellationToken
-    )
+    private async Task Refresh(string prefix, bool urgent, CancellationToken cancellationToken)
     {
         // The index builder publishes entities last. Its alias is the commit
         // point for the generation shared by all catalog collections.
@@ -154,7 +148,7 @@ internal sealed class CatalogQueryEvidenceRefreshService(
             typesense,
             collection,
             performances,
-            exportPath,
+            logger,
             cancellationToken
         );
 

@@ -263,8 +263,8 @@ internal sealed class CatalogSearchDisplay(TypesenseClient typesense, SearchColl
                 null,
                 null,
                 row.TrackIds.Select(Value).OfType<JsonElement>().ToArray(),
-                // A selected passage is an exact tape. Per-show song totals
-                // would mix its recordings and could count a medley file twice.
+                // The ranking signal sums the show's song starts. A passage
+                // opens one tape and has no separately published v4 metrics.
                 null
             );
 

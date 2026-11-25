@@ -624,7 +624,8 @@ public sealed class TestSearchRelevance
                 {
                     SourceId = $"source_{number}",
                     TrackIds = [$"track_a{number}", $"track_b{number}"],
-                    TrackPlays = number,
+                    TrackPlays = 8,
+                    RecordingPlays = number,
                 }
             )
             .ToArray();

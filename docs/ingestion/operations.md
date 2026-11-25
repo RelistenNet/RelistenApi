@@ -367,6 +367,13 @@ use the evidence snapshot refreshed at the alias swap and again after a day
 on the same generation. The daily refresh picks up in-place changes without
 rebuilding or writing to the index.
 
+The refresh reads the replica in separate statements, retrying recovery
+conflicts once. It streams vocabulary and published song popularity from the
+current Typesense collections. For confirmed segues it sums published yearly
+song-at-show starts and picks the tape using published recording starts. A failed
+refresh keeps the previous snapshot. The refresh log separates the index exports,
+catalog lookups, and passage reads.
+
 Retirement drops the old collections. Typesense reclaims their disk space on
 its compaction interval (`--db-compaction-interval=86400`). Raft snapshots
 bound the import log on a separate interval (`--snapshot-interval-seconds=300`).

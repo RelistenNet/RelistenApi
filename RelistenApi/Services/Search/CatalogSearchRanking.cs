@@ -304,7 +304,7 @@ internal static class CatalogSearchRanking
             2,
             Popularity: passage.PopularityPercentile,
             ReadingId: reading,
-            SameKindCount: passage.TrackPlays
+            SameKindCount: passage.TrackPlays.GetValueOrDefault()
         );
 }
 

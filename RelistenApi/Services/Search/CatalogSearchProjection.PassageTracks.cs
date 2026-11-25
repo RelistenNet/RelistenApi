@@ -41,8 +41,8 @@ internal sealed partial class CatalogSearchProjection
             _rows.Transaction,
             new SearchVocabulary(entries, []),
             _venues,
-            _plays,
-            cancellationToken
+            cancellationToken,
+            includePopularity: false
         );
         foreach (
             var ids in passages

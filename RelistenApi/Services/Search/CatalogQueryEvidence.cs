@@ -4,7 +4,7 @@ using System.Linq;
 
 namespace Relisten.Search;
 
-/// <summary>PostgreSQL query evidence published for one Typesense entity collection.</summary>
+/// <summary>Query evidence from Postgres and the active Typesense catalog generation.</summary>
 internal sealed class CatalogQueryEvidence(
     string? collection,
     SearchVocabulary vocabulary,
@@ -47,9 +47,9 @@ internal sealed class CatalogQueryEvidence(
 
     public long TitlePlays(string artistSlug, string title)
     {
-        var raw = titlePlays?.GetValueOrDefault((artistSlug, title)) ?? 0;
+        var imported = titlePlays?.GetValueOrDefault((artistSlug, title)) ?? 0;
         var canonical = Vocabulary.FindSong(artistSlug, title);
-        return raw + (canonical == null ? 0 : SongPlays(canonical.Id));
+        return imported + (canonical == null ? 0 : SongPlays(canonical.Id));
     }
 
     public bool HasReviews(string? artistSlug = null) =>
