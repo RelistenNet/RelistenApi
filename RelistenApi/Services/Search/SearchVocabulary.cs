@@ -7,6 +7,7 @@ namespace Relisten.Search;
 
 internal sealed class SearchVocabulary
 {
+    private const int PlaceSongPrefixLimit = 16;
     private readonly FrozenDictionary<string, Match[]> _terms;
     private readonly string[] _keys;
     private readonly FrozenDictionary<(char First, int Length, int Spaces), string[]> _spellings;
@@ -405,15 +406,8 @@ internal sealed class SearchVocabulary
             }
         }
 
-        var start = Array.BinarySearch(_keys, terms, StringComparer.Ordinal);
-        for (var index = start < 0 ? ~start : start; index < _keys.Length; index++)
+        foreach (var key in TermsStartingWith(terms))
         {
-            var key = _keys[index];
-            if (!key.StartsWith(terms, StringComparison.Ordinal))
-            {
-                break;
-            }
-
             foreach (var hit in _terms[key])
             {
                 if (key == terms)
@@ -469,6 +463,21 @@ internal sealed class SearchVocabulary
         }
 
         return ranked.Take(limit).ToArray();
+    }
+
+    private IEnumerable<string> TermsStartingWith(string text)
+    {
+        var start = Array.BinarySearch(_keys, text, StringComparer.Ordinal);
+        for (var index = start < 0 ? ~start : start; index < _keys.Length; index++)
+        {
+            var key = _keys[index];
+            if (!key.StartsWith(text, StringComparison.Ordinal))
+            {
+                yield break;
+            }
+
+            yield return key;
+        }
     }
 
     public (string? Artist, string? Kind) FullArtist(string terms, string? scope)
@@ -696,10 +705,7 @@ internal sealed class SearchVocabulary
     public PlaceSongMatch? ExactPlaceSong(string terms, string? artist)
     {
         // Keep the ordinary exact-item ranking when the entire query names a catalog item.
-        if (
-            _terms.TryGetValue(terms, out var whole)
-            && whole.Any(match => match.Canonical && IncludesArtist(match.Document, artist))
-        )
+        if (NamesCatalogItem(terms, artist))
         {
             return null;
         }
@@ -719,16 +725,82 @@ internal sealed class SearchVocabulary
         return null;
     }
 
+    public PlaceSongMatch? PlaceSongPrefix(string terms, string? artist)
+    {
+        // Only complete the last typed word, with enough letters to bound the
+        // title lookup. An exact item keeps its existing interpretation.
+        if (terms.Length - terms.LastIndexOf(' ') - 1 < 3 || NamesCatalogItem(terms, artist))
+        {
+            return null;
+        }
+
+        for (var split = terms.IndexOf(' '); split >= 0; split = terms.IndexOf(' ', split + 1))
+        {
+            var place = terms[..split];
+            if (!CanReadPlaceWithSongPrefix(place, artist))
+            {
+                continue;
+            }
+
+            var title = terms[(split + 1)..];
+            var songs = TermsStartingWith(title)
+                .Where(key => key != title)
+                .SelectMany(ExactSongs)
+                .Where(song => IncludesArtist(song, artist))
+                .Take(PlaceSongPrefixLimit + 1)
+                .ToArray();
+            if (songs.Length is 0 or > PlaceSongPrefixLimit)
+            {
+                continue;
+            }
+
+            if (MatchSongsAtPlace(place, title, artist, songs, MatchTier.Prefix) is { } match)
+            {
+                return match;
+            }
+        }
+
+        return null;
+    }
+
+    private bool CanReadPlaceWithSongPrefix(string place, string? artist) =>
+        IsKnownPlace(place)
+        || VenueAliasFor(place, artist) is { Count: > 0 }
+        // A multi-word venue name can be shortened at a word boundary, such
+        // as "Radio City". SongPlaces still rejects a broad venue match.
+        || (
+            place.Contains(' ')
+            && TermsStartingWith(place + " ")
+                .Any(name => _terms[name].Any(hit => hit.Canonical && hit.Document.Kind == "venue"))
+        );
+
+    private bool NamesCatalogItem(string terms, string? artist) =>
+        _terms.TryGetValue(terms, out var whole)
+        && whole.Any(match => match.Canonical && IncludesArtist(match.Document, artist));
+
     private static bool IncludesArtist(SearchDocument document, string? artist) =>
         string.IsNullOrEmpty(artist)
         || document.ArtistSlug == artist
         || document.ArtistSlugs.Contains(artist);
 
-    private PlaceSongMatch? MatchPlaceAndTitle(string place, string title, string? artist)
+    private PlaceSongMatch? MatchPlaceAndTitle(string place, string title, string? artist) =>
+        MatchSongsAtPlace(
+            place,
+            title,
+            artist,
+            ExactSongsWithVariants(title).Where(song => IncludesArtist(song, artist)),
+            MatchTier.Exact
+        );
+
+    private PlaceSongMatch? MatchSongsAtPlace(
+        string place,
+        string title,
+        string? artist,
+        IEnumerable<SearchDocument> candidates,
+        MatchTier tier
+    )
     {
-        var songs = ExactSongsWithVariants(title)
-            .Where(song => artist == null || song.ArtistSlug == artist)
-            .ToArray();
+        var songs = candidates.ToArray();
         if (songs.Length == 0)
         {
             return null;
@@ -751,7 +823,13 @@ internal sealed class SearchVocabulary
         }
         return venueIds.Count == 0
             ? null
-            : new PlaceSongMatch(title, place, songs.Select(song => song.Id).ToArray(), venueIds);
+            : new PlaceSongMatch(
+                title,
+                place,
+                songs.Select(song => song.Id).ToArray(),
+                venueIds,
+                tier
+            );
     }
 
     private IEnumerable<string> PlaceNames(string place) =>

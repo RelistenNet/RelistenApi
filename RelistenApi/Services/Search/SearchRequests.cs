@@ -392,10 +392,15 @@ internal static class SearchRequests
             return null;
         }
 
-        return vocabulary.ExactPlaceSong(query.Terms, query.Artist);
+        return vocabulary.ExactPlaceSong(query.Terms, query.Artist)
+            ?? (
+                input.Scope == SearchScope.All && !query.HasDate
+                    ? vocabulary.PlaceSongPrefix(query.Terms, query.Artist)
+                    : null
+            );
     }
 
-    public static SearchRequest ExactPlaceSong(SearchQuery query, PlaceSongMatch match)
+    public static SearchRequest PlaceSongPerformances(SearchQuery query, PlaceSongMatch match)
     {
         var filters = Constraints(query, SearchIndexSchema.Performances);
         filters.Add($"song_id:=[{string.Join(',', match.SongIds.Select(Literal))}]");
