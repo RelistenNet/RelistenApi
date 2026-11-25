@@ -266,7 +266,7 @@ public sealed class CatalogSongMatchReader
                     FROM matches m
                     JOIN ranked_sources r ON r.show_uuid=m.show_uuid AND r.source_uuid=m.source_uuid
                     JOIN source_tracks t ON t.uuid=m.track_uuid
-                    WHERE @allSources OR r.source_rank=1
+                    WHERE @allSources OR r.source_rank<=1
                     ORDER BY m.show_date,m.show_uuid,r.source_rank,m.track_position,m.track_uuid
                     """,
                     new
