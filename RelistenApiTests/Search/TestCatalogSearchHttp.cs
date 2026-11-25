@@ -16,6 +16,7 @@ using Relisten.Api.Models.Api.V4;
 using Relisten.Controllers.V4;
 using Relisten.Identifiers;
 using Relisten.Search;
+using Relisten.Services.Popularity;
 using RelistenApiTests.Popularity;
 using RelistenApiTests.V4;
 
@@ -32,12 +33,15 @@ public sealed partial class TestCatalogSearchHttp
     private const string JapanShowsQuery = "?q=Pagination%20Japan&scope=shows";
     private const string ScarletSongsQuery = "?q=Scarlet%20Begonias&scope=songs&typing=true";
     private const string PlayedScarlet = "perf_scarlet_most_played";
+    private static readonly string PlayedRawTitle = PopularityPerformanceKey.ForStorage(
+        PopularityPerformanceKey.RawTitle("scarlet begonias fire on the mountain")
+    );
     private readonly string _prefix = "test_search_http_" + Guid.NewGuid().ToString("N");
     private readonly Guid _review = Guid.NewGuid();
     private readonly EvidenceClock _evidenceClock = new();
     private string _previousPrimary = null!;
     private string _previousReplica = null!;
-    private bool _seededReview;
+    private bool _seededEvidence;
     private HttpClient? _typesenseHttp;
     private TypesenseClient? _typesense;
     private WebApplication? _app;
@@ -61,11 +65,16 @@ public sealed partial class TestCatalogSearchHttp
         await connection.ExecuteAsync(
             """
             INSERT INTO source_reviews(uuid, source_id, title, review, updated_at)
-            VALUES (@uuid, 910004, 'A remarkable encore', 'The encore was a highlight.', now())
+            VALUES (@uuid, 910004, 'A remarkable encore', 'The encore was a highlight.', now());
+            INSERT INTO song_performance_popularity(uuid,artist_uuid,song_id,plays_1y,generated_at,
+                plays_30d,hours_30d,hot_score_30d,plays_7d,hours_7d,hot_score_7d,
+                plays_48h,hours_48h,hot_score_48h,trend_ratio)
+            SELECT sh.uuid,a.uuid,@rawTitle,12,now(),0,0,0,0,0,0,0,0,0,0
+            FROM shows sh JOIN artists a ON a.id=sh.artist_id WHERE sh.id=910001;
             """,
-            new { uuid = _review }
+            new { uuid = _review, rawTitle = PlayedRawTitle }
         );
-        _seededReview = true;
+        _seededEvidence = true;
 
         _typesenseHttp = new HttpClient();
         TypesenseClient.Configure(_typesenseHttp, TypesenseUrl, TypesenseKey);
@@ -422,7 +431,6 @@ public sealed partial class TestCatalogSearchHttp
         builder.Configuration["Search:AliasPrefix"] = _prefix;
         builder.Configuration["Search:Typesense:Url"] = TypesenseUrl;
         builder.Configuration["Search:Typesense:ApiKey"] = TypesenseKey;
-        builder.Configuration["Search:PlaysExport"] = null;
         builder.Configuration[CatalogSearchExchange.KeySetting] = CatalogServiceKey;
         builder.Services.AddSingleton(
             new DbService(
@@ -468,12 +476,16 @@ public sealed partial class TestCatalogSearchHttp
                 await _app.DisposeAsync();
             }
 
-            if (_seededReview)
+            if (_seededEvidence)
             {
                 await using var connection = await MigratedTestDatabase.OpenAsync();
                 await connection.ExecuteAsync(
-                    "DELETE FROM source_reviews WHERE uuid = @uuid",
-                    new { uuid = _review }
+                    """
+                    DELETE FROM source_reviews WHERE uuid=@uuid;
+                    DELETE FROM song_performance_popularity
+                    WHERE uuid=(SELECT uuid FROM shows WHERE id=910001) AND song_id=@rawTitle;
+                    """,
+                    new { uuid = _review, rawTitle = PlayedRawTitle }
                 );
             }
 

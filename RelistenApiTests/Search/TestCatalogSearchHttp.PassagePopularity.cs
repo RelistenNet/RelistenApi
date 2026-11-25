@@ -85,19 +85,22 @@ public sealed partial class TestCatalogSearchHttp
         published.SourceId.Should().Be(UuidTypeId.Format("source", source));
         published.TrackIds.Should().Equal(UuidTypeId.Format("track", track));
 
-        async Task<SearchPassage> Load() =>
-            (
-                await SearchPassages.Load(
-                    connection,
-                    transaction,
-                    vocabulary,
-                    venues,
-                    CancellationToken.None
-                )
-            )
-                .Find(query)
-                .Should()
-                .ContainSingle()
-                .Subject;
+        async Task<SearchPassage> Load()
+        {
+            var matches = await SearchPassages.Discover(
+                connection,
+                transaction,
+                vocabulary,
+                venues,
+                CancellationToken.None
+            );
+            var ranked = await SearchPassages.RankByPublishedStarts(
+                connection,
+                transaction,
+                matches,
+                CancellationToken.None
+            );
+            return ranked.Find(query).Should().ContainSingle().Subject;
+        }
     }
 }

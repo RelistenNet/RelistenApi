@@ -1,6 +1,7 @@
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Linq;
+using Relisten.Services.Popularity;
 
 namespace Relisten.Search;
 
@@ -47,9 +48,10 @@ internal sealed class CatalogQueryEvidence(
 
     public long TitlePlays(string artistSlug, string title)
     {
-        var imported = titlePlays?.GetValueOrDefault((artistSlug, title)) ?? 0;
+        var key = PopularityPerformanceKey.ForStorage(PopularityPerformanceKey.RawTitle(title));
+        var raw = titlePlays?.GetValueOrDefault((artistSlug, key)) ?? 0;
         var canonical = Vocabulary.FindSong(artistSlug, title);
-        return imported + (canonical == null ? 0 : SongPlays(canonical.Id));
+        return raw + (canonical == null ? 0 : SongPlays(canonical.Id));
     }
 
     public bool HasReviews(string? artistSlug = null) =>

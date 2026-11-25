@@ -2,6 +2,7 @@ using System.Collections.Frozen;
 using System.Text.Json;
 using FluentAssertions;
 using Relisten.Search;
+using Relisten.Services.Popularity;
 
 namespace RelistenApiTests.Search;
 
@@ -137,8 +138,22 @@ public sealed class TestSearchRelevance
             ],
             titlePlays: new Dictionary<(string, string), long>
             {
-                [("quincy-blue", "last train")] = 2,
-                [("quincy-blue", "starlake light")] = 2,
+                [
+                    (
+                        "quincy-blue",
+                        PopularityPerformanceKey.ForStorage(
+                            PopularityPerformanceKey.RawTitle("last train")
+                        )
+                    )
+                ] = 2,
+                [
+                    (
+                        "quincy-blue",
+                        PopularityPerformanceKey.ForStorage(
+                            PopularityPerformanceKey.RawTitle("starlake light")
+                        )
+                    )
+                ] = 2,
             }.ToFrozenDictionary()
         );
 

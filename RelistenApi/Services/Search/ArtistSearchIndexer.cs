@@ -38,7 +38,9 @@ internal sealed class ArtistSearchIndexer(
         var generation = new SearchCollections(AliasPrefix, entities);
         var targets = SearchIndexSchema.Collections.ToDictionary(kind => kind, generation.Name);
 
-        await using var connection = db.CreateConnection(longTimeout: true, readOnly: false);
+        await using var connection = db.CreatePrimaryConnection(
+            SearchProjectionRows.BuildCommandTimeoutSeconds
+        );
         await connection.OpenAsync(cancellationToken);
         await using var snapshot = await SearchProjectionRows.BeginSnapshot(
             connection,

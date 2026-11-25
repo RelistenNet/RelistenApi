@@ -12,7 +12,7 @@ namespace Relisten.Ingestion.Workflows;
 /// <summary>Rebuilds derived catalog data in dependency order, after all item work has settled.</summary>
 internal static class CatalogSteps
 {
-    /// Whole-artist imports match new venues and songs before starting the search reindex.
+    /// Artist refreshes match venues and songs before starting the search reindex.
     internal static async Task RebuildArtist(
         ArtistId artist,
         IngestionExecution execution,

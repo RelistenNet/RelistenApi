@@ -44,6 +44,7 @@ internal sealed record SearchPassagePart(
 internal sealed class SearchPassages(ImmutableArray<SearchPassages.RuleMatches> rules)
 {
     public static readonly SearchPassages Empty = new([]);
+    private const int PopularityBatchSize = 512;
     private readonly Dictionary<double, double> _percentiles = CalculatePercentiles(rules);
 
     public IReadOnlyList<SearchPassage> Find(
@@ -127,12 +128,6 @@ internal sealed class SearchPassages(ImmutableArray<SearchPassages.RuleMatches> 
             .ToArray();
     }
 
-    internal IEnumerable<string> DisplayTrackIds() =>
-        rules
-            .SelectMany(rule => rule.Matches)
-            .SelectMany(match => match.Passage.TrackIds)
-            .Distinct(StringComparer.Ordinal);
-
     private static IEnumerable<SearchPassage> BestRecordings(IEnumerable<SearchPassage> matches) =>
         matches
             .GroupBy(match => match.Key, StringComparer.Ordinal)
@@ -157,13 +152,12 @@ internal sealed class SearchPassages(ImmutableArray<SearchPassages.RuleMatches> 
         return distribution.Calculate().GetValueOrDefault("sequence") ?? [];
     }
 
-    public static async Task<SearchPassages> Load(
+    public static async Task<ImmutableArray<RuleMatches>> Discover(
         NpgsqlConnection connection,
         NpgsqlTransaction? transaction,
         SearchVocabulary vocabulary,
         IReadOnlyDictionary<string, SearchProjectionRows.Venue> venues,
-        CancellationToken cancellationToken,
-        bool includePopularity = true
+        CancellationToken cancellationToken
     )
     {
         var resolved = new List<ResolvedRule>();
@@ -186,35 +180,16 @@ internal sealed class SearchPassages(ImmutableArray<SearchPassages.RuleMatches> 
 
         if (resolved.Count == 0)
         {
-            return Empty;
+            return [];
         }
 
-        var matches =
-            transaction == null
-                ? await SearchEvidenceRead.RetryOnRecoveryConflict(
-                    () =>
-                        ReadMatches(
-                            connection,
-                            null,
-                            resolved,
-                            vocabulary,
-                            venues,
-                            cancellationToken
-                        ),
-                    cancellationToken
-                )
-                : await ReadMatches(
-                    connection,
-                    transaction,
-                    resolved,
-                    vocabulary,
-                    venues,
-                    cancellationToken
-                );
-        return new SearchPassages(
-            includePopularity
-                ? await ReadPopularity(connection, transaction, matches, cancellationToken)
-                : matches
+        return await ReadMatches(
+            connection,
+            transaction,
+            resolved,
+            vocabulary,
+            venues,
+            cancellationToken
         );
     }
 
@@ -236,8 +211,7 @@ internal sealed class SearchPassages(ImmutableArray<SearchPassages.RuleMatches> 
                 artists = resolved.Select(rule => rule.Rule.Artist).Distinct().ToArray(),
                 firstSongs = resolved.Select(rule => rule.SongIds[0]).Distinct().ToArray(),
             },
-            transaction: transaction,
-            commandTimeout: transaction == null ? SearchEvidenceRead.CommandTimeoutSeconds : 600
+            transaction: transaction
         );
 
         // One set's rows are enough to establish every adjacent path. Keep the
@@ -265,7 +239,7 @@ internal sealed class SearchPassages(ImmutableArray<SearchPassages.RuleMatches> 
             .ToImmutableArray();
     }
 
-    private static async Task<ImmutableArray<RuleMatches>> ReadPopularity(
+    public static async Task<SearchPassages> RankByPublishedStarts(
         NpgsqlConnection connection,
         NpgsqlTransaction? transaction,
         ImmutableArray<RuleMatches> rules,
@@ -274,87 +248,121 @@ internal sealed class SearchPassages(ImmutableArray<SearchPassages.RuleMatches> 
     {
         // Only confirmed passages need popularity. Joining metrics to every
         // candidate setlist row changes the planner's join order and does more work.
-        const int batchSize = 512;
         var passages = rules
             .SelectMany(rule => rule.Matches)
             .Select(match => match.Passage)
             .ToArray();
-        var performances = new Dictionary<(Guid Show, string Song), long>();
-        var recordings = new Dictionary<Guid, long>();
+        var performances = await ReadPerformanceStarts(
+            connection,
+            transaction,
+            passages.SelectMany(ShowSongs),
+            cancellationToken
+        );
+        var recordings = await ReadRecordingStarts(
+            connection,
+            transaction,
+            passages.Select(Source),
+            cancellationToken
+        );
 
-        foreach (var batch in passages.SelectMany(ShowSongs).Distinct().Chunk(batchSize))
-        {
-            var metrics = await Read(() =>
-                PopularityStore.ReadSelectedPerformances(
-                    connection,
-                    batch.Select(item => item.Show).ToArray(),
-                    batch.Select(item => item.Song).ToArray(),
-                    transaction,
-                    cancellationToken
+        return new SearchPassages(
+            rules
+                .Select(rule =>
+                    rule with
+                    {
+                        Matches = rule
+                            .Matches.Select(match =>
+                                match with
+                                {
+                                    Passage = WithPlays(match.Passage, performances, recordings),
+                                }
+                            )
+                            .ToImmutableArray(),
+                    }
                 )
+                .ToImmutableArray()
+        );
+    }
+
+    private static async Task<Dictionary<(Guid Show, string Song), long>> ReadPerformanceStarts(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        IEnumerable<(Guid Show, string Song)> songs,
+        CancellationToken cancellationToken
+    )
+    {
+        var starts = new Dictionary<(Guid Show, string Song), long>();
+        foreach (var batch in songs.Distinct().Chunk(PopularityBatchSize))
+        {
+            var metrics = await PopularityStore.ReadSelectedPerformances(
+                connection,
+                batch.Select(item => item.Show).ToArray(),
+                batch.Select(item => item.Song).ToArray(),
+                transaction,
+                cancellationToken
             );
             foreach (var (key, value) in metrics)
             {
                 if (value.windows.Year is { } year)
                 {
-                    performances.Add(key, year.plays);
+                    starts.Add(key, year.plays);
                 }
             }
         }
 
-        foreach (var batch in passages.Select(Source).Distinct().Chunk(batchSize))
+        return starts;
+    }
+
+    private static async Task<Dictionary<Guid, long>> ReadRecordingStarts(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        IEnumerable<Guid> sources,
+        CancellationToken cancellationToken
+    )
+    {
+        var starts = new Dictionary<Guid, long>();
+        foreach (var batch in sources.Distinct().Chunk(PopularityBatchSize))
         {
-            var metrics = await Read(() =>
-                PopularityStore.ReadRecordingMetrics(
-                    connection,
-                    batch,
-                    transaction,
-                    cancellationToken
-                )
+            var metrics = await PopularityStore.ReadRecordingMetrics(
+                connection,
+                batch,
+                transaction,
+                cancellationToken
             );
             foreach (var (source, value) in metrics)
             {
                 if (value.windows.Year is { } year)
                 {
-                    recordings.Add(source, year.plays);
+                    starts.Add(source, year.plays);
                 }
             }
         }
 
-        return rules
-            .Select(rule =>
-                rule with
-                {
-                    Matches = rule
-                        .Matches.Select(match => match with { Passage = WithPlays(match.Passage) })
-                        .ToImmutableArray(),
-                }
-            )
-            .ToImmutableArray();
+        return starts;
+    }
 
-        Task<T> Read<T>(Func<Task<T>> query) =>
-            transaction == null
-                ? SearchEvidenceRead.RetryOnRecoveryConflict(query, cancellationToken)
-                : query();
-
-        SearchPassage WithPlays(SearchPassage passage)
+    private static SearchPassage WithPlays(
+        SearchPassage passage,
+        IReadOnlyDictionary<(Guid Show, string Song), long> performances,
+        IReadOnlyDictionary<Guid, long> recordings
+    )
+    {
+        long? plays = null;
+        foreach (var key in ShowSongs(passage))
         {
-            long? plays = null;
-            foreach (var key in ShowSongs(passage))
+            if (performances.TryGetValue(key, out var count))
             {
-                if (performances.TryGetValue(key, out var count))
-                {
-                    plays = plays.GetValueOrDefault() + count;
-                }
+                plays = plays.GetValueOrDefault() + count;
             }
-            return passage with
-            {
-                TrackPlays = plays,
-                RecordingPlays = recordings.TryGetValue(Source(passage), out var starts)
-                    ? starts
-                    : null,
-            };
         }
+
+        return passage with
+        {
+            TrackPlays = plays,
+            RecordingPlays = recordings.TryGetValue(Source(passage), out var starts)
+                ? starts
+                : null,
+        };
     }
 
     private static IEnumerable<(Guid Show, string Song)> ShowSongs(SearchPassage passage)
@@ -505,7 +513,8 @@ internal sealed class SearchPassages(ImmutableArray<SearchPassages.RuleMatches> 
             WHERE map.canonical_id = ANY(@firstSongs)
               AND (nullif(track.mp3_url, '') IS NOT NULL OR nullif(track.flac_url, '') IS NOT NULL)
         ), set_headers AS MATERIALIZED (
-            -- Look up the header by candidate set ID before joining its metadata.
+            -- OFFSET 0 keeps Postgres from flattening this lateral lookup.
+            -- The set-ID-first plan keeps this read inside the replica's 20 s budget.
             SELECT header.*
             FROM candidate_sets candidate
             CROSS JOIN LATERAL (

@@ -17,6 +17,8 @@ internal sealed class SearchProjectionRows(
     int? artistId = null
 )
 {
+    internal const int BuildCommandTimeoutSeconds = 600;
+
     public int? ArtistId => artistId;
     internal CatalogReadSession DisplaySession =>
         CatalogReadSession.Borrow(
@@ -341,30 +343,18 @@ internal sealed class SearchProjectionRows(
         string sql,
         CancellationToken cancellationToken,
         object? parameters = null
-    )
-    {
-        var command = new CommandDefinition(
-            sql,
-            parameters ?? new { ArtistId },
-            transaction: transaction,
-            commandTimeout: transaction == null ? SearchEvidenceRead.CommandTimeoutSeconds : 600,
-            cancellationToken: cancellationToken
-        );
-        return transaction == null
-            ? SearchEvidenceRead.RetryOnRecoveryConflict(
-                () => connection.QueryAsync<T>(command),
-                cancellationToken
+    ) =>
+        connection.QueryAsync<T>(
+            new CommandDefinition(
+                sql,
+                parameters ?? new { ArtistId },
+                transaction: transaction,
+                cancellationToken: cancellationToken
             )
-            : connection.QueryAsync<T>(command);
-    }
+        );
 
     private IAsyncEnumerable<T> Stream<T>(string sql) =>
-        connection.QueryUnbufferedAsync<T>(
-            sql,
-            new { ArtistId },
-            transaction: transaction,
-            commandTimeout: 600
-        );
+        connection.QueryUnbufferedAsync<T>(sql, new { ArtistId }, transaction: transaction);
 
     internal sealed record Artist(int Id, Guid Uuid, string Slug, string Name, bool Approved);
 

@@ -52,7 +52,7 @@ public class TestIngestionWorkflows
     public async Task TargetedImportCompletesWhileItsSearchReindexIsStillRunning()
     {
         var artist = new ArtistId(Guid.NewGuid());
-        var searchStarted = new TaskCompletionSource<Guid>(
+        var searchStarted = new TaskCompletionSource(
             TaskCreationOptions.RunContinuationsAsynchronously
         );
         var releaseSearch = new TaskCompletionSource(
@@ -68,7 +68,7 @@ public class TestIngestionWorkflows
                     return;
                 }
 
-                searchStarted.SetResult(indexedArtist);
+                searchStarted.SetResult();
                 await releaseSearch.Task;
                 throw new ApplicationFailureException("Search service unavailable");
             },
@@ -89,7 +89,7 @@ public class TestIngestionWorkflows
                 var timeout = TimeSpan.FromSeconds(20);
                 try
                 {
-                    (await searchStarted.Task.WaitAsync(timeout)).Should().Be(artist.Value);
+                    await searchStarted.Task.WaitAsync(timeout);
                     var result = await import.GetResultAsync().WaitAsync(timeout);
                     result.Status.Should().Be(ImportStatus.Completed);
                     result.CompletedItems.Should().Be(1);
@@ -130,16 +130,42 @@ public class TestIngestionWorkflows
         activities.Rebuilds.Should().Equal("shows", "years", "cache", "venues");
     }
 
-    [Test]
-    public async Task AFailedVenueMatchNeverFailsTheImport()
+    [TestCase("venue")]
+    [TestCase("song")]
+    public async Task AFailedMatchStillCompletesTheImportAndStartsReindex(string kind)
     {
-        var activities = new RecordingActivities(1) { FailVenues = true };
-        (await Run(activities)).Status.Should().Be(ImportStatus.Completed);
-        activities.Rebuilds.Should().Equal("shows", "years", "cache", "venues");
+        var artist = new ArtistId(Guid.NewGuid());
+        var reindexed = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        var activities = new RecordingActivities(1)
+        {
+            FailVenues = kind == "venue",
+            MatchImportedSongs =
+                kind == "song"
+                    ? _ =>
+                        throw new ApplicationFailureException(
+                            "Song matcher unavailable",
+                            nonRetryable: true
+                        )
+                    : null,
+            RefreshSearch = indexedArtist =>
+            {
+                if (indexedArtist == artist.Value)
+                {
+                    reindexed.TrySetResult();
+                }
+
+                return Task.CompletedTask;
+            },
+        };
+
+        (await Run(activities, artistId: artist)).Status.Should().Be(ImportStatus.Completed);
+        reindexed.Task.IsCompletedSuccessfully.Should().BeTrue();
     }
 
     [Test, Category("LocalIngestion")]
-    public async Task FullImportMatchesANewFileToAKnownSong()
+    public async Task FullImportMatchesANewFileBeforeSearchReindexes()
     {
         MigratedTestDatabase.RequireLocalDatabase();
         await using var connection = await MigratedTestDatabase.OpenAsync();
@@ -175,6 +201,9 @@ public class TestIngestionWorkflows
             new NormFlags(database),
             NullLogger<SongActivities>.Instance
         );
+        var indexedSong = new TaskCompletionSource<string?>(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
         var activities = new RecordingActivities(1)
         {
             PersistArchiveItem = () =>
@@ -198,20 +227,25 @@ public class TestIngestionWorkflows
                     }
                 ),
             MatchImportedSongs = songs.MatchImportedTracks,
+            RefreshSearch = async indexedArtist =>
+            {
+                if (indexedArtist == artist)
+                {
+                    indexedSong.TrySetResult(
+                        await connection.QuerySingleOrDefaultAsync<string>(
+                            "SELECT song_id FROM norm.track_songs WHERE track_uuid=@track AND resolved",
+                            new { track }
+                        )
+                    );
+                }
+            },
         };
 
         var result = await Run(activities, artistId: new ArtistId(artist));
 
         result.Status.Should().Be(ImportStatus.Completed);
         result.CompletedItems.Should().Be(1);
-        (
-            await connection.QuerySingleAsync<string>(
-                "SELECT song_id FROM norm.track_songs WHERE track_uuid=@track AND resolved",
-                new { track }
-            )
-        )
-            .Should()
-            .Be(song);
+        (await indexedSong.Task.WaitAsync(TimeSpan.FromSeconds(20))).Should().Be(song);
     }
 
     [TestCase("years")]

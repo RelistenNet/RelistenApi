@@ -12,7 +12,6 @@ namespace Relisten.Search;
 public sealed class CatalogQueryEvidenceStore
 {
     private static readonly TimeSpan StartupGracePeriod = TimeSpan.FromSeconds(60);
-    private readonly TimeProvider _clock;
     private readonly long _startedAt;
     private PublishedEvidence _current = new(CatalogQueryEvidence.Empty, 0);
 
@@ -21,26 +20,27 @@ public sealed class CatalogQueryEvidenceStore
 
     internal CatalogQueryEvidenceStore(TimeProvider clock)
     {
-        _clock = clock;
+        Clock = clock;
         _startedAt = clock.GetTimestamp();
     }
 
     internal CatalogQueryEvidence Current => Volatile.Read(ref _current).Evidence;
+    internal TimeProvider Clock { get; }
 
     // Give search a head start on replacement pods while keeping browse
     // available if loading evidence takes longer than the startup window.
     internal bool SearchStartupComplete =>
-        Current.Collection != null || _clock.GetElapsedTime(_startedAt) >= StartupGracePeriod;
+        Current.Collection != null || Clock.GetElapsedTime(_startedAt) >= StartupGracePeriod;
 
     internal bool IsFresh(string collection, TimeSpan maximumAge)
     {
         var current = Volatile.Read(ref _current);
         return current.Evidence.Collection == collection
-            && _clock.GetElapsedTime(current.Timestamp) < maximumAge;
+            && Clock.GetElapsedTime(current.Timestamp) < maximumAge;
     }
 
     internal void Publish(CatalogQueryEvidence snapshot) =>
-        Volatile.Write(ref _current, new PublishedEvidence(snapshot, _clock.GetTimestamp()));
+        Volatile.Write(ref _current, new PublishedEvidence(snapshot, Clock.GetTimestamp()));
 
     private sealed record PublishedEvidence(CatalogQueryEvidence Evidence, long Timestamp);
 }
@@ -55,7 +55,7 @@ internal sealed class CatalogQueryEvidenceRefreshService(
 {
     private static readonly TimeSpan AliasPollInterval = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan MaximumEvidenceAge = TimeSpan.FromHours(1);
-    private static readonly TimeSpan FailedRefreshDelay = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan FailedRefreshDelay = TimeSpan.FromMinutes(5);
     private readonly SemaphoreSlim _wake = new(0, 1);
     private int _urgent;
 
@@ -101,7 +101,8 @@ internal sealed class CatalogQueryEvidenceRefreshService(
                 );
                 // Missing-generation traffic may queue a wake-up while the load
                 // is running. That signal must not bypass the retry delay.
-                await Task.Delay(FailedRefreshDelay, stoppingToken);
+                await Task.Delay(FailedRefreshDelay, store.Clock, stoppingToken);
+                continue;
             }
 
             await _wake.WaitAsync(AliasPollInterval, stoppingToken);

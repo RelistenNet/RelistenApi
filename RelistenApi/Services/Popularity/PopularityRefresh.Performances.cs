@@ -251,42 +251,24 @@ public partial class PopularityService
         connection.QueryAsync<PerformanceTarget>(
             new CommandDefinition(
                 """
-                WITH RECURSIVE owner AS (
+                WITH owner AS (
                     SELECT a.id,a.uuid,coalesce(f.norm_catalogue,false) AS approved
                     FROM artists a LEFT JOIN features f ON f.artist_id=a.id WHERE a.uuid=@artist
-                ), tracks AS MATERIALIZED (
-                    SELECT h.uuid AS show,t.uuid AS track,t.title,t.is_orphaned,
-                           nullif(t.mp3_url,'') IS NOT NULL OR nullif(t.flac_url,'') IS NOT NULL AS playable
-                    FROM owner a JOIN shows h ON h.artist_id=a.id
-                    JOIN sources s ON s.show_id=h.id AND s.artist_id=a.id
-                    JOIN source_tracks t ON t.source_id=s.id AND t.artist_id=a.id
-                    -- An import can remove a set and leave its replaced files without a set ID.
-                    LEFT JOIN source_sets ss ON ss.id=t.source_set_id AND ss.source_id=s.id
-                    WHERE h.uuid=ANY(@shows)
-                      AND (t.is_orphaned OR ss.id IS NOT NULL)
-                ), song_map AS (
-                    -- Old files keep their own mappings. Follow song merges back from
-                    -- surviving IDs with the same depth bound as live catalogue reads.
-                    SELECT s.id,s.id AS canonical_id,1 AS depth
-                    FROM owner a JOIN norm.songs s ON s.artist_uuid=a.uuid
-                    WHERE a.approved AND s.merged_into IS NULL
-                    UNION ALL
-                    SELECT s.id,m.canonical_id,m.depth+1
-                    FROM song_map m JOIN norm.songs s ON s.merged_into=m.id
-                    WHERE m.depth<32
                 ), matches AS MATERIALIZED (
                     SELECT m.track_uuid,m.song_id
-                    FROM owner a CROSS JOIN LATERAL norm.song_recording_matches(a.uuid,NULL::text[],@shows) m
+                    FROM owner a
+                    CROSS JOIN LATERAL norm.song_recording_matches(a.uuid,NULL::text[],@shows,include_orphaned => true) m
                     WHERE a.approved
-                    UNION ALL
-                    SELECT t.track,m.canonical_id
-                    FROM tracks t JOIN norm.track_songs p ON p.track_uuid=t.track AND p.resolved
-                    JOIN song_map m ON m.id=p.song_id
-                    WHERE t.is_orphaned
                 )
-                SELECT t.show,t.track,m.song_id AS song,coalesce(t.title,'') AS title
-                FROM tracks t LEFT JOIN matches m ON m.track_uuid=t.track
-                WHERE t.is_orphaned OR t.playable OR m.song_id IS NOT NULL
+                SELECT h.uuid AS show,t.uuid AS track,m.song_id AS song,coalesce(t.title,'') AS title
+                FROM owner a JOIN shows h ON h.artist_id=a.id
+                JOIN sources s ON s.show_id=h.id AND s.artist_id=a.id
+                JOIN source_tracks t ON t.source_id=s.id AND t.artist_id=a.id
+                LEFT JOIN source_sets ss ON ss.id=t.source_set_id AND ss.source_id=s.id
+                LEFT JOIN matches m ON m.track_uuid=t.uuid
+                WHERE h.uuid=ANY(@shows)
+                  AND (t.is_orphaned OR ss.id IS NOT NULL)
+                  AND (t.is_orphaned OR m.song_id IS NOT NULL OR nullif(t.mp3_url,'') IS NOT NULL OR nullif(t.flac_url,'') IS NOT NULL)
                 """,
                 new { artist, shows },
                 commandTimeout: 600,

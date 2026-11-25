@@ -52,8 +52,22 @@ public sealed partial class TestCatalogSearchHttp
     private sealed class EvidenceClock : TimeProvider
     {
         private long _offset;
+        public TaskCompletionSource BackoffStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public override long GetTimestamp() => base.GetTimestamp() + Interlocked.Read(ref _offset);
+
+        // Exercise generation recovery without making the fixture wait out production backoff.
+        public override ITimer CreateTimer(
+            TimerCallback callback,
+            object? state,
+            TimeSpan dueTime,
+            TimeSpan period
+        )
+        {
+            BackoffStarted.TrySetResult();
+            return base.CreateTimer(callback, state, TimeSpan.FromMilliseconds(100), period);
+        }
 
         public void Advance(TimeSpan elapsed) =>
             Interlocked.Add(ref _offset, (long)(elapsed.TotalSeconds * TimestampFrequency));
@@ -115,6 +129,7 @@ public sealed partial class TestCatalogSearchHttp
             var unavailable = await ReadSearch(request);
             ((string?)unavailable["availability"]!["catalog"]).Should().Be("unavailable");
 
+            await _evidenceClock.BackoffStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
             await Import(nextCollections, performanceKind);
             await WaitForEvidence(replacement, query);
             Results(await GetSearch(query))

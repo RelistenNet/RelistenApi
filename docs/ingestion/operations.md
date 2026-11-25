@@ -356,7 +356,7 @@ Leave `/health/ready` on the database checks so browse can serve while search
 continues warming after the grace period.
 [Kubernetes startup probe documentation](https://kubernetes.io/docs/concepts/workloads/pods/probes/#startup-probe)
 
-After a whole-artist import, the worker matches new tracks to existing songs for
+After an artist import, including a thin refresh, the worker matches tracks to existing songs for
 artists with `norm_catalogue` enabled. A match failure is logged and the import
 still finishes. New titles still need an explicit `--norm-songs` run. Artist imports
 start a background reindex after matching, and song normalization reindexes its
@@ -365,23 +365,10 @@ refresh requests record their start before resolving the
 aliases, using `search_artist_reindexes` from migration 23. Once the full build
 publishes new aliases and starts the retirement timer, it reindexes artists whose
 requests started since its database snapshot began. The next successful daily
-build repairs failed or missed refreshes. Artist scope and review availability
-use the evidence snapshot refreshed at the alias swap and again about an hour
-after the last successful load. Refreshes on running pods keep the existing
-jitter. They pick up in-place changes without writing to the index.
-
-The refresh reads the replica in separate statements, retrying recovery
-conflicts once. It streams vocabulary and published song popularity from the
-current Typesense collections. For confirmed segues it sums published yearly
-song-at-show starts and picks the tape using published recording starts. A failed
-refresh keeps the previous snapshot. The refresh log separates the index exports,
-catalog lookups, and passage reads.
-
-After deploying the hourly refresh, record each Catalog API pod's reload time
-and peak container memory during its first scheduled reload. Compare search
-latency before and during reloads. Return to a daily interval if the hourly
-reloads degrade search latency or leave too little memory headroom. Restore the
-daily interval in the Catalog API and redeploy it.
+build repairs failed or missed refreshes. Catalog API pods refresh query
+evidence after an alias swap and about once an hour, with jitter, to pick up
+in-place index changes. They read catalog metadata from the replica. A failed
+reload keeps the previous snapshot and waits five minutes before trying again.
 
 Retirement drops the old collections. Typesense reclaims their disk space on
 its compaction interval (`--db-compaction-interval=86400`). Raft snapshots

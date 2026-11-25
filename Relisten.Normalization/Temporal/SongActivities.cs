@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Npgsql;
@@ -69,15 +70,24 @@ public sealed class SongActivities(
         return result;
     }
 
-    /// Match against the published catalogue after a whole-artist import. The explicit
+    /// Match against the published catalogue after an artist refresh. The explicit
     /// normalization command can still match artists whose catalogues are unpublished.
     [Activity("Songs.MatchImportedTracks")]
     public async Task MatchImportedTracks(Guid artist)
     {
-        if (await flags.CatalogueOnAsync(artist))
+        if (!await flags.CatalogueOnAsync(artist))
         {
-            await MatchTracks(artist);
+            return;
         }
+
+        var start = Stopwatch.GetTimestamp();
+        var result = await MatchTracks(artist);
+        logger.LogInformation(
+            "Matched imported songs for {Artist} in {ElapsedMs} ms and updated {TracksWritten} tracks",
+            artist,
+            (long)Stopwatch.GetElapsedTime(start).TotalMilliseconds,
+            result.TracksWritten
+        );
     }
 
     private async Task RefreshCountsAsync(Guid artist)

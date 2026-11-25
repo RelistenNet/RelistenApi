@@ -2,12 +2,14 @@ using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Dapper;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using Relisten.Identifiers;
+using Relisten.Services.Popularity;
 
 namespace Relisten.Search;
 
@@ -24,10 +26,7 @@ internal static class CatalogQueryEvidenceLoader
         CancellationToken cancellationToken
     )
     {
-        var timer = Stopwatch.StartNew();
-        await using var connection = db.CreateReplicaConnection(
-            SearchEvidenceRead.CommandTimeoutSeconds
-        );
+        await using var connection = db.CreateReplicaConnection(commandTimeout: 20);
         await connection.OpenAsync(cancellationToken);
 
         var rows = new SearchProjectionRows(connection, transaction: null);
@@ -35,8 +34,6 @@ internal static class CatalogQueryEvidenceLoader
         var aliasKeys = shortNames
             .SelectMany(row => SearchPlaceAliases.Keys(row.Name, row.Normalized))
             .ToHashSet(StringComparer.Ordinal);
-        var setupMs = timer.ElapsedMilliseconds;
-        timer.Restart();
         // Use the index's popularity scale and check short venue names against
         // indexed artists and songs, including imported songs absent from norm.
         var indexed = await LoadIndexedVocabulary(
@@ -51,8 +48,6 @@ internal static class CatalogQueryEvidenceLoader
             performances,
             cancellationToken
         );
-        var exportsMs = timer.ElapsedMilliseconds;
-        timer.Restart();
         var venues = (await rows.Venues(cancellationToken)).ToDictionary(venue => venue.Id);
         var placeAliases = SearchPlaceAliases.Build(
             venues,
@@ -71,21 +66,29 @@ internal static class CatalogQueryEvidenceLoader
             cancellationToken
         );
         var reviewArtists = await rows.ReviewArtists(cancellationToken);
-        var metadataMs = setupMs + timer.ElapsedMilliseconds;
-        timer.Restart();
-        var passages = await SearchPassages.Load(
+        var titlePlays = await LoadTitlePlays(
+            connection,
+            vocabulary,
+            indexed.ImportedTitlePlays,
+            cancellationToken
+        );
+        var matches = await SearchPassages.Discover(
             connection,
             transaction: null,
             vocabulary,
             venues,
             cancellationToken
         );
-        logger.LogInformation(
-            "Read query evidence for {Collection}: Typesense exports {ExportMs} ms, catalog lookups {MetadataMs} ms, passages and popularity {PassageMs} ms",
+        var passages = await SearchPassages.RankByPublishedStarts(
+            connection,
+            transaction: null,
+            matches,
+            cancellationToken
+        );
+        logger.LogDebug(
+            "Read query evidence for {Collection} with playback totals for {TitleCount} artist titles",
             collection,
-            exportsMs,
-            metadataMs,
-            timer.ElapsedMilliseconds
+            titlePlays.Count
         );
         return new CatalogQueryEvidence(
             collection,
@@ -93,7 +96,7 @@ internal static class CatalogQueryEvidenceLoader
             passages,
             indexed.SongPlays.ToFrozenDictionary(),
             reviewArtists.ToFrozenSet(),
-            indexed.ImportedTitlePlays.ToFrozenDictionary()
+            titlePlays
         );
     }
 
@@ -139,7 +142,12 @@ internal static class CatalogQueryEvidenceLoader
                     && row.Name is { } title
                 )
                 {
-                    var key = (artist, title);
+                    var key = (
+                        artist,
+                        PopularityPerformanceKey.ForStorage(
+                            PopularityPerformanceKey.RawTitle(title)
+                        )
+                    );
                     importedTitlePlays[key] =
                         importedTitlePlays.GetValueOrDefault(key) + year.Plays;
                 }
@@ -171,6 +179,39 @@ internal static class CatalogQueryEvidenceLoader
             placeCollisions
         );
     }
+
+    private static async Task<FrozenDictionary<(string Artist, string Title), long>> LoadTitlePlays(
+        NpgsqlConnection connection,
+        SearchVocabulary vocabulary,
+        Dictionary<(string Artist, string Title), long> importedTitles,
+        CancellationToken cancellationToken
+    )
+    {
+        var totals = connection.QueryUnbufferedAsync<RawTitleStarts>(
+            """
+            SELECT artist.slug AS Artist, raw.song_id AS SongKey, raw.plays
+            FROM (
+                SELECT artist_uuid, song_id, sum(plays_1y)::bigint AS plays
+                FROM song_performance_popularity
+                WHERE song_id LIKE 'raw:%' AND plays_1y > 0
+                GROUP BY artist_uuid, song_id
+            ) raw
+            JOIN artists artist ON artist.uuid = raw.artist_uuid
+            """
+        );
+        await foreach (var total in totals.WithCancellation(cancellationToken))
+        {
+            if (vocabulary.ArtistDocuments.TryGetValue(total.Artist, out var artist))
+            {
+                // Imported-song totals can include the same raw starts.
+                importedTitles.TryAdd((artist.ArtistSlug, total.SongKey), total.Plays);
+            }
+        }
+
+        return importedTitles.ToFrozenDictionary();
+    }
+
+    private sealed record RawTitleStarts(string Artist, string SongKey, long Plays);
 
     private static async Task<SearchReviewedNicknames.SongTarget[]> LoadNicknameSongs(
         TypesenseClient typesense,
