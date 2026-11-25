@@ -34,6 +34,7 @@ public sealed partial class TestCatalogSearchHttp
     private const string PlayedScarlet = "perf_scarlet_most_played";
     private readonly string _prefix = "test_search_http_" + Guid.NewGuid().ToString("N");
     private readonly Guid _review = Guid.NewGuid();
+    private readonly EvidenceClock _evidenceClock = new();
     private string _previousPrimary = null!;
     private string _previousReplica = null!;
     private bool _seededReview;
@@ -434,6 +435,7 @@ public sealed partial class TestCatalogSearchHttp
         );
         builder.Services.AddSingleton<IBackgroundJobClient>(new RecordingPopularityJobs());
         builder.Services.AddV4Catalog();
+        builder.Services.AddSingleton(new CatalogQueryEvidenceStore(_evidenceClock));
         builder
             .Services.AddControllers()
             .AddApplicationPart(typeof(CatalogSearchController).Assembly);

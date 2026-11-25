@@ -1,3 +1,4 @@
+using Dapper;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Relisten.Search;
@@ -6,6 +7,58 @@ namespace RelistenApiTests.Search;
 
 public sealed partial class TestCatalogSearchHttp
 {
+    [Test]
+    public async Task ReviewScopeUsesRefreshedEvidenceOnTheSameIndex()
+    {
+        var refresh = _app!.Services.GetRequiredService<CatalogQueryEvidenceRefreshService>();
+        var store = _app.Services.GetRequiredService<CatalogQueryEvidenceStore>();
+        var baseline = store.Current;
+        var query =
+            $"?q=remarkable%20encore&scope=reviews&typing=true&artist_id={Id("artist", 14)}";
+        Results(await GetSearch(query)).Should().ContainSingle();
+
+        // The search document can keep the old owner until the next artist reindex.
+        // Scope eligibility comes from the API's own snapshot of the catalog.
+        await using var connection = await MigratedTestDatabase.OpenAsync();
+        await connection.ExecuteAsync(
+            "UPDATE source_reviews SET source_id = 910001 WHERE uuid = @uuid",
+            new { uuid = _review }
+        );
+        try
+        {
+            Results(await GetSearch(query)).Should().ContainSingle();
+            _evidenceClock.Advance(TimeSpan.FromDays(1));
+            refresh.RefreshNow(); // Wake the poll without waiting for its real-time interval.
+
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            while (ReferenceEquals(store.Current, baseline))
+            {
+                await Task.Delay(25, deadline.Token);
+            }
+
+            store.Current.Collection.Should().Be(baseline.Collection);
+            Results(await GetSearch(query)).Should().BeEmpty();
+        }
+        finally
+        {
+            await connection.ExecuteAsync(
+                "UPDATE source_reviews SET source_id = 910004 WHERE uuid = @uuid",
+                new { uuid = _review }
+            );
+            store.Publish(baseline);
+        }
+    }
+
+    private sealed class EvidenceClock : TimeProvider
+    {
+        private long _offset;
+
+        public override long GetTimestamp() => base.GetTimestamp() + Interlocked.Read(ref _offset);
+
+        public void Advance(TimeSpan elapsed) =>
+            Interlocked.Add(ref _offset, (long)(elapsed.TotalSeconds * TimestampFrequency));
+    }
+
     [Test]
     public async Task SearchesRecoverWhenThePinnedGenerationIsRemovedDuringReloadFailure()
     {

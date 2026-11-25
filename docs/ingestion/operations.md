@@ -363,7 +363,9 @@ aliases, using `search_artist_reindexes` from migration 23. Once the full build
 publishes new aliases and starts the retirement timer, it reindexes artists whose
 requests started since its database snapshot began. The next successful daily
 build repairs failed or missed refreshes. Artist scope and review availability
-use the evidence snapshot refreshed at the alias swap.
+use the evidence snapshot refreshed at the alias swap and again after a day
+on the same generation. The daily refresh picks up in-place changes without
+rebuilding or writing to the index.
 
 Retirement drops the old collections. Typesense reclaims their disk space on
 its compaction interval (`--db-compaction-interval=86400`). Raft snapshots

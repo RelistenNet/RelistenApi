@@ -14,7 +14,7 @@ public sealed class CatalogQueryEvidenceStore
     private static readonly TimeSpan StartupGracePeriod = TimeSpan.FromSeconds(60);
     private readonly TimeProvider _clock;
     private readonly long _startedAt;
-    private CatalogQueryEvidence _current = CatalogQueryEvidence.Empty;
+    private PublishedEvidence _current = new(CatalogQueryEvidence.Empty, 0);
 
     public CatalogQueryEvidenceStore()
         : this(TimeProvider.System) { }
@@ -25,14 +25,24 @@ public sealed class CatalogQueryEvidenceStore
         _startedAt = clock.GetTimestamp();
     }
 
-    internal CatalogQueryEvidence Current => Volatile.Read(ref _current);
+    internal CatalogQueryEvidence Current => Volatile.Read(ref _current).Evidence;
 
     // Give search a head start on replacement pods while keeping browse
     // available if loading evidence takes longer than the startup window.
     internal bool SearchStartupComplete =>
         Current.Collection != null || _clock.GetElapsedTime(_startedAt) >= StartupGracePeriod;
 
-    internal void Publish(CatalogQueryEvidence snapshot) => Volatile.Write(ref _current, snapshot);
+    internal bool IsFresh(string collection, TimeSpan maximumAge)
+    {
+        var current = Volatile.Read(ref _current);
+        return current.Evidence.Collection == collection
+            && _clock.GetElapsedTime(current.Timestamp) < maximumAge;
+    }
+
+    internal void Publish(CatalogQueryEvidence snapshot) =>
+        Volatile.Write(ref _current, new PublishedEvidence(snapshot, _clock.GetTimestamp()));
+
+    private sealed record PublishedEvidence(CatalogQueryEvidence Evidence, long Timestamp);
 }
 
 internal sealed class CatalogQueryEvidenceRefreshService(
@@ -43,7 +53,8 @@ internal sealed class CatalogQueryEvidenceRefreshService(
     ILogger<CatalogQueryEvidenceRefreshService> logger
 ) : BackgroundService
 {
-    private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan AliasPollInterval = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan MaximumEvidenceAge = TimeSpan.FromDays(1);
     private static readonly TimeSpan FailedRefreshDelay = TimeSpan.FromSeconds(5);
     private readonly SemaphoreSlim _wake = new(0, 1);
     private int _urgent;
@@ -94,7 +105,7 @@ internal sealed class CatalogQueryEvidenceRefreshService(
                 await Task.Delay(FailedRefreshDelay, stoppingToken);
             }
 
-            await _wake.WaitAsync(RefreshInterval, stoppingToken);
+            await _wake.WaitAsync(AliasPollInterval, stoppingToken);
         }
     }
 
@@ -109,21 +120,22 @@ internal sealed class CatalogQueryEvidenceRefreshService(
         // point for the generation shared by all catalog collections.
         var alias = SearchIndexBuilder.AliasName(prefix, SearchIndexSchema.Entities);
         var collection = await typesense.ReadAlias(alias, cancellationToken);
-        if (collection is null || collection == store.Current.Collection)
+        // Artist reindexes change evidence in place without moving the alias.
+        if (collection is null || store.IsFresh(collection, MaximumEvidenceAge))
         {
             return;
         }
 
         if (!urgent && store.Current.Collection != null)
         {
-            // All pods see the same alias swap. Spread their full catalog reads
-            // over a minute while the current evidence remains usable.
+            // Pods can see the same alias swap or reach the refresh age together.
+            // Spread their catalog reads while the current evidence remains usable.
             await _wake.WaitAsync(
                 TimeSpan.FromMilliseconds(Random.Shared.Next(60_001)),
                 cancellationToken
             );
             collection = await typesense.ReadAlias(alias, cancellationToken);
-            if (collection is null || collection == store.Current.Collection)
+            if (collection is null || store.IsFresh(collection, MaximumEvidenceAge))
             {
                 return;
             }
