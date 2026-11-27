@@ -211,12 +211,14 @@ public sealed class SonosControlController(
                 CredentialHash = SonosProtocol.Hash(credential),
                 ItemsJson = JsonSerializer.Serialize(
                     items.Select(
-                        (item, i) =>
-                            item with
-                            {
-                                OccurrenceId = request.Occurrences?[i].OccurrenceId ?? item.Id,
-                                SourceTrackId = trackIds[i],
-                            }
+                        (item, index) =>
+                            request.Occurrences is { } entries
+                                ? entries[index].Bind(item)
+                                : item with
+                                {
+                                    OccurrenceId = item.Id,
+                                    SourceTrackId = trackIds[index],
+                                }
                     ),
                     SonosHandoff.QueueJson
                 ),

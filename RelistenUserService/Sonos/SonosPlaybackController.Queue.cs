@@ -36,7 +36,14 @@ public sealed partial class SonosPlaybackController
                 queue.QueueVersion,
                 queueLength = items.Length,
                 refreshPending = queue.RefreshedQueueVersion < queue.QueueVersion,
-                occurrences = items.Select(QueueOccurrence),
+                occurrences = items.Select(
+                    (item, index) =>
+                        QueueOccurrence(item, index) with
+                        {
+                            PlaylistId = item.PlaylistId,
+                            PlaylistEntryId = item.PlaylistEntryId,
+                        }
+                ),
             }
         );
     }
@@ -282,14 +289,7 @@ public sealed partial class SonosPlaybackController
 
             foreach (var (entry, item) in additions.Zip(resolved))
             {
-                existing.Add(
-                    entry.OccurrenceId,
-                    item with
-                    {
-                        OccurrenceId = entry.OccurrenceId,
-                        SourceTrackId = entry.TrackId,
-                    }
-                );
+                existing.Add(entry.OccurrenceId, entry.Bind(item));
             }
         }
 

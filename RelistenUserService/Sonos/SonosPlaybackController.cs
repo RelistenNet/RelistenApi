@@ -399,5 +399,12 @@ public sealed partial class SonosPlaybackController(
         string? Album,
         string? ImageUrl,
         string OccurrenceId
-    );
+    )
+    {
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? PlaylistId { get; init; }
+
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? PlaylistEntryId { get; init; }
+    }
 }

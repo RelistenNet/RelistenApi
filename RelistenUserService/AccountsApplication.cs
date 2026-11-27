@@ -104,6 +104,7 @@ public static class AccountsApplication
         builder.Services.AddScoped<SonosQueueRefresh>();
         builder.Services.AddSingleton<SonosWorkflowStarter>();
         builder.Services.AddScoped<SonosGroupEvents>();
+        builder.Services.AddScoped<SonosPlaybackReports>();
         if (sonos is not null)
         {
             builder.Services.AddSingleton<SonosQueueRefreshActivities>();

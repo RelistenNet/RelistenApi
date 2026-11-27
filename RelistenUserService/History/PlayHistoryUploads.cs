@@ -129,10 +129,58 @@ public sealed class PlayHistoryUploads(AccountsDbContext database, TimeProvider 
         CancellationToken cancellationToken
     )
     {
-        var payload = JsonSerializer.Serialize(plays, WireJson);
         await using var transaction = await database.Database.BeginTransactionAsync(
             cancellationToken
         );
+        var acceptedIds = await WriteAsync(userId, receivedAt, plays, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return acceptedIds;
+    }
+
+    // Joins the callback's report claim transaction so failed writes leave the report retryable.
+    internal async Task WriteSonosAsync(
+        UserId userId,
+        DateTimeOffset receivedAt,
+        IEnumerable<SonosPlay> plays,
+        CancellationToken ct
+    )
+    {
+        const short sonosAppType = 3; // The catalog's persisted SourceTrackPlayAppType.Sonos.
+        var validated = plays.Select(play => new ValidatedPlay(
+            PlayId.New().Value,
+            receivedAt,
+            receivedAt.AddMilliseconds(
+                -Math.Min(play.DurationPlayedMillis, TimeSpan.FromDays(1).TotalMilliseconds)
+            ),
+            play.Track.ToString(),
+            play.Track.Value,
+            play.Playlist,
+            play.PlaylistEntry,
+            play.CatalogDurationMs,
+            sonosAppType,
+            false,
+            PlayOrigin.Live
+        ));
+        await WriteAsync(userId, receivedAt, validated, ct);
+    }
+
+    internal sealed record SonosPlay(
+        TrackId Track,
+        string? Playlist,
+        string? PlaylistEntry,
+        int? CatalogDurationMs,
+        long DurationPlayedMillis
+    );
+
+    private async Task<string[]?> WriteAsync(
+        UserId userId,
+        DateTimeOffset receivedAt,
+        IEnumerable<ValidatedPlay> plays,
+        CancellationToken cancellationToken
+    )
+    {
+        var payload = JsonSerializer.Serialize(plays, WireJson);
+        var transaction = database.Database.CurrentTransaction!;
         await using var command = new NpgsqlCommand(
             InsertPlaysSql,
             (NpgsqlConnection)database.Database.GetDbConnection(),
@@ -149,7 +197,6 @@ public sealed class PlayHistoryUploads(AccountsDbContext database, TimeProvider 
             await reader.ReadAsync(cancellationToken);
             acceptedIds = reader.GetBoolean(0) ? reader.GetFieldValue<string[]>(1) : null;
         }
-        await transaction.CommitAsync(cancellationToken);
         return acceptedIds;
     }
 

@@ -1,10 +1,13 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Dapper;
 using FluentAssertions;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using NUnit.Framework;
+using Relisten.Identifiers;
 using RelistenUserService.Sonos;
 
 namespace RelistenUserServiceTests;
@@ -410,6 +413,146 @@ public sealed partial class TestMcpHttp
             await Task.Delay(100);
         } while (DateTime.UtcNow < deadline);
         observed.Should().Be("Office + 1");
+    }
+
+    [Test]
+    public async Task Sonos_counts_each_qualified_report_on_the_saved_playlist_occurrence_once()
+    {
+        const string nativeBase = AccountsOrigin + "/v1/integrations/sonos";
+        const string origin = "https://sonos.example.test";
+        const string track = "track_4rc5e1za2bvsrnnr0edzzj8rfs";
+        var trackUuid = TrackId.Parse(track).Value;
+        var playlist = PlaylistId.New();
+        var entry = PlaylistEntryId.New();
+        var otherPlaylist = PlaylistId.New();
+        var otherEntry = PlaylistEntryId.New();
+        using var upstream = new TestSonosDevelopment.TestUpstream();
+        await StartApp(mountCatalog: false, sonos: upstream);
+        var fields = AuthorizeFields(Native, NativeRedirect, ReadScopes + " account.manage");
+        using var code = await Authorize(fields, await SignIn(fields));
+        var login = await Exchange(Native, NativeRedirect, ReadCode(code));
+        await LinkSonos(nativeBase, origin, login.Access);
+        await using var connection = new NpgsqlConnection(database.ConnectionString);
+        await connection.ExecuteAsync(
+            """
+            WITH artist AS (
+                INSERT INTO public.artists (uuid, name, slug, updated_at) VALUES (@artistUuid, 'Sonos', @slug, now()) RETURNING id
+            )
+            INSERT INTO public.source_tracks (uuid, artist_id, track_position, title, slug, mp3_url, duration, updated_at)
+            SELECT @trackUuid, id, 1, 'Sonos fixture', 'sonos-fixture', 'https://example.test/sonos.mp3', 381, now() FROM artist
+            ON CONFLICT (uuid) DO NOTHING
+            """,
+            new
+            {
+                trackUuid,
+                artistUuid = Guid.NewGuid(),
+                slug = "sonos-" + Guid.NewGuid().ToString("N"),
+            }
+        );
+
+        var handle = Guid.NewGuid();
+        using var started = await SendJson(
+            HttpMethod.Post,
+            nativeBase + "/handoffs",
+            login.Access,
+            new
+            {
+                request_id = handle,
+                group_id = "office",
+                start_index = 0,
+                position_millis = 0,
+                occurrences = new[]
+                {
+                    new
+                    {
+                        occurrence_id = "first",
+                        track_id = track,
+                        playlist_id = (string?)otherPlaylist.Value,
+                        playlist_entry_id = (string?)otherEntry.Value,
+                    },
+                    new
+                    {
+                        occurrence_id = "target",
+                        track_id = track,
+                        playlist_id = (string?)playlist.Value,
+                        playlist_entry_id = (string?)entry.Value,
+                    },
+                    new
+                    {
+                        occurrence_id = "no-playlist",
+                        track_id = track,
+                        playlist_id = (string?)null,
+                        playlist_entry_id = (string?)null,
+                    },
+                },
+            }
+        );
+        started.StatusCode.Should().Be(HttpStatusCode.OK);
+        using var queue = await Get($"{nativeBase}/playback/{handle}/queue", login.Access);
+        var occurrences = (await Json(queue)).GetProperty("occurrences");
+        var item = occurrences[1].GetProperty("item_id").GetString()!;
+        var credential = upstream.Load.GetProperty("httpAuthorization").GetString()!;
+        var timePlayed = $"{origin}/sonos/cloud-queue/{handle}/v2.3/timePlayed";
+        async Task Report(Guid reportId, string id, int millis)
+        {
+            using var response = await SendJson(
+                HttpMethod.Post,
+                timePlayed,
+                credential,
+                new
+                {
+                    items = new[]
+                    {
+                        new
+                        {
+                            reportId,
+                            id,
+                            durationPlayedMillis = millis,
+                        },
+                    },
+                }
+            );
+            response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        }
+
+        var first = Guid.NewGuid();
+        await Report(first, item, 20_000);
+        (
+            await connection.QuerySingleAsync<int>(
+                "SELECT count(*)::int FROM user_data.plays WHERE playlist_id = @id",
+                new { id = playlist.Value }
+            )
+        )
+            .Should()
+            .Be(0);
+        await Report(first, item, 195_000);
+        await Report(Guid.NewGuid(), item, 200_000);
+        await Report(first, item, 210_000);
+        await Report(Guid.NewGuid(), occurrences[2].GetProperty("item_id").GetString()!, 200_000);
+
+        var saved = await connection.QueryAsync<(
+            string? PlaylistId,
+            string? EntryId,
+            short AppType
+        )>(
+            "SELECT playlist_id, playlist_entry_id, app_type FROM user_data.plays WHERE track_id = @track",
+            new { track }
+        );
+        saved
+            .Should()
+            .BeEquivalentTo(
+                new (string?, string?, short)[]
+                {
+                    (playlist.Value, entry.Value, 3),
+                    (playlist.Value, entry.Value, 3),
+                    (null, null, 3),
+                }
+            );
+        var catalog = await connection.QueryAsync<string?>(
+            "SELECT playlist_id FROM public.source_track_plays WHERE source_track_uuid = @trackUuid AND app_type = 3",
+            new { trackUuid }
+        );
+        catalog.Should().BeEquivalentTo(new[] { playlist.Value, playlist.Value, null });
     }
 
     [TestCase(false)]

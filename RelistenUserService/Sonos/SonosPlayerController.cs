@@ -170,8 +170,21 @@ public sealed class SonosPlayerController(
     public async Task<IActionResult> TimePlayed(
         Guid queueId,
         [FromBody] JsonElement report,
-        CancellationToken ct
-    ) => await AuthorizedQueueAsync(queueId, ct) is null ? NotFound() : NoContent();
+        CancellationToken ct,
+        [FromServices] SonosPlaybackReports? reports = null
+    )
+    {
+        if (await AuthorizedQueueAsync(queueId, ct) is not { } queue)
+        {
+            return NotFound();
+        }
+
+        if (reports is not null)
+        {
+            await reports.RecordAsync(queue, report, ct);
+        }
+        return NoContent();
+    }
 
     [HttpPost("events/{**path}")]
     [RequestSizeLimit(64 * 1024)]

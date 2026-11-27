@@ -18,7 +18,24 @@ public sealed record SonosHandoffRequest(
         SonosOccurrenceInput[]? Occurrences = null
 );
 
-public sealed record SonosOccurrenceInput(string OccurrenceId, string TrackId);
+public sealed record SonosOccurrenceInput(
+    string OccurrenceId,
+    string TrackId,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        string? PlaylistId = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        string? PlaylistEntryId = null
+)
+{
+    internal QueueTrack Bind(QueueTrack item) =>
+        item with
+        {
+            OccurrenceId = OccurrenceId,
+            SourceTrackId = TrackId,
+            PlaylistId = PlaylistId,
+            PlaylistEntryId = PlaylistEntryId,
+        };
+}
 
 // Id is Sonos's item ID for this queue occurrence. OccurrenceId identifies the
 // same entry to mobile across edits. Keep the requested SourceTrackId alongside
@@ -27,7 +44,11 @@ internal sealed record QueueTrack(
     string Id,
     QueueTrackMetadata Track,
     string? OccurrenceId = null,
-    string? SourceTrackId = null
+    string? SourceTrackId = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        string? PlaylistId = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        string? PlaylistEntryId = null
 )
 {
     // Queues stored before edits used the Sonos ID and the resolved recording ID.
@@ -35,7 +56,10 @@ internal sealed record QueueTrack(
     public string OccurrenceKey => OccurrenceId ?? Id;
 
     [JsonIgnore]
-    public string CatalogTrackId => SourceTrackId ?? Track.Id.ObjectId["TrackU:".Length..];
+    public string CatalogTrackId => SourceTrackId ?? ResolvedTrackId;
+
+    [JsonIgnore]
+    public string ResolvedTrackId => Track.Id.ObjectId["TrackU:".Length..];
 }
 
 internal sealed record RemovedQueueTrack(QueueTrack Item, string? AfterItemId);
@@ -77,6 +101,14 @@ public sealed class SonosHandoff(
             entry is not null
             && ValidOccurrenceId(entry.OccurrenceId)
             && TrackId.TryParse(entry.TrackId, out _)
+            && (entry.PlaylistId == null || PlaylistId.TryParse(entry.PlaylistId, out _))
+            && (
+                entry.PlaylistEntryId == null
+                || (
+                    entry.PlaylistId != null
+                    && PlaylistEntryId.TryParse(entry.PlaylistEntryId, out _)
+                )
+            )
         )
         && entries.Select(entry => entry.OccurrenceId).Distinct(StringComparer.Ordinal).Count()
             == entries.Length;
