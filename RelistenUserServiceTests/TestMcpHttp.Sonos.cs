@@ -336,6 +336,82 @@ public sealed partial class TestMcpHttp
         queue.GetProperty("occurrences").GetArrayLength().Should().Be(1);
     }
 
+    [Test]
+    public async Task A_signed_household_event_refreshes_names_from_the_authorized_groups_read()
+    {
+        const string nativeBase = AccountsOrigin + "/v1/integrations/sonos";
+        const string sonosOrigin = "https://sonos.example.test";
+        const string track = "track_4rc5e1za2bvsrnnr0edzzj8rfs";
+        using var upstream = new TestSonosDevelopment.TestUpstream();
+        await using var temporal = await Temporalio.Testing.WorkflowEnvironment.StartLocalAsync();
+        await StartApp(
+            mountCatalog: false,
+            sonos: upstream,
+            temporalAddress: temporal.Client.Connection.Options.TargetHost,
+            sonosHouseholdEvents: true
+        );
+        var fields = AuthorizeFields(Native, NativeRedirect, ReadScopes + " account.manage");
+        using var code = await Authorize(fields, await SignIn(fields));
+        var login = await Exchange(Native, NativeRedirect, ReadCode(code));
+        await LinkSonos(nativeBase, sonosOrigin, login.Access);
+
+        var handle = Guid.NewGuid();
+        using var handoff = await SendJson(
+            HttpMethod.Post,
+            nativeBase + "/handoffs",
+            login.Access,
+            new
+            {
+                request_id = handle,
+                group_id = "office",
+                track_ids = new[] { track },
+                start_index = 0,
+            }
+        );
+        handoff.StatusCode.Should().Be(HttpStatusCode.OK);
+        upstream.OfficeName = "Office + 1";
+
+        using var regroup = new HttpRequestMessage(
+            HttpMethod.Post,
+            sonosOrigin + "/sonos/events/groups"
+        )
+        {
+            Content = JsonContent.Create(
+                new { groups = new[] { new { id = "office", name = "Untrusted" } } }
+            ),
+        };
+        regroup.Headers.Add("X-Sonos-Event-Seq-Id", "9");
+        regroup.Headers.Add("X-Sonos-Namespace", "groups");
+        regroup.Headers.Add("X-Sonos-Type", "groups");
+        regroup.Headers.Add("X-Sonos-Target-Type", "householdId");
+        regroup.Headers.Add("X-Sonos-Target-Value", "home");
+        regroup.Headers.Add("X-Sonos-Household-Id", "studio");
+        regroup.Headers.Add(
+            "X-Sonos-Event-Signature",
+            WebEncoders.Base64UrlEncode(
+                System.Security.Cryptography.SHA256.HashData(
+                    System.Text.Encoding.UTF8.GetBytes(
+                        "9groupsgroupshouseholdIdhometest-idtest-secret"
+                    )
+                )
+            )
+        );
+        using var accepted = await http.SendAsync(regroup);
+        accepted.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        string? observed;
+        do
+        {
+            using var playback = await Get($"{nativeBase}/playback/{handle}", login.Access);
+            observed = (await Json(playback)).GetProperty("group_name").GetString();
+            if (observed == "Office + 1")
+                break;
+            await Task.Delay(100);
+        } while (DateTime.UtcNow < deadline);
+        observed.Should().Be("Office + 1");
+    }
+
     [TestCase(false)]
     [TestCase(true)]
     public async Task Sonos_skip_targets_the_selected_occurrence_and_reconciles_a_lost_response(

@@ -19,24 +19,24 @@ public sealed class TestSonosQueueRefreshWorkflow
         var room = new Room();
         using var worker = new TemporalWorker(
             temporal.Client,
-            new TemporalWorkerOptions(SonosQueueRefreshStarter.TaskQueue)
+            new TemporalWorkerOptions(SonosWorkflowStarter.TaskQueue)
                 .AddWorkflow<SonosQueueRefreshWorkflow>()
                 .AddAllActivities(room)
         );
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-        var starter = new SonosQueueRefreshStarter(
+        var starter = new SonosWorkflowStarter(
             temporal.Client,
-            NullLogger<SonosQueueRefreshStarter>.Instance
+            NullLogger<SonosWorkflowStarter>.Instance
         );
         var queueId = Guid.NewGuid();
 
         await worker.ExecuteAsync(async () =>
         {
-            (await starter.TrySignalAsync(queueId, deadline.Token)).Should().BeTrue();
+            (await starter.TrySignalQueueAsync(queueId, deadline.Token)).Should().BeTrue();
             await room.FirstRefreshStarted.Task.WaitAsync(deadline.Token);
             try
             {
-                (await starter.TrySignalAsync(queueId, deadline.Token)).Should().BeTrue();
+                (await starter.TrySignalQueueAsync(queueId, deadline.Token)).Should().BeTrue();
             }
             finally
             {

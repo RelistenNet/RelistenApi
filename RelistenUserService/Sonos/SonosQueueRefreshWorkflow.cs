@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using System.Net;
 using Temporalio.Activities;
 using Temporalio.Api.Enums.V1;
@@ -8,14 +9,35 @@ using Temporalio.Workflows;
 
 namespace RelistenUserService.Sonos;
 
-public sealed class SonosQueueRefreshStarter(
+public sealed class SonosWorkflowStarter(
     ITemporalClient client,
-    ILogger<SonosQueueRefreshStarter> logger
+    ILogger<SonosWorkflowStarter> logger
 )
 {
     internal const string TaskQueue = "sonos";
 
-    internal async Task<bool> TrySignalAsync(Guid queueId, CancellationToken ct)
+    internal Task<bool> TrySignalQueueAsync(Guid queueId, CancellationToken ct) =>
+        TrySignalAsync(
+            (SonosQueueRefreshWorkflow workflow) => workflow.RunAsync(queueId),
+            $"sonos-queue-refresh-{queueId}",
+            nameof(SonosQueueRefreshWorkflow.QueueChanged),
+            ct
+        );
+
+    internal Task<bool> TrySignalHouseholdAsync(string household, CancellationToken ct) =>
+        TrySignalAsync(
+            (SonosHouseholdWorkflow workflow) => workflow.RunAsync(household),
+            $"sonos-household-{household}",
+            nameof(SonosHouseholdWorkflow.GroupsChanged),
+            ct
+        );
+
+    private async Task<bool> TrySignalAsync<TWorkflow>(
+        Expression<Func<TWorkflow, Task>> run,
+        string id,
+        string signal,
+        CancellationToken ct
+    )
     {
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
         deadline.CancelAfter(TimeSpan.FromSeconds(1));
@@ -25,12 +47,12 @@ public sealed class SonosQueueRefreshStarter(
             // The SDK connects lazily before it applies the RPC cancellation token.
             await client.Connection.ConnectAsync().WaitAsync(deadline.Token);
             await client.StartWorkflowAsync(
-                (SonosQueueRefreshWorkflow workflow) => workflow.RunAsync(queueId),
-                new WorkflowOptions($"sonos-queue-refresh-{queueId}", TaskQueue)
+                run,
+                new WorkflowOptions(id, TaskQueue)
                 {
                     IdConflictPolicy = WorkflowIdConflictPolicy.UseExisting,
                     IdReusePolicy = WorkflowIdReusePolicy.AllowDuplicate,
-                    StartSignal = nameof(SonosQueueRefreshWorkflow.QueueChanged),
+                    StartSignal = signal,
                     Rpc = new RpcOptions { CancellationToken = deadline.Token },
                 }
             );
@@ -44,8 +66,8 @@ public sealed class SonosQueueRefreshStarter(
         {
             logger.LogWarning(
                 error,
-                "Could not confirm a refresh for Sonos queue {QueueId}.",
-                queueId
+                "Could not confirm a signal for Sonos workflow {WorkflowId}.",
+                id
             );
             return false;
         }

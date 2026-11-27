@@ -72,24 +72,14 @@ public sealed partial class SonosPlaybackController(
                     continue;
                 }
 
-                RoomPlayback? observed;
                 try
                 {
-                    observed = await ReadRoomAsync(token.Token, group.Key, ct);
+                    var views = await ReadGroupPlaybackAsync(token.Token, eligible, ct);
+                    active.AddRange(views.Where(view => view.Status == "active"));
                 }
                 catch (Exception error) when (Unavailable(error, ct))
                 {
                     roomUnavailable = true;
-                    continue;
-                }
-
-                foreach (var queue in eligible)
-                {
-                    var state = await ReconcileAsync(queue, observed, ct);
-                    if (state.Status == "active")
-                    {
-                        active.Add(state);
-                    }
                 }
             }
 
@@ -127,14 +117,44 @@ public sealed partial class SonosPlaybackController(
                 return ReconnectRequired();
             }
 
-            return Ok(
-                await ReconcileAsync(queue, await ReadRoomAsync(token.Token, queue.GroupId, ct), ct)
-            );
+            var playback = await ReadGroupPlaybackAsync(token.Token, [queue], ct);
+            return Ok(playback[0]);
         }
         catch (Exception error) when (Unavailable(error, ct))
         {
             return Problem(statusCode: 502, title: "Could not read Sonos playback.");
         }
+    }
+
+    private async Task<List<PlaybackView>> ReadGroupPlaybackAsync(
+        string token,
+        IReadOnlyList<SonosQueue> queues,
+        CancellationToken ct
+    )
+    {
+        // Recovering a lost load response can change which queue owns the room.
+        // Serialize that observation with handoffs, while normal polls just read.
+        await using var transaction = queues.Any(queue => queue.Status == "dispatching")
+            ? await db.Database.BeginTransactionAsync(ct)
+            : null;
+        if (transaction is not null)
+        {
+            await LockRoomAsync(queues[0], ct);
+        }
+
+        var room = await ReadRoomAsync(token, queues[0].GroupId, ct);
+        var views = new List<PlaybackView>(queues.Count);
+        foreach (var queue in queues)
+        {
+            views.Add(await ReconcileAsync(queue, room, ct));
+        }
+
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(ct);
+        }
+
+        return views;
     }
 
     private async Task<SonosQueue?> ReadOwnedQueueAsync(Guid handle, CancellationToken ct)
@@ -267,15 +287,9 @@ public sealed partial class SonosPlaybackController(
             return Inactive(queue, evicted == 1 ? "evicted" : "unconfirmed");
         }
 
-        if (queue.Status == "dispatching")
+        if (queue.Status == "dispatching" && !await SonosHandoff.ConfirmLoadedAsync(db, queue, ct))
         {
-            var updated = await db.Set<SonosQueue>()
-                .Where(row => row.Id == queue.Id && row.Status == "dispatching")
-                .ExecuteUpdateAsync(set => set.SetProperty(row => row.Status, "loaded"), ct);
-            if (updated != 1)
-            {
-                return Inactive(queue, "unconfirmed");
-            }
+            return Inactive(queue, "unconfirmed");
         }
 
         var item = items[index];

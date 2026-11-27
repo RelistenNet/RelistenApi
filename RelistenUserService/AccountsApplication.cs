@@ -102,10 +102,12 @@ public static class AccountsApplication
         builder.Services.AddScoped<SonosAccountLink>();
         builder.Services.AddScoped<SonosHandoff>();
         builder.Services.AddScoped<SonosQueueRefresh>();
-        builder.Services.AddSingleton<SonosQueueRefreshStarter>();
+        builder.Services.AddSingleton<SonosWorkflowStarter>();
+        builder.Services.AddScoped<SonosGroupEvents>();
         if (sonos is not null)
         {
             builder.Services.AddSingleton<SonosQueueRefreshActivities>();
+            builder.Services.AddSingleton<SonosHouseholdActivities>();
             builder.Services.AddHostedService<SonosTemporalWorker>();
 
             if (builder.Configuration.GetValue<bool>("Sonos:LegacyQueueRefreshEnabled"))

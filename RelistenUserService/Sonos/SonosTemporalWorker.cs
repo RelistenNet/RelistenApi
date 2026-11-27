@@ -7,6 +7,7 @@ namespace RelistenUserService.Sonos;
 internal sealed class SonosTemporalWorker(
     ITemporalClient client,
     SonosQueueRefreshActivities refresh,
+    SonosHouseholdActivities households,
     ILogger<SonosTemporalWorker> logger
 ) : BackgroundService
 {
@@ -16,13 +17,15 @@ internal sealed class SonosTemporalWorker(
 
         using var worker = new TemporalWorker(
             client,
-            new TemporalWorkerOptions(SonosQueueRefreshStarter.TaskQueue)
+            new TemporalWorkerOptions(SonosWorkflowStarter.TaskQueue)
             {
                 MaxConcurrentActivities = 8,
                 GracefulShutdownTimeout = TimeSpan.FromSeconds(10),
             }
                 .AddWorkflow<SonosQueueRefreshWorkflow>()
                 .AddAllActivities(refresh)
+                .AddWorkflow<SonosHouseholdWorkflow>()
+                .AddAllActivities(households)
         );
         await worker.ExecuteAsync(ct);
     }

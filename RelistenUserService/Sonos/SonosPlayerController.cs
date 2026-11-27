@@ -175,7 +175,11 @@ public sealed class SonosPlayerController(
 
     [HttpPost("events/{**path}")]
     [RequestSizeLimit(64 * 1024)]
-    public async Task<IActionResult> Events([FromBody] JsonElement body, CancellationToken ct)
+    public async Task<IActionResult> Events(
+        [FromBody] JsonElement body,
+        CancellationToken ct,
+        [FromServices] SonosGroupEvents? groups = null
+    )
     {
         if (Config is not { } config)
         {
@@ -199,6 +203,11 @@ public sealed class SonosPlayerController(
         )
         {
             return Unauthorized();
+        }
+
+        if (fields[1] == "groups" && fields[2] is ("groups" or "groupInfo") && groups is not null)
+        {
+            return await groups.ChangedAsync(fields[3], fields[4], ct) ? Ok() : StatusCode(503);
         }
 
         if (

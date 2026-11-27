@@ -47,7 +47,7 @@ public sealed partial class SonosPlaybackController
         Guid handle,
         SonosQueueEditRequest request,
         [FromServices] SonosHandoff handoff,
-        [FromServices] SonosQueueRefreshStarter refresh,
+        [FromServices] SonosWorkflowStarter refresh,
         CancellationToken ct
     )
     {
@@ -158,7 +158,7 @@ public sealed partial class SonosPlaybackController
 
             // The refresh activity acquires these same locks before it reads the pending version.
             // Signal before commit so a rolled-back edit can only wake a read of committed work.
-            if (changed && !await refresh.TrySignalAsync(handle, ct))
+            if (changed && !await refresh.TrySignalQueueAsync(handle, ct))
             {
                 return Problem(
                     statusCode: 503,
