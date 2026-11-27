@@ -171,12 +171,14 @@ public sealed class SonosAccountLink(
     internal async Task<SonosAccess?> AccessAsync(
         SonosConfiguration config,
         UserId user,
-        CancellationToken ct
+        CancellationToken ct,
+        string? rejectedGrantVersion = null
     )
     {
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
         await locks.LockAsync($"sonos-grant:{user}", ct);
-        var grant = await db.Set<SonosGrant>().FindAsync([user], ct);
+        var grants = db.Set<SonosGrant>().Where(row => row.UserId == user);
+        var grant = await grants.AsNoTracking().SingleOrDefaultAsync(ct);
         if (grant is null)
         {
             return null;
@@ -185,7 +187,11 @@ public sealed class SonosAccountLink(
         var stored = JsonSerializer.Deserialize<StoredSonosToken>(
             _protector.Unprotect(grant.ProtectedToken)
         )!;
-        if (stored.ExpiresAt <= clock.GetUtcNow().AddMinutes(1))
+        // A different worker may already have replaced the rejected token.
+        if (
+            stored.ExpiresAt <= clock.GetUtcNow().AddMinutes(1)
+            || grant.ProtectedToken == rejectedGrantVersion
+        )
         {
             try
             {
@@ -204,16 +210,18 @@ public sealed class SonosAccountLink(
             catch (SonosRequestException exception)
                 when (exception.Status == HttpStatusCode.BadRequest)
             {
-                db.Remove(grant);
+                await grants.ExecuteDeleteAsync(ct);
                 await db.Set<SonosQueue>()
                     .Where(row => row.UserId == user)
                     .ExecuteUpdateAsync(set => set.SetProperty(row => row.Status, "revoked"), ct);
-                await db.SaveChangesAsync(ct);
                 await transaction.CommitAsync(ct);
                 return null;
             }
 
-            await db.SaveChangesAsync(ct);
+            await grants.ExecuteUpdateAsync(
+                update => update.SetProperty(row => row.ProtectedToken, grant.ProtectedToken),
+                ct
+            );
         }
 
         await transaction.CommitAsync(ct);

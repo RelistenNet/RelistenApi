@@ -1,4 +1,3 @@
-using System.Net;
 using Temporalio.Activities;
 using Temporalio.Common;
 using Temporalio.Exceptions;
@@ -31,6 +30,7 @@ internal sealed class SonosQueueRefreshWorkflow
                     new ActivityOptions
                     {
                         StartToCloseTimeout = TimeSpan.FromSeconds(45),
+                        ScheduleToCloseTimeout = TimeSpan.FromMinutes(5),
                         RetryPolicy = new RetryPolicy
                         {
                             InitialInterval = TimeSpan.FromSeconds(2),
@@ -41,7 +41,7 @@ internal sealed class SonosQueueRefreshWorkflow
             }
             catch (ActivityFailureException error) when (_changed)
             {
-                // A permanent rejection of an earlier edit must not discard a newer signal.
+                // A failed delivery must not discard a newer signal.
                 Workflow.Logger.LogWarning(
                     error,
                     "Refresh failed for Sonos queue {QueueId}; another edit is pending.",
@@ -82,9 +82,6 @@ internal sealed class SonosQueueRefreshActivities(
             throw new ApplicationFailureException(
                 $"Sonos rejected the queue refresh with HTTP {(int)error.Status}.",
                 error,
-                nonRetryable: error.Status
-                    is not (HttpStatusCode.RequestTimeout or HttpStatusCode.TooManyRequests)
-                    && (int)error.Status < 500,
                 nextRetryDelay: retryAfter > TimeSpan.Zero ? retryAfter : null
             );
         }

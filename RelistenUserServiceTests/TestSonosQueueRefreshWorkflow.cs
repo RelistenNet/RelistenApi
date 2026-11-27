@@ -49,6 +49,70 @@ public sealed class TestSonosQueueRefreshWorkflow
     }
 
     [Test]
+    public async Task A_queue_workflow_stops_retrying_a_persistent_delivery_failure()
+    {
+        await using var temporal = await WorkflowEnvironment.StartTimeSkippingAsync();
+        using var worker = new TemporalWorker(
+            temporal.Client,
+            new TemporalWorkerOptions(SonosWorkflowStarter.TaskQueue)
+                .AddWorkflow<SonosQueueRefreshWorkflow>()
+                .AddAllActivities(new UnavailableRoom())
+        );
+
+        await worker.ExecuteAsync(async () =>
+        {
+            var handle = await temporal.Client.StartWorkflowAsync(
+                (SonosQueueRefreshWorkflow workflow) => workflow.RunAsync(Guid.NewGuid()),
+                new WorkflowOptions("queue-retry-deadline", SonosWorkflowStarter.TaskQueue)
+            );
+            var failure = Assert.ThrowsAsync<WorkflowFailedException>(() =>
+                handle.GetResultAsync().WaitAsync(TimeSpan.FromSeconds(10))
+            );
+            failure!.InnerException.Should().BeOfType<ActivityFailureException>();
+        });
+    }
+
+    [Test]
+    public async Task A_fatal_poll_error_restarts_the_worker_after_it_started()
+    {
+        var polling = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var fail = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var restarted = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        using var stopping = new CancellationTokenSource(TimeSpan.FromSeconds(12));
+
+        async Task Poll(CancellationToken ct)
+        {
+            if (polling.TrySetResult())
+            {
+                await fail.Task.WaitAsync(ct);
+                throw new InvalidOperationException("Worker polling failed.");
+            }
+
+            restarted.TrySetResult();
+        }
+
+        var supervising = SonosTemporalWorker.SuperviseAsync(
+            Poll,
+            NullLogger.Instance,
+            stopping.Token
+        );
+        await polling.Task.WaitAsync(stopping.Token);
+        fail.TrySetResult();
+        await Task.WhenAny(restarted.Task, supervising).WaitAsync(stopping.Token);
+        await supervising.WaitAsync(stopping.Token);
+        restarted.Task.IsCompletedSuccessfully.Should().BeTrue();
+    }
+
+    public sealed class UnavailableRoom
+    {
+        [Activity("Refresh")]
+        public Task RefreshAsync(Guid queueId) =>
+            throw new ApplicationFailureException("Sonos is unavailable.");
+    }
+
+    [Test]
     public async Task A_household_workflow_stops_retrying_a_persistent_provider_failure()
     {
         await using var temporal = await WorkflowEnvironment.StartTimeSkippingAsync();

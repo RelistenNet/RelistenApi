@@ -35,7 +35,8 @@ public sealed partial class SonosPlaybackController
             {
                 queue.QueueVersion,
                 queueLength = items.Length,
-                refreshPending = queue.RefreshedQueueVersion < queue.QueueVersion,
+                refreshPending = queue.RefreshAfter.HasValue
+                    && queue.RefreshedQueueVersion < queue.QueueVersion,
                 occurrences = items.Select(
                     (item, index) =>
                         QueueOccurrence(item, index) with

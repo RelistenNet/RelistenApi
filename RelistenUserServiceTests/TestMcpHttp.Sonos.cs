@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
+using System.Net.Sockets;
 using System.Text.Json;
 using Dapper;
 using FluentAssertions;
@@ -305,13 +307,19 @@ public sealed partial class TestMcpHttp
         upstream.RoomPosition.Should().Be(1000);
     }
 
-    [Test]
-    public async Task Sonos_queue_edit_rolls_back_when_Temporal_is_unreachable()
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task Sonos_queue_edit_rolls_back_when_Temporal_cannot_confirm_the_signal(
+        bool stalls
+    )
     {
         const string nativeBase = AccountsOrigin + "/v1/integrations/sonos";
         const string track = "track_4rc5e1za2bvsrnnr0edzzj8rfs";
         using var upstream = new TestSonosDevelopment.TestUpstream();
-        await StartApp(mountCatalog: false, sonos: upstream, temporalAddress: "127.0.0.1:1");
+        using var blackhole = stalls ? new TcpListener(IPAddress.Loopback, 0) : null;
+        blackhole?.Start();
+        var address = blackhole?.LocalEndpoint.ToString() ?? "127.0.0.1:1";
+        await StartApp(mountCatalog: false, sonos: upstream, temporalAddress: address);
         var fields = AuthorizeFields(Native, NativeRedirect, ReadScopes + " account.manage");
         using var code = await Authorize(fields, await SignIn(fields));
         var login = await Exchange(Native, NativeRedirect, ReadCode(code));
@@ -334,27 +342,39 @@ public sealed partial class TestMcpHttp
         var queueUrl = $"{nativeBase}/playback/{handle}/queue";
         using var initial = await Get(queueUrl, login.Access);
         var item = (await Json(initial)).GetProperty("occurrences")[0];
+        var elapsed = Stopwatch.StartNew();
         using var rejected = await SendJson(
-            HttpMethod.Put,
-            queueUrl,
-            login.Access,
-            new
-            {
-                command_id = Guid.NewGuid(),
-                expected_version = 1,
-                expected_item_id = item.GetProperty("item_id").GetString(),
-                occurrences = new[]
+                HttpMethod.Put,
+                queueUrl,
+                login.Access,
+                new
                 {
-                    new
+                    command_id = Guid.NewGuid(),
+                    expected_version = 1,
+                    expected_item_id = item.GetProperty("item_id").GetString(),
+                    occurrences = new[]
                     {
-                        occurrence_id = item.GetProperty("occurrence_id").GetString()!,
-                        track_id = track,
+                        new
+                        {
+                            occurrence_id = item.GetProperty("occurrence_id").GetString()!,
+                            track_id = track,
+                        },
+                        new { occurrence_id = "added", track_id = track },
                     },
-                    new { occurrence_id = "added", track_id = track },
-                },
-            }
-        );
+                }
+            )
+            .WaitAsync(TimeSpan.FromSeconds(5));
         rejected.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+        if (blackhole is not null)
+        {
+            elapsed
+                .Elapsed.Should()
+                .BeGreaterThan(TimeSpan.FromMilliseconds(750))
+                .And.BeLessThan(TimeSpan.FromSeconds(3));
+            using var accepted = await blackhole
+                .AcceptTcpClientAsync()
+                .WaitAsync(TimeSpan.FromSeconds(1));
+        }
         using var unchanged = await Get(queueUrl, login.Access);
         var queue = await Json(unchanged);
         queue.GetProperty("queue_version").GetInt64().Should().Be(1);

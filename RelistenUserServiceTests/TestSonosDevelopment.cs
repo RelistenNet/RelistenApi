@@ -736,6 +736,8 @@ public sealed class TestSonosDevelopment
         public int CreateCount { get; private set; }
         public int RefreshCount { get; private set; }
         public bool RejectFirstRefresh { get; set; }
+        public Func<HttpRequestMessage, HttpResponseMessage>? OnRefresh { get; set; }
+        public string AccessToken { get; set; } = "access";
         public bool LoseNextCreateResponse { get; set; }
         public bool RejectNextLoad { get; set; }
         public HttpStatusCode MissingRoomStatus { get; set; } = HttpStatusCode.NotFound;
@@ -823,6 +825,10 @@ public sealed class TestSonosDevelopment
             if (path.EndsWith("/refreshCloudQueue", StringComparison.Ordinal))
             {
                 RefreshCount++;
+                if (OnRefresh is { } respond)
+                {
+                    return respond(request);
+                }
                 return new HttpResponseMessage(
                     RejectFirstRefresh && RefreshCount == 1
                         ? HttpStatusCode.ServiceUnavailable
@@ -1004,8 +1010,14 @@ public sealed class TestSonosDevelopment
             {
                 "/login/v3/oauth/access" when IncompleteToken =>
                     """{"access_token":"access","expires_in":3600}""",
-                "/login/v3/oauth/access" =>
-                    """{"access_token":"access","refresh_token":"refresh","expires_in":3600}""",
+                "/login/v3/oauth/access" => JsonSerializer.Serialize(
+                    new
+                    {
+                        access_token = AccessToken,
+                        refresh_token = "refresh",
+                        expires_in = 3600,
+                    }
+                ),
                 "/control/api/v1/households" =>
                     """{"households":[{"id":"home"},{"id":"studio"}]}""",
                 "/control/api/v1/households/home/groups/subscription" => "{}",
