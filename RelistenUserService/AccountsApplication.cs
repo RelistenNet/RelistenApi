@@ -102,7 +102,17 @@ public static class AccountsApplication
         builder.Services.AddScoped<SonosAccountLink>();
         builder.Services.AddScoped<SonosHandoff>();
         builder.Services.AddScoped<SonosQueueRefresh>();
-        builder.Services.AddHostedService<SonosQueueRefreshWorker>();
+        builder.Services.AddSingleton<SonosQueueRefreshStarter>();
+        if (sonos is not null)
+        {
+            builder.Services.AddSingleton<SonosQueueRefreshActivities>();
+            builder.Services.AddHostedService<SonosTemporalWorker>();
+
+            if (builder.Configuration.GetValue<bool>("Sonos:LegacyQueueRefreshEnabled"))
+            {
+                builder.Services.AddHostedService<SonosQueueRefreshWorker>();
+            }
+        }
         builder
             .Services.AddHttpClient<SonosProtocol>(client =>
                 client.Timeout = TimeSpan.FromSeconds(10)

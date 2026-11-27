@@ -47,6 +47,7 @@ public sealed partial class SonosPlaybackController
         Guid handle,
         SonosQueueEditRequest request,
         [FromServices] SonosHandoff handoff,
+        [FromServices] SonosQueueRefreshStarter refresh,
         CancellationToken ct
     )
     {
@@ -144,7 +145,7 @@ public sealed partial class SonosPlaybackController
                 return Conflict(new { code = "sonos_queue_current_protected" });
             }
 
-            var result = await SaveQueueEditAsync(
+            var (result, changed) = await SaveQueueEditAsync(
                 queue,
                 current,
                 replacement,
@@ -154,6 +155,17 @@ public sealed partial class SonosPlaybackController
                 playing.ItemId,
                 ct
             );
+
+            // The refresh activity acquires these same locks before it reads the pending version.
+            // Signal before commit so a rolled-back edit can only wake a read of committed work.
+            if (changed && !await refresh.TrySignalAsync(handle, ct))
+            {
+                return Problem(
+                    statusCode: 503,
+                    title: "Could not schedule the Sonos queue refresh. Retry the edit."
+                );
+            }
+
             await transaction.CommitAsync(ct);
             return result;
         }
@@ -163,7 +175,7 @@ public sealed partial class SonosPlaybackController
         }
     }
 
-    private async Task<IActionResult> SaveQueueEditAsync(
+    private async Task<(IActionResult Result, bool Changed)> SaveQueueEditAsync(
         SonosQueue queue,
         QueueTrack[] current,
         QueueTrack[] replacement,
@@ -180,7 +192,7 @@ public sealed partial class SonosPlaybackController
             var tombstones = RetainRemovedItems(current, replacement, removed);
             if (tombstones.Count > 15_000)
             {
-                return Conflict(new { code = "sonos_queue_history_full" });
+                return (Conflict(new { code = "sonos_queue_history_full" }), false);
             }
 
             var itemsJson = JsonSerializer.Serialize(replacement, SonosHandoff.QueueJson);
@@ -204,7 +216,7 @@ public sealed partial class SonosPlaybackController
                 );
             if (saved != 1)
             {
-                return PlaybackInactive();
+                return (PlaybackInactive(), false);
             }
         }
 
@@ -221,7 +233,7 @@ public sealed partial class SonosPlaybackController
         };
         db.Add(receipt);
         await db.SaveChangesAsync(ct);
-        return Ok(QueueEditReceipt(receipt));
+        return (Ok(QueueEditReceipt(receipt)), version != queue.QueueVersion);
     }
 
     private IActionResult ReadQueueEditReplay(SonosCommand prior, string hash) =>

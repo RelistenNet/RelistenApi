@@ -107,13 +107,18 @@ public sealed partial class TestMcpHttp
     }
 
     [Test]
-    public async Task Sonos_queue_edits_preserve_occurrences_and_retry_refresh()
+    public async Task Sonos_queue_edits_preserve_occurrences_and_Temporal_retries_refresh()
     {
         const string sonosOrigin = "https://sonos.example.test";
         const string nativeBase = AccountsOrigin + "/v1/integrations/sonos";
         const string track = "track_4rc5e1za2bvsrnnr0edzzj8rfs";
         using var upstream = new TestSonosDevelopment.TestUpstream { RejectFirstRefresh = true };
-        await StartApp(mountCatalog: false, sonos: upstream);
+        await using var temporal = await Temporalio.Testing.WorkflowEnvironment.StartLocalAsync();
+        await StartApp(
+            mountCatalog: false,
+            sonos: upstream,
+            temporalAddress: temporal.Client.Connection.Options.TargetHost
+        );
         var fields = AuthorizeFields(Native, NativeRedirect, ReadScopes + " account.manage");
         using var code = await Authorize(fields, await SignIn(fields));
         var login = await Exchange(Native, NativeRedirect, ReadCode(code));
@@ -273,6 +278,62 @@ public sealed partial class TestMcpHttp
         upstream.RefreshCount.Should().Be(2);
         upstream.LoadCount.Should().Be(1);
         upstream.RoomPosition.Should().Be(1000);
+    }
+
+    [Test]
+    public async Task Sonos_queue_edit_rolls_back_when_Temporal_is_unreachable()
+    {
+        const string nativeBase = AccountsOrigin + "/v1/integrations/sonos";
+        const string track = "track_4rc5e1za2bvsrnnr0edzzj8rfs";
+        using var upstream = new TestSonosDevelopment.TestUpstream();
+        await StartApp(mountCatalog: false, sonos: upstream, temporalAddress: "127.0.0.1:1");
+        var fields = AuthorizeFields(Native, NativeRedirect, ReadScopes + " account.manage");
+        using var code = await Authorize(fields, await SignIn(fields));
+        var login = await Exchange(Native, NativeRedirect, ReadCode(code));
+        await LinkSonos(nativeBase, "https://sonos.example.test", login.Access);
+
+        var handle = Guid.NewGuid();
+        using var started = await SendJson(
+            HttpMethod.Post,
+            nativeBase + "/handoffs",
+            login.Access,
+            new
+            {
+                request_id = handle,
+                group_id = "office",
+                track_ids = new[] { track },
+                start_index = 0,
+            }
+        );
+        started.StatusCode.Should().Be(HttpStatusCode.OK);
+        var queueUrl = $"{nativeBase}/playback/{handle}/queue";
+        using var initial = await Get(queueUrl, login.Access);
+        var item = (await Json(initial)).GetProperty("occurrences")[0];
+        using var rejected = await SendJson(
+            HttpMethod.Put,
+            queueUrl,
+            login.Access,
+            new
+            {
+                command_id = Guid.NewGuid(),
+                expected_version = 1,
+                expected_item_id = item.GetProperty("item_id").GetString(),
+                occurrences = new[]
+                {
+                    new
+                    {
+                        occurrence_id = item.GetProperty("occurrence_id").GetString()!,
+                        track_id = track,
+                    },
+                    new { occurrence_id = "added", track_id = track },
+                },
+            }
+        );
+        rejected.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+        using var unchanged = await Get(queueUrl, login.Access);
+        var queue = await Json(unchanged);
+        queue.GetProperty("queue_version").GetInt64().Should().Be(1);
+        queue.GetProperty("occurrences").GetArrayLength().Should().Be(1);
     }
 
     [TestCase(false)]

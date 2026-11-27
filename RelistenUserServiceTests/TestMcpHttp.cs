@@ -909,7 +909,8 @@ public sealed partial class TestMcpHttp
         HttpMessageHandler? sonos = null,
         string? playlistAlias = null,
         HttpMessageHandler? playlistSearch = null,
-        TimeProvider? validationClock = null
+        TimeProvider? validationClock = null,
+        string? temporalAddress = null
     )
     {
         catalog = new(catalogResponse);
@@ -956,6 +957,7 @@ public sealed partial class TestMcpHttp
                 ["Sonos:ClientId"] = sonos is null ? null : "test-id",
                 ["Sonos:ClientSecret"] = sonos is null ? null : "test-secret",
                 ["Sonos:ServiceId"] = sonos is null ? null : "270",
+                ["Temporal:Address"] = temporalAddress,
             }
         );
         if (sonos is not null)

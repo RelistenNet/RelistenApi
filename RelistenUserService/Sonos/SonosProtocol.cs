@@ -167,7 +167,7 @@ public sealed class SonosProtocol(HttpClient http)
                 // An intermediary can return an empty or non-JSON error response.
             }
 
-            throw new SonosRequestException(response.StatusCode, code);
+            throw new SonosRequestException(response.StatusCode, code, response.Headers.RetryAfter);
         }
 
         var body = await response.Content.ReadAsByteArrayAsync(cancellationToken);
@@ -175,11 +175,15 @@ public sealed class SonosProtocol(HttpClient http)
     }
 }
 
-internal sealed class SonosRequestException(HttpStatusCode status, string? code)
-    : Exception("Sonos rejected the request.")
+internal sealed class SonosRequestException(
+    HttpStatusCode status,
+    string? code,
+    RetryConditionHeaderValue? retryAfter = null
+) : Exception("Sonos rejected the request.")
 {
     public HttpStatusCode Status { get; } = status;
     public string? Code { get; } = code;
+    public RetryConditionHeaderValue? RetryAfter { get; } = retryAfter;
     public bool SessionEnded =>
         Status == HttpStatusCode.Gone
         || Code is "ERROR_SESSION_EVICTED" or "ERROR_INVALID_OBJECT_ID";
