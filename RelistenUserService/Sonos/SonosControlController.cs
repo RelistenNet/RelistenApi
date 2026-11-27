@@ -73,7 +73,10 @@ public sealed class SonosControlController(
     }
 
     [HttpGet("groups")]
-    public async Task<IActionResult> Groups(CancellationToken ct)
+    public async Task<IActionResult> Groups(
+        CancellationToken ct,
+        [FromServices] SonosGroupEvents? events = null
+    )
     {
         if (Config is not { } config)
         {
@@ -83,9 +86,25 @@ public sealed class SonosControlController(
         try
         {
             var token = await link.AccessAsync(config, account.User.Id, ct);
-            return token is null
-                ? Conflict(new { code = "sonos_reconnect_required" })
-                : Ok(await handoff.GroupsAsync(token.Token, ct));
+            if (token is null)
+            {
+                return Conflict(new { code = "sonos_reconnect_required" });
+            }
+
+            var groups = await handoff.ReadAndRefreshGroupNamesAsync(
+                account.User.Id,
+                token.Token,
+                ct
+            );
+            if (events is not null)
+            {
+                await events.SubscribeAsync(
+                    token.Token,
+                    groups.Select(group => group.HouseholdId),
+                    ct
+                );
+            }
+            return Ok(groups);
         }
         catch (Exception ex) when (SonosUnavailable(ex, ct))
         {
@@ -95,7 +114,11 @@ public sealed class SonosControlController(
 
     [HttpPost("handoffs")]
     [RequestSizeLimit(2 * 1024 * 1024)]
-    public async Task<IActionResult> Start(SonosHandoffRequest request, CancellationToken ct)
+    public async Task<IActionResult> Start(
+        SonosHandoffRequest request,
+        CancellationToken ct,
+        [FromServices] SonosGroupEvents? events = null
+    )
     {
         if (Config is not { } config)
         {
@@ -191,12 +214,14 @@ public sealed class SonosControlController(
                 CredentialHash = SonosProtocol.Hash(credential),
                 ItemsJson = JsonSerializer.Serialize(
                     items.Select(
-                        (item, i) =>
-                            item with
-                            {
-                                OccurrenceId = request.Occurrences?[i].OccurrenceId ?? item.Id,
-                                SourceTrackId = trackIds[i],
-                            }
+                        (item, index) =>
+                            request.Occurrences is { } entries
+                                ? entries[index].Bind(item)
+                                : item with
+                                {
+                                    OccurrenceId = item.Id,
+                                    SourceTrackId = trackIds[index],
+                                }
                     ),
                     SonosHandoff.QueueJson
                 ),
@@ -229,6 +254,10 @@ public sealed class SonosControlController(
                 request.PositionMillis,
                 ct
             );
+            if (events is not null)
+            {
+                await events.SubscribeAsync(token.Token, [group.HouseholdId], ct);
+            }
             return Receipt(await ReadQueueAsync(queue.Id, ct) ?? queue);
         }
         catch (Exception ex) when (SonosUnavailable(ex, ct))

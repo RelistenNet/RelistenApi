@@ -34,6 +34,14 @@ public static class PlaylistJson
     {
         if (type.Type == typeof(PlaylistSummary))
         {
+            // Online counters have no content revision and do not belong in the change feed.
+            foreach (var metric in new[] { "follower_count", "popularity", "popularity_as_of" })
+            {
+                type.Properties.Single(property => property.Name == metric).ShouldSerialize = (
+                    _,
+                    _
+                ) => false;
+            }
             type.Properties.Single(property => property.Name == "track_count").ShouldSerialize = (
                 value,
                 _

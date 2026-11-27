@@ -54,7 +54,8 @@ internal sealed class PlaylistSearchIndex(
                     .Select(document =>
                         document with
                         {
-                            PopularityPercentile = previous?.PopularityPercentile ?? 0,
+                            PopularityPercentile =
+                                document.PlaysYear > 0 ? previous?.PopularityPercentile ?? 0 : 0,
                         }
                     )
                     .ToArray(),
@@ -80,9 +81,13 @@ internal sealed class PlaylistSearchIndex(
             {
                 break;
             }
-            foreach (var document in documents)
+            foreach (
+                var document in documents.Where(row =>
+                    row.Published && !row.Archived && !row.TakenDown
+                )
+            )
             {
-                percentiles.Observe("playlist", document.FollowCount);
+                percentiles.Observe("playlist", document.PlaysYear);
             }
             await Import(collection, documents, false, cancellationToken);
             after = documents[^1].Id;
@@ -92,7 +97,7 @@ internal sealed class PlaylistSearchIndex(
         {
             var updates = typesense
                 .ExportDocuments(collection, "", cancellationToken)
-                .Where(document => document.FollowCount > 0);
+                .Where(document => document.PlaysYear > 0);
             await foreach (var batch in updates.Chunk(1000).WithCancellation(cancellationToken))
             {
                 var json = string.Join(
@@ -102,7 +107,7 @@ internal sealed class PlaylistSearchIndex(
                             new
                             {
                                 id = document.Id,
-                                popularity_percentile = ranks[document.FollowCount],
+                                popularity_percentile = ranks[document.PlaysYear],
                             }
                         )
                     )
@@ -233,6 +238,7 @@ internal sealed class PlaylistSearchIndex(
                 new { name = "archived", type = "bool" },
                 new { name = "taken_down", type = "bool" },
                 new { name = "follow_count", type = "int64" },
+                new { name = "plays_year", type = "int64" },
                 new
                 {
                     name = "popularity_percentile",

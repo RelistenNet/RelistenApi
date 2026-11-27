@@ -12,7 +12,7 @@ The public snapshot needs no credentials.
 | Method and path | Request and result |
 | --- | --- |
 | `PUT /v1/playlists/{playlist_id}/publication` | Owner only. Send `{"contract_version": 1, "published": true}` or `false`. The request sets the state and needs no `command_id`; a retry returns the current state with `changed: false`. A publish returns `public_code`, and later publishes reuse it. Publishing a taken-down or archived playlist returns `409 playlist_taken_down` or `409 playlist_archived`. |
-| `GET /v1/public-playlists/{public_code}` | Returns the current authored structure, public owner ID and username, revision, and history generation. Missing and unavailable playlists return the same 404. |
+| `GET /v1/public-playlists/{public_code}` | Returns the current authored structure, public owner ID and username, revision, history generation, and the metrics described below. Missing and unavailable playlists return the same 404. |
 | `PUT /v1/public-playlists/{public_code}/follow` | Returns 204 for a new or existing follow while the playlist is public. An account can follow up to 500 playlists; the 501st returns `422 quota_exceeded`. Following your own playlist returns `422 own_playlist`, since it is already in `playlists`. |
 | `DELETE /v1/playlists/{playlist_id}/follow` | Returns 204 even if the follow is already gone. Works for unavailable or deleted sources. |
 | `POST /v1/public-playlists/{public_code}/copy` | Send `contract_version: 1` and `command_id`. Returns 201 with the private copy's ID and revision. Retries return 200 with the same copy, including after takedown or deletion of the source. |
@@ -38,7 +38,7 @@ the edge like the public snapshot.
 
 | Query | Meaning |
 | --- | --- |
-| `sort` | `recent` (default) orders by `updated_at`, which publication, unpublication and content edits move. `followers` orders by follower count. `plays` orders by plays started from the playlist on the last 30 UTC days, counting each day once it is materialized (see Play attribution). Ties fall back to playlist ID, all descending. |
+| `sort` | `recent` (default) orders by `updated_at`, which publication, unpublication and content edits move. `followers` orders by follower count. `plays` orders by `popularity.windows["30d"].plays`, treating a missing snapshot as zero. Ties fall back to playlist ID, all descending. |
 | `artist` | An `artist_` ID or a bare catalog artist UUID. Keeps playlists with at least one live entry for one of that artist's tracks. |
 | `limit` | 1–50, default 25. |
 | `cursor` | The previous page's `next_cursor`. It is valid only with the `sort` that produced it. |
@@ -46,9 +46,9 @@ the edge like the public snapshot.
 Each item carries `playlist_id`, `public_code`, `name`, `description` (the
 author's Markdown, or null), `owner` (`id`,
 `username`), `track_count`, `duration_seconds`, `updated_at`,
-`follower_count`, `recent_play_count` and `artist_ids` (the typed IDs of the
-artists its tracks belong to, the artist with the most tracks first; tracks
-missing from the catalog add none). A null `next_cursor` ends the
+`follower_count`, `popularity`, `popularity_as_of`, and `artist_ids` (typed
+artist IDs ordered by the number of tracks in the playlist, most first).
+A null `next_cursor` ends the
 listing. Counts can change between pages, so a playlist may move across the
 cursor and be skipped or repeated. An invalid query returns
 `422 invalid_query`.
@@ -59,23 +59,30 @@ playlist revision. A track missing from the catalog counts in `track_count`
 but adds no duration or artist. A catalog change to a track's artist or
 duration reaches the playlist at its next revision.
 
+Public playlist detail, library reads, and search also expose the metrics.
+`follower_count` reflects committed follows and unfollows. The shared
+`PopularityResource` contains momentum, trend, and plays, hours, and hot score
+for `48h`, `7d`, `30d`, and `1y`. `popularity_as_of` is the UTC cutoff of
+the snapshot. A playlist with no snapshot has null popularity and cutoff.
+Publishing can expose attributed plays from before publication.
+
 ### Play attribution
 
 Plays started from a playlist record its `playlist_id` in
 `public.source_track_plays`. Signed-in plays get it from the cloud play
-history upload. Anonymous clients pass `playlist_id` to
+history upload. Qualifying Sonos listens use the playlist saved with the queue
+item. Anonymous clients pass `playlist_id` to
 `POST /api/v4/live/play` (JSON) or `POST /api/v2/live/play` (query). The
 catalog checks only that the value is a canonical `playlist_` ID and never
 returns it. The `source_track_plays_playlist_daily` continuous aggregate
-totals plays per playlist and UTC day, and the `plays` sort reads only its
-materialized days. A day is materialized an hour after it closes (and re-closed
-for three days to pick up late uploads), so a play counts one to 25 hours after
-it starts.
+totals plays per playlist and UTC day. The nightly popularity job reads the
+complete materialized days. Directory sorting uses the latest snapshot, and
+search uses the past-year play percentile from the playlist index build.
 
 Anonymous attribution is unauthenticated, like the track play counts it sits
-beside. Nothing checks that the track is in the playlist or limits plays per
-playlist, so the `plays` ordering can be inflated. That is accepted for now;
-add per-client limits before using it for anything beyond browse ordering.
+beside. The endpoint accepts playlist attribution without checking membership
+or limiting plays per playlist, so the reported totals and rankings can be
+inflated.
 
 ## Moderation
 

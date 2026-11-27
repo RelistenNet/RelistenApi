@@ -35,8 +35,16 @@ public sealed partial class SonosPlaybackController
             {
                 queue.QueueVersion,
                 queueLength = items.Length,
-                refreshPending = queue.RefreshedQueueVersion < queue.QueueVersion,
-                occurrences = items.Select(QueueOccurrence),
+                refreshPending = queue.RefreshAfter.HasValue
+                    && queue.RefreshedQueueVersion < queue.QueueVersion,
+                occurrences = items.Select(
+                    (item, index) =>
+                        QueueOccurrence(item, index) with
+                        {
+                            PlaylistId = item.PlaylistId,
+                            PlaylistEntryId = item.PlaylistEntryId,
+                        }
+                ),
             }
         );
     }
@@ -47,6 +55,7 @@ public sealed partial class SonosPlaybackController
         Guid handle,
         SonosQueueEditRequest request,
         [FromServices] SonosHandoff handoff,
+        [FromServices] SonosWorkflowStarter workflows,
         CancellationToken ct
     )
     {
@@ -68,94 +77,18 @@ public sealed partial class SonosPlaybackController
             return Problem(statusCode: 422, title: "Invalid Sonos queue edit.");
         }
 
-        var hash = SonosProtocol.Hash(JsonSerializer.Serialize(request));
         try
         {
-            if (await FindCommandAsync(handle, request.CommandId, ct) is { } replay)
-            {
-                return ReadQueueEditReplay(replay, hash);
-            }
-
-            if (request.ExpectedVersion != original.QueueVersion)
-            {
-                return QueueChanged(original);
-            }
-
-            var current = original.ReadItems();
-            var removed = original.ReadRemovedItems();
-            var replacement = await ResolveReplacementAsync(
+            var (edit, response) = await PrepareQueueEditAsync(
+                original,
+                request,
                 config,
                 handoff,
-                request.Occurrences,
-                current,
-                removed,
                 ct
             );
-            if (replacement is null)
-            {
-                return Problem(
-                    statusCode: 422,
-                    title: "A Sonos occurrence changed recording, reused a removed ID, or is unavailable."
-                );
-            }
-
-            var access = await link.AccessAsync(config, original.UserId, ct);
-            if (access is null)
-            {
-                return ReconnectRequired();
-            }
-
-            await using var transaction = await db.Database.BeginTransactionAsync(ct);
-            await LockRoomAsync(original, ct);
-            var prior = await FindCommandAsync(handle, request.CommandId, ct);
-            if (prior is not null)
-            {
-                return ReadQueueEditReplay(prior, hash);
-            }
-
-            if (await ReadCommandQueueAsync(handle, access, ct) is not { } queue)
-            {
-                return PlaybackInactive();
-            }
-
-            if (request.ExpectedVersion != queue.QueueVersion)
-            {
-                return QueueChanged(queue);
-            }
-
-            // Check the room after catalog validation. The playhead can advance without changing
-            // the queue revision. Sonos can still advance after this read, before fetching the edit.
-            var room = await ReadRoomAsync(access.Token, queue.GroupId, ct);
-            var playback = await ReconcileAsync(queue, room, ct);
-            if (playback.Status != "active" || playback.CurrentOccurrence is not { } playing)
-            {
-                await transaction.CommitAsync(ct);
-                return PlaybackInactive();
-            }
-
-            if (playing.ItemId != request.ExpectedItemId)
-            {
-                return Conflict(new { code = "sonos_playback_changed" });
-            }
-
-            var protectedLength = playing.QueueIndex + 1;
-            if (!current.Take(protectedLength).SequenceEqual(replacement.Take(protectedLength)))
-            {
-                return Conflict(new { code = "sonos_queue_current_protected" });
-            }
-
-            var result = await SaveQueueEditAsync(
-                queue,
-                current,
-                replacement,
-                removed,
-                request.CommandId,
-                hash,
-                playing.ItemId,
-                ct
-            );
-            await transaction.CommitAsync(ct);
-            return result;
+            return edit is null
+                ? response!
+                : await ApplyQueueEditAsync(edit, request, workflows, ct);
         }
         catch (Exception error) when (Unavailable(error, ct))
         {
@@ -163,24 +96,192 @@ public sealed partial class SonosPlaybackController
         }
     }
 
-    private async Task<IActionResult> SaveQueueEditAsync(
+    private sealed record PreparedQueueEdit(
+        SonosQueue Original,
+        string Hash,
+        SonosAccess Access,
+        QueueTrack[] Current,
+        QueueTrack[] Replacement,
+        RemovedQueueTrack[] Removed
+    );
+
+    private async Task<(PreparedQueueEdit? Edit, IActionResult? Response)> PrepareQueueEditAsync(
+        SonosQueue original,
+        SonosQueueEditRequest request,
+        SonosConfiguration config,
+        SonosHandoff handoff,
+        CancellationToken ct
+    )
+    {
+        var hash = SonosProtocol.Hash(JsonSerializer.Serialize(request));
+        if (await FindCommandAsync(original.Id, request.CommandId, ct) is { } replay)
+        {
+            return (null, ReadQueueEditReplay(replay, hash));
+        }
+        if (request.ExpectedVersion != original.QueueVersion)
+        {
+            return (null, QueueChanged(original));
+        }
+
+        var current = original.ReadItems();
+        var removed = original.ReadRemovedItems();
+        var replacement = await ResolveReplacementAsync(
+            config,
+            handoff,
+            request.Occurrences,
+            current,
+            removed,
+            ct
+        );
+        if (replacement is null)
+        {
+            return (
+                null,
+                Problem(
+                    statusCode: 422,
+                    title: "A Sonos occurrence changed recording, reused a removed ID, or is unavailable."
+                )
+            );
+        }
+
+        var access = await link.AccessAsync(config, original.UserId, ct);
+        return access is null
+            ? (null, ReconnectRequired())
+            : (new(original, hash, access, current, replacement, removed), null);
+    }
+
+    private async Task<IActionResult> ApplyQueueEditAsync(
+        PreparedQueueEdit edit,
+        SonosQueueEditRequest request,
+        SonosWorkflowStarter workflows,
+        CancellationToken ct
+    )
+    {
+        var handle = edit.Original.Id;
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await LockRoomAsync(edit.Original, ct);
+        if (await FindCommandAsync(handle, request.CommandId, ct) is { } prior)
+        {
+            return ReadQueueEditReplay(prior, edit.Hash);
+        }
+        if (await ReadCommandQueueAsync(handle, edit.Access, ct) is not { } queue)
+        {
+            return PlaybackInactive();
+        }
+        if (request.ExpectedVersion != queue.QueueVersion)
+        {
+            return QueueChanged(queue);
+        }
+
+        var check = await CheckQueueEditPlayheadAsync(
+            queue,
+            edit.Access.Token,
+            request.ExpectedItemId,
+            edit.Current,
+            edit.Replacement,
+            ct
+        );
+        if (check.Playing is not { } playing)
+        {
+            // Keep any eviction found by reconciliation even though the edit was rejected.
+            if (check.PersistInactiveState)
+            {
+                await transaction.CommitAsync(ct);
+            }
+            return check.Rejection!;
+        }
+
+        var (receipt, failure) = await SaveQueueEditAsync(
+            queue,
+            edit,
+            request.CommandId,
+            playing.ItemId,
+            ct
+        );
+        if (receipt is null)
+        {
+            return failure == QueueSaveFailure.HistoryFull
+                ? Conflict(new { code = "sonos_queue_history_full" })
+                : PlaybackInactive();
+        }
+
+        // The worker takes the same locks, so it reads committed edits only.
+        if (
+            receipt.QueueVersion != queue.QueueVersion
+            && !await workflows.TrySignalQueueAsync(handle, ct)
+        )
+        {
+            // Rollback discards the edit and its receipt. Retrying the same command ID reruns the edit.
+            return Problem(
+                statusCode: 503,
+                title: "Could not schedule the Sonos queue refresh. Retry the edit."
+            );
+        }
+
+        await transaction.CommitAsync(ct);
+        return Ok(QueueEditReceipt(receipt));
+    }
+
+    private sealed record QueueEditCheck(
+        PlaybackOccurrence? Playing,
+        IActionResult? Rejection = null,
+        bool PersistInactiveState = false
+    );
+
+    private async Task<QueueEditCheck> CheckQueueEditPlayheadAsync(
         SonosQueue queue,
+        string token,
+        string expectedItemId,
         QueueTrack[] current,
         QueueTrack[] replacement,
-        RemovedQueueTrack[] removed,
+        CancellationToken ct
+    )
+    {
+        // Check the room after catalog validation. The playhead can advance without changing
+        // the queue revision. Sonos can still advance after this read, before fetching the edit.
+        var room = await ReadRoomAsync(token, queue.GroupId, ct);
+        var playback = await ReconcileAsync(queue, room, ct);
+        if (playback.Status != "active" || playback.CurrentOccurrence is not { } playing)
+        {
+            return new(null, PlaybackInactive(), PersistInactiveState: true);
+        }
+
+        if (playing.ItemId != expectedItemId)
+        {
+            return new(null, Conflict(new { code = "sonos_playback_changed" }));
+        }
+
+        var protectedLength = playing.QueueIndex + 1;
+        if (!current.Take(protectedLength).SequenceEqual(replacement.Take(protectedLength)))
+        {
+            return new(null, Conflict(new { code = "sonos_queue_current_protected" }));
+        }
+
+        return new(playing);
+    }
+
+    private enum QueueSaveFailure
+    {
+        Inactive,
+        HistoryFull,
+    }
+
+    private async Task<(SonosCommand? Receipt, QueueSaveFailure? Failure)> SaveQueueEditAsync(
+        SonosQueue queue,
+        PreparedQueueEdit edit,
         Guid commandId,
-        string hash,
         string itemId,
         CancellationToken ct
     )
     {
+        var (current, replacement) = (edit.Current, edit.Replacement);
         var version = queue.QueueVersion;
         if (!current.SequenceEqual(replacement))
         {
-            var tombstones = RetainRemovedItems(current, replacement, removed);
+            var tombstones = RetainRemovedItems(current, replacement, edit.Removed);
             if (tombstones.Count > 15_000)
             {
-                return Conflict(new { code = "sonos_queue_history_full" });
+                return (null, QueueSaveFailure.HistoryFull);
             }
 
             var itemsJson = JsonSerializer.Serialize(replacement, SonosHandoff.QueueJson);
@@ -204,7 +305,7 @@ public sealed partial class SonosPlaybackController
                 );
             if (saved != 1)
             {
-                return PlaybackInactive();
+                return (null, QueueSaveFailure.Inactive);
             }
         }
 
@@ -212,7 +313,7 @@ public sealed partial class SonosPlaybackController
         {
             QueueId = queue.Id,
             Id = commandId,
-            RequestHash = hash,
+            RequestHash = edit.Hash,
             Action = "queue",
             Status = "accepted",
             ExpectedItemId = itemId,
@@ -221,7 +322,7 @@ public sealed partial class SonosPlaybackController
         };
         db.Add(receipt);
         await db.SaveChangesAsync(ct);
-        return Ok(QueueEditReceipt(receipt));
+        return (receipt, null);
     }
 
     private IActionResult ReadQueueEditReplay(SonosCommand prior, string hash) =>
@@ -270,14 +371,7 @@ public sealed partial class SonosPlaybackController
 
             foreach (var (entry, item) in additions.Zip(resolved))
             {
-                existing.Add(
-                    entry.OccurrenceId,
-                    item with
-                    {
-                        OccurrenceId = entry.OccurrenceId,
-                        SourceTrackId = entry.TrackId,
-                    }
-                );
+                existing.Add(entry.OccurrenceId, entry.Bind(item));
             }
         }
 

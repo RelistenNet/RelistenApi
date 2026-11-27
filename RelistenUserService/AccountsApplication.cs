@@ -102,7 +102,15 @@ public static class AccountsApplication
         builder.Services.AddScoped<SonosAccountLink>();
         builder.Services.AddScoped<SonosHandoff>();
         builder.Services.AddScoped<SonosQueueRefresh>();
-        builder.Services.AddHostedService<SonosQueueRefreshWorker>();
+        builder.Services.AddSingleton<SonosWorkflowStarter>();
+        builder.Services.AddScoped<SonosGroupEvents>();
+        builder.Services.AddScoped<SonosPlaybackReports>();
+        if (sonos is not null)
+        {
+            builder.Services.AddSingleton<SonosQueueRefreshActivities>();
+            builder.Services.AddSingleton<SonosHouseholdActivities>();
+            builder.Services.AddHostedService<SonosTemporalWorker>();
+        }
         builder
             .Services.AddHttpClient<SonosProtocol>(client =>
                 client.Timeout = TimeSpan.FromSeconds(10)

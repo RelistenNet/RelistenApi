@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="../Relisten.Search.Contracts/Relisten.Search.Contracts.csproj" />
     <ProjectReference Include="../Relisten.Identifiers/Relisten.Identifiers.csproj" />
   </ItemGroup>
 </Project>

@@ -129,9 +129,20 @@ public sealed partial class TestPlaylistApi
         await RecordPlaylistPlaysAsync(artist.Tracks[0], ids[1], plays: 3, daysAgo: 2);
         await RecordPlaylistPlaysAsync(artist.Tracks[0], ids[2], plays: 1, daysAgo: 1);
         await RecordPlaylistPlaysAsync(artist.Tracks[0], ids[0], plays: 5, daysAgo: 0);
+        await using (var connection = new NpgsqlConnection(_database.ConnectionString))
+        {
+            await connection.OpenAsync();
+            await Relisten.Services.Popularity.PopularityService.PublishPlaylistPopularity(
+                connection,
+                default
+            );
+        }
         var played = await ListArtist(artist.Uuid, sort: "plays");
         played.Playlists.Select(item => item.PlaylistId).Should().Equal(ids[1], ids[2], ids[0]);
-        played.Playlists.Select(item => item.RecentPlayCount).Should().Equal(3, 1, 0);
+        played
+            .Playlists.Select(item => item.Popularity?.Windows.Days30.Plays ?? 0)
+            .Should()
+            .Equal(3, 1, 0);
 
         await Problem(
             await _client.GetAsync(
@@ -202,6 +213,132 @@ public sealed partial class TestPlaylistApi
                 ),
             ]
         );
+
+    [Test]
+    public async Task Concurrent_follows_keep_one_live_count_across_public_and_owner_reads()
+    {
+        var artist = await SeedArtistAsync(60);
+        var request = PlaylistOf(artist.Tracks[0]);
+        (await Send(HttpMethod.Post, "/v1/playlists", request))
+            .StatusCode.Should()
+            .Be(HttpStatusCode.Created);
+        var code = (await Publish(request.PlaylistId)).PublicCode;
+        var first = await NewSharingListener();
+        var second = await NewSharingListener();
+        var url = $"/v1/public-playlists/{code}";
+        var follows = await Task.WhenAll(
+            Send(HttpMethod.Put, $"{url}/follow", actor: first),
+            Send(HttpMethod.Put, $"{url}/follow", actor: second)
+        );
+        follows
+            .Select(row => row.StatusCode)
+            .Should()
+            .OnlyContain(status => status == HttpStatusCode.NoContent);
+        (await Send(HttpMethod.Put, $"{url}/follow", actor: second))
+            .StatusCode.Should()
+            .Be(HttpStatusCode.NoContent);
+        (await Read<PublicPlaylistSnapshot>(await _client.GetAsync(url)))
+            .FollowerCount.Should()
+            .Be(2);
+        var list = await Read<PlaylistList>(await Send(HttpMethod.Get, "/v1/playlists"));
+        list.Playlists.Single(row => row.PlaylistId == request.PlaylistId)
+            .FollowerCount.Should()
+            .Be(2);
+
+        await using var connection = new NpgsqlConnection(_database.ConnectionString);
+        await connection.ExecuteAsync(
+            "DELETE FROM identity.users WHERE id = @id",
+            new { id = second.Value }
+        );
+        (await Read<PublicPlaylistSnapshot>(await _client.GetAsync(url)))
+            .FollowerCount.Should()
+            .Be(1);
+    }
+
+    [Test]
+    public async Task Repeated_unfollow_and_deleting_another_playlist_preserve_the_count()
+    {
+        var artist = await SeedArtistAsync(60);
+        var playlists = new[] { PlaylistOf(artist.Tracks[0]), PlaylistOf(artist.Tracks[0]) };
+        var codes = new List<string?>();
+        var listener = await NewSharingListener();
+        foreach (var playlist in playlists)
+        {
+            (await Send(HttpMethod.Post, "/v1/playlists", playlist))
+                .StatusCode.Should()
+                .Be(HttpStatusCode.Created);
+            var code = (await Publish(playlist.PlaylistId)).PublicCode;
+            codes.Add(code);
+            (await Send(HttpMethod.Put, $"/v1/public-playlists/{code}/follow", actor: listener))
+                .StatusCode.Should()
+                .Be(HttpStatusCode.NoContent);
+        }
+
+        await using var connection = new NpgsqlConnection(_database.ConnectionString);
+        await connection.ExecuteAsync(
+            "DELETE FROM user_data.playlists WHERE id = @id",
+            new { id = playlists[0].PlaylistId.Value }
+        );
+        (await _client.GetAsync($"/v1/public-playlists/{codes[0]}"))
+            .StatusCode.Should()
+            .Be(HttpStatusCode.NotFound);
+        var surviving = $"/v1/public-playlists/{codes[1]}";
+        (await Read<PublicPlaylistSnapshot>(await _client.GetAsync(surviving)))
+            .FollowerCount.Should()
+            .Be(1);
+
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            (
+                await Send(
+                    HttpMethod.Delete,
+                    $"/v1/playlists/{playlists[1].PlaylistId}/follow",
+                    actor: listener
+                )
+            )
+                .StatusCode.Should()
+                .Be(HttpStatusCode.NoContent);
+            (await Read<PublicPlaylistSnapshot>(await _client.GetAsync(surviving)))
+                .FollowerCount.Should()
+                .Be(0);
+        }
+    }
+
+    [Test]
+    public async Task Daily_momentum_favors_the_playlist_with_more_plays_on_the_latest_complete_day()
+    {
+        var artist = await SeedArtistAsync(60);
+        var rising = PlaylistOf(artist.Tracks[0]);
+        var fading = PlaylistOf(artist.Tracks[0]);
+        foreach (var playlist in new[] { rising, fading })
+        {
+            (await Send(HttpMethod.Post, "/v1/playlists", playlist))
+                .StatusCode.Should()
+                .Be(HttpStatusCode.Created);
+            await Publish(playlist.PlaylistId);
+        }
+        await RecordPlaylistPlaysAsync(artist.Tracks[0], rising.PlaylistId, 10, daysAgo: 2);
+        await RecordPlaylistPlaysAsync(artist.Tracks[0], fading.PlaylistId, 20, daysAgo: 2);
+        await RecordPlaylistPlaysAsync(artist.Tracks[0], rising.PlaylistId, 20, daysAgo: 1);
+        await RecordPlaylistPlaysAsync(artist.Tracks[0], fading.PlaylistId, 10, daysAgo: 1);
+        await using var connection = new NpgsqlConnection(_database.ConnectionString);
+        await connection.OpenAsync();
+        await Relisten.Services.Popularity.PopularityService.PublishPlaylistPopularity(
+            connection,
+            default
+        );
+        var cards = (await ListArtist(artist.Uuid)).Playlists.ToDictionary(
+            row => row.PlaylistId,
+            row => row.Popularity!
+        );
+        cards
+            .Values.Select(view => view.Windows.Year!.Plays)
+            .Should()
+            .OnlyContain(plays => plays == 30);
+        cards[rising.PlaylistId]
+            .MomentumScore.Should()
+            .BeGreaterThan(cards[fading.PlaylistId].MomentumScore);
+    }
 
     private async Task<PublicPlaylistPage> ListArtist(
         Guid artist,

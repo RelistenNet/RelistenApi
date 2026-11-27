@@ -18,6 +18,7 @@ public sealed class Playlist
 
     // Live entries with a track, maintained beside EntryCount so summaries need no entry scan.
     public int TrackCount { get; set; }
+    public int FollowerCount { get; set; }
 
     // Catalog facts derived from live track entries by PlaylistCatalogIndex, beside the
     // playlist_artists rows. They are current when CatalogIndexedRevision equals Revision.

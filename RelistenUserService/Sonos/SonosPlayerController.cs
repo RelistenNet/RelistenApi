@@ -170,12 +170,29 @@ public sealed class SonosPlayerController(
     public async Task<IActionResult> TimePlayed(
         Guid queueId,
         [FromBody] JsonElement report,
-        CancellationToken ct
-    ) => await AuthorizedQueueAsync(queueId, ct) is null ? NotFound() : NoContent();
+        CancellationToken ct,
+        [FromServices] SonosPlaybackReports? reports = null
+    )
+    {
+        if (await AuthorizedQueueAsync(queueId, ct, acceptFinalReport: true) is not { } queue)
+        {
+            return NotFound();
+        }
+
+        if (reports is not null)
+        {
+            await reports.RecordAsync(queue, report, ct);
+        }
+        return NoContent();
+    }
 
     [HttpPost("events/{**path}")]
     [RequestSizeLimit(64 * 1024)]
-    public async Task<IActionResult> Events([FromBody] JsonElement body, CancellationToken ct)
+    public async Task<IActionResult> Events(
+        [FromBody] JsonElement body,
+        CancellationToken ct,
+        [FromServices] SonosGroupEvents? groups = null
+    )
     {
         if (Config is not { } config)
         {
@@ -201,10 +218,25 @@ public sealed class SonosPlayerController(
             return Unauthorized();
         }
 
+        var eventNamespace = fields[1];
+        var eventType = fields[2];
+        var targetType = fields[3];
+        var targetId = fields[4];
+
+        // The signed target chooses the household. The unsigned body cannot supply names.
         if (
-            fields[1] == "playbackSession"
-            && fields[2] == "sessionError"
-            && fields[3] is "sessionId" or "playbackSessionId"
+            eventNamespace == "groups"
+            && eventType is ("groups" or "groupInfo")
+            && groups is not null
+        )
+        {
+            return await groups.ChangedAsync(targetType, targetId, ct) ? Ok() : StatusCode(503);
+        }
+
+        if (
+            eventNamespace == "playbackSession"
+            && eventType == "sessionError"
+            && targetType is "sessionId" or "playbackSessionId"
             && body.ValueKind == JsonValueKind.Object
             && body.TryGetProperty("errorCode", out var errorCode)
             && errorCode.ValueKind == JsonValueKind.String
@@ -215,17 +247,17 @@ public sealed class SonosPlayerController(
             // cannot by itself prove which session ended.
             await db.Set<SonosQueue>()
                 .Where(row =>
-                    row.SonosSessionId == fields[4]
+                    row.SonosSessionId == targetId
                     && (row.Status == "loaded" || row.Status == "dispatching")
                 )
-                .ExecuteUpdateAsync(set => set.SetProperty(row => row.Status, "evicted"), ct);
+                .EvictAsync(clock.GetUtcNow(), ct);
             return Ok();
         }
 
         if (
-            fields[1] == "playback"
-            && fields[2] == "playbackStatus"
-            && fields[3] == "groupId"
+            eventNamespace == "playback"
+            && eventType == "playbackStatus"
+            && targetType == "groupId"
             && body.ValueKind == JsonValueKind.Object
             && body.TryGetProperty("playbackState", out var state)
             && body.TryGetProperty("itemId", out var item)
@@ -239,7 +271,7 @@ public sealed class SonosPlayerController(
             var household = Request.Headers["X-Sonos-Household-Id"].ToString();
             var candidates = db.Set<SonosQueue>()
                 .Where(row =>
-                    row.GroupId == fields[4]
+                    row.GroupId == targetId
                     && row.HouseholdId == household
                     && row.ExpiresAt > now
                     && (row.Status == "loaded" || row.Status == "dispatching")
@@ -274,7 +306,11 @@ public sealed class SonosPlayerController(
         return Ok();
     }
 
-    private async Task<SonosQueue?> AuthorizedQueueAsync(Guid id, CancellationToken ct)
+    private async Task<SonosQueue?> AuthorizedQueueAsync(
+        Guid id,
+        CancellationToken ct,
+        bool acceptFinalReport = false
+    )
     {
         if (Config is null)
         {
@@ -294,13 +330,19 @@ public sealed class SonosPlayerController(
         }
 
         var now = clock.GetUtcNow();
+        // The player may submit its final listen after a handoff, eviction, or queue expiry.
+        var cutoff = acceptFinalReport ? now.AddMinutes(-5) : now;
         var queue = await db.Set<SonosQueue>()
             .AsNoTracking()
             .SingleOrDefaultAsync(
                 row =>
                     row.Id == id
-                    && row.ExpiresAt > now
-                    && (row.Status == "loaded" || row.Status == "dispatching"),
+                    && row.ExpiresAt > cutoff
+                    && (
+                        row.Status == "loaded"
+                        || row.Status == "dispatching"
+                        || (acceptFinalReport && row.Status == "evicted" && row.EvictedAt > cutoff)
+                    ),
                 ct
             );
         // The speaker's queue credential inherits the creating login's lifetime.

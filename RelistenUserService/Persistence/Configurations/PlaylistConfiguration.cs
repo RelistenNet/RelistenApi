@@ -40,6 +40,8 @@ public sealed class PlaylistConfiguration
             row.UpdatedAt,
         });
         builder.HasIndex(row => row.PublicCode).IsUnique();
+        builder.HasIndex(row => new { row.FollowerCount, row.Id }).IsDescending(true, true);
+        builder.Property(row => row.FollowerCount).HasDefaultValue(0);
         builder.Property(row => row.CatalogDurationSeconds).HasDefaultValue(0);
         builder.Property(row => row.CatalogIndexedRevision).HasDefaultValue(0L);
         builder

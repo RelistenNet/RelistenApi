@@ -10,6 +10,7 @@ using Newtonsoft.Json.Serialization;
 using Npgsql;
 using Relisten.Api.Models.Api.V4;
 using Relisten.Identifiers;
+using Relisten.Search;
 using Relisten.Services.Popularity;
 
 namespace Relisten.Catalog;

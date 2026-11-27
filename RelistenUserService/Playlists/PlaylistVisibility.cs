@@ -33,20 +33,20 @@ internal static class PlaylistVisibility
     internal static async Task<Playlist> LockPublicSourceAsync(
         AccountsDbContext database,
         string code,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        bool forFollow = false
     )
     {
-        // Writers and the operator hold the playlist's update lock. Holding a share
-        // lock keeps the source public and its structure stable until the command commits.
-        return await database
-                .Playlists.FromSqlInterpolated(
-                    $"""
-                    SELECT * FROM user_data.playlists WHERE public_code = {code} FOR SHARE
-                    """
-                )
-                .AsNoTracking()
-                .Public()
-                .SingleOrDefaultAsync(cancellationToken)
+        // A follow changes the counter on this row. Lock it for that update from the
+        // start so concurrent follows do not deadlock trying to upgrade share locks.
+        var source = forFollow
+            ? database.Playlists.FromSqlInterpolated(
+                $"SELECT * FROM user_data.playlists WHERE public_code = {code} FOR NO KEY UPDATE"
+            )
+            : database.Playlists.FromSqlInterpolated(
+                $"SELECT * FROM user_data.playlists WHERE public_code = {code} FOR SHARE"
+            );
+        return await source.AsNoTracking().Public().SingleOrDefaultAsync(cancellationToken)
             ?? throw NotFound();
     }
 }

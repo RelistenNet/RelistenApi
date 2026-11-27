@@ -7,6 +7,7 @@ using Microsoft.OpenApi;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 using Relisten.Api.Models.Api.V4;
+using Relisten.Search;
 using Swashbuckle.AspNetCore.SwaggerGen;
 
 namespace Relisten.Controllers.V4;
@@ -21,7 +22,7 @@ internal sealed class CatalogResourceSchemaFilter : ISchemaFilter
         if (
             schema is not OpenApiSchema model
             || schema.Properties is null
-            || context.Type.Namespace != typeof(TrackResource).Namespace
+            || !UsesCatalogContract(context.Type)
             || Resolver.ResolveContract(context.Type) is not JsonObjectContract contract
         )
         {
@@ -125,4 +126,10 @@ internal sealed class CatalogResourceSchemaFilter : ISchemaFilter
             }
         }
     }
+
+    private static bool UsesCatalogContract(Type type) =>
+        type.Namespace == typeof(TrackResource).Namespace
+        || type == typeof(PopularityResource)
+        || type == typeof(PopularityWindowsResource)
+        || type == typeof(PopularityWindowResource);
 }

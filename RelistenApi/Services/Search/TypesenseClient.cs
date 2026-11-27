@@ -158,7 +158,7 @@ internal sealed class TypesenseClient(HttpClient http)
     ) =>
         Export<IndexedDocument>(
             collection,
-            "id,venue_id,kind,popularity_percentile,follow_count"
+            "id,venue_id,kind,popularity_percentile,follow_count,plays_year"
                 + (
                     includeVocabularyFields
                         ? ",name,popularity,display_popularity.windows.1y.plays"
@@ -313,7 +313,8 @@ internal sealed class TypesenseClient(HttpClient http)
         long FollowCount,
         string? Name = null,
         double Popularity = 0,
-        IndexedPopularity? DisplayPopularity = null
+        IndexedPopularity? DisplayPopularity = null,
+        long PlaysYear = 0
     );
 
     internal sealed record IndexedPopularity(Dictionary<string, IndexedPlayWindow> Windows);

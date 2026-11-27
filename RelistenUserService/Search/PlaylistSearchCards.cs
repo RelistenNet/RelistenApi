@@ -44,7 +44,15 @@ internal sealed class PlaylistSearchCards(AccountsDbContext db)
             .ThenBy(row => row.Id)
             .Take(PlaylistSearchCandidates.AllPageSize);
         var rows = await CurrentRows(library).ToArrayAsync(cancellationToken);
-        return rows.Select(row => row.Card(user, followed: row.OwnerId != user)).ToArray();
+        var popularity = await ReadPopularity(rows, cancellationToken);
+        return rows.Select(row =>
+                row.Card(
+                    user,
+                    followed: row.OwnerId != user,
+                    popularity.GetValueOrDefault(row.Id.Value)
+                )
+            )
+            .ToArray();
     }
 
     public async Task<PlaylistSearchCard[]> Read(
@@ -72,6 +80,7 @@ internal sealed class PlaylistSearchCards(AccountsDbContext db)
         var rows = await CurrentRows(visible)
             .ToDictionaryAsync(row => row.Id.Value, cancellationToken);
 
+        var popularity = await ReadPopularity(rows.Values, cancellationToken);
         var follows = viewer is { } user
             ? await db
                 .PlaylistFollows.Where(follow =>
@@ -89,12 +98,19 @@ internal sealed class PlaylistSearchCards(AccountsDbContext db)
                     .Card(
                         viewer,
                         follows.Contains(rows[candidate.Id].Id),
+                        popularity.GetValueOrDefault(candidate.Id),
                         candidate.PopularityPercentile,
                         candidate.SupportingMatch
                     )
             )
             .ToArray();
     }
+
+    private Task<Dictionary<string, PlaylistPopularity>> ReadPopularity(
+        IEnumerable<CurrentPlaylist> rows,
+        CancellationToken ct
+    ) =>
+        PlaylistPopularity.ReadAsync(db, rows.Where(row => row.IsPublic).Select(row => row.Id), ct);
 
     private IQueryable<CurrentPlaylist> CurrentRows(IQueryable<Playlist> playlists) =>
         from row in playlists
@@ -105,6 +121,7 @@ internal sealed class PlaylistSearchCards(AccountsDbContext db)
             row.Name,
             row.Description,
             row.TrackCount,
+            row.FollowerCount,
             row.Published,
             row.Archived,
             row.TakenDown,
@@ -120,6 +137,7 @@ internal sealed class PlaylistSearchCards(AccountsDbContext db)
         string Name,
         string? Description,
         int TrackCount,
+        int FollowerCount,
         bool Published,
         bool Archived,
         bool TakenDown,
@@ -129,7 +147,7 @@ internal sealed class PlaylistSearchCards(AccountsDbContext db)
         string Username
     )
     {
-        private bool IsPublic => Published && !Archived && !TakenDown;
+        public bool IsPublic => Published && !Archived && !TakenDown;
 
         public bool Matches(PlaylistCandidate hit) =>
             hit.HistoryGeneration == HistoryGeneration
@@ -142,6 +160,7 @@ internal sealed class PlaylistSearchCards(AccountsDbContext db)
         public PlaylistSearchCard Card(
             UserId? viewer,
             bool followed,
+            PlaylistPopularity? popularity,
             double popularityPercentile = 0,
             MatchEvidence? supportingMatch = null
         ) =>
@@ -154,6 +173,8 @@ internal sealed class PlaylistSearchCards(AccountsDbContext db)
                 IsPublic ? PublicCode : null,
                 IsPublic ? Username : null,
                 followed,
+                IsPublic ? FollowerCount : null,
+                popularity,
                 popularityPercentile,
                 supportingMatch
             );
@@ -169,6 +190,8 @@ internal sealed record PlaylistSearchCard(
     string? PublicCode,
     string? Curator,
     bool Followed,
+    int? FollowerCount,
+    PlaylistPopularity? Popularity,
     double PopularityPercentile,
     MatchEvidence? SupportingMatch
 )

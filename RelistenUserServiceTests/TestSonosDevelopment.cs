@@ -28,13 +28,179 @@ public sealed class TestSonosDevelopment
     private static readonly CancellationToken Ct = CancellationToken.None;
 
     [Test]
-    public async Task Linked_account_loads_an_ordered_queue_and_observes_a_signed_pause()
+    public Task Linked_account_loads_an_ordered_queue_and_observes_a_signed_pause() =>
+        WithSonosAsync(ExerciseAsync);
+
+    [Test]
+    public Task Discovering_groups_refreshes_only_the_current_accounts_active_group_names() =>
+        WithSonosAsync(async room =>
+        {
+            await ConnectAsync(room);
+            var loaded = new SonosHandoffRequest(Guid.NewGuid(), "office", [Track], 0, 0);
+            HandoffStatus(await room.Control.Start(loaded, Ct)).Should().Be("loaded");
+
+            var otherUser = await room.Database.CreateUserAsync("other_sonos_user");
+            var dispatching = SeedQueue(room, room.UserId, "studio-office", "dispatching", null);
+            var evicted = SeedQueue(room, room.UserId, "office", "evicted", "Old name");
+            var unlisted = SeedQueue(room, room.UserId, "missing", "loaded", "Unlisted");
+            var otherAccount = SeedQueue(room, otherUser, "office", "loaded", "Other account");
+            await room.Db.SaveChangesAsync(Ct);
+
+            room.Upstream.OfficeName = "Living Room + 3";
+            room.Upstream.StudioName = "Studio + 1";
+            (await room.Control.Groups(Ct)).Should().BeOfType<OkObjectResult>();
+
+            var playback = AsJson(
+                (OkObjectResult)await room.Playback.GetPlayback(loaded.RequestId, Ct)
+            );
+            playback.GetProperty("group_name").GetString().Should().Be("Living Room + 3");
+            playback.GetProperty("status").GetString().Should().Be("active");
+
+            var rows = await room
+                .Db.Set<SonosQueue>()
+                .AsNoTracking()
+                .ToDictionaryAsync(row => row.Id, Ct);
+            rows[dispatching.Id].GroupName.Should().Be("Studio + 1");
+            rows[dispatching.Id].Status.Should().Be("dispatching");
+            rows[dispatching.Id].QueueVersion.Should().Be(dispatching.QueueVersion);
+            rows[evicted.Id].GroupName.Should().Be("Old name");
+            rows[unlisted.Id].GroupName.Should().Be("Unlisted");
+            rows[otherAccount.Id].GroupName.Should().Be("Other account");
+        });
+
+    [TestCase("acknowledgement")]
+    [TestCase("receipt")]
+    [TestCase("playback")]
+    public Task Confirming_a_replacement_retires_the_old_queue(string confirmation) =>
+        WithSonosAsync(async room =>
+        {
+            await ConnectAsync(room);
+            var first = new SonosHandoffRequest(Guid.NewGuid(), "office", [Track], 0, 0);
+            HandoffStatus(await room.Control.Start(first, Ct)).Should().Be("loaded");
+            var oldItem = room.Upstream.RoomItem;
+            var anotherRoom = SeedQueue(room, room.UserId, "studio-office", "loaded", "Studio");
+            await room.Db.SaveChangesAsync(Ct);
+
+            var next = first with { RequestId = Guid.NewGuid() };
+            room.Upstream.CreatedSessionId = "replacement-session";
+            if (confirmation == "acknowledgement")
+            {
+                HandoffStatus(await room.Control.Start(next, Ct)).Should().Be("loaded");
+            }
+            else
+            {
+                room.Upstream.LoseNextLoadResponse = true;
+                (await room.Control.Start(next, Ct)).Should().BeOfType<AcceptedAtActionResult>();
+                HandoffStatus(await room.Control.GetHandoff(first.RequestId, Ct))
+                    .Should()
+                    .Be("loaded");
+                if (confirmation == "receipt")
+                {
+                    HandoffStatus(await room.Control.GetHandoff(next.RequestId, Ct))
+                        .Should()
+                        .Be("loaded");
+                }
+                else
+                {
+                    var playback = AsJson(
+                        (OkObjectResult)await room.Playback.GetPlayback(next.RequestId, Ct)
+                    );
+                    playback.GetProperty("status").GetString().Should().Be("active");
+                }
+            }
+
+            room.Upstream.RoomItem.Should().NotBe(oldItem);
+            HandoffStatus(await room.Control.GetHandoff(first.RequestId, Ct))
+                .Should()
+                .Be("evicted");
+            HandoffStatus(await room.Control.GetHandoff(next.RequestId, Ct)).Should().Be("loaded");
+            HandoffStatus(await room.Control.GetHandoff(anotherRoom.Id, Ct)).Should().Be("loaded");
+        });
+
+    [Test]
+    public Task Recovering_an_older_load_leaves_the_newer_pending_handoff_eligible() =>
+        WithSonosAsync(async room =>
+        {
+            await ConnectAsync(room);
+            var first = new SonosHandoffRequest(Guid.NewGuid(), "office", [Track], 0, 0);
+            room.Upstream.LoseNextLoadResponse = true;
+            (await room.Control.Start(first, Ct)).Should().BeOfType<AcceptedAtActionResult>();
+            var firstItem = room.Upstream.RoomItem;
+
+            room.Clock.Advance(TimeSpan.FromSeconds(46));
+            var next = first with { RequestId = Guid.NewGuid() };
+            room.Upstream.CreatedSessionId = "replacement-session";
+            room.Upstream.LoseNextLoadResponse = true;
+            (await room.Control.Start(next, Ct)).Should().BeOfType<AcceptedAtActionResult>();
+            var nextItem = room.Upstream.RoomItem;
+
+            // The new load is still pending confirmation while the room reports the old item.
+            room.Upstream.RoomItem = firstItem;
+            HandoffStatus(await room.Control.GetHandoff(first.RequestId, Ct)).Should().Be("loaded");
+            (await room.Control.GetHandoff(next.RequestId, Ct))
+                .Should()
+                .BeOfType<AcceptedAtActionResult>();
+
+            room.Upstream.RoomItem = nextItem;
+            HandoffStatus(await room.Control.GetHandoff(next.RequestId, Ct)).Should().Be("loaded");
+            HandoffStatus(await room.Control.GetHandoff(first.RequestId, Ct))
+                .Should()
+                .Be("evicted");
+        });
+
+    private static SonosQueue SeedQueue(
+        TestRoom room,
+        UserId owner,
+        string groupId,
+        string status,
+        string? name
+    )
+    {
+        var queue = new SonosQueue
+        {
+            Id = Guid.NewGuid(),
+            UserId = owner,
+            SessionId = room.SessionId,
+            GroupId = groupId,
+            GroupName = name,
+            HouseholdId = groupId == "studio-office" ? "studio" : "home",
+            Status = status,
+            QueueVersion = 8,
+            ItemsJson = "[]",
+            ExpiresAt = room.Clock.GetUtcNow().AddHours(1),
+        };
+        room.Db.Add(queue);
+        return queue;
+    }
+
+    private static async Task ConnectAsync(TestRoom room)
+    {
+        var authorization = AsJson((OkObjectResult)await room.Control.Connect(Ct))
+            .GetProperty("authorization_url")
+            .GetString()!;
+        var state = QueryHelpers.ParseQuery(new Uri(authorization).Query)["state"].ToString();
+        (await room.Player.Callback(state, "one-time-code", Ct)).Should().BeOfType<ContentResult>();
+    }
+
+    private sealed record TestRoom(
+        PostgresIntegrationDatabase Database,
+        AccountsDbContext Db,
+        UserId UserId,
+        SessionId SessionId,
+        TestClock Clock,
+        TestUpstream Upstream,
+        SonosControlController Control,
+        SonosPlayerController Player,
+        SonosPlaybackController Playback
+    );
+
+    private static async Task WithSonosAsync(Func<TestRoom, Task> exercise)
     {
         var database = new PostgresIntegrationDatabase();
         try
         {
             await database.StartAsync();
-            await ExerciseAsync(database);
+            await WithDatabaseAsync(database, exercise);
         }
         finally
         {
@@ -42,7 +208,10 @@ public sealed class TestSonosDevelopment
         }
     }
 
-    private static async Task ExerciseAsync(PostgresIntegrationDatabase database)
+    private static async Task WithDatabaseAsync(
+        PostgresIntegrationDatabase database,
+        Func<TestRoom, Task> exercise
+    )
     {
         var userId = await database.CreateUserAsync("sonos_test");
         var nativeId = SessionId.New();
@@ -102,6 +271,26 @@ public sealed class TestSonosDevelopment
         };
         player.Request.Host = new HostString(Host);
 
+        var playbackApi = new SonosPlaybackController(
+            account,
+            development,
+            link,
+            protocol,
+            db,
+            locks,
+            TimeProvider.System
+        )
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
+        };
+        await exercise(
+            new(database, db, userId, nativeId, clock, upstream, control, player, playbackApi)
+        );
+    }
+
+    private static async Task ExerciseAsync(TestRoom room)
+    {
+        var (_, db, userId, nativeId, clock, upstream, control, player, playbackApi) = room;
         var authorization = AsJson((OkObjectResult)await control.Connect(Ct))
             .GetProperty("authorization_url")
             .GetString()!;
@@ -226,18 +415,6 @@ public sealed class TestSonosDevelopment
             .Should()
             .Be("PLAYBACK_STATE_PAUSED");
 
-        var playbackApi = new SonosPlaybackController(
-            account,
-            development,
-            link,
-            protocol,
-            db,
-            locks,
-            TimeProvider.System
-        )
-        {
-            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
-        };
         var handle = request.RequestId;
         playback.GetProperty("playback_handle").GetGuid().Should().Be(handle);
         upstream.RoomState = "PLAYBACK_STATE_PAUSED";
@@ -559,6 +736,8 @@ public sealed class TestSonosDevelopment
         public int CreateCount { get; private set; }
         public int RefreshCount { get; private set; }
         public bool RejectFirstRefresh { get; set; }
+        public Func<HttpRequestMessage, HttpResponseMessage>? OnRefresh { get; set; }
+        public string AccessToken { get; set; } = "access";
         public bool LoseNextCreateResponse { get; set; }
         public bool RejectNextLoad { get; set; }
         public HttpStatusCode MissingRoomStatus { get; set; } = HttpStatusCode.NotFound;
@@ -574,6 +753,10 @@ public sealed class TestSonosDevelopment
         public Dictionary<string, bool> RoomPlaybackActions { get; } = [];
         public bool LoseNextPlayModeResponse { get; set; }
         public bool RejectPlayModeByPolicy { get; set; }
+        public string OfficeName { get; set; } = "Office";
+        public string? NextHomeGroupsResponse { get; set; }
+        public string StudioName { get; set; } = "Office";
+        public string CreatedSessionId { get; set; } = "test-session";
         public string RoomState { get; set; } = "PLAYBACK_STATE_PLAYING";
         public bool EvictOnNextCommand { get; set; }
         public bool LoseNextTransportResponse { get; set; }
@@ -581,6 +764,16 @@ public sealed class TestSonosDevelopment
         public int RoomPosition { get; private set; }
         public int RoomVolume { get; private set; } = 17;
         public bool RoomMuted { get; set; }
+
+        private string HomeGroups()
+        {
+            var next = NextHomeGroupsResponse;
+            NextHomeGroupsResponse = null;
+            return next
+                ?? JsonSerializer.Serialize(
+                    new { groups = new[] { new { id = "office", name = OfficeName } } }
+                );
+        }
 
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
@@ -632,6 +825,10 @@ public sealed class TestSonosDevelopment
             if (path.EndsWith("/refreshCloudQueue", StringComparison.Ordinal))
             {
                 RefreshCount++;
+                if (OnRefresh is { } respond)
+                {
+                    return respond(request);
+                }
                 return new HttpResponseMessage(
                     RejectFirstRefresh && RefreshCount == 1
                         ? HttpStatusCode.ServiceUnavailable
@@ -813,14 +1010,22 @@ public sealed class TestSonosDevelopment
             {
                 "/login/v3/oauth/access" when IncompleteToken =>
                     """{"access_token":"access","expires_in":3600}""",
-                "/login/v3/oauth/access" =>
-                    """{"access_token":"access","refresh_token":"refresh","expires_in":3600}""",
+                "/login/v3/oauth/access" => JsonSerializer.Serialize(
+                    new
+                    {
+                        access_token = AccessToken,
+                        refresh_token = "refresh",
+                        expires_in = 3600,
+                    }
+                ),
                 "/control/api/v1/households" =>
                     """{"households":[{"id":"home"},{"id":"studio"}]}""",
-                "/control/api/v1/households/home/groups" =>
-                    """{"groups":[{"id":"office","name":"Office"}]}""",
-                "/control/api/v1/households/studio/groups" =>
-                    """{"groups":[{"id":"studio-office","name":"Office"}]}""",
+                "/control/api/v1/households/home/groups/subscription" => "{}",
+                "/control/api/v1/households/studio/groups/subscription" => "{}",
+                "/control/api/v1/households/home/groups" => HomeGroups(),
+                "/control/api/v1/households/studio/groups" => JsonSerializer.Serialize(
+                    new { groups = new[] { new { id = "studio-office", name = StudioName } } }
+                ),
                 "/control/api/v1/groups/office/playback" => JsonSerializer.Serialize(
                     new
                     {
@@ -839,11 +1044,15 @@ public sealed class TestSonosDevelopment
                         @fixed = false,
                     }
                 ),
-                "/control/api/v1/groups/office/playback/subscription" => "{}",
-                "/control/api/v1/playbackSessions/test-session/playbackSession/subscription" =>
+                "/control/api/v1/groups/office/playback/subscription"
+                or "/control/api/v1/groups/studio-office/playback/subscription" => "{}",
+                var subscription
+                    when subscription
+                        == $"/control/api/v1/playbackSessions/{CreatedSessionId}/playbackSession/subscription" =>
                     "{}",
-                "/control/api/v1/groups/office/playbackSession" =>
-                    """{"sessionId":"test-session"}""",
+                "/control/api/v1/groups/office/playbackSession"
+                or "/control/api/v1/groups/studio-office/playbackSession" =>
+                    JsonSerializer.Serialize(new { sessionId = CreatedSessionId }),
                 _ => throw new InvalidOperationException($"Unexpected upstream request {path}"),
             };
             return new HttpResponseMessage(HttpStatusCode.OK)

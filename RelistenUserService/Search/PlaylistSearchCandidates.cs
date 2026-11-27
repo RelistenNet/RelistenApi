@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text.Json;
 using Microsoft.AspNetCore.WebUtilities;
 using Relisten.Accounts.Contracts.Search;
@@ -9,6 +10,8 @@ internal sealed class PlaylistSearchCandidates(HttpClient client, IConfiguration
 {
     internal const int PageSize = 20;
     internal const int AllPageSize = 20;
+    private const string CandidateFields =
+        "id,history_generation,revision,published,archived,taken_down";
 
     public async Task<PlaylistCandidate[]> Find(
         MergedSearchRequest request,
@@ -33,27 +36,24 @@ internal sealed class PlaylistSearchCandidates(HttpClient client, IConfiguration
 
         var alias = configuration["Search:PlaylistAlias"] ?? PlaylistSearchJob.DefaultAlias;
         // A playlist's own text is stronger evidence than an artist or song on one track.
-        var path = QueryHelpers.AddQueryString(
-            $"collections/{Uri.EscapeDataString(alias)}/documents/search",
-            new Dictionary<string, string?>
-            {
-                ["q"] = query,
-                ["query_by"] = "name,description,curator,entry_notes,guide_text,artists,songs",
-                ["query_by_weights"] = "8,5,4,3,3,2,2",
-                ["text_match_type"] = "max_weight",
-                ["drop_tokens_threshold"] = "0",
-                ["filter_by"] = filter,
-                ["include_fields"] =
-                    "id,history_generation,revision,published,archived,taken_down,popularity_percentile",
-                ["highlight_fields"] = "description,curator,entry_notes,guide_text,artists,songs",
-                ["sort_by"] = "_text_match:desc,follow_count:desc,updated_at:desc",
-                ["page"] = request.Page.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                ["per_page"] = (request.IsAll ? AllPageSize : PageSize).ToString(
-                    System.Globalization.CultureInfo.InvariantCulture
-                ),
-            }
-        );
-        var result = await client.GetFromJsonAsync<PlaylistHits>(path, Json, cancellationToken);
+        var path = $"collections/{Uri.EscapeDataString(alias)}/documents/search";
+        var parameters = new Dictionary<string, string?>
+        {
+            ["q"] = query,
+            ["query_by"] = "name,description,curator,entry_notes,guide_text,artists,songs",
+            ["query_by_weights"] = "8,5,4,3,3,2,2",
+            ["text_match_type"] = "max_weight",
+            ["drop_tokens_threshold"] = "0",
+            ["filter_by"] = filter,
+            ["include_fields"] = CandidateFields + ",popularity_percentile",
+            ["highlight_fields"] = "description,curator,entry_notes,guide_text,artists,songs",
+            ["sort_by"] = "_text_match:desc,plays_year:desc,follow_count:desc",
+            ["page"] = request.Page.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["per_page"] = (request.IsAll ? AllPageSize : PageSize).ToString(
+                System.Globalization.CultureInfo.InvariantCulture
+            ),
+        };
+        var result = await ReadHits(path, parameters, cancellationToken);
         if (result?.Hits is null)
         {
             throw new JsonException("Typesense returned no playlist hits property.");
@@ -69,6 +69,39 @@ internal sealed class PlaylistSearchCandidates(HttpClient client, IConfiguration
                 }
             )
             .ToArray();
+    }
+
+    private async Task<PlaylistHits?> ReadHits(
+        string path,
+        Dictionary<string, string?> parameters,
+        CancellationToken ct
+    )
+    {
+        using var response = await client.GetAsync(
+            QueryHelpers.AddQueryString(path, parameters),
+            ct
+        );
+        if (
+            response.StatusCode is (HttpStatusCode.BadRequest or HttpStatusCode.NotFound)
+            && (await response.Content.ReadAsStringAsync(ct)).Contains(
+                "Could not find a field named `plays_year` in the schema",
+                StringComparison.Ordinal
+            )
+        )
+        {
+            // An older alias can still serve text and follower ordering until its next rebuild.
+            parameters["sort_by"] = "_text_match:desc,follow_count:desc";
+            // Old percentiles measured follows. Only new generations carry a play percentile.
+            parameters["include_fields"] = CandidateFields;
+            return await client.GetFromJsonAsync<PlaylistHits>(
+                QueryHelpers.AddQueryString(path, parameters),
+                Json,
+                ct
+            );
+        }
+
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<PlaylistHits>(Json, ct);
     }
 
     private static MatchEvidence SupportingMatch(string query, PlaylistHighlight[] highlights)

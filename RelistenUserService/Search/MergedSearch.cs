@@ -117,7 +117,7 @@ internal sealed class MergedSearch(
         if (!all)
         {
             return catalog
-                .Concat(playlists.OrderByDescending(candidate => candidate.Order))
+                .Concat(OrderPlaylists(playlists))
                 .Select(candidate => candidate.Result)
                 .ToArray();
         }
@@ -125,11 +125,7 @@ internal sealed class MergedSearch(
         // The catalog has already applied its grouping and playback rules.
         // Insert playlists by shared scores without changing catalog order.
         // Reviews are supporting evidence, so playlist results appear above them.
-        var remaining = new Queue<SearchCandidate>(
-            playlists
-                .OrderByDescending(candidate => candidate.Order)
-                .ThenBy(candidate => candidate.Result.Key, StringComparer.Ordinal)
-        );
+        var remaining = new Queue<SearchCandidate>(OrderPlaylists(playlists));
         var result = new List<SearchResult>();
         foreach (var candidate in catalog)
         {
@@ -148,6 +144,16 @@ internal sealed class MergedSearch(
 
         return result.Concat(remaining.Select(candidate => candidate.Result)).Take(limit).ToArray();
     }
+
+    private static IOrderedEnumerable<SearchCandidate> OrderPlaylists(
+        IEnumerable<SearchCandidate> playlists
+    ) =>
+        playlists
+            .OrderByDescending(candidate => candidate.Order)
+            .ThenByDescending(candidate =>
+                ((PlaylistSearchResult)candidate.Result).Playlist.FollowerCount
+            )
+            .ThenBy(candidate => candidate.Result.Key, StringComparer.Ordinal);
 
     private sealed record PlaylistRankItem(string Key) : ISearchRankItem
     {
@@ -211,11 +217,16 @@ internal sealed class MergedSearch(
                         card.Owned,
                         card.Description,
                         card.PublicCode,
-                        card.Curator
+                        card.Curator,
+                        card.FollowerCount,
+                        card.Popularity?.AsOf
                     )
                 )
                 {
                     Key = key,
+                    Popularity = card.Popularity is { } snapshot
+                        ? JsonSerializer.SerializeToElement(snapshot.Resource)
+                        : null,
                 };
                 var rank = new RankedCandidate(
                     new PlaylistRankItem(key),

@@ -397,6 +397,117 @@ public sealed class TestPopularityStore
     }
 
     [Test]
+    public async Task A_shared_catalog_failure_does_not_skip_playlist_publication()
+    {
+        const string playlist = "playlist_catalog_failure_fixture";
+        await AddPlaylistPlay(playlist);
+        await connection.ExecuteAsync(
+            "ALTER TABLE public.artist_popularity RENAME TO artist_popularity_catalog_failure"
+        );
+        try
+        {
+            var (job, redis) = CreateReadModelJob();
+            using var redisConnection = redis;
+            Assert.CatchAsync(() => job.RefreshReadModel());
+            (
+                await connection.QuerySingleOrDefaultAsync<long>(
+                    "SELECT plays_1y FROM public.playlist_popularity WHERE playlist_id=@playlist",
+                    new { playlist }
+                )
+            )
+                .Should()
+                .Be(1);
+        }
+        finally
+        {
+            await connection.ExecuteAsync(
+                "ALTER TABLE public.artist_popularity_catalog_failure RENAME TO artist_popularity"
+            );
+            await RemovePlaylistFixture(playlist);
+        }
+    }
+
+    [Test]
+    public async Task A_failed_playlist_write_preserves_the_last_published_snapshot()
+    {
+        const string playlist = "playlist_write_failure_fixture";
+        await AddPlaylistPlay(playlist);
+        try
+        {
+            await PopularityService.PublishPlaylistPopularity(connection, CancellationToken.None);
+            var published = await ReadPlaylistPublication(playlist);
+            await AddPlaylistPlay(playlist);
+            await connection.ExecuteAsync(
+                """
+                ALTER TABLE public.playlist_popularity ADD CONSTRAINT reject_fixture_playlists
+                   CHECK (playlist_id <> 'playlist_write_failure_fixture') NOT VALID
+                """
+            );
+            try
+            {
+                var failure = Assert.ThrowsAsync<PostgresException>(() =>
+                    PopularityService.PublishPlaylistPopularity(connection, CancellationToken.None)
+                );
+                failure!.ConstraintName.Should().Be("reject_fixture_playlists");
+                (await ReadPlaylistPublication(playlist)).Should().Be(published);
+            }
+            finally
+            {
+                await connection.ExecuteAsync(
+                    "ALTER TABLE public.playlist_popularity DROP CONSTRAINT reject_fixture_playlists"
+                );
+            }
+            await PopularityService.PublishPlaylistPopularity(connection, CancellationToken.None);
+            (await ReadPlaylistPublication(playlist)).AnnualPlays.Should().Be(2);
+        }
+        finally
+        {
+            await RemovePlaylistFixture(playlist);
+        }
+    }
+
+    private (PopularityService Job, IDisposable Redis) CreateReadModelJob()
+    {
+        var options = RedisService.BuildConfiguration("redis://127.0.0.1:16379");
+        options.DefaultDatabase = 14;
+        var redis = new RedisService(options);
+        var cache = new PopularityCacheService(redis);
+        var jobs = System.Reflection.DispatchProxy.Create<IBackgroundJobClient, NoRefresh>();
+        return (new(db, cache, jobs, NullLogger<PopularityService>.Instance), redis.connection);
+    }
+
+    private Task AddPlaylistPlay(string playlist) =>
+        connection.ExecuteAsync(
+            """
+            INSERT INTO public.source_track_plays(created_at, source_track_uuid, app_type, playlist_id)
+            VALUES (date_trunc('day', now(), 'UTC') - interval '12 hours', @track, 2, @playlist)
+            """,
+            new { track, playlist }
+        );
+
+    private async Task RemovePlaylistFixture(string playlist)
+    {
+        await connection.ExecuteAsync(
+            "DELETE FROM public.source_track_plays WHERE playlist_id=@playlist; DELETE FROM public.playlist_popularity WHERE playlist_id=@playlist",
+            new { playlist }
+        );
+        await connection.ExecuteAsync(
+            """
+            CALL refresh_continuous_aggregate('public.source_track_plays_playlist_daily',
+                date_trunc('day', now(), 'UTC') - interval '1 day', date_trunc('day', now(), 'UTC'))
+            """
+        );
+    }
+
+    private Task<(DateTime Cutoff, long AnnualPlays, string Resource)> ReadPlaylistPublication(
+        string playlist
+    ) =>
+        connection.QuerySingleAsync<(DateTime, long, string)>(
+            "SELECT as_of, plays_1y, popularity::text FROM public.playlist_popularity WHERE playlist_id=@playlist",
+            new { playlist }
+        );
+
+    [Test]
     public async Task Refresh_publishes_the_same_calculation_to_Postgres_and_legacy_Redis()
     {
         var options = RedisService.BuildConfiguration("redis://127.0.0.1:16379");

@@ -996,6 +996,12 @@ namespace RelistenUserService.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("entry_count");
 
+                    b.Property<int>("FollowerCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("follower_count");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text")
@@ -1034,6 +1040,9 @@ namespace RelistenUserService.Persistence.Migrations
 
                     b.HasIndex("PublicCode")
                         .IsUnique();
+
+                    b.HasIndex("FollowerCount", "Id")
+                        .IsDescending();
 
                     b.HasIndex("OwnerId", "Archived", "UpdatedAt");
 
@@ -1448,6 +1457,10 @@ namespace RelistenUserService.Persistence.Migrations
                     b.Property<DateTimeOffset?>("DispatchUntil")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("dispatch_until");
+
+                    b.Property<DateTimeOffset?>("EvictedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("evicted_at");
 
                     b.Property<DateTimeOffset>("ExpiresAt")
                         .HasColumnType("timestamp with time zone")

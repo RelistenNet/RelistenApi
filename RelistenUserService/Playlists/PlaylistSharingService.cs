@@ -38,6 +38,7 @@ public sealed class PlaylistSharingService(
             {
                 row.Id,
                 row.Revision,
+                row.FollowerCount,
                 Owner = new PublicPlaylistOwner(row.OwnerId, row.Owner.Username),
                 Metadata = new PlaylistMetadata(row.Name, row.Description),
             })
@@ -55,6 +56,8 @@ public sealed class PlaylistSharingService(
             head.Id,
             cancellationToken
         );
+        var popularity = await PlaylistPopularity.ReadAsync(database, [head.Id], cancellationToken);
+        var snapshot = popularity.GetValueOrDefault(head.Id.Value);
         await transaction.CommitAsync(cancellationToken);
         return new(
             1,
@@ -65,7 +68,12 @@ public sealed class PlaylistSharingService(
             head.Owner,
             head.Metadata,
             structure
-        );
+        )
+        {
+            FollowerCount = head.FollowerCount,
+            Popularity = snapshot?.Resource,
+            PopularityAsOf = snapshot?.AsOf,
+        };
     }
 
     public async Task FollowAsync(UserId actor, string code, CancellationToken cancellationToken)
@@ -80,7 +88,8 @@ public sealed class PlaylistSharingService(
         var source = await PlaylistVisibility.LockPublicSourceAsync(
             database,
             code,
-            cancellationToken
+            cancellationToken,
+            forFollow: true
         );
 
         // The owner already has the playlist in `playlists`; a follow would list it twice.

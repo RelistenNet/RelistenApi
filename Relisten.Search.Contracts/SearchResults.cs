@@ -94,5 +94,7 @@ public sealed record PlaylistSearchCardResource(
     bool Owned,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Description,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? PublicCode,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Curator
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Curator,
+    int? FollowerCount = null,
+    DateTimeOffset? PopularityAsOf = null
 );

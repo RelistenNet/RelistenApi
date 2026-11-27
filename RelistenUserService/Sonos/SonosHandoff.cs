@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Relisten.Identifiers;
+using RelistenUserService.Identity.Entities;
 using RelistenUserService.Persistence;
 
 namespace RelistenUserService.Sonos;
@@ -17,7 +18,24 @@ public sealed record SonosHandoffRequest(
         SonosOccurrenceInput[]? Occurrences = null
 );
 
-public sealed record SonosOccurrenceInput(string OccurrenceId, string TrackId);
+public sealed record SonosOccurrenceInput(
+    string OccurrenceId,
+    string TrackId,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        string? PlaylistId = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        string? PlaylistEntryId = null
+)
+{
+    internal QueueTrack Bind(QueueTrack item) =>
+        item with
+        {
+            OccurrenceId = OccurrenceId,
+            SourceTrackId = TrackId,
+            PlaylistId = PlaylistId,
+            PlaylistEntryId = PlaylistEntryId,
+        };
+}
 
 // Id is Sonos's item ID for this queue occurrence. OccurrenceId identifies the
 // same entry to mobile across edits. Keep the requested SourceTrackId alongside
@@ -26,7 +44,11 @@ internal sealed record QueueTrack(
     string Id,
     QueueTrackMetadata Track,
     string? OccurrenceId = null,
-    string? SourceTrackId = null
+    string? SourceTrackId = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        string? PlaylistId = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        string? PlaylistEntryId = null
 )
 {
     // Queues stored before edits used the Sonos ID and the resolved recording ID.
@@ -34,7 +56,10 @@ internal sealed record QueueTrack(
     public string OccurrenceKey => OccurrenceId ?? Id;
 
     [JsonIgnore]
-    public string CatalogTrackId => SourceTrackId ?? Track.Id.ObjectId["TrackU:".Length..];
+    public string CatalogTrackId => SourceTrackId ?? ResolvedTrackId;
+
+    [JsonIgnore]
+    public string ResolvedTrackId => Track.Id.ObjectId["TrackU:".Length..];
 }
 
 internal sealed record RemovedQueueTrack(QueueTrack Item, string? AfterItemId);
@@ -76,6 +101,14 @@ public sealed class SonosHandoff(
             entry is not null
             && ValidOccurrenceId(entry.OccurrenceId)
             && TrackId.TryParse(entry.TrackId, out _)
+            && (entry.PlaylistId == null || PlaylistId.TryParse(entry.PlaylistId, out _))
+            && (
+                entry.PlaylistEntryId == null
+                || (
+                    entry.PlaylistId != null
+                    && PlaylistEntryId.TryParse(entry.PlaylistEntryId, out _)
+                )
+            )
         )
         && entries.Select(entry => entry.OccurrenceId).Distinct(StringComparer.Ordinal).Count()
             == entries.Length;
@@ -140,25 +173,83 @@ public sealed class SonosHandoff(
         foreach (var household in households.GetProperty("households").EnumerateArray())
         {
             var householdId = household.GetProperty("id").GetString()!;
-            var response = await protocol.ControlAsync(
-                token,
-                $"households/{Uri.EscapeDataString(householdId)}/groups",
-                null,
-                ct
-            );
-            foreach (var group in response.GetProperty("groups").EnumerateArray())
-            {
-                result.Add(
-                    new(
-                        householdId,
-                        group.GetProperty("id").GetString()!,
-                        group.GetProperty("name").GetString()!
-                    )
-                );
-            }
+            result.AddRange(await HouseholdGroupsAsync(token, householdId, ct));
         }
 
         return result;
+    }
+
+    internal async Task<SonosGroup[]> HouseholdGroupsAsync(
+        string token,
+        string household,
+        CancellationToken ct
+    )
+    {
+        var response = await protocol.ControlAsync(
+            token,
+            $"households/{Uri.EscapeDataString(household)}/groups",
+            null,
+            ct
+        );
+        try
+        {
+            return response
+                .GetProperty("groups")
+                .EnumerateArray()
+                .Select(group => new SonosGroup(
+                    household,
+                    group.GetProperty("id").GetString()!,
+                    group.GetProperty("name").GetString()!
+                ))
+                .ToArray();
+        }
+        catch (Exception error) when (error is KeyNotFoundException or InvalidOperationException)
+        {
+            throw new JsonException("Sonos returned malformed group data.", error);
+        }
+    }
+
+    internal async Task<IReadOnlyList<SonosGroup>> ReadAndRefreshGroupNamesAsync(
+        UserId userId,
+        string token,
+        CancellationToken ct,
+        string? household = null
+    )
+    {
+        // Read and save under the same grant lock so a delayed discovery read cannot
+        // overwrite a newer regroup read. Handoff publication and disconnect share it.
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await locks.LockAsync($"sonos-grant:{userId}", ct);
+        var groups = household is null
+            ? await GroupsAsync(token, ct)
+            : await HouseholdGroupsAsync(token, household, ct);
+        if (groups.Count > 0)
+        {
+            await SaveGroupNamesAsync(userId, groups, ct);
+        }
+        await transaction.CommitAsync(ct);
+        return groups;
+    }
+
+    private async Task SaveGroupNamesAsync(
+        UserId userId,
+        IReadOnlyList<SonosGroup> groups,
+        CancellationToken ct
+    )
+    {
+        var households = groups.Select(group => group.HouseholdId).ToArray();
+        var ids = groups.Select(group => group.Id).ToArray();
+        var names = groups.Select(group => group.Name).ToArray();
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+            UPDATE user_data.sonos_queues queue SET group_name = fresh.name
+            FROM unnest({households}, {ids}, {names}) AS fresh(household, id, name)
+            WHERE queue.user_id = {userId.Value} AND queue.household_id = fresh.household
+                AND queue.group_id = fresh.id AND queue.status IN ('loaded', 'dispatching')
+                AND queue.group_name IS DISTINCT FROM fresh.name
+            """,
+            ct
+        );
     }
 
     internal async Task<QueueTrack[]?> ResolveTracksAsync(
@@ -623,9 +714,7 @@ public sealed class SonosHandoff(
             throw;
         }
 
-        await db.Set<SonosQueue>()
-            .Where(row => row.Id == queue.Id && row.Status == "dispatching")
-            .ExecuteUpdateAsync(set => set.SetProperty(row => row.Status, "loaded"), ct);
+        await ConfirmLoadedAsync(db, queue, clock.GetUtcNow(), ct);
         await transaction.CommitAsync(ct);
     }
 
@@ -665,16 +754,24 @@ public sealed class SonosHandoff(
         return false;
     }
 
-    private Task<int> EndDispatchAsync(Guid id, string status) =>
-        db.Set<SonosQueue>()
-            .Where(row => row.Id == id && row.Status == "dispatching")
-            .ExecuteUpdateAsync(
+    private Task<int> EndDispatchAsync(Guid id, string status)
+    {
+        var dispatch = db.Set<SonosQueue>()
+            .Where(row => row.Id == id && row.Status == "dispatching");
+        return status == "evicted"
+            ? dispatch.EvictAsync(clock.GetUtcNow(), CancellationToken.None)
+            : dispatch.ExecuteUpdateAsync(
                 set => set.SetProperty(row => row.Status, status),
                 CancellationToken.None
             );
+    }
 
     internal async Task ObserveLoadedAsync(string token, SonosQueue queue, CancellationToken ct)
     {
+        // A replacement can take over after the dispatch window ends. Read and
+        // publish under the same room lock so an old observation cannot win.
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await LockDestinationAsync(queue, ct);
         var status = await protocol.ControlAsync(
             token,
             $"{GroupPath(queue.GroupId)}/playback",
@@ -691,15 +788,56 @@ public sealed class SonosHandoff(
         }
 
         // Queue-item IDs are generated per occurrence. Seeing one in the room proves it loaded this queue.
-        var items = JsonSerializer.Deserialize<QueueTrack[]>(queue.ItemsJson, QueueJson)!;
+        var items = queue.ReadItems();
         if (!items.Any(item => item.Id == current.GetString()))
         {
             return;
         }
 
-        await db.Set<SonosQueue>()
+        await ConfirmLoadedAsync(db, queue, clock.GetUtcNow(), ct);
+        await transaction.CommitAsync(ct);
+    }
+
+    // Callers hold the group and grant locks through the load or observation.
+    internal static async Task<bool> ConfirmLoadedAsync(
+        AccountsDbContext db,
+        SonosQueue queue,
+        DateTimeOffset confirmedAt,
+        CancellationToken ct
+    )
+    {
+        var queues = db.Set<SonosQueue>();
+        var loaded = await queues
             .Where(row => row.Id == queue.Id && row.Status == "dispatching")
             .ExecuteUpdateAsync(set => set.SetProperty(row => row.Status, "loaded"), ct);
+        if (loaded != 1)
+        {
+            // Another observer may have confirmed this version while we waited for the room.
+            return await queues.AnyAsync(
+                row =>
+                    row.Id == queue.Id
+                    && row.Status == "loaded"
+                    && row.QueueVersion == queue.QueueVersion,
+                ct
+            );
+        }
+
+        // A room has one cloud queue. A delayed confirmation can replace an older
+        // load, but a newer reservation must still be free to finish its handoff.
+        await queues
+            .Where(row =>
+                row.Id != queue.Id
+                && row.UserId == queue.UserId
+                && row.GroupId == queue.GroupId
+                && row.HouseholdId == queue.HouseholdId
+                && (row.DispatchUntil == null || row.DispatchUntil <= queue.DispatchUntil)
+                && (
+                    row.Status == "loaded"
+                    || (row.Status == "dispatching" && row.SonosSessionId != null)
+                )
+            )
+            .EvictAsync(confirmedAt, ct);
+        return true;
     }
 
     public static string GroupPath(string id) => $"groups/{Uri.EscapeDataString(id)}";

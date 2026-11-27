@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Relisten.Accounts.Contracts.Identifiers;
+using Relisten.Search;
 
 namespace Relisten.Accounts.Contracts.Playlists;
 
@@ -36,7 +37,12 @@ public sealed record PublicPlaylistSnapshot(
     PublicPlaylistOwner Owner,
     PlaylistMetadata Metadata,
     IReadOnlyList<PlaylistSegmentSnapshot> Segments
-);
+)
+{
+    public int? FollowerCount { get; init; }
+    public PopularityResource? Popularity { get; init; }
+    public DateTimeOffset? PopularityAsOf { get; init; }
+}
 
 /// <summary>Unavailable heads contain only the playlist ID and availability.</summary>
 public sealed record FollowedPlaylistHead(PlaylistId PlaylistId, bool Available)
@@ -52,13 +58,21 @@ public sealed record FollowedPlaylistHead(PlaylistId PlaylistId, bool Available)
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public long? Revision { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? FollowerCount { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public PopularityResource? Popularity { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DateTimeOffset? PopularityAsOf { get; init; }
 }
 
 /// <summary>
 /// One public playlist in a listing. <c>DurationSeconds</c> totals the catalog durations
-/// of its tracks. <c>RecentPlayCount</c> counts plays started from it on the last 30 UTC
-/// days, from signed-in and anonymous listeners. A day's plays count once it is
-/// materialized, an hour after it closes. <c>Description</c> is the author's Markdown, or
+/// of its tracks. <c>PopularityAsOf</c> gives the latest complete day covered by the snapshot.
+/// <c>Description</c> is the author's Markdown, or
 /// null when there is none. <c>ArtistIds</c> are the typed v4 IDs (<c>artist_…</c>) of the
 /// artists its tracks belong to, the artist with the most tracks first; tracks missing from
 /// the catalog add none.
@@ -73,7 +87,8 @@ public sealed record PublicPlaylistListing(
     int DurationSeconds,
     DateTimeOffset UpdatedAt,
     int FollowerCount,
-    long RecentPlayCount,
+    PopularityResource? Popularity,
+    DateTimeOffset? PopularityAsOf,
     IReadOnlyList<string> ArtistIds
 );
 

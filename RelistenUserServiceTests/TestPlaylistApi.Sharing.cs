@@ -42,6 +42,7 @@ public sealed partial class TestPlaylistApi
         anonymous.Headers.CacheControl!.NoCache.Should().BeTrue();
         anonymous.Headers.GetValues("CDN-Cache-Control").Should().Equal("max-age=60");
         var publicSnapshot = await Read<PublicPlaylistSnapshot>(anonymous);
+        publicSnapshot.FollowerCount.Should().Be(0);
         publicSnapshot.Owner.Id.Should().Be(_user);
         publicSnapshot.PlaylistId.Should().Be(playlist.PlaylistId);
         publicSnapshot.HistoryGeneration.Should().Be(published.HistoryGeneration);
@@ -59,7 +60,10 @@ public sealed partial class TestPlaylistApi
                 "revision",
                 "owner",
                 "metadata",
-                "segments"
+                "segments",
+                "follower_count",
+                "popularity",
+                "popularity_as_of"
             );
         publicBody
             .RootElement.GetProperty("owner")

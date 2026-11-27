@@ -38,7 +38,11 @@ internal sealed class SonosQueue
 
     // Sonos acknowledged the refresh request. Playback status separately reports its cached version.
     public long RefreshedQueueVersion { get; set; } = 1;
+
+    // A value indicates an edit is pending delivery through Temporal.
+    // A permanent rejection clears this marker without advancing the acknowledged version.
     public DateTimeOffset? RefreshAfter { get; set; }
+    public DateTimeOffset? EvictedAt { get; set; }
     public DateTimeOffset ExpiresAt { get; set; }
 
     // After this reservation ends, receipt polling can still recover a load that reached the room.
@@ -52,6 +56,22 @@ internal sealed class SonosQueue
 
     public RemovedQueueTrack[] ReadRemovedItems() =>
         JsonSerializer.Deserialize<RemovedQueueTrack[]>(RemovedItemsJson, SonosHandoff.QueueJson)!;
+}
+
+internal static class SonosQueueUpdates
+{
+    internal static Task<int> EvictAsync(
+        this IQueryable<SonosQueue> queues,
+        DateTimeOffset at,
+        CancellationToken ct
+    ) =>
+        queues.ExecuteUpdateAsync(
+            update =>
+                update
+                    .SetProperty(row => row.Status, "evicted")
+                    .SetProperty(row => row.EvictedAt, at),
+            ct
+        );
 }
 
 internal sealed class SonosGrantConfiguration : IEntityTypeConfiguration<SonosGrant>
