@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -118,6 +119,43 @@ public sealed class TestPlaylistSearchIndex
             .GetDouble()
             .Should()
             .Be(percentile);
+    }
+
+    [Test]
+    public async Task An_older_playlist_collection_still_returns_text_matches()
+    {
+        var owner = await database.CreateUserAsync("legacycurator");
+        const string title = "Evening jazz";
+        var playlist = await Seed(database, owner, title);
+        await using var db = database.CreateContext();
+        // Give the pre-rebuild document a positive percentile. The old schema's
+        // value represents followers and must not be applied as a play percentile.
+        await SeedPopularity(db, playlist, yearly: 20, monthly: 10);
+        await index.Rebuild(CancellationToken.None);
+        (await Read(http, alias, playlist))!
+            .Value.GetProperty("popularity_percentile")
+            .GetDouble()
+            .Should()
+            .BeGreaterThan(0);
+        var collection = await typesense.ReadAlias(alias, CancellationToken.None);
+        using var changed = await http.PatchAsJsonAsync(
+            $"collections/{collection}",
+            new { fields = new[] { new { name = "plays_year", drop = true } } }
+        );
+        changed.EnsureSuccessStatusCode();
+
+        var candidates = await new PlaylistSearchCandidates(http, configuration).Find(
+            new MergedSearchRequest { Q = "evening", Scope = "playlists" },
+            null,
+            CancellationToken.None
+        );
+        candidates.Should().ContainSingle().Which.PopularityPercentile.Should().Be(0);
+        var cards = await new PlaylistSearchCards(db).Read(
+            candidates,
+            null,
+            CancellationToken.None
+        );
+        cards.Should().ContainSingle(card => card.Id == playlist && card.Label == title);
     }
 
     [Test]

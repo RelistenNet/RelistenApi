@@ -256,6 +256,55 @@ public sealed partial class TestPlaylistApi
     }
 
     [Test]
+    public async Task Repeated_unfollow_and_deleting_another_playlist_preserve_the_count()
+    {
+        var artist = await SeedArtistAsync(60);
+        var playlists = new[] { PlaylistOf(artist.Tracks[0]), PlaylistOf(artist.Tracks[0]) };
+        var codes = new List<string?>();
+        var listener = await NewSharingListener();
+        foreach (var playlist in playlists)
+        {
+            (await Send(HttpMethod.Post, "/v1/playlists", playlist))
+                .StatusCode.Should()
+                .Be(HttpStatusCode.Created);
+            var code = (await Publish(playlist.PlaylistId)).PublicCode;
+            codes.Add(code);
+            (await Send(HttpMethod.Put, $"/v1/public-playlists/{code}/follow", actor: listener))
+                .StatusCode.Should()
+                .Be(HttpStatusCode.NoContent);
+        }
+
+        await using var connection = new NpgsqlConnection(_database.ConnectionString);
+        await connection.ExecuteAsync(
+            "DELETE FROM user_data.playlists WHERE id = @id",
+            new { id = playlists[0].PlaylistId.Value }
+        );
+        (await _client.GetAsync($"/v1/public-playlists/{codes[0]}"))
+            .StatusCode.Should()
+            .Be(HttpStatusCode.NotFound);
+        var surviving = $"/v1/public-playlists/{codes[1]}";
+        (await Read<PublicPlaylistSnapshot>(await _client.GetAsync(surviving)))
+            .FollowerCount.Should()
+            .Be(1);
+
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            (
+                await Send(
+                    HttpMethod.Delete,
+                    $"/v1/playlists/{playlists[1].PlaylistId}/follow",
+                    actor: listener
+                )
+            )
+                .StatusCode.Should()
+                .Be(HttpStatusCode.NoContent);
+            (await Read<PublicPlaylistSnapshot>(await _client.GetAsync(surviving)))
+                .FollowerCount.Should()
+                .Be(0);
+        }
+    }
+
+    [Test]
     public async Task Daily_momentum_favors_the_playlist_with_more_plays_on_the_latest_complete_day()
     {
         var artist = await SeedArtistAsync(60);

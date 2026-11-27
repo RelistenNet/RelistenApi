@@ -35,13 +35,8 @@ public partial class PopularityService
         CancellationToken ct
     )
     {
-        var cutoff = await ReadPlaylistCutoffAsync(connection, ct);
-        if (cutoff is null)
-        {
-            return 0;
-        }
-
-        var rows = await ReadPlaylistWindows(connection, cutoff.Value, ct);
+        var cutoff = await RefreshClosedPlaylistDaysAsync(connection, ct);
+        var rows = await ReadPlaylistWindows(connection, cutoff, ct);
         var snapshots = ScorePlaylists(rows);
         // A single statement publishes the new snapshot and retires expired rows together.
         await connection.ExecuteAsync(
@@ -63,27 +58,25 @@ public partial class PopularityService
         return snapshots.Length;
     }
 
-    private static Task<DateTime?> ReadPlaylistCutoffAsync(
+    private static async Task<DateTime> RefreshClosedPlaylistDaysAsync(
         NpgsqlConnection connection,
         CancellationToken ct
     )
     {
-        // The watermark is the exclusive end of materialized data. A day without
-        // playlist plays still advances the window when Timescale materializes it.
-        return connection.QuerySingleAsync<DateTime?>(
+        var cutoff = await connection.QuerySingleAsync<DateTime>(
+            new CommandDefinition("SELECT date_trunc('day', now(), 'UTC')", cancellationToken: ct)
+        );
+
+        // Timescale only advances the watermark when it materializes a row for a later day.
+        // Refresh the policy's recent range here so the cutoff also covers complete quiet days.
+        await connection.ExecuteAsync(
             new CommandDefinition(
-                """
-                SELECT CASE WHEN watermark >= 0 THEN least(date_trunc('day', now(), 'UTC'),
-                    date_trunc('day', _timescaledb_functions.to_timestamp(watermark), 'UTC')) END
-                FROM (
-                    SELECT _timescaledb_functions.cagg_watermark(mat_hypertable_id) AS watermark
-                    FROM _timescaledb_catalog.continuous_agg
-                    WHERE user_view_schema = 'public' AND user_view_name = 'source_track_plays_playlist_daily'
-                ) AS aggregate
-                """,
+                "CALL refresh_continuous_aggregate('public.source_track_plays_playlist_daily', @start, @cutoff)",
+                new { start = cutoff.AddDays(-3), cutoff },
                 cancellationToken: ct
             )
         );
+        return cutoff;
     }
 
     private static async Task<PlaylistWindows[]> ReadPlaylistWindows(

@@ -16,11 +16,9 @@ ALTER TABLE source_track_plays ADD COLUMN IF NOT EXISTS playlist_id text;
 -- last materialized day straight from the hypertable, so today's plays count
 -- immediately. Timescale's default group index covers (playlist_id, play_day).
 --
--- Until a day with playlist plays has been materialized, the watermark stays at
--- the start of time (a refresh over empty data does not move it), and each
--- read scans raw plays back to its own play_day bound. Readers must therefore
--- pass that bound as a parameter: a constant lets Timescale exclude older chunks
--- at startup, while an expression such as now() - interval does not.
+-- A refresh over empty days does not advance the materialization watermark.
+-- While real-time reads are enabled, a bound parameter on play_day lets
+-- Timescale exclude older raw chunks at startup.
 CREATE MATERIALIZED VIEW IF NOT EXISTS source_track_plays_playlist_daily
 WITH (timescaledb.continuous, timescaledb.materialized_only = false)
 AS

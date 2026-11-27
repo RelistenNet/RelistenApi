@@ -47,21 +47,48 @@ public partial class PopularityService
         }
     }
 
-    /// <summary>
-    /// Publishes the rolling populations to Postgres and the legacy Redis maps.
-    /// The shared maps run first. After that, a failed artist leaves its last
-    /// publication readable and lets later artists finish before the job retries.
-    /// </summary>
+    /// <summary>Publishes catalog and playlist popularity independently and reports failures to the job runner.</summary>
     public async Task RefreshReadModel(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        var failures = new List<Exception>();
+        try
+        {
+            await RefreshCatalogReadModel(failures, cancellationToken);
+        }
+        catch (Exception error) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.LogWarning(error, "Could not refresh catalog popularity");
+            failures.Add(error);
+        }
+
+        try
+        {
+            await RefreshPlaylistPopularity(cancellationToken);
+        }
+        catch (Exception error) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.LogWarning(error, "Could not refresh playlist popularity");
+            failures.Add(error);
+        }
+
+        if (failures.Count > 0)
+        {
+            throw new AggregateException("Some popularity populations failed.", failures);
+        }
+    }
+
+    private async Task RefreshCatalogReadModel(
+        List<Exception> failures,
+        CancellationToken cancellationToken
+    )
+    {
         await RefreshArtistPopularityMap();
         await RefreshGlobalShowPopularityMap();
         await RefreshGlobalYearPopularityMap();
 
         var artists = await ReadOwners(cancellationToken);
         var started = Stopwatch.StartNew();
-        var failures = new List<Exception>();
         long performances = 0;
         long recordings = 0;
         long songs = 0;
@@ -96,20 +123,6 @@ public partial class PopularityService
             songs,
             started.Elapsed
         );
-        try
-        {
-            await RefreshPlaylistPopularity(cancellationToken);
-        }
-        catch (Exception error) when (!cancellationToken.IsCancellationRequested)
-        {
-            logger.LogWarning(error, "Could not refresh playlist popularity");
-            failures.Add(error);
-        }
-
-        if (failures.Count > 0)
-        {
-            throw new AggregateException("Some popularity populations failed.", failures);
-        }
     }
 
     private async Task<Guid[]> ReadOwners(CancellationToken cancellationToken) =>
