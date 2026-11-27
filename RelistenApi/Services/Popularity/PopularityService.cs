@@ -1406,16 +1406,22 @@ namespace Relisten.Services.Popularity
             return (plays6h / 6.0) / (plays7d / 168.0);
         }
 
-        internal static void ApplyMomentumScores(IReadOnlyList<PopularityMetrics> metrics)
+        internal static void ApplyMomentumScores(
+            IReadOnlyList<PopularityMetrics> metrics,
+            IReadOnlyList<double>? shortTrends = null
+        )
         {
-            var scores = CalculateMomentumScores(metrics);
+            var scores = CalculateMomentumScores(metrics, shortTrends);
             for (var i = 0; i < metrics.Count; i++)
             {
                 metrics[i].momentum_score = scores[i];
             }
         }
 
-        internal static double[] CalculateMomentumScores(IReadOnlyList<PopularityMetrics> metrics)
+        internal static double[] CalculateMomentumScores(
+            IReadOnlyList<PopularityMetrics> metrics,
+            IReadOnlyList<double>? shortTrends = null
+        )
         {
             if (metrics.Count == 0)
             {
@@ -1432,12 +1438,12 @@ namespace Relisten.Services.Popularity
                 metrics.Select(item => item.windows.days_30d.hot_score).ToList()
             );
             var shortTrendRanks = PercentileRanks(
-                metrics
-                    .Select(item =>
-                    {
-                        return ComputeShortTrendRatio(item.plays_6h, item.windows.days_7d.plays);
-                    })
-                    .ToList()
+                shortTrends
+                    ?? metrics
+                        .Select(item =>
+                            ComputeShortTrendRatio(item.plays_6h, item.windows.days_7d.plays)
+                        )
+                        .ToArray()
             );
 
             var scores = new double[metrics.Count];

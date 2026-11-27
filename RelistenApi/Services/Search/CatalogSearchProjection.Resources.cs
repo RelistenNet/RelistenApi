@@ -9,6 +9,7 @@ using Relisten.Api.Models;
 using Relisten.Api.Models.Api.V4;
 using Relisten.Catalog;
 using Relisten.Controllers.V4;
+using Relisten.Search;
 using Relisten.Services.Popularity;
 
 namespace Relisten.Search;

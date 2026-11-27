@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Relisten.Api.Models.Api.V4;
+using Relisten.Search;
 
 namespace Relisten.Catalog;
 

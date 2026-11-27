@@ -3,6 +3,7 @@ using HotChocolate;
 using HotChocolate.Types;
 using Relisten.Api.Models.Api.V4;
 using Relisten.Catalog;
+using Relisten.Search;
 using Relisten.Services.Popularity;
 
 namespace Relisten.GraphQL;

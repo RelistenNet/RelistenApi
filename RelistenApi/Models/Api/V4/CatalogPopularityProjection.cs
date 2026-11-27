@@ -1,4 +1,5 @@
 using Relisten.Api.Models;
+using Relisten.Search;
 
 namespace Relisten.Api.Models.Api.V4;
 

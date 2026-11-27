@@ -33,9 +33,34 @@ public sealed class PlaylistReadService(AccountsDbContext dbContext)
             .Where(row => row.OwnerId == actor && row.Archived == (view == "archived"))
             .OrderByDescending(row => row.UpdatedAt)
             .ThenBy(row => row.Id);
-        var summaries = await Summaries(playlists).ToArrayAsync(cancellationToken);
+        var summaries = await ReadSummariesAsync(dbContext, playlists, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return new(1, generation, summaries);
+    }
+
+    internal static async Task<PlaylistSummary[]> ReadSummariesAsync(
+        AccountsDbContext database,
+        IQueryable<Playlist> playlists,
+        CancellationToken ct
+    )
+    {
+        var summaries = await Summaries(playlists).ToArrayAsync(ct);
+        var popularity = await PlaylistPopularity.ReadAsync(
+            database,
+            summaries.Where(row => row.FollowerCount.HasValue).Select(row => row.PlaylistId),
+            ct
+        );
+        return summaries
+            .Select(row =>
+                popularity.TryGetValue(row.PlaylistId.Value, out var snapshot)
+                    ? row with
+                    {
+                        Popularity = snapshot.Resource,
+                        PopularityAsOf = snapshot.AsOf,
+                    }
+                    : row
+            )
+            .ToArray();
     }
 
     internal static IQueryable<PlaylistSummary> Summaries(IQueryable<Playlist> playlists) =>
@@ -53,16 +78,18 @@ public sealed class PlaylistReadService(AccountsDbContext dbContext)
             PublicCode = row.PublicCode,
             Published = row.Published,
             TakenDown = row.TakenDown,
+            FollowerCount =
+                row.Published && !row.Archived && !row.TakenDown ? row.FollowerCount : null,
         });
 
-    internal static Task<FollowedPlaylistHead[]> FollowedHeadsAsync(
+    internal static async Task<FollowedPlaylistHead[]> FollowedHeadsAsync(
         AccountsDbContext database,
         UserId actor,
         CancellationToken cancellationToken
     )
     {
         var visible = database.Playlists.AsNoTracking().Public();
-        return (
+        var heads = await (
             from follow in database.PlaylistFollows.AsNoTracking()
             where follow.UserId == actor
             join playlist in visible on follow.PlaylistId equals playlist.Id into matches
@@ -74,8 +101,25 @@ public sealed class PlaylistReadService(AccountsDbContext dbContext)
                 Name = playlist == null ? null : playlist.Name,
                 Owner = playlist == null ? null : new(playlist.OwnerId, playlist.Owner.Username),
                 Revision = playlist == null ? null : playlist.Revision,
+                FollowerCount = playlist == null ? null : playlist.FollowerCount,
             }
         ).ToArrayAsync(cancellationToken);
+        var popularity = await PlaylistPopularity.ReadAsync(
+            database,
+            heads.Where(row => row.Available).Select(row => row.PlaylistId),
+            cancellationToken
+        );
+        return heads
+            .Select(row =>
+                popularity.TryGetValue(row.PlaylistId.Value, out var snapshot)
+                    ? row with
+                    {
+                        Popularity = snapshot.Resource,
+                        PopularityAsOf = snapshot.AsOf,
+                    }
+                    : row
+            )
+            .ToArray();
     }
 
     public async Task<PlaylistSnapshot> SnapshotAsync(
@@ -93,6 +137,13 @@ public sealed class PlaylistReadService(AccountsDbContext dbContext)
         var playlist = await AuthorizedPlaylistAsync(actor, id, cancellationToken);
         var generation = await GenerationAsync(cancellationToken);
         var structure = await ReadStructureAsync(dbContext, id, cancellationToken);
+        var isPublic = playlist.Published && !playlist.Archived && !playlist.TakenDown;
+        var popularity = await PlaylistPopularity.ReadAsync(
+            dbContext,
+            isPublic ? [id] : [],
+            cancellationToken
+        );
+        var snapshot = popularity.GetValueOrDefault(id.Value);
         await transaction.CommitAsync(cancellationToken);
 
         return new(
@@ -111,6 +162,9 @@ public sealed class PlaylistReadService(AccountsDbContext dbContext)
             PublicCode = playlist.PublicCode,
             Published = playlist.Published,
             TakenDown = playlist.TakenDown,
+            FollowerCount = isPublic ? playlist.FollowerCount : null,
+            Popularity = snapshot?.Resource,
+            PopularityAsOf = snapshot?.AsOf,
         };
     }
 

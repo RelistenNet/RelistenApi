@@ -16,24 +16,19 @@ namespace RelistenUserService.Playlists;
 /// an artist. Pages are keyset-paginated on (sort key, playlist ID), descending.
 /// </summary>
 /// <remarks>
-/// Follower and play counts are computed over every public playlist on each request.
-/// That is cheap while public playlists number in the thousands; responses are cached
-/// at the edge for a minute. Counts can change between pages, so a playlist whose count
-/// moves past the cursor may be skipped or repeated; the ID tiebreak keeps pages disjoint
-/// for unchanged counts.
+/// Counts may change between pages. The ID tiebreak keeps pages disjoint for unchanged counts.
 /// </remarks>
-public sealed class PublicPlaylistDirectory(AccountsDbContext database, TimeProvider clock)
+public sealed class PublicPlaylistDirectory(AccountsDbContext database)
 {
     internal const int DefaultLimit = 25;
     internal const int MaximumLimit = 50;
-    private const int PlayWindowDays = 30;
 
     // Integer keys for every sort, so one cursor shape and one keyset predicate serve all.
     private static readonly Dictionary<string, string> SortKeys = new(StringComparer.Ordinal)
     {
         ["recent"] = "(extract(epoch FROM updated_at) * 1000000)::bigint",
-        ["followers"] = "follower_count::bigint",
-        ["plays"] = "recent_play_count",
+        ["followers"] = "follower_count",
+        ["plays"] = "plays_30d",
     };
 
     public async Task<PublicPlaylistPage> ListAsync(
@@ -120,15 +115,8 @@ public sealed class PublicPlaylistDirectory(AccountsDbContext database, TimeProv
                        playlist.owner_id,
                        owner.username, playlist.track_count, playlist.catalog_duration_seconds,
                        playlist.updated_at,
-                       (
-                           SELECT count(*)::integer FROM user_data.playlist_follows AS follow
-                           WHERE follow.playlist_id = playlist.id
-                       ) AS follower_count,
-                       (
-                           SELECT coalesce(sum(bucket.plays), 0)::bigint
-                           FROM public.source_track_plays_playlist_daily AS bucket
-                           WHERE bucket.playlist_id = playlist.id AND bucket.play_day >= @plays_since
-                       ) AS recent_play_count,
+                       playlist.follower_count, coalesce(stats.plays_30d, 0) AS plays_30d,
+                       stats.popularity::text AS popularity_json, stats.as_of AS popularity_as_of,
                        -- Most tracks first; the UUID breaks ties so the order is stable.
                        ARRAY(
                            SELECT artist.artist_uuid FROM user_data.playlist_artists AS artist
@@ -136,6 +124,7 @@ public sealed class PublicPlaylistDirectory(AccountsDbContext database, TimeProv
                            ORDER BY artist.track_count DESC, artist.artist_uuid
                        ) AS artist_uuids
                 FROM user_data.playlists AS playlist
+                LEFT JOIN public.playlist_popularity AS stats ON stats.playlist_id = playlist.id
                 JOIN identity.users AS owner ON owner.id = playlist.owner_id
                 WHERE playlist.published AND NOT playlist.archived AND NOT playlist.taken_down
                   AND owner.status = @active_status
@@ -147,7 +136,8 @@ public sealed class PublicPlaylistDirectory(AccountsDbContext database, TimeProv
                    description AS "Description",
                    owner_id AS "OwnerId", username AS "Username", track_count AS "TrackCount",
                    catalog_duration_seconds AS "DurationSeconds", updated_at AS "UpdatedAt",
-                   follower_count AS "FollowerCount", recent_play_count AS "RecentPlayCount",
+                   follower_count AS "FollowerCount", popularity_json AS "PopularityJson",
+                   popularity_as_of AS "PopularityAsOf",
                    artist_uuids AS "ArtistUuids", sort_key AS "SortKey"
             FROM keyed
             {keyset}
@@ -156,11 +146,10 @@ public sealed class PublicPlaylistDirectory(AccountsDbContext database, TimeProv
             """;
     }
 
-    private object[] Parameters(ListingQuery query)
+    private static object[] Parameters(ListingQuery query)
     {
         var parameters = new List<NpgsqlParameter>
         {
-            new("plays_since", NpgsqlDbType.TimestampTz) { Value = PlayWindowStart() },
             new("active_status", NpgsqlDbType.Text) { Value = UserStatuses.Active },
             // One extra row tells whether another page follows.
             new("take", NpgsqlDbType.Integer) { Value = query.Limit + 1 },
@@ -177,17 +166,6 @@ public sealed class PublicPlaylistDirectory(AccountsDbContext database, TimeProv
         return parameters.ToArray<object>();
     }
 
-    /// <summary>
-    /// The first UTC day of the play window, today included. The aggregate holds only
-    /// materialized days (catalog migration 25), so today's plays, and yesterday's until
-    /// its refresh an hour after midnight UTC, are not counted yet.
-    /// </summary>
-    private DateTimeOffset PlayWindowStart()
-    {
-        var today = clock.GetUtcNow().UtcDateTime.Date;
-        return new DateTimeOffset(today.AddDays(1 - PlayWindowDays), TimeSpan.Zero);
-    }
-
     private static PublicPlaylistListing ToListing(ListingRow row) =>
         new(
             PlaylistId.Parse(row.Id),
@@ -199,7 +177,12 @@ public sealed class PublicPlaylistDirectory(AccountsDbContext database, TimeProv
             row.DurationSeconds,
             row.UpdatedAt,
             row.FollowerCount,
-            row.RecentPlayCount,
+            row.PopularityJson == null
+                ? null
+                : System.Text.Json.JsonSerializer.Deserialize<Relisten.Search.PopularityResource>(
+                    row.PopularityJson
+                ),
+            row.PopularityAsOf,
             row.ArtistUuids.Select(uuid => new ArtistId(uuid).ToString()).ToArray()
         );
 
@@ -253,7 +236,8 @@ public sealed class PublicPlaylistDirectory(AccountsDbContext database, TimeProv
         public int DurationSeconds { get; init; }
         public DateTimeOffset UpdatedAt { get; init; }
         public int FollowerCount { get; init; }
-        public long RecentPlayCount { get; init; }
+        public string? PopularityJson { get; init; }
+        public DateTimeOffset? PopularityAsOf { get; init; }
         public Guid[] ArtistUuids { get; init; } = [];
         public long SortKey { get; init; }
     }

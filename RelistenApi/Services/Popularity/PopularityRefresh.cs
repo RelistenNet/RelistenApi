@@ -96,9 +96,19 @@ public partial class PopularityService
             songs,
             started.Elapsed
         );
+        try
+        {
+            await RefreshPlaylistPopularity(cancellationToken);
+        }
+        catch (Exception error) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.LogWarning(error, "Could not refresh playlist popularity");
+            failures.Add(error);
+        }
+
         if (failures.Count > 0)
         {
-            throw new AggregateException("Some artist popularity populations failed.", failures);
+            throw new AggregateException("Some popularity populations failed.", failures);
         }
     }
 

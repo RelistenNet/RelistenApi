@@ -133,6 +133,7 @@ internal sealed class PlaylistSearchRows(string accountsConnectionString, DbServ
                     header.HistoryGeneration,
                     header.Revision,
                     header.FollowCount,
+                    header.PlaysYear,
                     header.UpdatedAt
                 );
             })
@@ -175,11 +176,14 @@ internal sealed class PlaylistSearchRows(string accountsConnectionString, DbServ
                            p.taken_down AS TakenDown, p.revision, (extract(epoch FROM p.updated_at) * 1000)::bigint AS UpdatedAt,
                            u.username,
                            g.value AS HistoryGeneration,
-                           (SELECT count(*) FROM user_data.playlist_follows f WHERE f.playlist_id = p.id) AS FollowCount
+                           p.follower_count::bigint AS FollowCount,
+                           CASE WHEN p.published AND NOT p.archived AND NOT p.taken_down
+                             THEN coalesce(pop.plays_1y, 0) ELSE 0 END AS PlaysYear
                     FROM user_data.playlists p
                     JOIN identity.users u ON u.id = p.owner_id
                     CROSS JOIN user_data.history_generation g
-                    WHERE p.id > @after AND (@playlistId::text IS NULL OR p.id = @playlistId)
+                    LEFT JOIN public.playlist_popularity pop ON pop.playlist_id = p.id
+                    WHERE u.status = 'active' AND p.id > @after AND (@playlistId::text IS NULL OR p.id = @playlistId)
                     ORDER BY p.id LIMIT @limit
                     """,
                     new
@@ -268,7 +272,8 @@ internal sealed class PlaylistSearchRows(string accountsConnectionString, DbServ
         long UpdatedAt,
         string Username,
         string HistoryGeneration,
-        long FollowCount
+        long FollowCount,
+        long PlaysYear
     );
 
     private sealed record Entry(string PlaylistId, string? TrackId, string? Description);
@@ -298,6 +303,7 @@ internal sealed record PlaylistSearchDocument(
     string HistoryGeneration,
     long Revision,
     long FollowCount,
+    long PlaysYear,
     long UpdatedAt,
     double PopularityPercentile = 0
 );

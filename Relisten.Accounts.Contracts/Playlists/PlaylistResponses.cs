@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Relisten.Accounts.Contracts.Identifiers;
+using Relisten.Search;
 
 namespace Relisten.Accounts.Contracts.Playlists;
 
@@ -20,6 +21,9 @@ public sealed record PlaylistSummary(
     public string? PublicCode { get; init; }
     public bool Published { get; init; }
     public bool TakenDown { get; init; }
+    public int? FollowerCount { get; init; }
+    public PopularityResource? Popularity { get; init; }
+    public DateTimeOffset? PopularityAsOf { get; init; }
 }
 
 public sealed record PlaylistList(
@@ -73,6 +77,9 @@ public sealed record PlaylistSnapshot(
     public string? PublicCode { get; init; }
     public bool Published { get; init; }
     public bool TakenDown { get; init; }
+    public int? FollowerCount { get; init; }
+    public PopularityResource? Popularity { get; init; }
+    public DateTimeOffset? PopularityAsOf { get; init; }
 }
 
 public sealed record PlaylistOperationResult(

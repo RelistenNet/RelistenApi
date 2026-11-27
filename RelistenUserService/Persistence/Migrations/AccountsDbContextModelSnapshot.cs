@@ -996,6 +996,12 @@ namespace RelistenUserService.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("entry_count");
 
+                    b.Property<int>("FollowerCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("follower_count");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text")
@@ -1035,6 +1041,9 @@ namespace RelistenUserService.Persistence.Migrations
                     b.HasIndex("PublicCode")
                         .IsUnique();
 
+                    b.HasIndex("FollowerCount", "Id")
+                        .IsDescending();
+
                     b.HasIndex("OwnerId", "Archived", "UpdatedAt");
 
                     b.ToTable("playlists", "user_data", t =>
@@ -1056,6 +1065,10 @@ namespace RelistenUserService.Persistence.Migrations
                     b.Property<Guid>("ArtistUuid")
                         .HasColumnType("uuid")
                         .HasColumnName("artist_uuid");
+
+                    b.Property<int>("FollowerCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("follower_count");
 
                     b.Property<int>("TrackCount")
                         .HasColumnType("integer")

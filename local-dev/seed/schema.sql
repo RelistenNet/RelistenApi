@@ -1585,3 +1585,11 @@ SELECT add_continuous_aggregate_policy('source_track_plays_daily',
     start_offset => interval '3 days', end_offset => interval '1 day', schedule_interval => interval '1 day');
 SELECT add_continuous_aggregate_policy('source_track_plays_playlist_daily',
     start_offset => interval '3 days', end_offset => interval '1 hour', schedule_interval => interval '1 hour');
+
+CREATE TABLE IF NOT EXISTS public.playlist_popularity (
+    playlist_id text PRIMARY KEY,
+    as_of timestamptz NOT NULL,
+    popularity jsonb NOT NULL,
+    plays_30d bigint GENERATED ALWAYS AS ((popularity #>> '{windows,30d,plays}')::bigint) STORED,
+    plays_1y bigint GENERATED ALWAYS AS ((popularity #>> '{windows,1y,plays}')::bigint) STORED
+);

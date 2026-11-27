@@ -46,7 +46,7 @@ internal sealed class PlaylistSearchCandidates(HttpClient client, IConfiguration
                 ["include_fields"] =
                     "id,history_generation,revision,published,archived,taken_down,popularity_percentile",
                 ["highlight_fields"] = "description,curator,entry_notes,guide_text,artists,songs",
-                ["sort_by"] = "_text_match:desc,follow_count:desc,updated_at:desc",
+                ["sort_by"] = "_text_match:desc,plays_year:desc,follow_count:desc",
                 ["page"] = request.Page.ToString(System.Globalization.CultureInfo.InvariantCulture),
                 ["per_page"] = (request.IsAll ? AllPageSize : PageSize).ToString(
                     System.Globalization.CultureInfo.InvariantCulture

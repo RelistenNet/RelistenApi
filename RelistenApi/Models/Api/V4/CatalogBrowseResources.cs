@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 using Relisten.Identifiers;
+using Relisten.Search;
 
 namespace Relisten.Api.Models.Api.V4;
 
