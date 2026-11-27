@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using RelistenUserService.Persistence;
 using Temporalio.Activities;
 using Temporalio.Common;
+using Temporalio.Exceptions;
 using Temporalio.Workflows;
 
 namespace RelistenUserService.Sonos;
@@ -154,16 +155,49 @@ internal sealed class SonosHouseholdActivities(
             .Distinct()
             .ToArrayAsync(ct);
 
+        Exception? failed = null;
         foreach (var account in sessions.GroupBy(session => session.UserId))
         {
-            foreach (var session in account)
+            try
             {
-                if (await link.SessionActiveAsync(session.UserId, session.SessionId, ct))
+                foreach (var session in account)
                 {
-                    await RefreshAccountAsync(link, handoff, config, session.UserId, household, ct);
-                    break;
+                    if (await link.SessionActiveAsync(session.UserId, session.SessionId, ct))
+                    {
+                        await RefreshAccountAsync(
+                            link,
+                            handoff,
+                            config,
+                            session.UserId,
+                            household,
+                            ct
+                        );
+                        break;
+                    }
                 }
             }
+            catch (Exception error)
+                when (!ct.IsCancellationRequested
+                    && error
+                        is (
+                            SonosRequestException
+                            or HttpRequestException
+                            or OperationCanceledException
+                            or System.Text.Json.JsonException
+                        )
+                )
+            {
+                // Give other linked accounts their refresh before Temporal retries this one.
+                failed ??= error;
+            }
+        }
+
+        if (failed is not null)
+        {
+            throw new ApplicationFailureException(
+                "A linked account could not refresh its Sonos room names.",
+                failed
+            );
         }
     }
 
@@ -180,8 +214,7 @@ internal sealed class SonosHouseholdActivities(
         {
             if (await link.AccessAsync(config, user, ct) is { } access)
             {
-                var groups = await handoff.HouseholdGroupsAsync(access.Token, household, ct);
-                await handoff.RefreshGroupNamesAsync(user, groups, ct);
+                await handoff.ReadAndRefreshGroupNamesAsync(user, access.Token, ct, household);
             }
         }
         catch (SonosRequestException error)

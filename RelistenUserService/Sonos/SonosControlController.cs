@@ -91,8 +91,11 @@ public sealed class SonosControlController(
                 return Conflict(new { code = "sonos_reconnect_required" });
             }
 
-            var groups = await handoff.GroupsAsync(token.Token, ct);
-            await handoff.RefreshGroupNamesAsync(account.User.Id, groups, ct);
+            var groups = await handoff.ReadAndRefreshGroupNamesAsync(
+                account.User.Id,
+                token.Token,
+                ct
+            );
             if (events is not null)
             {
                 await events.SubscribeAsync(

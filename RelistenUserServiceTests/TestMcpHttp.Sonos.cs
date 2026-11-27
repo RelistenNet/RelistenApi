@@ -493,7 +493,12 @@ public sealed partial class TestMcpHttp
         var item = occurrences[1].GetProperty("item_id").GetString()!;
         var credential = upstream.Load.GetProperty("httpAuthorization").GetString()!;
         var timePlayed = $"{origin}/sonos/cloud-queue/{handle}/v2.3/timePlayed";
-        async Task Report(Guid reportId, string id, int millis)
+        async Task Report(
+            Guid reportId,
+            string id,
+            int millis,
+            HttpStatusCode status = HttpStatusCode.NoContent
+        )
         {
             using var response = await SendJson(
                 HttpMethod.Post,
@@ -512,7 +517,7 @@ public sealed partial class TestMcpHttp
                     },
                 }
             );
-            response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            response.StatusCode.Should().Be(status);
         }
 
         var first = Guid.NewGuid();
@@ -525,6 +530,21 @@ public sealed partial class TestMcpHttp
         )
             .Should()
             .Be(0);
+        // A rejected catalog insert must leave the same report eligible for retry.
+        await connection.ExecuteAsync(
+            "ALTER TABLE public.source_track_plays ADD CONSTRAINT reject_sonos_report CHECK (app_type <> 3) NOT VALID"
+        );
+        try
+        {
+            await Report(first, item, 195_000, HttpStatusCode.InternalServerError);
+        }
+        finally
+        {
+            await connection.ExecuteAsync(
+                "ALTER TABLE public.source_track_plays DROP CONSTRAINT reject_sonos_report"
+            );
+        }
+
         await Report(first, item, 195_000);
         await Report(Guid.NewGuid(), item, 200_000);
         await Report(first, item, 210_000);

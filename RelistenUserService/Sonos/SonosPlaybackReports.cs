@@ -72,18 +72,9 @@ public sealed class SonosPlaybackReports(
         foreach (var entry in entries.EnumerateArray())
         {
             if (
-                entry.ValueKind != JsonValueKind.Object
-                || !entry.TryGetProperty("reportId", out var id)
-                || id.ValueKind != JsonValueKind.String
-                || !id.TryGetGuid(out var reportId)
-                || reportId == Guid.Empty
-                || !entry.TryGetProperty("id", out var itemId)
-                || itemId.ValueKind != JsonValueKind.String
-                || !items.TryGetValue(itemId.GetString()!, out var item)
-                || !entry.TryGetProperty("durationPlayedMillis", out var duration)
-                || duration.ValueKind != JsonValueKind.Number
-                || !duration.TryGetInt64(out var playedMillis)
-                || playedMillis < QualificationMillis(item)
+                ReadItem(entry) is not { } reading
+                || !items.TryGetValue(reading.ItemId, out var item)
+                || reading.PlayedMillis < QualificationMillis(item)
                 || !TrackId.TryParse(item.ResolvedTrackId, out var track)
             )
             {
@@ -91,18 +82,41 @@ public sealed class SonosPlaybackReports(
             }
 
             plays.TryAdd(
-                reportId,
+                reading.ReportId,
                 new(
                     track,
                     item.PlaylistId,
                     item.PlaylistEntryId,
                     item.Track.DurationMillis,
-                    playedMillis
+                    reading.PlayedMillis
                 )
             );
         }
         return plays;
     }
+
+    private static ReportedItem? ReadItem(JsonElement entry)
+    {
+        if (
+            entry.ValueKind != JsonValueKind.Object
+            || !entry.TryGetProperty("reportId", out var id)
+            || id.ValueKind != JsonValueKind.String
+            || !id.TryGetGuid(out var reportId)
+            || reportId == Guid.Empty
+            || !entry.TryGetProperty("id", out var itemId)
+            || itemId.ValueKind != JsonValueKind.String
+            || !entry.TryGetProperty("durationPlayedMillis", out var duration)
+            || duration.ValueKind != JsonValueKind.Number
+            || !duration.TryGetInt64(out var playedMillis)
+        )
+        {
+            return null;
+        }
+
+        return new(reportId, itemId.GetString()!, playedMillis);
+    }
+
+    private sealed record ReportedItem(Guid ReportId, string ItemId, long PlayedMillis);
 
     private static int QualificationMillis(QueueTrack item) =>
         item.Track.DurationMillis is > 0 and var duration

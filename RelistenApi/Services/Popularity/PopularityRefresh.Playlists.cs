@@ -117,40 +117,42 @@ public partial class PopularityService
 
     private static object[] ScorePlaylists(PlaylistWindows[] rows)
     {
-        var metrics = rows.Select(row =>
+        var playlists = rows.Select(row =>
             {
-                var result = CreateMetrics(
+                var metrics = CreateMetrics(
                     row.Plays30d,
                     row.Plays7d,
-                    0,
+                    plays6h: 0,
                     row.Plays48h,
                     row.Plays90d,
                     row.Seconds30d,
                     row.Seconds7d,
                     row.Seconds48h
                 );
-                result.windows.Year = new PopularityWindowMetrics
+                metrics.windows.Year = new PopularityWindowMetrics
                 {
                     plays = row.PlaysYear,
                     hours = row.SecondsYear / 3600.0,
                     hot_score = Math.Sqrt(row.PlaysYear),
                 };
-                return result;
+                // Playlists use the latest complete day in place of catalog's six-hour input.
+                var shortTrend = row.Plays7d == 0 ? 0 : 7.0 * row.Plays1d / row.Plays7d;
+                return (row.Id, Metrics: metrics, ShortTrend: shortTrend);
             })
             .ToArray();
-        var active = metrics.Where(metric => metric.windows.days_30d.plays > 0).ToArray();
-        var shortTrends = rows.Where(row => row.Plays30d > 0)
-            .Select(row => row.Plays7d == 0 ? 0 : 7.0 * row.Plays1d / row.Plays7d)
+        var active = playlists
+            .Where(playlist => playlist.Metrics.windows.days_30d.plays > 0)
             .ToArray();
-        ApplyMomentumScores(active, shortTrends);
-        return rows.Select(
-                (row, index) =>
-                    new
-                    {
-                        id = row.Id,
-                        popularity = V4CatalogProjection.ProjectPopularity(metrics[index]),
-                    }
-            )
+        ApplyMomentumScores(
+            active.Select(playlist => playlist.Metrics).ToArray(),
+            active.Select(playlist => playlist.ShortTrend).ToArray()
+        );
+        return playlists
+            .Select(playlist => new
+            {
+                id = playlist.Id,
+                popularity = V4CatalogProjection.ProjectPopularity(playlist.Metrics),
+            })
             .ToArray();
     }
 

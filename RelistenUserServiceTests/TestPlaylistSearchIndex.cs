@@ -16,6 +16,7 @@ using RelistenIngestionWorker.AccountDeletion;
 using RelistenIngestionWorker.PlaylistSearch;
 using RelistenUserService.Identity.Entities;
 using RelistenUserService.Library;
+using RelistenUserService.Persistence;
 using RelistenUserService.Playlists;
 using RelistenUserService.Playlists.Entities;
 using RelistenUserService.Search;
@@ -50,6 +51,7 @@ public sealed class TestPlaylistSearchIndex
 
         database = new PostgresIntegrationDatabase();
         await database.StartAsync();
+        await database.LoadCatalogSchemaAsync();
         alias = "test_playlists_" + Guid.NewGuid().ToString("N");
         beforeImport = new BeforeImport();
         http = new HttpClient(beforeImport);
@@ -75,7 +77,7 @@ public sealed class TestPlaylistSearchIndex
     }
 
     [Test]
-    public async Task FullBuildStoresFollowerPercentileAndRenamePreservesIt()
+    public async Task FullBuildRanksYearlyPlaysAndRenamePreservesThePercentile()
     {
         var owner = await database.CreateUserAsync("percentileowner");
         var follower = await database.CreateUserAsync("percentilefollower");
@@ -83,8 +85,11 @@ public sealed class TestPlaylistSearchIndex
         var quiet = await Seed(database, owner, "Quiet playlist");
 
         await using var db = database.CreateContext();
-        db.PlaylistFollows.Add(new PlaylistFollow { UserId = follower, PlaylistId = popular });
+        // The quiet playlist sorts first in a 30-day directory and has more followers.
+        db.PlaylistFollows.Add(new PlaylistFollow { UserId = follower, PlaylistId = quiet });
         await db.SaveChangesAsync();
+        await SeedPopularity(db, popular, yearly: 100, monthly: 1);
+        await SeedPopularity(db, quiet, yearly: 40, monthly: 40);
         await index.Rebuild(CancellationToken.None);
 
         var percentile = (await Read(http, alias, popular))!
@@ -94,6 +99,13 @@ public sealed class TestPlaylistSearchIndex
             .Value.GetProperty("popularity_percentile")
             .GetDouble();
         percentile.Should().BeGreaterThan(quietPercentile);
+        var finder = new PlaylistSearchCandidates(http, configuration);
+        var matches = await finder.Find(
+            new MergedSearchRequest { Q = "playlist", Scope = "playlists" },
+            null,
+            CancellationToken.None
+        );
+        matches.Select(hit => hit.Id).Should().ContainInOrder(popular.Value, quiet.Value);
 
         var renamed = await db.Playlists.SingleAsync(row => row.Id == popular);
         renamed.Name = "Renamed playlist";
@@ -328,6 +340,27 @@ public sealed class TestPlaylistSearchIndex
                     .BeGreaterThan(TimeSpan.FromSeconds(59));
             }
         });
+    }
+
+    private static Task SeedPopularity(
+        AccountsDbContext db,
+        PlaylistId playlist,
+        int yearly,
+        int monthly
+    )
+    {
+        var empty = new PopularityWindowResource(0, 0, 0);
+        var resource = new PopularityResource(
+            0,
+            0,
+            new(empty, empty, new(monthly, 0, 0), new(yearly, 0, 0))
+        );
+        return db.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+            INSERT INTO public.playlist_popularity (playlist_id, as_of, popularity)
+            VALUES ({playlist.Value}, now(), {JsonSerializer.Serialize(resource)}::jsonb)
+            """
+        );
     }
 
     private static async Task<PlaylistId> Seed(

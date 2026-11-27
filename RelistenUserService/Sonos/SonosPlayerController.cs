@@ -218,15 +218,25 @@ public sealed class SonosPlayerController(
             return Unauthorized();
         }
 
-        if (fields[1] == "groups" && fields[2] is ("groups" or "groupInfo") && groups is not null)
+        var eventNamespace = fields[1];
+        var eventType = fields[2];
+        var targetType = fields[3];
+        var targetId = fields[4];
+
+        // The signed target chooses the household. The unsigned body cannot supply names.
+        if (
+            eventNamespace == "groups"
+            && eventType is ("groups" or "groupInfo")
+            && groups is not null
+        )
         {
-            return await groups.ChangedAsync(fields[3], fields[4], ct) ? Ok() : StatusCode(503);
+            return await groups.ChangedAsync(targetType, targetId, ct) ? Ok() : StatusCode(503);
         }
 
         if (
-            fields[1] == "playbackSession"
-            && fields[2] == "sessionError"
-            && fields[3] is "sessionId" or "playbackSessionId"
+            eventNamespace == "playbackSession"
+            && eventType == "sessionError"
+            && targetType is "sessionId" or "playbackSessionId"
             && body.ValueKind == JsonValueKind.Object
             && body.TryGetProperty("errorCode", out var errorCode)
             && errorCode.ValueKind == JsonValueKind.String
@@ -237,7 +247,7 @@ public sealed class SonosPlayerController(
             // cannot by itself prove which session ended.
             await db.Set<SonosQueue>()
                 .Where(row =>
-                    row.SonosSessionId == fields[4]
+                    row.SonosSessionId == targetId
                     && (row.Status == "loaded" || row.Status == "dispatching")
                 )
                 .ExecuteUpdateAsync(set => set.SetProperty(row => row.Status, "evicted"), ct);
@@ -245,9 +255,9 @@ public sealed class SonosPlayerController(
         }
 
         if (
-            fields[1] == "playback"
-            && fields[2] == "playbackStatus"
-            && fields[3] == "groupId"
+            eventNamespace == "playback"
+            && eventType == "playbackStatus"
+            && targetType == "groupId"
             && body.ValueKind == JsonValueKind.Object
             && body.TryGetProperty("playbackState", out var state)
             && body.TryGetProperty("itemId", out var item)
@@ -261,7 +271,7 @@ public sealed class SonosPlayerController(
             var household = Request.Headers["X-Sonos-Household-Id"].ToString();
             var candidates = db.Set<SonosQueue>()
                 .Where(row =>
-                    row.GroupId == fields[4]
+                    row.GroupId == targetId
                     && row.HouseholdId == household
                     && row.ExpiresAt > now
                     && (row.Status == "loaded" || row.Status == "dispatching")

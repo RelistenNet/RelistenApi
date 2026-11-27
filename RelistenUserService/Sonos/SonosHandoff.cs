@@ -202,25 +202,37 @@ public sealed class SonosHandoff(
             .ToArray();
     }
 
-    internal async Task RefreshGroupNamesAsync(
+    internal async Task<IReadOnlyList<SonosGroup>> ReadAndRefreshGroupNamesAsync(
+        UserId userId,
+        string token,
+        CancellationToken ct,
+        string? household = null
+    )
+    {
+        // Read and save under the same grant lock so a delayed discovery read cannot
+        // overwrite a newer regroup read. Handoff publication and disconnect share it.
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await locks.LockAsync($"sonos-grant:{userId}", ct);
+        var groups = household is null
+            ? await GroupsAsync(token, ct)
+            : await HouseholdGroupsAsync(token, household, ct);
+        if (groups.Count > 0)
+        {
+            await SaveGroupNamesAsync(userId, groups, ct);
+        }
+        await transaction.CommitAsync(ct);
+        return groups;
+    }
+
+    private async Task SaveGroupNamesAsync(
         UserId userId,
         IReadOnlyList<SonosGroup> groups,
         CancellationToken ct
     )
     {
-        if (groups.Count == 0)
-        {
-            return;
-        }
-
         var households = groups.Select(group => group.HouseholdId).ToArray();
         var ids = groups.Select(group => group.Id).ToArray();
         var names = groups.Select(group => group.Name).ToArray();
-
-        // Serialize name updates with handoff publication and disconnect. Match the
-        // household as well as the group because this account can control several homes.
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        await locks.LockAsync($"sonos-grant:{userId}", ct);
         await db.Database.ExecuteSqlInterpolatedAsync(
             $"""
             UPDATE user_data.sonos_queues queue SET group_name = fresh.name
@@ -231,7 +243,6 @@ public sealed class SonosHandoff(
             """,
             ct
         );
-        await transaction.CommitAsync(ct);
     }
 
     internal async Task<QueueTrack[]?> ResolveTracksAsync(

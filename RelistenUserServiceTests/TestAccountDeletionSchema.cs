@@ -278,6 +278,8 @@ public sealed class TestAccountDeletionSchema
             INSERT INTO user_data.sonos_commands
                 (id, queue_id, request_hash, action, status, expected_item_id)
             VALUES (@SonosCommandId, @SonosQueueId, 'request', 'pause', 'accepted', 'item');
+            INSERT INTO user_data.sonos_playback_reports (queue_id, report_id)
+            VALUES (@SonosQueueId, @SonosReportId);
 
             INSERT INTO user_data.plays
                 (user_id, play_id, track_id, qualified_at, started_at, received_at, app_type, offline, origin)
@@ -311,6 +313,7 @@ public sealed class TestAccountDeletionSchema
                 PlayId = PlayId.New().Value,
                 SonosQueueId = Guid.CreateVersion7(),
                 SonosCommandId = Guid.CreateVersion7(),
+                SonosReportId = Guid.CreateVersion7(),
             },
             transaction
         );

@@ -81,7 +81,11 @@ internal sealed class PlaylistSearchIndex(
             {
                 break;
             }
-            foreach (var document in documents)
+            foreach (
+                var document in documents.Where(row =>
+                    row.Published && !row.Archived && !row.TakenDown
+                )
+            )
             {
                 percentiles.Observe("playlist", document.PlaysYear);
             }

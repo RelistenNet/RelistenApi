@@ -131,25 +131,23 @@ public sealed partial class SonosPlaybackController
                 return QueueChanged(queue);
             }
 
-            // Check the room after catalog validation. The playhead can advance without changing
-            // the queue revision. Sonos can still advance after this read, before fetching the edit.
-            var room = await ReadRoomAsync(access.Token, queue.GroupId, ct);
-            var playback = await ReconcileAsync(queue, room, ct);
-            if (playback.Status != "active" || playback.CurrentOccurrence is not { } playing)
+            var check = await CheckQueueEditPlayheadAsync(
+                queue,
+                access.Token,
+                request.ExpectedItemId,
+                current,
+                replacement,
+                ct
+            );
+            if (check.Playing is not { } playing)
             {
-                await transaction.CommitAsync(ct);
-                return PlaybackInactive();
-            }
-
-            if (playing.ItemId != request.ExpectedItemId)
-            {
-                return Conflict(new { code = "sonos_playback_changed" });
-            }
-
-            var protectedLength = playing.QueueIndex + 1;
-            if (!current.Take(protectedLength).SequenceEqual(replacement.Take(protectedLength)))
-            {
-                return Conflict(new { code = "sonos_queue_current_protected" });
+                // Reconciliation can retire an inactive queue. A rejected edit to an
+                // active queue leaves that transaction untouched, including on a 503.
+                if (check.PersistInactiveState)
+                {
+                    await transaction.CommitAsync(ct);
+                }
+                return check.Rejection!;
             }
 
             var (result, changed) = await SaveQueueEditAsync(
@@ -180,6 +178,44 @@ public sealed partial class SonosPlaybackController
         {
             return Problem(statusCode: 502, title: "Could not validate the Sonos queue edit.");
         }
+    }
+
+    private sealed record QueueEditCheck(
+        PlaybackOccurrence? Playing,
+        IActionResult? Rejection = null,
+        bool PersistInactiveState = false
+    );
+
+    private async Task<QueueEditCheck> CheckQueueEditPlayheadAsync(
+        SonosQueue queue,
+        string token,
+        string expectedItemId,
+        QueueTrack[] current,
+        QueueTrack[] replacement,
+        CancellationToken ct
+    )
+    {
+        // Check the room after catalog validation. The playhead can advance without changing
+        // the queue revision. Sonos can still advance after this read, before fetching the edit.
+        var room = await ReadRoomAsync(token, queue.GroupId, ct);
+        var playback = await ReconcileAsync(queue, room, ct);
+        if (playback.Status != "active" || playback.CurrentOccurrence is not { } playing)
+        {
+            return new(null, PlaybackInactive(), PersistInactiveState: true);
+        }
+
+        if (playing.ItemId != expectedItemId)
+        {
+            return new(null, Conflict(new { code = "sonos_playback_changed" }));
+        }
+
+        var protectedLength = playing.QueueIndex + 1;
+        if (!current.Take(protectedLength).SequenceEqual(replacement.Take(protectedLength)))
+        {
+            return new(null, Conflict(new { code = "sonos_queue_current_protected" }));
+        }
+
+        return new(playing);
     }
 
     private async Task<(IActionResult Result, bool Changed)> SaveQueueEditAsync(
