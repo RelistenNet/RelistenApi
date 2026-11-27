@@ -287,7 +287,10 @@ public sealed partial class SonosPlaybackController(
             return Inactive(queue, evicted == 1 ? "evicted" : "unconfirmed");
         }
 
-        if (queue.Status == "dispatching" && !await SonosHandoff.ConfirmLoadedAsync(db, queue, ct))
+        if (
+            queue.Status == "dispatching"
+            && !await SonosHandoff.ConfirmLoadedAsync(db, queue, clock.GetUtcNow(), ct)
+        )
         {
             return Inactive(queue, "unconfirmed");
         }
@@ -321,7 +324,7 @@ public sealed partial class SonosPlaybackController(
                 && row.Status == "loaded"
                 && (version == null || row.QueueVersion == version)
             )
-            .ExecuteUpdateAsync(set => set.SetProperty(row => row.Status, "evicted"), ct);
+            .EvictAsync(clock.GetUtcNow(), ct);
 
     private static PlaybackView Inactive(SonosQueue queue, string status) =>
         new(

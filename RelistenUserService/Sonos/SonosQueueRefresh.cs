@@ -11,55 +11,75 @@ internal sealed class SonosQueueRefresh(
     TimeProvider clock
 )
 {
-    internal async Task RefreshAsync(
+    internal async Task RefreshAsync(SonosConfiguration config, Guid id, CancellationToken ct)
+    {
+        var queue = await ReadActiveQueueAsync(id, ct);
+        if (queue is not null && await ReadAccessAsync(config, queue, ct) is { } access)
+        {
+            await DeliverAsync(queue, access, ct);
+        }
+    }
+
+    internal async Task RefreshDuringCutoverAsync(
         SonosConfiguration config,
         Guid id,
-        CancellationToken ct,
-        bool legacy = false
+        CancellationToken ct
     )
     {
-        var queue = await db.Set<SonosQueue>()
-            .AsNoTracking()
-            .SingleOrDefaultAsync(row => row.Id == id, ct);
-        if (
-            queue is not { Status: "loaded", SonosSessionId: not null }
-            || queue.ExpiresAt <= clock.GetUtcNow()
-        )
+        var queue = await ReadActiveQueueAsync(id, ct);
+        if (queue is null)
         {
             return;
         }
 
         try
         {
-            await DeliverAsync(config, queue, legacy, ct);
+            if (await ReadAccessAsync(config, queue, ct) is { } access)
+            {
+                await DeliverAsync(queue, access, ct, dueBefore: clock.GetUtcNow());
+            }
+            else
+            {
+                await DeferAsync(queue, null, ct);
+            }
         }
-        catch (Exception error) when (legacy && CanRetry(error, ct))
+        catch (Exception error) when (CanRetry(error, ct))
         {
-            // Only the temporary cutover poller schedules retries in Postgres.
             await DeferAsync(queue, clock.GetUtcNow().AddSeconds(10), ct);
         }
     }
 
-    private async Task DeliverAsync(
+    private Task<SonosQueue?> ReadActiveQueueAsync(Guid id, CancellationToken ct)
+    {
+        var now = clock.GetUtcNow();
+        return db.Set<SonosQueue>()
+            .AsNoTracking()
+            .SingleOrDefaultAsync(
+                row =>
+                    row.Id == id
+                    && row.Status == "loaded"
+                    && row.SonosSessionId != null
+                    && row.ExpiresAt > now,
+                ct
+            );
+    }
+
+    private async Task<SonosAccess?> ReadAccessAsync(
         SonosConfiguration config,
         SonosQueue queue,
-        bool legacy,
         CancellationToken ct
+    ) =>
+        await link.SessionActiveAsync(queue.UserId, queue.SessionId, ct)
+            ? await link.AccessAsync(config, queue.UserId, ct)
+            : null;
+
+    private async Task DeliverAsync(
+        SonosQueue queue,
+        SonosAccess access,
+        CancellationToken ct,
+        DateTimeOffset? dueBefore = null
     )
     {
-        if (
-            !await link.SessionActiveAsync(queue.UserId, queue.SessionId, ct)
-            || await link.AccessAsync(config, queue.UserId, ct) is not { } access
-        )
-        {
-            if (legacy)
-            {
-                await DeferAsync(queue, null, ct);
-            }
-
-            return;
-        }
-
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
         await locks.LockAllAsync(
             [$"sonos-group:{queue.GroupId}", $"sonos-grant:{queue.UserId}"],
@@ -75,7 +95,7 @@ internal sealed class SonosQueueRefresh(
                     row.Id == queue.Id
                     && row.Status == "loaded"
                     && row.ExpiresAt > now
-                    && (!legacy || row.RefreshAfter <= now)
+                    && (dueBefore == null || row.RefreshAfter <= dueBefore)
                     && row.RefreshedQueueVersion < row.QueueVersion,
                 ct
             );
@@ -134,10 +154,7 @@ internal sealed class SonosQueueRefresh(
         }
         catch (SonosRequestException error) when (error.SessionEnded)
         {
-            await target.ExecuteUpdateAsync(
-                update => update.SetProperty(row => row.Status, "evicted"),
-                ct
-            );
+            await target.EvictAsync(clock.GetUtcNow(), ct);
         }
     }
 

@@ -1069,10 +1069,6 @@ namespace RelistenUserService.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("artist_uuid");
 
-                    b.Property<int>("FollowerCount")
-                        .HasColumnType("integer")
-                        .HasColumnName("follower_count");
-
                     b.Property<int>("TrackCount")
                         .HasColumnType("integer")
                         .HasColumnName("track_count");

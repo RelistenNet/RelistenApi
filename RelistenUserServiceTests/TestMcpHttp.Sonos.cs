@@ -5,10 +5,12 @@ using Dapper;
 using FluentAssertions;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using NUnit.Framework;
 using Relisten.Identifiers;
 using RelistenUserService.Sonos;
+using Temporalio.Activities;
 
 namespace RelistenUserServiceTests;
 
@@ -127,6 +129,9 @@ public sealed partial class TestMcpHttp
         var login = await Exchange(Native, NativeRedirect, ReadCode(code));
         await LinkSonos(nativeBase, sonosOrigin, login.Access);
 
+        var removedPlaylist = PlaylistId.New().Value;
+        await using var connection = new NpgsqlConnection(database.ConnectionString);
+        await EnsureSonosCatalogTrack(connection, TrackId.Parse(track).Value);
         var handle = Guid.NewGuid();
         var queueUrl = $"{nativeBase}/playback/{handle}/queue";
         var playerUrl = $"{sonosOrigin}/sonos/cloud-queue/{handle}/v2.3";
@@ -144,6 +149,7 @@ public sealed partial class TestMcpHttp
                 {
                     occurrence_id = key,
                     track_id = track,
+                    playlist_id = key == "b" ? removedPlaylist : null,
                 }),
             }
         );
@@ -233,6 +239,22 @@ public sealed partial class TestMcpHttp
         playerItems[1].GetProperty("id").GetString().Should().Be(b);
         playerItems[1].GetProperty("deleted").GetBoolean().Should().BeTrue();
         playerItems[2].GetProperty("id").GetString().Should().Be(c);
+        using var removedReport = await SendSonosReport(
+            playerUrl + "/timePlayed",
+            credential,
+            Guid.NewGuid(),
+            b,
+            195_000
+        );
+        removedReport.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        (
+            await connection.QuerySingleAsync<int>(
+                "SELECT count(*)::int FROM user_data.plays WHERE playlist_id = @removedPlaylist",
+                new { removedPlaylist }
+            )
+        )
+            .Should()
+            .Be(1);
 
         using var staleNext = await SendJson(
             HttpMethod.Post,
@@ -339,12 +361,17 @@ public sealed partial class TestMcpHttp
         queue.GetProperty("occurrences").GetArrayLength().Should().Be(1);
     }
 
-    [Test]
-    public async Task A_signed_household_event_refreshes_names_from_the_authorized_groups_read()
+    [TestCase("householdId", null)]
+    [TestCase("groupId", null)]
+    [TestCase("groupId", "{}")]
+    [TestCase("groupId", """{"groups":[{"id":"office","name":1}]}""")]
+    public async Task A_signed_groups_event_refreshes_linked_accounts_in_the_target_household(
+        string targetType,
+        string? malformed
+    )
     {
         const string nativeBase = AccountsOrigin + "/v1/integrations/sonos";
         const string sonosOrigin = "https://sonos.example.test";
-        const string track = "track_4rc5e1za2bvsrnnr0edzzj8rfs";
         using var upstream = new TestSonosDevelopment.TestUpstream();
         await using var temporal = await Temporalio.Testing.WorkflowEnvironment.StartLocalAsync();
         await StartApp(
@@ -353,66 +380,142 @@ public sealed partial class TestMcpHttp
             temporalAddress: temporal.Client.Connection.Options.TargetHost,
             sonosHouseholdEvents: true
         );
+
         var fields = AuthorizeFields(Native, NativeRedirect, ReadScopes + " account.manage");
         using var code = await Authorize(fields, await SignIn(fields));
         var login = await Exchange(Native, NativeRedirect, ReadCode(code));
         await LinkSonos(nativeBase, sonosOrigin, login.Access);
+        using var otherCode = await Authorize(fields, await SignIn(fields, "google-shared"));
+        var other = await Exchange(Native, NativeRedirect, ReadCode(otherCode));
+        await LinkSonos(nativeBase, sonosOrigin, other.Access);
 
-        var handle = Guid.NewGuid();
-        using var handoff = await SendJson(
-            HttpMethod.Post,
-            nativeBase + "/handoffs",
+        var homeQueues = new[] { Guid.NewGuid(), Guid.NewGuid() };
+        var studioQueue = Guid.NewGuid();
+        using var office = await PostSonosHandoff(nativeBase, login.Access, homeQueues[0]);
+        using var studio = await PostSonosHandoff(
+            nativeBase,
             login.Access,
-            new
-            {
-                request_id = handle,
-                group_id = "office",
-                track_ids = new[] { track },
-                start_index = 0,
-            }
+            studioQueue,
+            "studio-office"
         );
-        handoff.StatusCode.Should().Be(HttpStatusCode.OK);
-        upstream.OfficeName = "Office + 1";
-
-        using var regroup = new HttpRequestMessage(
-            HttpMethod.Post,
-            sonosOrigin + "/sonos/events/groups"
-        )
+        upstream.CreatedSessionId = "other-session";
+        using var otherOffice = await PostSonosHandoff(nativeBase, other.Access, homeQueues[1]);
+        foreach (var handoff in new[] { office, studio, otherOffice })
         {
-            Content = JsonContent.Create(
-                new { groups = new[] { new { id = "office", name = "Untrusted" } } }
-            ),
-        };
-        regroup.Headers.Add("X-Sonos-Event-Seq-Id", "9");
-        regroup.Headers.Add("X-Sonos-Namespace", "groups");
-        regroup.Headers.Add("X-Sonos-Type", "groups");
-        regroup.Headers.Add("X-Sonos-Target-Type", "householdId");
-        regroup.Headers.Add("X-Sonos-Target-Value", "home");
-        regroup.Headers.Add("X-Sonos-Household-Id", "studio");
-        regroup.Headers.Add(
-            "X-Sonos-Event-Signature",
-            WebEncoders.Base64UrlEncode(
-                System.Security.Cryptography.SHA256.HashData(
-                    System.Text.Encoding.UTF8.GetBytes(
-                        "9groupsgroupshouseholdIdhometest-idtest-secret"
-                    )
+            handoff.StatusCode.Should().Be(HttpStatusCode.OK);
+            (await Json(handoff)).GetProperty("status").GetString().Should().Be("loaded");
+        }
+
+        upstream.OfficeName = "Office + 1";
+        upstream.StudioName = "Studio + 1";
+        var releaseRetries = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        if (malformed is not null)
+        {
+            upstream.NextHomeGroupsResponse = malformed;
+            upstream.BeforeRequest = path =>
+                path == "/control/api/v1/households/home/groups"
+                && ActivityExecutionContext.HasCurrent
+                && ActivityExecutionContext.Current.Info.Attempt > 1
+                    ? releaseRetries.Task
+                    : Task.CompletedTask;
+        }
+
+        try
+        {
+            using var accepted = await SendSonosEvent(
+                sonosOrigin,
+                "groups",
+                "groups",
+                targetType,
+                targetType == "groupId" ? "office" : "home",
+                new { groups = new[] { new { id = "office", name = "Untrusted" } } },
+                unsignedHousehold: "studio"
+            );
+            accepted.StatusCode.Should().Be(HttpStatusCode.OK);
+
+            await using var connection = new NpgsqlConnection(database.ConnectionString);
+            if (malformed is not null)
+            {
+                // The healthy account must refresh even while retry attempts are blocked.
+                await WaitForChangedRoomNames(connection, homeQueues, expected: 1);
+                releaseRetries.TrySetResult();
+            }
+
+            await WaitForChangedRoomNames(connection, homeQueues, expected: 2);
+            (
+                await connection.QuerySingleAsync<string>(
+                    "SELECT group_name FROM user_data.sonos_queues WHERE id = @studioQueue",
+                    new { studioQueue }
                 )
             )
-        );
-        using var accepted = await http.SendAsync(regroup);
-        accepted.StatusCode.Should().Be(HttpStatusCode.OK);
+                .Should()
+                .Be("Office");
+        }
+        finally
+        {
+            releaseRetries.TrySetResult();
+        }
+    }
 
-        var deadline = DateTime.UtcNow.AddSeconds(10);
-        string? observed;
+    private static async Task WaitForChangedRoomNames(
+        NpgsqlConnection connection,
+        Guid[] homeQueues,
+        int expected
+    )
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(8);
+        int updated;
         do
         {
-            using var playback = await Get($"{nativeBase}/playback/{handle}", login.Access);
-            observed = (await Json(playback)).GetProperty("group_name").GetString();
-            if (observed == "Office + 1")
-                break;
+            updated = await connection.QuerySingleAsync<int>(
+                "SELECT count(*)::int FROM user_data.sonos_queues WHERE id = ANY(@homeQueues) AND group_name = 'Office + 1'",
+                new { homeQueues }
+            );
+            if (updated == expected)
+            {
+                return;
+            }
             await Task.Delay(100);
         } while (DateTime.UtcNow < deadline);
-        observed.Should().Be("Office + 1");
+        updated.Should().Be(expected);
+    }
+
+    private async Task<HttpResponseMessage> SendSonosEvent(
+        string origin,
+        string eventNamespace,
+        string type,
+        string targetType,
+        string target,
+        object body,
+        string? unsignedHousehold = null
+    )
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            origin + "/sonos/events/" + eventNamespace
+        )
+        {
+            Content = JsonContent.Create(body),
+        };
+        request.Headers.Add("X-Sonos-Event-Seq-Id", "9");
+        request.Headers.Add("X-Sonos-Namespace", eventNamespace);
+        request.Headers.Add("X-Sonos-Type", type);
+        request.Headers.Add("X-Sonos-Target-Type", targetType);
+        request.Headers.Add("X-Sonos-Target-Value", target);
+        if (unsignedHousehold is not null)
+        {
+            request.Headers.Add("X-Sonos-Household-Id", unsignedHousehold);
+        }
+        var signed = System.Text.Encoding.UTF8.GetBytes(
+            $"9{eventNamespace}{type}{targetType}{target}test-idtest-secret"
+        );
+        request.Headers.Add(
+            "X-Sonos-Event-Signature",
+            WebEncoders.Base64UrlEncode(System.Security.Cryptography.SHA256.HashData(signed))
+        );
+        return await http.SendAsync(request);
     }
 
     [Test]
@@ -420,8 +523,8 @@ public sealed partial class TestMcpHttp
     {
         const string nativeBase = AccountsOrigin + "/v1/integrations/sonos";
         const string origin = "https://sonos.example.test";
-        const string track = "track_4rc5e1za2bvsrnnr0edzzj8rfs";
-        var trackUuid = TrackId.Parse(track).Value;
+        var trackUuid = Guid.NewGuid();
+        var track = UuidTypeId.Format("track", trackUuid);
         var playlist = PlaylistId.New();
         var entry = PlaylistEntryId.New();
         var otherPlaylist = PlaylistId.New();
@@ -433,22 +536,7 @@ public sealed partial class TestMcpHttp
         var login = await Exchange(Native, NativeRedirect, ReadCode(code));
         await LinkSonos(nativeBase, origin, login.Access);
         await using var connection = new NpgsqlConnection(database.ConnectionString);
-        await connection.ExecuteAsync(
-            """
-            WITH artist AS (
-                INSERT INTO public.artists (uuid, name, slug, updated_at) VALUES (@artistUuid, 'Sonos', @slug, now()) RETURNING id
-            )
-            INSERT INTO public.source_tracks (uuid, artist_id, track_position, title, slug, mp3_url, duration, updated_at)
-            SELECT @trackUuid, id, 1, 'Sonos fixture', 'sonos-fixture', 'https://example.test/sonos.mp3', 381, now() FROM artist
-            ON CONFLICT (uuid) DO NOTHING
-            """,
-            new
-            {
-                trackUuid,
-                artistUuid = Guid.NewGuid(),
-                slug = "sonos-" + Guid.NewGuid().ToString("N"),
-            }
-        );
+        await EnsureSonosCatalogTrack(connection, trackUuid);
 
         var handle = Guid.NewGuid();
         using var started = await SendJson(
@@ -500,22 +588,12 @@ public sealed partial class TestMcpHttp
             HttpStatusCode status = HttpStatusCode.NoContent
         )
         {
-            using var response = await SendJson(
-                HttpMethod.Post,
+            using var response = await SendSonosReport(
                 timePlayed,
                 credential,
-                new
-                {
-                    items = new[]
-                    {
-                        new
-                        {
-                            reportId,
-                            id,
-                            durationPlayedMillis = millis,
-                        },
-                    },
-                }
+                reportId,
+                id,
+                millis
             );
             response.StatusCode.Should().Be(status);
         }
@@ -530,6 +608,8 @@ public sealed partial class TestMcpHttp
         )
             .Should()
             .Be(0);
+        await AttemptReportWhileOwnerDisabled(handle, first, item);
+
         // A rejected catalog insert must leave the same report eligible for retry.
         await connection.ExecuteAsync(
             "ALTER TABLE public.source_track_plays ADD CONSTRAINT reject_sonos_report CHECK (app_type <> 3) NOT VALID"
@@ -573,6 +653,208 @@ public sealed partial class TestMcpHttp
             new { trackUuid }
         );
         catalog.Should().BeEquivalentTo(new[] { playlist.Value, playlist.Value, null });
+    }
+
+    private async Task AttemptReportWhileOwnerDisabled(Guid queueId, Guid reportId, string itemId)
+    {
+        // Exercise the race after the callback has authorized the session and read the queue.
+        await using var scope = app.Services.CreateAsyncScope();
+        await using var db = database.CreateContext();
+        var queue = await db.Set<SonosQueue>().AsNoTracking().SingleAsync(row => row.Id == queueId);
+        var owner = await db.Users.SingleAsync(row => row.Id == queue.UserId);
+        owner.Status = "disabled";
+        await db.SaveChangesAsync();
+
+        try
+        {
+            var recorder = scope.ServiceProvider.GetRequiredService<SonosPlaybackReports>();
+            await recorder.RecordAsync(
+                queue,
+                SonosReportBody(reportId, itemId, 195_000),
+                CancellationToken.None
+            );
+        }
+        finally
+        {
+            owner.Status = "active";
+            await db.SaveChangesAsync();
+        }
+    }
+
+    [TestCase("replacement")]
+    [TestCase("event")]
+    [TestCase("expiry")]
+    public async Task Sonos_accepts_a_final_report_during_grace_without_reopening_the_queue(
+        string endedBy
+    )
+    {
+        const string nativeBase = AccountsOrigin + "/v1/integrations/sonos";
+        const string sonosOrigin = "https://sonos.example.test";
+        const string track = "track_4rc5e1za2bvsrnnr0edzzj8rfs";
+        var playlist = PlaylistId.New().Value;
+        using var upstream = new TestSonosDevelopment.TestUpstream();
+        await StartApp(mountCatalog: false, sonos: upstream);
+        var fields = AuthorizeFields(Native, NativeRedirect, ReadScopes + " account.manage");
+        using var code = await Authorize(fields, await SignIn(fields));
+        var login = await Exchange(Native, NativeRedirect, ReadCode(code));
+        await LinkSonos(nativeBase, sonosOrigin, login.Access);
+        await using var connection = new NpgsqlConnection(database.ConnectionString);
+        await EnsureSonosCatalogTrack(connection, TrackId.Parse(track).Value);
+
+        var handle = Guid.NewGuid();
+        using var started = await SendJson(
+            HttpMethod.Post,
+            nativeBase + "/handoffs",
+            login.Access,
+            new
+            {
+                request_id = handle,
+                group_id = "office",
+                start_index = 0,
+                occurrences = new[]
+                {
+                    new
+                    {
+                        occurrence_id = "first",
+                        track_id = track,
+                        playlist_id = playlist,
+                    },
+                },
+            }
+        );
+        started.StatusCode.Should().Be(HttpStatusCode.OK);
+        var item = upstream.Load.GetProperty("itemId").GetString()!;
+        var credential = upstream.Load.GetProperty("httpAuthorization").GetString()!;
+        var playerUrl = $"{sonosOrigin}/sonos/cloud-queue/{handle}/v2.3";
+        var reportId = Guid.NewGuid();
+
+        switch (endedBy)
+        {
+            case "replacement":
+                upstream.CreatedSessionId = "next-session";
+                using (
+                    var replacement = await PostSonosHandoff(
+                        nativeBase,
+                        login.Access,
+                        Guid.NewGuid()
+                    )
+                )
+                {
+                    replacement.StatusCode.Should().Be(HttpStatusCode.OK);
+                }
+                var otherCredential = upstream.Load.GetProperty("httpAuthorization").GetString()!;
+                using (
+                    var wrongQueue = await SendSonosReport(
+                        playerUrl + "/timePlayed",
+                        otherCredential,
+                        reportId,
+                        item,
+                        195_000
+                    )
+                )
+                {
+                    wrongQueue.StatusCode.Should().Be(HttpStatusCode.NotFound);
+                }
+                break;
+            case "event":
+                using (
+                    var evicted = await SendSonosEvent(
+                        sonosOrigin,
+                        "playbackSession",
+                        "sessionError",
+                        "sessionId",
+                        upstream.CreatedSessionId,
+                        new { errorCode = "ERROR_SESSION_EVICTED" }
+                    )
+                )
+                {
+                    evicted.StatusCode.Should().Be(HttpStatusCode.OK);
+                }
+                break;
+            case "expiry":
+                await connection.ExecuteAsync(
+                    "UPDATE user_data.sonos_queues SET expires_at = now() - interval '30 seconds' WHERE id = @handle",
+                    new { handle }
+                );
+                break;
+        }
+
+        using var version = await Get(playerUrl + "/version", credential);
+        version.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        using var final = await SendSonosReport(
+            playerUrl + "/timePlayed",
+            credential,
+            reportId,
+            item,
+            195_000
+        );
+        final.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        (
+            await connection.QuerySingleAsync<int>(
+                "SELECT count(*)::int FROM user_data.plays WHERE playlist_id = @playlist",
+                new { playlist }
+            )
+        )
+            .Should()
+            .Be(1);
+
+        var endedColumn = endedBy == "expiry" ? "expires_at" : "evicted_at";
+        await connection.ExecuteAsync(
+            $"UPDATE user_data.sonos_queues SET {endedColumn} = now() - interval '10 minutes' WHERE id = @handle",
+            new { handle }
+        );
+        using var tooLate = await SendSonosReport(
+            playerUrl + "/timePlayed",
+            credential,
+            Guid.NewGuid(),
+            item,
+            195_000
+        );
+        tooLate.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    private static JsonElement SonosReportBody(Guid reportId, string id, int millis) =>
+        JsonSerializer.SerializeToElement(
+            new
+            {
+                items = new[]
+                {
+                    new
+                    {
+                        reportId,
+                        id,
+                        durationPlayedMillis = millis,
+                    },
+                },
+            }
+        );
+
+    private Task<HttpResponseMessage> SendSonosReport(
+        string url,
+        string credential,
+        Guid reportId,
+        string id,
+        int millis
+    ) => SendJson(HttpMethod.Post, url, credential, SonosReportBody(reportId, id, millis));
+
+    private static Task<int> EnsureSonosCatalogTrack(NpgsqlConnection connection, Guid trackUuid)
+    {
+        return connection.ExecuteAsync(
+            """
+            WITH artist AS (
+                INSERT INTO public.artists (uuid, name, slug, updated_at) VALUES (@artistUuid, 'Sonos', @slug, now()) RETURNING id
+            )
+            INSERT INTO public.source_tracks (uuid, artist_id, track_position, title, slug, mp3_url, duration, updated_at)
+            SELECT @trackUuid, id, 1, 'Sonos fixture', 'sonos-fixture', 'https://example.test/sonos.mp3', 381, now() FROM artist
+            ON CONFLICT (uuid) DO NOTHING
+            """,
+            new
+            {
+                trackUuid,
+                artistUuid = Guid.NewGuid(),
+                slug = "sonos-" + Guid.NewGuid().ToString("N"),
+            }
+        );
     }
 
     [TestCase(false)]
@@ -972,7 +1254,12 @@ public sealed partial class TestMcpHttp
         upstream.CreateCount.Should().Be(creates + 1);
     }
 
-    private Task<HttpResponseMessage> PostSonosHandoff(string nativeBase, string token, Guid id) =>
+    private Task<HttpResponseMessage> PostSonosHandoff(
+        string nativeBase,
+        string token,
+        Guid id,
+        string groupId = "office"
+    ) =>
         Send(
             new(HttpMethod.Post, nativeBase + "/handoffs")
             {
@@ -981,7 +1268,7 @@ public sealed partial class TestMcpHttp
                     new
                     {
                         request_id = id,
-                        group_id = "office",
+                        group_id = groupId,
                         track_ids = new[] { "track_4rc5e1za2bvsrnnr0edzzj8rfs" },
                         start_index = 0,
                         position_millis = 1000,

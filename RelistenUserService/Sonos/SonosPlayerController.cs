@@ -174,7 +174,7 @@ public sealed class SonosPlayerController(
         [FromServices] SonosPlaybackReports? reports = null
     )
     {
-        if (await AuthorizedQueueAsync(queueId, ct) is not { } queue)
+        if (await AuthorizedQueueAsync(queueId, ct, acceptFinalReport: true) is not { } queue)
         {
             return NotFound();
         }
@@ -250,7 +250,7 @@ public sealed class SonosPlayerController(
                     row.SonosSessionId == targetId
                     && (row.Status == "loaded" || row.Status == "dispatching")
                 )
-                .ExecuteUpdateAsync(set => set.SetProperty(row => row.Status, "evicted"), ct);
+                .EvictAsync(clock.GetUtcNow(), ct);
             return Ok();
         }
 
@@ -306,7 +306,11 @@ public sealed class SonosPlayerController(
         return Ok();
     }
 
-    private async Task<SonosQueue?> AuthorizedQueueAsync(Guid id, CancellationToken ct)
+    private async Task<SonosQueue?> AuthorizedQueueAsync(
+        Guid id,
+        CancellationToken ct,
+        bool acceptFinalReport = false
+    )
     {
         if (Config is null)
         {
@@ -326,13 +330,19 @@ public sealed class SonosPlayerController(
         }
 
         var now = clock.GetUtcNow();
+        // The player may submit its final listen after a handoff, eviction, or queue expiry.
+        var cutoff = acceptFinalReport ? now.AddMinutes(-5) : now;
         var queue = await db.Set<SonosQueue>()
             .AsNoTracking()
             .SingleOrDefaultAsync(
                 row =>
                     row.Id == id
-                    && row.ExpiresAt > now
-                    && (row.Status == "loaded" || row.Status == "dispatching"),
+                    && row.ExpiresAt > cutoff
+                    && (
+                        row.Status == "loaded"
+                        || row.Status == "dispatching"
+                        || (acceptFinalReport && row.Status == "evicted" && row.EvictedAt > cutoff)
+                    ),
                 ct
             );
         // The speaker's queue credential inherits the creating login's lifetime.

@@ -752,6 +752,7 @@ public sealed class TestSonosDevelopment
         public bool LoseNextPlayModeResponse { get; set; }
         public bool RejectPlayModeByPolicy { get; set; }
         public string OfficeName { get; set; } = "Office";
+        public string? NextHomeGroupsResponse { get; set; }
         public string StudioName { get; set; } = "Office";
         public string CreatedSessionId { get; set; } = "test-session";
         public string RoomState { get; set; } = "PLAYBACK_STATE_PLAYING";
@@ -761,6 +762,16 @@ public sealed class TestSonosDevelopment
         public int RoomPosition { get; private set; }
         public int RoomVolume { get; private set; } = 17;
         public bool RoomMuted { get; set; }
+
+        private string HomeGroups()
+        {
+            var next = NextHomeGroupsResponse;
+            NextHomeGroupsResponse = null;
+            return next
+                ?? JsonSerializer.Serialize(
+                    new { groups = new[] { new { id = "office", name = OfficeName } } }
+                );
+        }
 
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
@@ -999,9 +1010,7 @@ public sealed class TestSonosDevelopment
                     """{"households":[{"id":"home"},{"id":"studio"}]}""",
                 "/control/api/v1/households/home/groups/subscription" => "{}",
                 "/control/api/v1/households/studio/groups/subscription" => "{}",
-                "/control/api/v1/households/home/groups" => JsonSerializer.Serialize(
-                    new { groups = new[] { new { id = "office", name = OfficeName } } }
-                ),
+                "/control/api/v1/households/home/groups" => HomeGroups(),
                 "/control/api/v1/households/studio/groups" => JsonSerializer.Serialize(
                     new { groups = new[] { new { id = "studio-office", name = StudioName } } }
                 ),
@@ -1023,14 +1032,15 @@ public sealed class TestSonosDevelopment
                         @fixed = false,
                     }
                 ),
-                "/control/api/v1/groups/office/playback/subscription" => "{}",
+                "/control/api/v1/groups/office/playback/subscription"
+                or "/control/api/v1/groups/studio-office/playback/subscription" => "{}",
                 var subscription
                     when subscription
                         == $"/control/api/v1/playbackSessions/{CreatedSessionId}/playbackSession/subscription" =>
                     "{}",
-                "/control/api/v1/groups/office/playbackSession" => JsonSerializer.Serialize(
-                    new { sessionId = CreatedSessionId }
-                ),
+                "/control/api/v1/groups/office/playbackSession"
+                or "/control/api/v1/groups/studio-office/playbackSession" =>
+                    JsonSerializer.Serialize(new { sessionId = CreatedSessionId }),
                 _ => throw new InvalidOperationException($"Unexpected upstream request {path}"),
             };
             return new HttpResponseMessage(HttpStatusCode.OK)

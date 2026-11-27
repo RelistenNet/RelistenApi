@@ -191,15 +191,22 @@ public sealed class SonosHandoff(
             null,
             ct
         );
-        return response
-            .GetProperty("groups")
-            .EnumerateArray()
-            .Select(group => new SonosGroup(
-                household,
-                group.GetProperty("id").GetString()!,
-                group.GetProperty("name").GetString()!
-            ))
-            .ToArray();
+        try
+        {
+            return response
+                .GetProperty("groups")
+                .EnumerateArray()
+                .Select(group => new SonosGroup(
+                    household,
+                    group.GetProperty("id").GetString()!,
+                    group.GetProperty("name").GetString()!
+                ))
+                .ToArray();
+        }
+        catch (Exception error) when (error is KeyNotFoundException or InvalidOperationException)
+        {
+            throw new JsonException("Sonos returned malformed group data.", error);
+        }
     }
 
     internal async Task<IReadOnlyList<SonosGroup>> ReadAndRefreshGroupNamesAsync(
@@ -707,7 +714,7 @@ public sealed class SonosHandoff(
             throw;
         }
 
-        await ConfirmLoadedAsync(db, queue, ct);
+        await ConfirmLoadedAsync(db, queue, clock.GetUtcNow(), ct);
         await transaction.CommitAsync(ct);
     }
 
@@ -747,13 +754,17 @@ public sealed class SonosHandoff(
         return false;
     }
 
-    private Task<int> EndDispatchAsync(Guid id, string status) =>
-        db.Set<SonosQueue>()
-            .Where(row => row.Id == id && row.Status == "dispatching")
-            .ExecuteUpdateAsync(
+    private Task<int> EndDispatchAsync(Guid id, string status)
+    {
+        var dispatch = db.Set<SonosQueue>()
+            .Where(row => row.Id == id && row.Status == "dispatching");
+        return status == "evicted"
+            ? dispatch.EvictAsync(clock.GetUtcNow(), CancellationToken.None)
+            : dispatch.ExecuteUpdateAsync(
                 set => set.SetProperty(row => row.Status, status),
                 CancellationToken.None
             );
+    }
 
     internal async Task ObserveLoadedAsync(string token, SonosQueue queue, CancellationToken ct)
     {
@@ -783,7 +794,7 @@ public sealed class SonosHandoff(
             return;
         }
 
-        await ConfirmLoadedAsync(db, queue, ct);
+        await ConfirmLoadedAsync(db, queue, clock.GetUtcNow(), ct);
         await transaction.CommitAsync(ct);
     }
 
@@ -791,6 +802,7 @@ public sealed class SonosHandoff(
     internal static async Task<bool> ConfirmLoadedAsync(
         AccountsDbContext db,
         SonosQueue queue,
+        DateTimeOffset confirmedAt,
         CancellationToken ct
     )
     {
@@ -824,7 +836,7 @@ public sealed class SonosHandoff(
                     || (row.Status == "dispatching" && row.SonosSessionId != null)
                 )
             )
-            .ExecuteUpdateAsync(set => set.SetProperty(row => row.Status, "evicted"), ct);
+            .EvictAsync(confirmedAt, ct);
         return true;
     }
 

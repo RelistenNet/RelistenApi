@@ -22,17 +22,23 @@ public sealed class SonosPlaybackReports(
             return;
         }
 
+        // Claim each report with ON CONFLICT DO NOTHING in the same transaction as both
+        // play writes. A rollback leaves the claim available for a Sonos retry.
         await using var transaction = await database.Database.BeginTransactionAsync(ct);
         var claimed = await ClaimAsync(queue.Id, plays.Keys.ToArray(), ct);
-        if (claimed.Length > 0)
-        {
-            await history.WriteSonosAsync(
+        if (
+            claimed.Length > 0
+            && !await history.WriteSonosAsync(
                 queue.UserId,
                 clock.GetUtcNow(),
                 claimed.Select(id => plays[id]),
                 ct
-            );
+            )
+        )
+        {
+            return;
         }
+
         await transaction.CommitAsync(ct);
     }
 
@@ -118,6 +124,7 @@ public sealed class SonosPlaybackReports(
 
     private sealed record ReportedItem(Guid ReportId, string ItemId, long PlayedMillis);
 
+    // Count after half the track rounded up, capped at four minutes.
     private static int QualificationMillis(QueueTrack item) =>
         item.Track.DurationMillis is > 0 and var duration
             ? Math.Min(FourMinutesMs, duration / 2 + duration % 2)

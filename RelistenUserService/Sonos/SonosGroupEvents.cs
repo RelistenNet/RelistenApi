@@ -110,18 +110,31 @@ internal sealed class SonosHouseholdWorkflow
         do
         {
             _changed = false;
-            await Workflow.ExecuteActivityAsync(
-                (SonosHouseholdActivities activities) => activities.RefreshNamesAsync(household),
-                new ActivityOptions
-                {
-                    StartToCloseTimeout = TimeSpan.FromMinutes(1),
-                    RetryPolicy = new RetryPolicy
+            try
+            {
+                await Workflow.ExecuteActivityAsync(
+                    (SonosHouseholdActivities activities) =>
+                        activities.RefreshNamesAsync(household),
+                    new ActivityOptions
                     {
-                        InitialInterval = TimeSpan.FromSeconds(2),
-                        MaximumInterval = TimeSpan.FromSeconds(30),
-                    },
-                }
-            );
+                        StartToCloseTimeout = TimeSpan.FromMinutes(1),
+                        RetryPolicy = new RetryPolicy
+                        {
+                            InitialInterval = TimeSpan.FromSeconds(2),
+                            MaximumAttempts = 3,
+                        },
+                    }
+                );
+            }
+            catch (ActivityFailureException error) when (_changed)
+            {
+                // The exhausted refresh does not consume an event accepted while it ran.
+                Workflow.Logger.LogWarning(
+                    error,
+                    "Another room-name refresh is pending for household {HouseholdId}.",
+                    household
+                );
+            }
         } while (_changed);
     }
 }
@@ -187,7 +200,7 @@ internal sealed class SonosHouseholdActivities(
                         )
                 )
             {
-                // Give other linked accounts their refresh before Temporal retries this one.
+                // Try the remaining accounts before Temporal retries the household refresh.
                 failed ??= error;
             }
         }

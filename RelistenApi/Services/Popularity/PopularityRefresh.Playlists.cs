@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
@@ -10,6 +11,7 @@ using Microsoft.Extensions.Logging;
 using Npgsql;
 using Relisten.Api.Models;
 using Relisten.Api.Models.Api.V4;
+using Relisten.Search;
 
 namespace Relisten.Services.Popularity;
 
@@ -33,22 +35,7 @@ public partial class PopularityService
         CancellationToken ct
     )
     {
-        // The watermark is the exclusive end of materialized data. A day without
-        // playlist plays still advances the window when Timescale materializes it.
-        var cutoff = await connection.QuerySingleAsync<DateTime?>(
-            new CommandDefinition(
-                """
-                SELECT CASE WHEN watermark >= 0 THEN least(date_trunc('day', now(), 'UTC'),
-                    date_trunc('day', _timescaledb_functions.to_timestamp(watermark), 'UTC')) END
-                FROM (
-                    SELECT _timescaledb_functions.cagg_watermark(mat_hypertable_id) AS watermark
-                    FROM _timescaledb_catalog.continuous_agg
-                    WHERE user_view_schema = 'public' AND user_view_name = 'source_track_plays_playlist_daily'
-                ) AS aggregate
-                """,
-                cancellationToken: ct
-            )
-        );
+        var cutoff = await ReadPlaylistCutoffAsync(connection, ct);
         if (cutoff is null)
         {
             return 0;
@@ -74,6 +61,29 @@ public partial class PopularityService
             )
         );
         return snapshots.Length;
+    }
+
+    private static Task<DateTime?> ReadPlaylistCutoffAsync(
+        NpgsqlConnection connection,
+        CancellationToken ct
+    )
+    {
+        // The watermark is the exclusive end of materialized data. A day without
+        // playlist plays still advances the window when Timescale materializes it.
+        return connection.QuerySingleAsync<DateTime?>(
+            new CommandDefinition(
+                """
+                SELECT CASE WHEN watermark >= 0 THEN least(date_trunc('day', now(), 'UTC'),
+                    date_trunc('day', _timescaledb_functions.to_timestamp(watermark), 'UTC')) END
+                FROM (
+                    SELECT _timescaledb_functions.cagg_watermark(mat_hypertable_id) AS watermark
+                    FROM _timescaledb_catalog.continuous_agg
+                    WHERE user_view_schema = 'public' AND user_view_name = 'source_track_plays_playlist_daily'
+                ) AS aggregate
+                """,
+                cancellationToken: ct
+            )
+        );
     }
 
     private static async Task<PlaylistWindows[]> ReadPlaylistWindows(
@@ -115,7 +125,7 @@ public partial class PopularityService
             )
         ).ToArray();
 
-    private static object[] ScorePlaylists(PlaylistWindows[] rows)
+    private static PlaylistSnapshot[] ScorePlaylists(PlaylistWindows[] rows)
     {
         var playlists = rows.Select(row =>
             {
@@ -148,13 +158,17 @@ public partial class PopularityService
             active.Select(playlist => playlist.ShortTrend).ToArray()
         );
         return playlists
-            .Select(playlist => new
-            {
-                id = playlist.Id,
-                popularity = V4CatalogProjection.ProjectPopularity(playlist.Metrics),
-            })
+            .Select(playlist => new PlaylistSnapshot(
+                playlist.Id,
+                V4CatalogProjection.ProjectPopularity(playlist.Metrics)!
+            ))
             .ToArray();
     }
+
+    private sealed record PlaylistSnapshot(
+        [property: JsonPropertyName("id")] string Id,
+        [property: JsonPropertyName("popularity")] PopularityResource Popularity
+    );
 
     private sealed record PlaylistWindows(
         string Id,

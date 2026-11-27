@@ -1066,10 +1066,6 @@ namespace RelistenUserService.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("artist_uuid");
 
-                    b.Property<int>("FollowerCount")
-                        .HasColumnType("integer")
-                        .HasColumnName("follower_count");
-
                     b.Property<int>("TrackCount")
                         .HasColumnType("integer")
                         .HasColumnName("track_count");
@@ -1461,6 +1457,10 @@ namespace RelistenUserService.Persistence.Migrations
                     b.Property<DateTimeOffset?>("DispatchUntil")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("dispatch_until");
+
+                    b.Property<DateTimeOffset?>("EvictedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("evicted_at");
 
                     b.Property<DateTimeOffset>("ExpiresAt")
                         .HasColumnType("timestamp with time zone")

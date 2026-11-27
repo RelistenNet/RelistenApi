@@ -3,11 +3,11 @@ using RelistenUserService.Persistence;
 
 namespace RelistenUserService.Sonos;
 
-internal sealed class SonosQueueRefreshWorker(
+internal sealed class SonosQueueRefreshCutoverPoller(
     IServiceScopeFactory scopes,
     SonosIntegration integration,
     TimeProvider clock,
-    ILogger<SonosQueueRefreshWorker> logger
+    ILogger<SonosQueueRefreshCutoverPoller> logger
 ) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken ct)
@@ -44,7 +44,7 @@ internal sealed class SonosQueueRefreshWorker(
                     using var refreshScope = scopes.CreateScope();
                     await refreshScope
                         .ServiceProvider.GetRequiredService<SonosQueueRefresh>()
-                        .RefreshAsync(config, id, ct, legacy: true);
+                        .RefreshDuringCutoverAsync(config, id, ct);
                 }
             }
             catch (Exception error) when (!ct.IsCancellationRequested)

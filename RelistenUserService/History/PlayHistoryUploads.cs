@@ -137,8 +137,8 @@ public sealed class PlayHistoryUploads(AccountsDbContext database, TimeProvider 
         return acceptedIds;
     }
 
-    // Joins the callback's report claim transaction so failed writes leave the report retryable.
-    internal async Task WriteSonosAsync(
+    // Uses the caller's transaction. Returns false if the owner is inactive at the write.
+    internal async Task<bool> WriteSonosAsync(
         UserId userId,
         DateTimeOffset receivedAt,
         IEnumerable<SonosPlay> plays,
@@ -161,7 +161,7 @@ public sealed class PlayHistoryUploads(AccountsDbContext database, TimeProvider 
             false,
             PlayOrigin.Live
         ));
-        await WriteAsync(userId, receivedAt, validated, ct);
+        return await WriteAsync(userId, receivedAt, validated, ct) is not null;
     }
 
     internal sealed record SonosPlay(
@@ -180,7 +180,11 @@ public sealed class PlayHistoryUploads(AccountsDbContext database, TimeProvider 
     )
     {
         var payload = JsonSerializer.Serialize(plays, WireJson);
-        var transaction = database.Database.CurrentTransaction!;
+        var transaction =
+            database.Database.CurrentTransaction
+            ?? throw new InvalidOperationException(
+                "Writing play history requires an open transaction."
+            );
         await using var command = new NpgsqlCommand(
             InsertPlaysSql,
             (NpgsqlConnection)database.Database.GetDbConnection(),

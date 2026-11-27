@@ -57,7 +57,6 @@ public sealed class PlaylistArtist
     public PlaylistId PlaylistId { get; set; }
     public Guid ArtistUuid { get; set; }
     public int TrackCount { get; set; }
-    public int FollowerCount { get; set; }
 }
 
 public sealed class PlaylistRevisionRow

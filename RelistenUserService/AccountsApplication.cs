@@ -113,7 +113,7 @@ public static class AccountsApplication
 
             if (builder.Configuration.GetValue<bool>("Sonos:LegacyQueueRefreshEnabled"))
             {
-                builder.Services.AddHostedService<SonosQueueRefreshWorker>();
+                builder.Services.AddHostedService<SonosQueueRefreshCutoverPoller>();
             }
         }
         builder

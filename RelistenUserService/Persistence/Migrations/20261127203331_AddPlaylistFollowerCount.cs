@@ -10,7 +10,6 @@ namespace RelistenUserService.Persistence.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // Prevent concurrent inserts or deletes between the backfill and trigger install.
             migrationBuilder.AddColumn<int>(
                 name: "follower_count",
                 schema: "user_data",
@@ -20,15 +19,7 @@ namespace RelistenUserService.Persistence.Migrations
                 defaultValue: 0
             );
 
-            migrationBuilder.AddColumn<int>(
-                name: "follower_count",
-                schema: "user_data",
-                table: "playlist_artists",
-                type: "integer",
-                nullable: false,
-                defaultValue: 0
-            );
-
+            // Prevent concurrent inserts or deletes between the backfill and trigger install.
             migrationBuilder.Sql(
                 "LOCK TABLE user_data.playlist_follows IN SHARE ROW EXCLUSIVE MODE"
             );
@@ -79,12 +70,6 @@ namespace RelistenUserService.Persistence.Migrations
                 name: "follower_count",
                 schema: "user_data",
                 table: "playlists"
-            );
-
-            migrationBuilder.DropColumn(
-                name: "follower_count",
-                schema: "user_data",
-                table: "playlist_artists"
             );
         }
     }

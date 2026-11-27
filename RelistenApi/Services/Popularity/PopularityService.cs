@@ -1406,6 +1406,7 @@ namespace Relisten.Services.Popularity
             return (plays6h / 6.0) / (plays7d / 168.0);
         }
 
+        // When supplied, shortTrends[i] replaces the six-hour ratio for metrics[i].
         internal static void ApplyMomentumScores(
             IReadOnlyList<PopularityMetrics> metrics,
             IReadOnlyList<double>? shortTrends = null
