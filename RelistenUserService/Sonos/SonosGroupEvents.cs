@@ -12,23 +12,16 @@ public sealed class SonosGroupEvents(
     AccountsDbContext database,
     SonosProtocol protocol,
     SonosWorkflowStarter workflows,
-    IConfiguration settings,
     TimeProvider clock,
     ILogger<SonosGroupEvents> logger
 )
 {
-    private bool Enabled => settings.GetValue<bool>("Sonos:HouseholdEventsEnabled");
-
     internal async Task SubscribeAsync(
         string token,
         IEnumerable<string> households,
         CancellationToken ct
     )
     {
-        if (!Enabled)
-        {
-            return;
-        }
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
         deadline.CancelAfter(TimeSpan.FromSeconds(1));
         try
@@ -60,7 +53,7 @@ public sealed class SonosGroupEvents(
 
     internal async Task<bool> ChangedAsync(string target, string id, CancellationToken ct)
     {
-        if (!Enabled || id.Length > 128)
+        if (id.Length > 128)
         {
             return true;
         }

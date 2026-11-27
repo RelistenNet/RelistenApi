@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
@@ -397,8 +398,7 @@ public sealed partial class TestMcpHttp
         await StartApp(
             mountCatalog: false,
             sonos: upstream,
-            temporalAddress: temporal.Client.Connection.Options.TargetHost,
-            sonosHouseholdEvents: true
+            temporalAddress: temporal.Client.Connection.Options.TargetHost
         );
 
         var fields = AuthorizeFields(Native, NativeRedirect, ReadScopes + " account.manage");
@@ -409,6 +409,16 @@ public sealed partial class TestMcpHttp
         var other = await Exchange(Native, NativeRedirect, ReadCode(otherCode));
         await LinkSonos(nativeBase, sonosOrigin, other.Access);
 
+        var subscriptions = new ConcurrentQueue<string>();
+        upstream.BeforeRequest = path =>
+        {
+            if (path.EndsWith("/groups/subscription", StringComparison.Ordinal))
+            {
+                subscriptions.Enqueue(path);
+            }
+
+            return Task.CompletedTask;
+        };
         var homeQueues = new[] { Guid.NewGuid(), Guid.NewGuid() };
         var studioQueue = Guid.NewGuid();
         using var office = await PostSonosHandoff(nativeBase, login.Access, homeQueues[0]);
@@ -425,6 +435,8 @@ public sealed partial class TestMcpHttp
             handoff.StatusCode.Should().Be(HttpStatusCode.OK);
             (await Json(handoff)).GetProperty("status").GetString().Should().Be("loaded");
         }
+        subscriptions.Should().Contain("/control/api/v1/households/home/groups/subscription");
+        subscriptions.Should().Contain("/control/api/v1/households/studio/groups/subscription");
 
         upstream.OfficeName = "Office + 1";
         upstream.StudioName = "Studio + 1";

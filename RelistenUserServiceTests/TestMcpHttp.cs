@@ -910,8 +910,7 @@ public sealed partial class TestMcpHttp
         string? playlistAlias = null,
         HttpMessageHandler? playlistSearch = null,
         TimeProvider? validationClock = null,
-        string? temporalAddress = null,
-        bool sonosHouseholdEvents = false
+        string? temporalAddress = null
     )
     {
         catalog = new(catalogResponse);
@@ -959,7 +958,6 @@ public sealed partial class TestMcpHttp
                 ["Sonos:ClientSecret"] = sonos is null ? null : "test-secret",
                 ["Sonos:ServiceId"] = sonos is null ? null : "270",
                 ["Temporal:Address"] = temporalAddress,
-                ["Sonos:HouseholdEventsEnabled"] = sonosHouseholdEvents.ToString(),
             }
         );
         if (sonos is not null)

@@ -110,11 +110,6 @@ public static class AccountsApplication
             builder.Services.AddSingleton<SonosQueueRefreshActivities>();
             builder.Services.AddSingleton<SonosHouseholdActivities>();
             builder.Services.AddHostedService<SonosTemporalWorker>();
-
-            if (builder.Configuration.GetValue<bool>("Sonos:LegacyQueueRefreshEnabled"))
-            {
-                builder.Services.AddHostedService<SonosQueueRefreshCutoverPoller>();
-            }
         }
         builder
             .Services.AddHttpClient<SonosProtocol>(client =>

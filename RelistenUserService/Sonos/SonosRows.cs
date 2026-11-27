@@ -39,7 +39,7 @@ internal sealed class SonosQueue
     // Sonos acknowledged the refresh request. Playback status separately reports its cached version.
     public long RefreshedQueueVersion { get; set; } = 1;
 
-    // A pending delivery also has a due time for the temporary cutover poller.
+    // A value indicates an edit is pending delivery through Temporal.
     // A permanent rejection clears this marker without advancing the acknowledged version.
     public DateTimeOffset? RefreshAfter { get; set; }
     public DateTimeOffset? EvictedAt { get; set; }

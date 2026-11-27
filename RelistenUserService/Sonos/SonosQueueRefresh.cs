@@ -18,49 +18,24 @@ internal sealed class SonosQueueRefresh(
         var queue = await ReadActiveQueueAsync(id, ct);
         if (queue is not null && await ReadAccessAsync(config, queue, ct) is { } access)
         {
-            var outcome = await DeliverWithTokenRefreshAsync(config, queue, access, ct);
-            if (outcome == DeliveryOutcome.GrantChanged)
+            try
             {
-                throw new InvalidOperationException(
-                    "The Sonos grant changed while preparing the queue refresh."
-                );
+                await DeliverAsync(queue, access, ct);
             }
-        }
-    }
-
-    internal async Task RefreshDuringCutoverAsync(
-        SonosConfiguration config,
-        Guid id,
-        CancellationToken ct
-    )
-    {
-        var queue = await ReadActiveQueueAsync(id, ct);
-        if (queue is null)
-        {
-            return;
-        }
-
-        try
-        {
-            if (await ReadAccessAsync(config, queue, ct) is { } access)
+            catch (SonosRequestException error) when (error.Status == HttpStatusCode.Unauthorized)
             {
-                // A concurrent grant update leaves the edit for the next cutover poll.
-                await DeliverWithTokenRefreshAsync(
+                // Release the delivery locks before refreshing the grant, which takes its own lock.
+                var current = await link.AccessAsync(
                     config,
-                    queue,
-                    access,
+                    queue.UserId,
                     ct,
-                    dueBefore: clock.GetUtcNow()
+                    rejectedGrantVersion: access.GrantVersion
                 );
+                if (current is not null)
+                {
+                    await DeliverAsync(queue, current, ct, retriedAfterUnauthorized: true);
+                }
             }
-            else
-            {
-                await DeferAsync(queue, null, ct);
-            }
-        }
-        catch (Exception error) when (CanRetry(error, ct))
-        {
-            await DeferAsync(queue, clock.GetUtcNow().AddSeconds(10), ct);
         }
     }
 
@@ -88,44 +63,10 @@ internal sealed class SonosQueueRefresh(
             ? await link.AccessAsync(config, queue.UserId, ct)
             : null;
 
-    private enum DeliveryOutcome
-    {
-        Finished,
-        GrantChanged,
-    }
-
-    private async Task<DeliveryOutcome> DeliverWithTokenRefreshAsync(
-        SonosConfiguration config,
+    private async Task DeliverAsync(
         SonosQueue queue,
         SonosAccess access,
         CancellationToken ct,
-        DateTimeOffset? dueBefore = null
-    )
-    {
-        try
-        {
-            return await DeliverAsync(queue, access, ct, dueBefore);
-        }
-        catch (SonosRequestException error) when (error.Status == HttpStatusCode.Unauthorized)
-        {
-            // Release the delivery locks before refreshing the grant, which takes its own lock.
-            var current = await link.AccessAsync(
-                config,
-                queue.UserId,
-                ct,
-                rejectedGrantVersion: access.GrantVersion
-            );
-            return current is null
-                ? DeliveryOutcome.Finished
-                : await DeliverAsync(queue, current, ct, dueBefore, retriedAfterUnauthorized: true);
-        }
-    }
-
-    private async Task<DeliveryOutcome> DeliverAsync(
-        SonosQueue queue,
-        SonosAccess access,
-        CancellationToken ct,
-        DateTimeOffset? dueBefore,
         bool retriedAfterUnauthorized = false
     )
     {
@@ -145,7 +86,6 @@ internal sealed class SonosQueueRefresh(
                     && row.Status == "loaded"
                     && row.ExpiresAt > now
                     && row.RefreshAfter != null
-                    && (dueBefore == null || row.RefreshAfter <= dueBefore)
                     && row.RefreshedQueueVersion < row.QueueVersion,
                 ct
             );
@@ -154,7 +94,7 @@ internal sealed class SonosQueueRefresh(
             || !await link.SessionActiveAsync(queue.UserId, queue.SessionId, ct)
         )
         {
-            return DeliveryOutcome.Finished;
+            return;
         }
 
         if (
@@ -166,12 +106,13 @@ internal sealed class SonosQueueRefresh(
                 )
         )
         {
-            return DeliveryOutcome.GrantChanged;
+            throw new InvalidOperationException(
+                "The Sonos grant changed while preparing the queue refresh."
+            );
         }
 
         await NotifySonosAsync(access.Token, session, current, retriedAfterUnauthorized, ct);
         await transaction.CommitAsync(ct);
-        return DeliveryOutcome.Finished;
     }
 
     private async Task NotifySonosAsync(
@@ -224,30 +165,14 @@ internal sealed class SonosQueueRefresh(
             );
             // The order is saved, but Sonos rejected delivery. Clear the pending marker
             // without claiming an acknowledgement. A different edit can try again.
-            await DeferAsync(current, null, ct);
+            await target.ExecuteUpdateAsync(
+                update => update.SetProperty(row => row.RefreshAfter, (DateTimeOffset?)null),
+                ct
+            );
         }
     }
-
-    private Task<int> DeferAsync(SonosQueue queue, DateTimeOffset? when, CancellationToken ct) =>
-        db.Set<SonosQueue>()
-            .Where(row =>
-                row.Id == queue.Id
-                && row.QueueVersion == queue.QueueVersion
-                && row.RefreshedQueueVersion < row.QueueVersion
-                // A cutover attempt can reach this after Temporal ended its delivery.
-                && row.RefreshAfter != null
-            )
-            .ExecuteUpdateAsync(update => update.SetProperty(row => row.RefreshAfter, when), ct);
 
     private static bool IsPermanentRejection(HttpStatusCode status) =>
         (int)status is >= 400 and < 500
         && status is not (HttpStatusCode.RequestTimeout or HttpStatusCode.TooManyRequests);
-
-    private static bool CanRetry(Exception error, CancellationToken ct) =>
-        !ct.IsCancellationRequested
-        && error
-            is SonosRequestException
-                or HttpRequestException
-                or System.Text.Json.JsonException
-                or OperationCanceledException;
 }

@@ -4,7 +4,6 @@ using System.Net;
 using Dapper;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using NUnit.Framework;
@@ -177,106 +176,6 @@ public sealed partial class TestMcpHttp
             .GetResultAsync()
             .WaitAsync(TimeSpan.FromSeconds(10));
         upstream.RefreshCount.Should().Be(commit ? 1 : 0);
-    }
-
-    [Test]
-    public async Task A_changed_grant_does_not_fail_a_cutover_refresh()
-    {
-        const string nativeBase = AccountsOrigin + "/v1/integrations/sonos";
-        using var upstream = new TestSonosDevelopment.TestUpstream();
-        await StartApp(mountCatalog: false, sonos: upstream);
-        var login = await SignInForSonos(nativeBase);
-        var handle = Guid.NewGuid();
-        using var loaded = await PostSonosHandoff(nativeBase, login.Access, handle);
-        loaded.StatusCode.Should().Be(HttpStatusCode.OK);
-
-        await using var writer = database.CreateContext();
-        var queue = await writer
-            .Set<SonosQueue>()
-            .AsNoTracking()
-            .SingleAsync(row => row.Id == handle);
-        await writer
-            .Set<SonosQueue>()
-            .Where(row => row.Id == handle)
-            .ExecuteUpdateAsync(update =>
-                update
-                    .SetProperty(row => row.QueueVersion, 2)
-                    .SetProperty(row => row.RefreshAfter, DateTimeOffset.UtcNow)
-            );
-        var grant = writer.Set<SonosGrant>().Where(row => row.UserId == queue.UserId);
-        var original = await grant.Select(row => row.ProtectedToken).SingleAsync();
-        await using var rotation = await writer.Database.BeginTransactionAsync();
-        var backend = ((NpgsqlConnection)writer.Database.GetDbConnection()).ProcessID;
-        await new AdvisoryLockService(writer).LockAsync(
-            "sonos-group:office",
-            CancellationToken.None
-        );
-
-        await using var scope = app.Services.CreateAsyncScope();
-        var config = scope.ServiceProvider.GetRequiredService<SonosIntegration>().Configuration!;
-        var refresh = scope.ServiceProvider.GetRequiredService<SonosQueueRefresh>();
-        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-        var pending = refresh.RefreshDuringCutoverAsync(config, handle, deadline.Token);
-        try
-        {
-            await WaitForDeliveryToTakeRoomLock(backend);
-            await grant.ExecuteUpdateAsync(update =>
-                update.SetProperty(row => row.ProtectedToken, original + "-rotated")
-            );
-            await rotation.CommitAsync();
-            await pending.WaitAsync(deadline.Token);
-            upstream.RefreshCount.Should().Be(0);
-        }
-        finally
-        {
-            await rotation.DisposeAsync();
-            await grant.ExecuteUpdateAsync(update =>
-                update.SetProperty(row => row.ProtectedToken, original)
-            );
-        }
-
-        await refresh.RefreshDuringCutoverAsync(config, handle, deadline.Token);
-        upstream.RefreshCount.Should().Be(1);
-    }
-
-    [Test]
-    public async Task A_failed_cutover_attempt_cannot_reschedule_delivery_after_it_ended()
-    {
-        const string nativeBase = AccountsOrigin + "/v1/integrations/sonos";
-        using var upstream = new TestSonosDevelopment.TestUpstream();
-        await StartApp(mountCatalog: false, sonos: upstream);
-        var login = await SignInForSonos(nativeBase);
-        var handle = Guid.NewGuid();
-        using var loaded = await PostSonosHandoff(nativeBase, login.Access, handle);
-        loaded.StatusCode.Should().Be(HttpStatusCode.OK);
-
-        await using var writer = database.CreateContext();
-        var queue = writer.Set<SonosQueue>().Where(row => row.Id == handle);
-        await queue.ExecuteUpdateAsync(update =>
-            update
-                .SetProperty(row => row.QueueVersion, 2)
-                .SetProperty(row => row.RefreshAfter, DateTimeOffset.UtcNow)
-        );
-        upstream.OnRefresh = _ => new(HttpStatusCode.ServiceUnavailable);
-        upstream.BeforeRequest = async path =>
-        {
-            if (path.EndsWith("/refreshCloudQueue", StringComparison.Ordinal))
-            {
-                // Set up the terminal state a Temporal attempt can commit before the
-                // cutover poller writes its retry time outside the delivery transaction.
-                await queue.ExecuteUpdateAsync(update =>
-                    update.SetProperty(row => row.RefreshAfter, (DateTimeOffset?)null)
-                );
-            }
-        };
-
-        await using var scope = app.Services.CreateAsyncScope();
-        var config = scope.ServiceProvider.GetRequiredService<SonosIntegration>().Configuration!;
-        await scope
-            .ServiceProvider.GetRequiredService<SonosQueueRefresh>()
-            .RefreshDuringCutoverAsync(config, handle, CancellationToken.None);
-        using var stored = await Get($"{nativeBase}/playback/{handle}/queue", login.Access);
-        (await Json(stored)).GetProperty("refresh_pending").GetBoolean().Should().BeFalse();
     }
 
     private async Task<TokenPair> SignInForSonos(string nativeBase)
